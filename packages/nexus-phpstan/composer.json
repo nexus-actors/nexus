@@ -1,0 +1,33 @@
+{
+    "name": "monadial/nexus-phpstan",
+    "description": "PHPStan rules and type extensions for Nexus actor system.",
+    "type": "phpstan-extension",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "phpstan/phpstan": "^2.0",
+        "shipmonk/phpstan-rules": "^4.0",
+        "monadial/nexus-core": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "shipmonk/phpstan-dev": "^1.0"
+    },
+    "extra": {
+        "phpstan": {
+            "includes": [
+                "extension.neon"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\PHPStan\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\PHPStan\\Tests\\": "tests/"
+        }
+    }
+}

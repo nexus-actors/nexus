@@ -1,0 +1,48 @@
+includes:
+    - vendor/phpstan/phpstan-strict-rules/rules.neon
+    - vendor/shipmonk/phpstan-rules/rules.neon
+
+parameters:
+    level: 9
+    phpVersion: 80500
+
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: true
+    checkGenericClassInNonGenericObjectType: true
+    checkMissingIterableValueType: true
+    checkUninitializedProperties: true
+
+    featureToggles:
+        bleedingEdge: true
+
+    exceptions:
+        check:
+            missingCheckedExceptionInThrows: true
+            tooWideThrowType: true
+            throwTypeCovariance: true
+        implicitThrows: false
+        checkedExceptionClasses:
+            - Monadial\Nexus\Core\Exception\NexusException
+
+    shipmonkRules:
+        enforceReadonlyPublicProperty:
+            enabled: true
+        forbidCheckedExceptionInCallable:
+            immediatelyCalledCallables:
+                'Monadial\Nexus\Core\Actor\Behavior::receive': 0
+                'Monadial\Nexus\Core\Actor\Behavior::withState': 0
+                'Monadial\Nexus\Core\Actor\Behavior::setup': 0
+            allowedCheckedExceptionCallables:
+                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::oneForOne': 2
+                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::allForOne': 2
+                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::exponentialBackoff': 3
+        forbidUnusedException:
+            enabled: true
+        forbidUselessNullableReturn:
+            enabled: true
+
+    paths:
+        - packages/nexus-core/src
+        - packages/nexus-runtime-fiber/src
+        - packages/nexus-runtime-swoole/src
+        - packages/nexus-serialization/src

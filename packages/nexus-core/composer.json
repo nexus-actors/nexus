@@ -1,0 +1,29 @@
+{
+    "name": "monadial/nexus-core",
+    "description": "Nexus actor system core — behaviors, actors, supervision, checked exception hierarchy.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "psr/log": "^3.0",
+        "psr/clock": "^1.0",
+        "psr/event-dispatcher": "^1.0",
+        "brick/math": "^0.12",
+        "fp4php/functional": "^6.0",
+        "azjezz/psl": "^4.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "monadial/nexus-runtime-fiber": "self.version"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Core\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Core\\Tests\\": "tests/"
+        }
+    }
+}

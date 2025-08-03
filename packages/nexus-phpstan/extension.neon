@@ -1,0 +1,3 @@
+# Nexus PHPStan rules and type extensions
+# Rules and extensions will be registered as they are implemented
+parameters: []

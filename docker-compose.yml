@@ -1,0 +1,31 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-full
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - XDEBUG_MODE=${XDEBUG_MODE:-debug}
+
+  php-fiber:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-fiber
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      - XDEBUG_MODE=${XDEBUG_MODE:-debug}
+
+  php-swoole:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-swoole
+    volumes:
+      - .:/app
+    working_dir: /app

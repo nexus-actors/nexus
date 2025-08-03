@@ -1,1 +1,13 @@
+/vendor/
+/packages/*/vendor/
+composer.lock
+.phpunit.cache/
+.phpunit.result.cache
+.php-cs-fixer.cache
+/infection.log
+*.swp
+*.swo
+.idea/
+.vscode/
+.DS_Store
 .worktrees/

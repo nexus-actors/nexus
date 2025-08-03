@@ -1,0 +1,12 @@
+{
+    "name": "monadial/nexus",
+    "description": "Nexus — A production-grade actor system for PHP 8.5+. Meta-package.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "monadial/nexus-core": "^1.0",
+        "monadial/nexus-runtime-fiber": "^1.0",
+        "monadial/nexus-serialization": "^1.0"
+    }
+}

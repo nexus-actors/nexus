@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         failOnRisky="true"
+         failOnWarning="true"
+         strict="true"
+>
+    <testsuites>
+        <testsuite name="unit">
+            <directory>packages/nexus-core/tests/Unit</directory>
+            <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
+            <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
+            <directory>packages/nexus-serialization/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="integration-fiber">
+            <directory>tests/Integration/Fiber</directory>
+        </testsuite>
+        <testsuite name="integration-swoole">
+            <directory>tests/Integration/Swoole</directory>
+        </testsuite>
+        <testsuite name="integration-serialization">
+            <directory>tests/Integration/Serialization</directory>
+        </testsuite>
+        <testsuite name="phpstan">
+            <directory>packages/nexus-phpstan/tests</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>packages/nexus-core/src</directory>
+            <directory>packages/nexus-runtime-fiber/src</directory>
+            <directory>packages/nexus-runtime-swoole/src</directory>
+            <directory>packages/nexus-serialization/src</directory>
+        </include>
+    </source>
+</phpunit>
