@@ -8,12 +8,7 @@ parameters:
 
     treatPhpDocTypesAsCertain: false
     reportUnmatchedIgnoredErrors: true
-    checkGenericClassInNonGenericObjectType: true
-    checkMissingIterableValueType: true
     checkUninitializedProperties: true
-
-    featureToggles:
-        bleedingEdge: true
 
     exceptions:
         check:
@@ -28,14 +23,8 @@ parameters:
         enforceReadonlyPublicProperty:
             enabled: true
         forbidCheckedExceptionInCallable:
-            immediatelyCalledCallables:
-                'Monadial\Nexus\Core\Actor\Behavior::receive': 0
-                'Monadial\Nexus\Core\Actor\Behavior::withState': 0
-                'Monadial\Nexus\Core\Actor\Behavior::setup': 0
-            allowedCheckedExceptionCallables:
-                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::oneForOne': 2
-                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::allForOne': 2
-                'Monadial\Nexus\Core\Supervision\SupervisionStrategy::exponentialBackoff': 3
+            # TODO: Add allowedCheckedExceptionCallables for SupervisionStrategy once implemented (Task 5)
+            allowedCheckedExceptionCallables: []
         forbidUnusedException:
             enabled: true
         forbidUselessNullableReturn:
