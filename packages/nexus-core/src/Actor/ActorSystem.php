@@ -9,6 +9,8 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
+use Monadial\Nexus\Core\Exception\MailboxClosedException;
+use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Runtime\Runtime;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
@@ -177,9 +179,18 @@ final class ActorSystem
 
     /**
      * Gracefully shut down the system within the given timeout.
+     *
+     * Stops all top-level actors (which closes their mailboxes, causing
+     * message-processing fibers to terminate), then signals the runtime
+     * to shut down.
      */
     public function shutdown(Duration $timeout): void
     {
+        // Stop all top-level actors — this closes mailboxes so message loops exit
+        foreach ($this->children->values()->toList() as $child) {
+            $this->stop($child);
+        }
+
         $this->runtime->shutdown($timeout);
     }
 
@@ -226,6 +237,27 @@ final class ActorSystem
         );
         $childCell->start();
 
+        $this->spawnMessageLoop($childCell, $childMailbox);
+
         return $childCell->self();
+    }
+
+    /**
+     * Spawn a fiber that dequeues messages from the mailbox and processes them.
+     *
+     * @param ActorCell<object> $cell
+     */
+    private function spawnMessageLoop(ActorCell $cell, Mailbox $mailbox): void
+    {
+        $this->runtime->spawn(static function () use ($cell, $mailbox): void {
+            while ($cell->isAlive()) {
+                try {
+                    $envelope = $mailbox->dequeueBlocking(Duration::seconds(1));
+                    $cell->processMessage($envelope);
+                } catch (MailboxClosedException) {
+                    break;
+                }
+            }
+        });
     }
 }

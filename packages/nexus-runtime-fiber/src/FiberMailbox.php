@@ -73,26 +73,34 @@ final class FiberMailbox implements Mailbox
      */
     public function dequeueBlocking(Duration $timeout): Envelope
     {
+        // Fiber-based blocking: suspend and re-check on resume
+        $fiber = Fiber::getCurrent();
+        if ($fiber !== null) {
+            while (true) {
+                if (!$this->queue->isEmpty()) {
+                    return $this->queue->dequeue();
+                }
+
+                if ($this->closed) {
+                    throw new MailboxClosedException($this->actor);
+                }
+
+                // Register as waiter only if not already registered
+                if (!in_array($fiber, $this->waiters, true)) {
+                    $this->waiters[] = $fiber;
+                }
+
+                Fiber::suspend('mailbox_wait');
+            }
+        }
+
+        // Fast path for non-fiber context
         if (!$this->queue->isEmpty()) {
             return $this->queue->dequeue();
         }
 
         if ($this->closed) {
             throw new MailboxClosedException($this->actor);
-        }
-
-        // Suspend the current fiber and wait for a message
-        $fiber = Fiber::getCurrent();
-        if ($fiber !== null) {
-            $this->waiters[] = $fiber;
-            Fiber::suspend('mailbox_wait');
-
-            // After resume, check if we were woken due to close
-            if ($this->queue->isEmpty()) { // @phpstan-ignore if.alwaysTrue
-                throw new MailboxClosedException($this->actor);
-            }
-
-            return $this->queue->dequeue(); // @phpstan-ignore deadCode.unreachable
         }
 
         // Not in a fiber context -- poll with timeout

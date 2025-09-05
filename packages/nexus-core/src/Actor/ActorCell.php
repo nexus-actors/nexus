@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
+use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
@@ -235,6 +236,8 @@ final class ActorCell implements ActorContext
             $this->deadLetters,
         );
         $childCell->start();
+
+        $this->spawnMessageLoop($childCell, $childMailbox);
 
         $childRef = $childCell->self();
         $this->childrenMap = $this->childrenMap->appended($name, $childRef);
@@ -505,6 +508,25 @@ final class ActorCell implements ActorContext
                 $this->currentState = $newBehavior->initialState()->get();
             }
         }
+    }
+
+    /**
+     * Spawn a fiber that dequeues messages from the mailbox and processes them.
+     *
+     * @param ActorCell<object> $cell
+     */
+    private function spawnMessageLoop(ActorCell $cell, Mailbox $mailbox): void
+    {
+        $this->runtime->spawn(static function () use ($cell, $mailbox): void {
+            while ($cell->isAlive()) {
+                try {
+                    $envelope = $mailbox->dequeueBlocking(Duration::seconds(1));
+                    $cell->processMessage($envelope);
+                } catch (MailboxClosedException) {
+                    break;
+                }
+            }
+        });
     }
 
     private function transitionTo(ActorState $target): void
