@@ -1,16 +1,16 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
+use DateTimeImmutable;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
-use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -22,12 +22,6 @@ final class ActorSystemTest extends TestCase
 {
     private TestRuntime $runtime;
     private TestClock $clock;
-
-    protected function setUp(): void
-    {
-        $this->clock = new TestClock();
-        $this->runtime = new TestRuntime($this->clock);
-    }
 
     #[Test]
     public function create_returns_system_with_name(): void
@@ -42,7 +36,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn($ctx, $msg) => Behavior::same(),
+            static fn ($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $system->spawn($props, 'orders');
@@ -55,10 +49,18 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn($ctx, $msg) => Behavior::same(),
+            static fn (ActorContext $ctx, Message $msg): Behavior => match (true) {
+                $msg instanceof Increment => Behavior::same(),
+                $msg instanceof Decrement => Behavior::same(),
+            },
         ));
 
+
         $ref = $system->spawn($props, 'worker');
+
+        $ref->tell(new Increment());
+
+        $system->run();
 
         self::assertTrue($ref->isAlive());
     }
@@ -68,7 +70,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn($ctx, $msg) => Behavior::same(),
+            static fn ($ctx, $msg) => Behavior::same(),
         ));
 
         $ref1 = $system->spawnAnonymous($props);
@@ -105,7 +107,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn($ctx, $msg) => Behavior::same(),
+            static fn ($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $system->spawn($props, 'to-stop');
@@ -170,7 +172,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn($ctx, $msg) => Behavior::same(),
+            static fn ($ctx, $msg) => Behavior::same(),
         ));
 
         $system->spawn($props, 'unique');
@@ -196,6 +198,12 @@ final class ActorSystemTest extends TestCase
         $clock = $system->clock();
 
         // Default clock should return a DateTimeImmutable
-        self::assertInstanceOf(\DateTimeImmutable::class, $clock->now());
+        self::assertInstanceOf(DateTimeImmutable::class, $clock->now());
+    }
+
+    protected function setUp(): void
+    {
+        $this->clock = new TestClock();
+        $this->runtime = new TestRuntime($this->clock);
     }
 }

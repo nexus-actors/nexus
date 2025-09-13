@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Message;
@@ -17,6 +16,7 @@ use Monadial\Nexus\Core\Message\Watch;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(PoisonPill::class)]
 #[CoversClass(Kill::class)]
@@ -82,7 +82,7 @@ final class SystemMessageTest extends TestCase
     #[Test]
     public function deadLetterImplementsSystemMessageAndCarriesProperties(): void
     {
-        $msg = new \stdClass();
+        $msg = new stdClass();
         $sender = $this->createActorRef('/user/sender');
         $recipient = $this->createActorRef('/user/recipient');
         $deadLetter = new DeadLetter($msg, $sender, $recipient);

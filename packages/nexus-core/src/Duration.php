@@ -1,26 +1,28 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core;
 
 use Brick\Math\BigInteger;
-use Brick\Math\RoundingMode;
+use NoDiscard;
+use Override;
+use Stringable;
 
 /**
+ * @psalm-api
+ * @psalm-immutable
+ *
  * Nanosecond-precision, immutable duration value object.
  *
  * All arithmetic methods return a new Duration instance; the original is never mutated.
  */
-final readonly class Duration implements \Stringable
+final readonly class Duration implements Stringable
 {
     private const int NANOS_PER_MICRO  = 1_000;
     private const int NANOS_PER_MILLI  = 1_000_000;
     private const int NANOS_PER_SECOND = 1_000_000_000;
 
-    private function __construct(
-        private BigInteger $nanos,
-    ) {}
+    private function __construct(private BigInteger $nanos,) {}
 
     // -- Factory methods ------------------------------------------------------
 
@@ -51,25 +53,25 @@ final readonly class Duration implements \Stringable
 
     // -- Arithmetic -----------------------------------------------------------
 
-    #[\NoDiscard]
+    #[NoDiscard]
     public function plus(self $other): self
     {
         return new self($this->nanos->plus($other->nanos));
     }
 
-    #[\NoDiscard]
+    #[NoDiscard]
     public function minus(self $other): self
     {
         return new self($this->nanos->minus($other->nanos));
     }
 
-    #[\NoDiscard]
+    #[NoDiscard]
     public function multipliedBy(int $factor): self
     {
         return new self($this->nanos->multipliedBy($factor));
     }
 
-    #[\NoDiscard]
+    #[NoDiscard]
     public function dividedBy(int $divisor): self
     {
         return new self($this->nanos->quotient($divisor));
@@ -131,6 +133,7 @@ final readonly class Duration implements \Stringable
 
     // -- Stringable -----------------------------------------------------------
 
+    #[Override]
     public function __toString(): string
     {
         $totalNanos = $this->nanos->abs();
@@ -167,6 +170,8 @@ final readonly class Duration implements \Stringable
 
         $result = implode(' ', $parts);
 
-        return $this->nanos->isNegative() ? '-' . $result : $result;
+        return $this->nanos->isNegative()
+            ? '-' . $result
+            : $result;
     }
 }

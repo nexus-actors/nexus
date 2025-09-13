@@ -1,13 +1,14 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
 
+use Closure;
 use DateTimeImmutable;
 use Monadial\Nexus\Core\Actor\Cancellable;
 use Monadial\Nexus\Core\Duration;
 
+/** @psalm-api */
 final class FiberScheduler
 {
     /** @var list<TimerEntry> */
@@ -16,7 +17,7 @@ final class FiberScheduler
     /**
      * @param \Closure(): void $callback
      */
-    public function scheduleOnce(Duration $delay, \Closure $callback, DateTimeImmutable $now): Cancellable
+    public function scheduleOnce(Duration $delay, Closure $callback, DateTimeImmutable $now): Cancellable
     {
         $cancellable = new FiberCancellable();
         $fireAt = $this->addDuration($now, $delay);
@@ -40,7 +41,7 @@ final class FiberScheduler
     public function scheduleRepeatedly(
         Duration $initialDelay,
         Duration $interval,
-        \Closure $callback,
+        Closure $callback,
         DateTimeImmutable $now,
     ): Cancellable {
         $cancellable = new FiberCancellable();
@@ -71,7 +72,8 @@ final class FiberScheduler
             if ($timer->fireAt <= $now) {
                 ($timer->callback)();
 
-                if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) { // @phpstan-ignore booleanNot.alwaysTrue
+                /** @psalm-suppress RedundantCondition -- defensive guard for timer invariants */
+                if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) {
                     $remaining[] = new TimerEntry(
                         callback: $timer->callback,
                         fireAt: $this->addDuration($timer->fireAt, $timer->interval),
@@ -116,7 +118,9 @@ final class FiberScheduler
         if ($remainingMicros > 0) {
             $modified = $result->modify("+{$remainingMicros} microseconds");
 
-            return $modified !== false ? $modified : $result;
+            return $modified !== false
+                ? $modified
+                : $result;
         }
 
         return $result;

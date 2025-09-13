@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -7,6 +6,9 @@ namespace Monadial\Nexus\Core\Actor;
 use Fp\Functional\Option\Option;
 
 /**
+ * @psalm-api
+ * @psalm-immutable
+ *
  * Result of a stateful behavior handler.
  *
  * Allows the handler to indicate new state, same state, stopped, or
@@ -21,11 +23,7 @@ final readonly class BehaviorWithState
      * @param Option<Behavior<T>> $behavior
      * @param Option<S> $state
      */
-    private function __construct(
-        private Option $behavior,
-        private Option $state,
-        private bool $stopped,
-    ) {}
+    private function __construct(private Option $behavior, private Option $state, private bool $stopped,) {}
 
     /**
      * Same behavior, new state.
@@ -104,9 +102,7 @@ final readonly class BehaviorWithState
     private static function noBehavior(): Option
     {
         /** @var Option<Behavior<object>> fp4php returns Option<empty>, covariant to Option<Behavior<object>> */
-        $none = Option::none(); // @phpstan-ignore varTag.type
-
-        return $none;
+        return Option::none();
     }
 
     /**
@@ -115,8 +111,6 @@ final readonly class BehaviorWithState
     private static function noState(): Option
     {
         /** @var Option<mixed> */
-        $none = Option::none();
-
-        return $none;
+        return Option::none();
     }
 }

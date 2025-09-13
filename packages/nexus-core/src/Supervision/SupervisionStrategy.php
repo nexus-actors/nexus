@@ -1,12 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Supervision;
 
+use Closure;
 use Monadial\Nexus\Core\Duration;
+use Throwable;
 
 /**
+ * @psalm-api
+ *
  * Immutable supervision strategy configuration.
  *
  * Created via named constructors: oneForOne(), allForOne(), exponentialBackoff().
@@ -20,7 +23,7 @@ final readonly class SupervisionStrategy
         public StrategyType $type,
         public int $maxRetries,
         public Duration $window,
-        public \Closure $decider,
+        public Closure $decider,
         public Duration $initialBackoff,
         public Duration $maxBackoff,
         public float $multiplier,
@@ -31,11 +34,7 @@ final readonly class SupervisionStrategy
      *
      * @param (\Closure(\Throwable): Directive)|null $decider
      */
-    public static function oneForOne(
-        int $maxRetries = 3,
-        ?Duration $window = null,
-        ?\Closure $decider = null,
-    ): self {
+    public static function oneForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null,): self {
         return new self(
             type: StrategyType::OneForOne,
             maxRetries: $maxRetries,
@@ -52,11 +51,7 @@ final readonly class SupervisionStrategy
      *
      * @param (\Closure(\Throwable): Directive)|null $decider
      */
-    public static function allForOne(
-        int $maxRetries = 3,
-        ?Duration $window = null,
-        ?\Closure $decider = null,
-    ): self {
+    public static function allForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null,): self {
         return new self(
             type: StrategyType::AllForOne,
             maxRetries: $maxRetries,
@@ -78,7 +73,7 @@ final readonly class SupervisionStrategy
         Duration $maxBackoff,
         int $maxRetries = 3,
         float $multiplier = 2.0,
-        ?\Closure $decider = null,
+        ?Closure $decider = null,
     ): self {
         return new self(
             type: StrategyType::ExponentialBackoff,
@@ -94,7 +89,7 @@ final readonly class SupervisionStrategy
     /**
      * Invoke the decider to determine the directive for the given exception.
      */
-    public function decide(\Throwable $exception): Directive
+    public function decide(Throwable $exception): Directive
     {
         return ($this->decider)($exception);
     }
@@ -102,8 +97,8 @@ final readonly class SupervisionStrategy
     /**
      * @return \Closure(\Throwable): Directive
      */
-    private static function defaultDecider(): \Closure
+    private static function defaultDecider(): Closure
     {
-        return static fn(\Throwable $_): Directive => Directive::Restart; // @phpstan-ignore shipmonk.unusedParameter
+        return static fn (Throwable $_): Directive => Directive::Restart;
     }
 }

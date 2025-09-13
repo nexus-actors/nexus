@@ -1,10 +1,10 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Fp\Functional\Option\Option;
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -14,7 +14,6 @@ use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
-use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\PoisonPill;
@@ -24,9 +23,11 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use OverflowException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[CoversClass(ActorCell::class)]
 final class ActorCellAdvancedTest extends TestCase
@@ -34,57 +35,6 @@ final class ActorCellAdvancedTest extends TestCase
     private TestRuntime $runtime;
     private DeadLetterRef $deadLetters;
     private TestLogger $logger;
-
-    protected function setUp(): void
-    {
-        $this->runtime = new TestRuntime();
-        $this->deadLetters = new DeadLetterRef();
-        $this->logger = new TestLogger();
-    }
-
-    // ---- Helpers ----
-
-    /**
-     * @template T of object
-     * @param Behavior<T> $behavior
-     * @return ActorCell<T>
-     */
-    private function createCell(
-        Behavior $behavior,
-        ?ActorPath $path = null,
-        ?TestMailbox $mailbox = null,
-    ): ActorCell {
-        $path ??= ActorPath::fromString('/user/test');
-        $mailbox ??= TestMailbox::unbounded();
-
-        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
-        $noParent = Option::none(); // @phpstan-ignore varTag.type
-
-        return new ActorCell(
-            $behavior,
-            $path,
-            $mailbox,
-            $this->runtime,
-            $noParent,
-            SupervisionStrategy::oneForOne(),
-            $this->runtime->clock(),
-            $this->logger,
-            $this->deadLetters,
-        );
-    }
-
-    private function envelope(object $message, ?ActorPath $target = null): Envelope
-    {
-        return Envelope::of(
-            $message,
-            ActorPath::root(),
-            $target ?? ActorPath::fromString('/user/test'),
-        );
-    }
-
-    // ======================================================================
-    // Tiered Exception Handling
-    // ======================================================================
 
     #[Test]
     public function checked_exception_in_handler_is_caught_and_logged(): void
@@ -119,7 +69,7 @@ final class ActorCellAdvancedTest extends TestCase
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
-                throw new \LogicException('bug in handler code');
+                throw new LogicException('bug in handler code');
             },
         );
 
@@ -144,7 +94,7 @@ final class ActorCellAdvancedTest extends TestCase
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
-                throw new \OverflowException('some unexpected error');
+                throw new OverflowException('some unexpected error');
             },
         );
 
@@ -172,7 +122,7 @@ final class ActorCellAdvancedTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -190,7 +140,7 @@ final class ActorCellAdvancedTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -219,7 +169,7 @@ final class ActorCellAdvancedTest extends TestCase
 
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -247,6 +197,7 @@ final class ActorCellAdvancedTest extends TestCase
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$messageProcessed): Behavior {
                 $messageProcessed = true;
+
                 return Behavior::same();
             },
         );
@@ -280,7 +231,7 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn-twice') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
 
                     // First spawn should succeed
@@ -290,6 +241,7 @@ final class ActorCellAdvancedTest extends TestCase
                     // Second spawn with same name should throw
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'worker');
                 }
+
                 return Behavior::same();
             },
         );
@@ -322,13 +274,14 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn-and-stop') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $childRef = $ctx->spawn(Props::fromBehavior($childBehavior), 'doomed');
 
                     // ctx->stop() sends a PoisonPill to the child
                     $ctx->stop($childRef);
                 }
+
                 return Behavior::same();
             },
         );
@@ -361,11 +314,12 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-a');
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-b');
                 }
+
                 return Behavior::same();
             },
         );
@@ -397,7 +351,7 @@ final class ActorCellAdvancedTest extends TestCase
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::setup(
             static function (ActorContext $ctx): Behavior {
-                throw new \RuntimeException('initialization boom');
+                throw new RuntimeException('initialization boom');
             },
         );
 
@@ -411,6 +365,7 @@ final class ActorCellAdvancedTest extends TestCase
         } catch (ActorInitializationException $e) {
             // After failure, cell should be in Stopped state
             self::assertSame(ActorState::Stopped, $cell->actorState());
+
             throw $e;
         }
     }
@@ -454,6 +409,7 @@ final class ActorCellAdvancedTest extends TestCase
                         new TestMessage('delayed'),
                     );
                 }
+
                 return Behavior::same();
             },
         );
@@ -494,6 +450,7 @@ final class ActorCellAdvancedTest extends TestCase
                         new TestMessage('tick'),
                     );
                 }
+
                 return Behavior::same();
             },
         );
@@ -517,4 +474,49 @@ final class ActorCellAdvancedTest extends TestCase
         $count2 = $mailbox->count();
         self::assertGreaterThan($count1, $count2, 'Should have more ticks after another interval');
     }
+
+    protected function setUp(): void
+    {
+        $this->runtime = new TestRuntime();
+        $this->deadLetters = new DeadLetterRef();
+        $this->logger = new TestLogger();
+    }
+
+    // ---- Helpers ----
+
+    /**
+     * @template T of object
+     * @param Behavior<T> $behavior
+     * @return ActorCell<T>
+     */
+    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null,): ActorCell {
+        $path ??= ActorPath::fromString('/user/test');
+        $mailbox ??= TestMailbox::unbounded();
+
+        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
+        $noParent = Option::none();
+
+        return new ActorCell(
+            $behavior,
+            $path,
+            $mailbox,
+            $this->runtime,
+            $noParent,
+            SupervisionStrategy::oneForOne(),
+            $this->runtime->clock(),
+            $this->logger,
+            $this->deadLetters,
+        );
+    }
+
+    private function envelope(object $message, ?ActorPath $target = null): Envelope
+    {
+        return Envelope::of(
+            $message,
+            ActorPath::root(),
+            $target ?? ActorPath::fromString('/user/test'),
+        );
+    }// ======================================================================
+// Tiered Exception Handling
+// ======================================================================
 }

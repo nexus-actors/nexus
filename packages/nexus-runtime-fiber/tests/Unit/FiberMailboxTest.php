@@ -1,16 +1,14 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
@@ -18,6 +16,7 @@ use Monadial\Nexus\Runtime\Fiber\FiberMailbox;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(FiberMailbox::class)]
 final class FiberMailboxTest extends TestCase
@@ -189,7 +188,7 @@ final class FiberMailboxTest extends TestCase
         (void) $mailbox->enqueue($this->createEnvelope('msg2'));
 
         $this->expectException(MailboxOverflowException::class);
-        (void) $mailbox->enqueue($this->createEnvelope('msg3')); // @phpstan-ignore missingType.checkedException
+        (void) $mailbox->enqueue($this->createEnvelope('msg3'));
     }
 
     #[Test]
@@ -215,7 +214,7 @@ final class FiberMailboxTest extends TestCase
         $mailbox->close();
 
         $this->expectException(MailboxClosedException::class);
-        (void) $mailbox->enqueue($this->createEnvelope('msg')); // @phpstan-ignore missingType.checkedException
+        (void) $mailbox->enqueue($this->createEnvelope('msg'));
     }
 
     #[Test]
@@ -252,13 +251,13 @@ final class FiberMailboxTest extends TestCase
         $mailbox->close();
 
         $this->expectException(MailboxClosedException::class);
-        $mailbox->dequeueBlocking(Duration::millis(100)); // @phpstan-ignore missingType.checkedException
+        $mailbox->dequeueBlocking(Duration::millis(100));
     }
 
     private function createEnvelope(string $label): Envelope
     {
         return Envelope::of(
-            new \stdClass(),
+            new stdClass(),
             ActorPath::root(),
             ActorPath::root(),
         );

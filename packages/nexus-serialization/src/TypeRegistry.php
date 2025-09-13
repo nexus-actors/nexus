@@ -1,12 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
 
 use Fp\Functional\Option\Option;
+use LogicException;
+use ReflectionClass;
 
 /**
+ * @psalm-api
+ *
  * Bidirectional mapping between message class names and their wire-format type identifiers.
  */
 final class TypeRegistry
@@ -25,7 +28,7 @@ final class TypeRegistry
     public function register(string $className, string $typeName): void
     {
         if (isset($this->nameToClass[$typeName])) {
-            throw new \LogicException(
+            throw new LogicException(
                 "Type name '{$typeName}' is already registered to class '{$this->nameToClass[$typeName]}'",
             );
         }
@@ -43,16 +46,13 @@ final class TypeRegistry
      */
     public function registerFromAttribute(string $className): void
     {
-        $reflection = new \ReflectionClass($className);
+        $reflection = new ReflectionClass($className);
         $attributes = $reflection->getAttributes(MessageType::class);
 
         if ($attributes === []) {
-            throw new \LogicException(
-                "Class '{$className}' does not have a #[MessageType] attribute",
-            );
+            throw new LogicException("Class '{$className}' does not have a #[MessageType] attribute");
         }
 
-        /** @var MessageType $messageType */
         $messageType = $attributes[0]->newInstance();
         $this->register($className, $messageType->name);
     }
@@ -69,7 +69,7 @@ final class TypeRegistry
         }
 
         /** @var Option<string> $none */
-        $none = Option::none(); // @phpstan-ignore varTag.type
+        $none = Option::none();
 
         return $none;
     }
@@ -86,7 +86,7 @@ final class TypeRegistry
         }
 
         /** @var Option<string> $none */
-        $none = Option::none(); // @phpstan-ignore varTag.type
+        $none = Option::none();
 
         return $none;
     }

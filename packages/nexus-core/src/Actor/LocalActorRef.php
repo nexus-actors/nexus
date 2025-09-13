@@ -1,15 +1,19 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Closure;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
+use Override;
+use RuntimeException;
 
 /**
+ * @psalm-api
+ *
  * Local (in-process) actor reference that delivers messages via a mailbox.
  *
  * @template T of object
@@ -22,13 +26,10 @@ final readonly class LocalActorRef implements ActorRef
      * @param Mailbox $mailbox The actor's mailbox for message delivery
      * @param \Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      */
-    public function __construct(
-        private ActorPath $path,
-        private Mailbox $mailbox,
-        private \Closure $aliveChecker,
-    ) {}
+    public function __construct(private ActorPath $path, private Mailbox $mailbox, private Closure $aliveChecker,) {}
 
     /** @param T $message */
+    #[Override]
     public function tell(object $message): void
     {
         try {
@@ -43,17 +44,20 @@ final readonly class LocalActorRef implements ActorRef
      * @param callable(ActorRef<R>): T $messageFactory
      * @return R
      */
+    #[Override]
     public function ask(callable $messageFactory, Duration $timeout): object
     {
         // Will be wired up with ActorSystem in Task 9
-        throw new \RuntimeException('ask() requires ActorSystem');
+        throw new RuntimeException('ask() requires ActorSystem');
     }
 
+    #[Override]
     public function path(): ActorPath
     {
         return $this->path;
     }
 
+    #[Override]
     public function isAlive(): bool
     {
         return ($this->aliveChecker)();

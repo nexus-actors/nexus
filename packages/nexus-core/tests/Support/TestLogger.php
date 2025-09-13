@@ -1,10 +1,11 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
+use Override;
 use Psr\Log\AbstractLogger;
+use Stringable;
 
 /**
  * In-memory logger for test assertions.
@@ -16,7 +17,11 @@ final class TestLogger extends AbstractLogger
     /** @var list<array{level: string, message: string}> */
     public array $logs = [];
 
-    public function log($level, \Stringable|string $message, array $context = []): void
+    /**
+     * @param array<string, mixed> $context
+     */
+    #[Override]
+    public function log(mixed $level, Stringable|string $message, array $context = []): void
     {
         $this->logs[] = ['level' => (string) $level, 'message' => (string) $message];
     }

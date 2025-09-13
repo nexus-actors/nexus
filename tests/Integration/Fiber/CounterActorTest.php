@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -37,19 +36,22 @@ final class CounterActorTest extends TestCase
 
         // Stateful counter behavior
         /** @var Behavior<object> $counterBehavior */
-        $counterBehavior = Behavior::withState(0, static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
-            if ($msg instanceof Increment) {
-                return BehaviorWithState::next($count + 1);
-            }
-
-            if ($msg instanceof GetCount) {
-                $msg->replyTo->tell(new CountReply($count));
-
+        $counterBehavior = Behavior::withState(
+            0,
+            static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
+                if ($msg instanceof Increment) {
+                    return BehaviorWithState::next($count + 1);
+                }
+    
+                if ($msg instanceof GetCount) {
+                    $msg->replyTo->tell(new CountReply($count));
+    
+                    return BehaviorWithState::same();
+                }
+    
                 return BehaviorWithState::same();
-            }
-
-            return BehaviorWithState::same();
-        });
+            },
+        );
 
         $counterRef = $system->spawn(Props::fromBehavior($counterBehavior), 'counter');
 
@@ -96,19 +98,22 @@ final class CounterActorTest extends TestCase
         $system = ActorSystem::create('counter-zero-test', $runtime);
 
         /** @var Behavior<object> $counterBehavior */
-        $counterBehavior = Behavior::withState(0, static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
-            if ($msg instanceof Increment) {
-                return BehaviorWithState::next($count + 1);
-            }
-
-            if ($msg instanceof GetCount) {
-                $msg->replyTo->tell(new CountReply($count));
-
+        $counterBehavior = Behavior::withState(
+            0,
+            static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
+                if ($msg instanceof Increment) {
+                    return BehaviorWithState::next($count + 1);
+                }
+    
+                if ($msg instanceof GetCount) {
+                    $msg->replyTo->tell(new CountReply($count));
+    
+                    return BehaviorWithState::same();
+                }
+    
                 return BehaviorWithState::same();
-            }
-
-            return BehaviorWithState::same();
-        });
+            },
+        );
 
         $counterRef = $system->spawn(Props::fromBehavior($counterBehavior), 'counter');
 
@@ -146,19 +151,22 @@ final class CounterActorTest extends TestCase
         $system = ActorSystem::create('counter-multi-test', $runtime);
 
         /** @var Behavior<object> $counterBehavior */
-        $counterBehavior = Behavior::withState(0, static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
-            if ($msg instanceof Increment) {
-                return BehaviorWithState::next($count + 1);
-            }
-
-            if ($msg instanceof GetCount) {
-                $msg->replyTo->tell(new CountReply($count));
-
+        $counterBehavior = Behavior::withState(
+            0,
+            static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
+                if ($msg instanceof Increment) {
+                    return BehaviorWithState::next($count + 1);
+                }
+    
+                if ($msg instanceof GetCount) {
+                    $msg->replyTo->tell(new CountReply($count));
+    
+                    return BehaviorWithState::same();
+                }
+    
                 return BehaviorWithState::same();
-            }
-
-            return BehaviorWithState::same();
-        });
+            },
+        );
 
         $counterRef = $system->spawn(Props::fromBehavior($counterBehavior), 'counter');
 
@@ -178,11 +186,13 @@ final class CounterActorTest extends TestCase
         for ($i = 0; $i < 3; $i++) {
             $counterRef->tell(new Increment());
         }
+
         $counterRef->tell(new GetCount($probeRef));
 
         for ($i = 0; $i < 2; $i++) {
             $counterRef->tell(new Increment());
         }
+
         $counterRef->tell(new GetCount($probeRef));
 
         $runtime->scheduleOnce(Duration::millis(200), static function () use ($system): void {

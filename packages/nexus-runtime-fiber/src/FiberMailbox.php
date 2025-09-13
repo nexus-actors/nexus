@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
@@ -10,35 +9,37 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use NoDiscard;
+use Override;
+use SplQueue;
 
+/** @psalm-api */
 final class FiberMailbox implements Mailbox
 {
     /** @var \SplQueue<Envelope> */
-    private \SplQueue $queue;
+    private SplQueue $queue;
 
     private bool $closed = false;
 
     /** @var list<Fiber<mixed, mixed, mixed, mixed>> */
     private array $waiters = [];
 
-    public function __construct(
-        private readonly MailboxConfig $config,
-        private readonly ActorPath $actor,
-    ) {
+    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor,) {
         /** @var \SplQueue<Envelope> $queue */
-        $queue = new \SplQueue();
+        $queue = new SplQueue();
         $this->queue = $queue;
     }
 
     /**
      * @throws MailboxClosedException
      */
-    #[\NoDiscard]
+    #[Override]
+    #[NoDiscard]
     public function enqueue(Envelope $envelope): EnqueueResult
     {
         if ($this->closed) {
@@ -46,7 +47,7 @@ final class FiberMailbox implements Mailbox
         }
 
         if ($this->config->bounded && $this->queue->count() >= $this->config->capacity) {
-            return $this->handleOverflow($envelope); // @phpstan-ignore missingType.checkedException
+            return $this->handleOverflow($envelope);
         }
 
         $this->queue->enqueue($envelope);
@@ -56,11 +57,12 @@ final class FiberMailbox implements Mailbox
     }
 
     /** @return Option<Envelope> */
+    #[Override]
     public function dequeue(): Option
     {
         if ($this->queue->isEmpty()) {
             /** @var Option<Envelope> $none fp4php returns Option<empty>, covariant to Option<Envelope> */
-            $none = Option::none(); // @phpstan-ignore varTag.type
+            $none = Option::none();
 
             return $none;
         }
@@ -71,10 +73,12 @@ final class FiberMailbox implements Mailbox
     /**
      * @throws MailboxClosedException
      */
+    #[Override]
     public function dequeueBlocking(Duration $timeout): Envelope
     {
         // Fiber-based blocking: suspend and re-check on resume
         $fiber = Fiber::getCurrent();
+
         if ($fiber !== null) {
             while (true) {
                 if (!$this->queue->isEmpty()) {
@@ -107,11 +111,13 @@ final class FiberMailbox implements Mailbox
         return $this->pollWithTimeout($timeout);
     }
 
+    #[Override]
     public function count(): int
     {
         return $this->queue->count();
     }
 
+    #[Override]
     public function isFull(): bool
     {
         if (!$this->config->bounded) {
@@ -121,11 +127,13 @@ final class FiberMailbox implements Mailbox
         return $this->queue->count() >= $this->config->capacity;
     }
 
+    #[Override]
     public function isEmpty(): bool
     {
         return $this->queue->isEmpty();
     }
 
+    #[Override]
     public function close(): void
     {
         $this->closed = true;
@@ -191,13 +199,16 @@ final class FiberMailbox implements Mailbox
     private function pollWithTimeout(Duration $timeout): Envelope
     {
         $deadline = hrtime(true) + $timeout->toNanos();
+
         while (hrtime(true) < $deadline) {
             if (!$this->queue->isEmpty()) {
                 return $this->queue->dequeue();
             }
+
             if ($this->closed) {
                 throw new MailboxClosedException($this->actor);
             }
+
             usleep(100); // small sleep to avoid busy spin
         }
 

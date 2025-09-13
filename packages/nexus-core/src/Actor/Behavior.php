@@ -1,13 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 
 /**
+ * @psalm-api
+ *
  * Immutable behavior definition for actors.
  *
  * Template parameter T represents the message protocol the actor handles.
@@ -33,7 +35,7 @@ final readonly class Behavior
      * @param \Closure(ActorContext<U>, U): Behavior<U> $handler
      * @return Behavior<U>
      */
-    public static function receive(\Closure $handler): self
+    public static function receive(Closure $handler): self
     {
         /** @var Behavior<U> */
         return new self(BehaviorTag::Receive, Option::some($handler), self::noSignalHandler(), self::noState());
@@ -46,10 +48,15 @@ final readonly class Behavior
      * @param \Closure(ActorContext<U>, U, S): BehaviorWithState<U, S> $handler
      * @return Behavior<U>
      */
-    public static function withState(mixed $initialState, \Closure $handler): self
+    public static function withState(mixed $initialState, Closure $handler): self
     {
         /** @var Behavior<U> */
-        return new self(BehaviorTag::WithState, Option::some($handler), self::noSignalHandler(), Option::some($initialState));
+        return new self(
+            BehaviorTag::WithState,
+            Option::some($handler),
+            self::noSignalHandler(),
+            Option::some($initialState),
+        );
     }
 
     /**
@@ -57,7 +64,7 @@ final readonly class Behavior
      * @param \Closure(ActorContext<U>): Behavior<U> $factory
      * @return Behavior<U>
      */
-    public static function setup(\Closure $factory): self
+    public static function setup(Closure $factory): self
     {
         /** @var Behavior<U> */
         return new self(BehaviorTag::Setup, Option::some($factory), self::noSignalHandler(), self::noState());
@@ -102,8 +109,9 @@ final readonly class Behavior
     /**
      * @param \Closure(ActorContext<T>, Signal): Behavior<T> $handler
      * @return Behavior<T>
+     * @psalm-suppress UnusedParam $handler is used in Option::some($handler)
      */
-    public function onSignal(\Closure $handler): self
+    public function onSignal(Closure $handler): self
     {
         /** @var Behavior<T> */
         return new self($this->tag, $this->handler, Option::some($handler), $this->initialState);
@@ -159,9 +167,7 @@ final readonly class Behavior
     private static function noHandler(): Option
     {
         /** @var Option<\Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
-        $none = Option::none(); // @phpstan-ignore varTag.type
-
-        return $none;
+        return Option::none();
     }
 
     /**
@@ -170,9 +176,7 @@ final readonly class Behavior
     private static function noSignalHandler(): Option
     {
         /** @var Option<\Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
-        $none = Option::none(); // @phpstan-ignore varTag.type
-
-        return $none;
+        return Option::none();
     }
 
     /**
@@ -181,8 +185,6 @@ final readonly class Behavior
     private static function noState(): Option
     {
         /** @var Option<mixed> */
-        $none = Option::none();
-
-        return $none;
+        return Option::none();
     }
 }

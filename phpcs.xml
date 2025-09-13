@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<ruleset name="Nexus">
+    <description>Nexus coding standard</description>
+
+    <arg name="extensions" value="php" />
+    <arg name="colors" />
+    <arg value="sp" />
+
+    <file>packages/nexus-core/src</file>
+    <file>packages/nexus-runtime-fiber/src</file>
+    <file>packages/nexus-runtime-swoole/src</file>
+    <file>packages/nexus-serialization/src</file>
+    <file>packages/nexus-core/tests</file>
+    <file>packages/nexus-runtime-fiber/tests</file>
+    <file>packages/nexus-serialization/tests</file>
+    <file>tests</file>
+
+    <!-- Slevomat: Type Hints -->
+    <rule ref="SlevomatCodingStandard.TypeHints">
+        <!-- We use mixed intentionally in generic boundaries -->
+        <exclude name="SlevomatCodingStandard.TypeHints.DisallowMixedTypeHint" />
+        <!-- Deprecated, replaced by DNFTypeHintFormat -->
+        <exclude name="SlevomatCodingStandard.TypeHints.UnionTypeHintFormat" />
+    </rule>
+
+    <!-- Slevomat: Classes -->
+    <rule ref="SlevomatCodingStandard.Classes">
+        <!-- We use constructor property promotion extensively -->
+        <exclude name="SlevomatCodingStandard.Classes.DisallowConstructorPropertyPromotion" />
+        <!-- Exception naming convention is fine (e.g. MailboxClosedException) -->
+        <exclude name="SlevomatCodingStandard.Classes.SuperfluousExceptionNaming" />
+        <!-- Long classes are fine for ActorCell etc. -->
+        <exclude name="SlevomatCodingStandard.Classes.ClassLength" />
+        <!-- Public readonly properties are a core pattern -->
+        <exclude name="SlevomatCodingStandard.Classes.ForbiddenPublicProperty" />
+    </rule>
+
+    <!-- Slevomat: Namespaces -->
+    <rule ref="SlevomatCodingStandard.Namespaces">
+        <!-- We don't require whitelisted namespaces -->
+        <exclude name="SlevomatCodingStandard.Namespaces.UseOnlyWhitelistedNamespaces" />
+        <!-- We use short class names in annotations, not FQCNs -->
+        <exclude name="SlevomatCodingStandard.Namespaces.FullyQualifiedClassNameInAnnotation" />
+        <!-- We prefer exceptions imported via use, not fully qualified -->
+        <exclude name="SlevomatCodingStandard.Namespaces.FullyQualifiedExceptions" />
+        <!-- Global functions with \ prefix is a performance best practice -->
+        <exclude name="SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalFunctions" />
+        <!-- Global constants with \ prefix is fine -->
+        <exclude name="SlevomatCodingStandard.Namespaces.FullyQualifiedGlobalConstants" />
+    </rule>
+
+    <!-- Slevomat: Functions -->
+    <rule ref="SlevomatCodingStandard.Functions">
+        <!-- Unused parameters are common in interface implementations and callbacks -->
+        <exclude name="SlevomatCodingStandard.Functions.UnusedParameter" />
+        <!-- Named arguments are a core PHP 8 feature we use -->
+        <exclude name="SlevomatCodingStandard.Functions.DisallowNamedArguments" />
+        <!-- Arrow functions are used extensively -->
+        <exclude name="SlevomatCodingStandard.Functions.DisallowArrowFunction" />
+        <!-- Long functions are fine for complex logic -->
+        <exclude name="SlevomatCodingStandard.Functions.FunctionLength" />
+        <!-- Trailing commas in calls are our style -->
+        <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInCall" />
+        <!-- Trailing commas in declarations are our style -->
+        <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInDeclaration" />
+        <!-- Not all closures need to be arrow functions -->
+        <exclude name="SlevomatCodingStandard.Functions.RequireArrowFunction" />
+    </rule>
+
+    <!-- Slevomat: Variables -->
+    <rule ref="SlevomatCodingStandard.Variables">
+        <!-- $_ is used intentionally for NoDiscard -->
+        <exclude name="SlevomatCodingStandard.Variables.UnusedVariable" />
+    </rule>
+
+    <!-- Slevomat: Exceptions -->
+    <rule ref="SlevomatCodingStandard.Exceptions">
+        <!-- Non-capturing catches are fine for expected exceptions -->
+        <exclude name="SlevomatCodingStandard.Exceptions.DisallowNonCapturingCatch" />
+    </rule>
+
+    <!-- Slevomat: Arrays -->
+    <rule ref="SlevomatCodingStandard.Arrays" />
+
+    <!-- Slevomat: Control Structures -->
+    <rule ref="SlevomatCodingStandard.ControlStructures">
+        <!-- Yoda comparisons are not our style -->
+        <exclude name="SlevomatCodingStandard.ControlStructures.RequireYodaComparison" />
+        <!-- New without parentheses is fine for empty constructors -->
+        <exclude name="SlevomatCodingStandard.ControlStructures.NewWithoutParentheses" />
+        <!-- Early exit is not always clearer -->
+        <exclude name="SlevomatCodingStandard.ControlStructures.EarlyExit" />
+    </rule>
+
+    <!-- Slevomat: Operators -->
+    <rule ref="SlevomatCodingStandard.Operators">
+        <!-- Increment/decrement operators are standard PHP -->
+        <exclude name="SlevomatCodingStandard.Operators.DisallowIncrementAndDecrementOperators" />
+        <exclude name="SlevomatCodingStandard.Operators.RequireOnlyStandaloneIncrementAndDecrementOperators" />
+    </rule>
+
+    <!-- Slevomat: PHP -->
+    <rule ref="SlevomatCodingStandard.PHP">
+        <!-- References are needed for array manipulation and closures -->
+        <exclude name="SlevomatCodingStandard.PHP.DisallowReference" />
+        <!-- We use assert() for type narrowing, not explicit assertions -->
+        <exclude name="SlevomatCodingStandard.PHP.RequireExplicitAssertion" />
+    </rule>
+
+    <!-- Treat types referenced only in @throws / @param / @return docblocks as used -->
+    <rule ref="SlevomatCodingStandard.Namespaces.UnusedUses">
+        <properties>
+            <property name="searchAnnotations" value="true" />
+        </properties>
+    </rule>
+
+    <!-- Configure strict_types spacing: one blank line after declare -->
+    <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
+        <properties>
+            <property name="spacesCountAroundEqualsSign" value="0" />
+            <property name="linesCountBeforeDeclare" value="0" />
+            <property name="linesCountAfterDeclare" value="1" />
+        </properties>
+    </rule>
+
+    <!-- Configure class brace spacing -->
+    <rule ref="SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces">
+        <properties>
+            <property name="linesCountAfterOpeningBrace" value="0" />
+            <property name="linesCountBeforeClosingBrace" value="0" />
+        </properties>
+    </rule>
+</ruleset>

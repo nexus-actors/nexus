@@ -1,11 +1,12 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Error;
 use Fp\Collections\HashMap;
 use Fp\Functional\Option\Option;
+use LogicException;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
@@ -21,14 +22,20 @@ use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Message\Resume;
 use Monadial\Nexus\Core\Message\Suspend;
 use Monadial\Nexus\Core\Message\SystemMessage;
-use Monadial\Nexus\Core\Message\Watch;
 use Monadial\Nexus\Core\Message\Unwatch;
+use Monadial\Nexus\Core\Message\Watch;
 use Monadial\Nexus\Core\Runtime\Runtime;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Override;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
+use Throwable;
+use function assert;
+use function is_callable;
 
 /**
+ * @psalm-api
+ *
  * Internal engine of an actor. Manages behavior, state machine, children, stash, and supervision.
  *
  * @template T of object
@@ -75,15 +82,15 @@ final class ActorCell implements ActorContext
         $this->currentBehavior = $behavior;
 
         /** @var HashMap<string, ActorRef<object>> $emptyChildren */
-        $emptyChildren = HashMap::collect([]); // @phpstan-ignore varTag.type
+        $emptyChildren = HashMap::collect([]);
         $this->childrenMap = $emptyChildren;
 
         /** @var HashMap<string, ActorRef<object>> $emptyWatchers */
-        $emptyWatchers = HashMap::collect([]); // @phpstan-ignore varTag.type
+        $emptyWatchers = HashMap::collect([]);
         $this->watchers = $emptyWatchers;
 
         /** @var ActorRef<T> $ref */
-        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive()); // @phpstan-ignore varTag.nativeType
+        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn (): bool => $this->isAlive());
         $this->selfRef = $ref;
     }
 
@@ -111,15 +118,17 @@ final class ActorCell implements ActorContext
         // Resolve setup behavior
         if ($this->currentBehavior->tag() === BehaviorTag::Setup) {
             $factory = $this->currentBehavior->handler()->get();
-            \assert(\is_callable($factory));
+            assert(is_callable($factory));
+
             try {
                 /** @var Behavior<T> $resolved */
                 $resolved = $factory($this);
                 $this->currentBehavior = $resolved;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 $this->transitionTo(ActorState::Running);
                 $this->transitionTo(ActorState::Stopping);
                 $this->transitionTo(ActorState::Stopped);
+
                 throw new ActorInitializationException($this->actorPath, $e->getMessage(), $e);
             }
         }
@@ -181,17 +190,20 @@ final class ActorCell implements ActorContext
     // ---- ActorContext implementation ----
 
     /** @return ActorRef<T> */
+    #[Override]
     public function self(): ActorRef
     {
         return $this->selfRef;
     }
 
     /** @return Option<ActorRef<object>> */
+    #[Override]
     public function parent(): Option
     {
         return $this->parentRef;
     }
 
+    #[Override]
     public function path(): ActorPath
     {
         return $this->actorPath;
@@ -203,17 +215,18 @@ final class ActorCell implements ActorContext
      * @return ActorRef<C>
      * @throws ActorInitializationException
      */
+    #[Override]
     public function spawn(Props $props, string $name): ActorRef
     {
         // Check for duplicate child name
-        if ($this->childrenMap->get($name)->isSome()) { // @phpstan-ignore method.impossibleType
+        if ($this->childrenMap->get($name)->isSome()) {
             throw new ActorNameExistsException($this->actorPath, $name);
         }
 
         $childPath = $this->actorPath->child($name);
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        $childSupervision = $props->supervision->isSome() // @phpstan-ignore method.impossibleType
+        $childSupervision = $props->supervision->isSome()
             ? $props->supervision->get()
             : SupervisionStrategy::oneForOne();
 
@@ -221,10 +234,9 @@ final class ActorCell implements ActorContext
         $typedSupervision = $childSupervision;
 
         /** @var Option<ActorRef<object>> $parentOpt fp4php returns Option<ActorRef<T>>, widen to Option<ActorRef<object>> */
-        $parentOpt = Option::some($this->selfRef); // @phpstan-ignore varTag.type
+        $parentOpt = Option::some($this->selfRef);
 
-        /** @var ActorCell<C> $childCell */
-        $childCell = new ActorCell(
+        $childCell = new self(
             $props->behavior,
             $childPath,
             $childMailbox,
@@ -246,24 +258,28 @@ final class ActorCell implements ActorContext
     }
 
     /** @param ActorRef<object> $child */
+    #[Override]
     public function stop(ActorRef $child): void
     {
         $child->tell(new PoisonPill());
     }
 
     /** @return Option<ActorRef<object>> */
+    #[Override]
     public function child(string $name): Option
     {
         return $this->childrenMap->get($name);
     }
 
     /** @return HashMap<string, ActorRef<object>> */
+    #[Override]
     public function children(): HashMap
     {
         return $this->childrenMap;
     }
 
     /** @param ActorRef<object> $target */
+    #[Override]
     public function watch(ActorRef $target): void
     {
         $target->tell(new Watch($this->selfRef));
@@ -271,6 +287,7 @@ final class ActorCell implements ActorContext
     }
 
     /** @param ActorRef<object> $target */
+    #[Override]
     public function unwatch(ActorRef $target): void
     {
         $target->tell(new Unwatch($this->selfRef));
@@ -278,23 +295,32 @@ final class ActorCell implements ActorContext
     }
 
     /** @param T $message */
+    #[Override]
     public function scheduleOnce(Duration $delay, object $message): Cancellable
     {
         $selfRef = $this->selfRef;
+
         return $this->runtime->scheduleOnce($delay, static function () use ($selfRef, $message): void {
             $selfRef->tell($message);
         });
     }
 
     /** @param T $message */
+    #[Override]
     public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, object $message): Cancellable
     {
         $selfRef = $this->selfRef;
-        return $this->runtime->scheduleRepeatedly($initialDelay, $interval, static function () use ($selfRef, $message): void {
-            $selfRef->tell($message);
-        });
+
+        return $this->runtime->scheduleRepeatedly(
+            $initialDelay,
+            $interval,
+            static function () use ($selfRef, $message): void {
+                $selfRef->tell($message);
+            },
+        );
     }
 
+    #[Override]
     public function stash(): void
     {
         if ($this->currentEnvelope !== null) {
@@ -302,31 +328,36 @@ final class ActorCell implements ActorContext
         }
     }
 
+    #[Override]
     public function unstashAll(): void
     {
         // Re-enqueue all stashed messages to the mailbox
         foreach ($this->stashBuffer as $envelope) {
             try {
                 $_ = $this->mailbox->enqueue($envelope);
-            } catch (\Throwable) {
+            } catch (Throwable) {
                 // If mailbox is closed, we can't re-enqueue
                 $this->logger->warning('Failed to unstash message to closed mailbox');
             }
         }
+
         $this->stashBuffer = [];
     }
 
+    #[Override]
     public function log(): LoggerInterface
     {
         return $this->logger;
     }
 
     /** @return Option<ActorRef<object>> */
+    #[Override]
     public function sender(): Option
     {
         if ($this->currentEnvelope === null) {
             /** @var Option<ActorRef<object>> $none */
-            $none = Option::none(); // @phpstan-ignore varTag.type
+            $none = Option::none();
+
             return $none;
         }
 
@@ -335,7 +366,8 @@ final class ActorCell implements ActorContext
         // Root path means no sender
         if ($senderPath->equals(ActorPath::root())) {
             /** @var Option<ActorRef<object>> $none */
-            $none = Option::none(); // @phpstan-ignore varTag.type
+            $none = Option::none();
+
             return $none;
         }
 
@@ -344,8 +376,9 @@ final class ActorCell implements ActorContext
         $senderRef = new LocalActorRef(
             $senderPath,
             $this->mailbox, // placeholder - in full system would resolve actual mailbox
-            static fn(): bool => true,
+            static fn (): bool => true,
         );
+
         return Option::some($senderRef);
     }
 
@@ -374,12 +407,11 @@ final class ActorCell implements ActorContext
     {
         $signalHandler = $this->currentBehavior->signalHandler();
 
-        if ($signalHandler->isNone()) { // @phpstan-ignore method.impossibleType
+        if ($signalHandler->isNone()) {
             return;
         }
 
         $handler = $signalHandler->get();
-        \assert(\is_callable($handler));
 
         try {
             /** @var Behavior<T> $result */
@@ -387,9 +419,9 @@ final class ActorCell implements ActorContext
             $this->applyBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Signal handler threw NexusException: ' . $e->getMessage());
-        } catch (\LogicException|\Error $e) {
+        } catch (LogicException|Error $e) {
             $this->logger->critical('Unchecked exception in signal handler: ' . $e->getMessage());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in signal handler: ' . $e->getMessage());
         }
     }
@@ -398,19 +430,20 @@ final class ActorCell implements ActorContext
     {
         if ($this->currentBehavior->tag() === BehaviorTag::WithState) {
             $this->handleStatefulMessage($message);
+
             return;
         }
 
         $handler = $this->currentBehavior->handler();
 
-        if ($handler->isNone()) { // @phpstan-ignore method.impossibleType
+        if ($handler->isNone()) {
             // Empty or other non-receive behavior - route to dead letters
             $this->deadLetters->tell($message);
+
             return;
         }
 
         $fn = $handler->get();
-        \assert(\is_callable($fn));
 
         try {
             /** @var Behavior<T> $result */
@@ -419,9 +452,9 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Handler threw NexusException: ' . $e->getMessage());
             $this->supervision->decide($e);
-        } catch (\LogicException|\Error $e) {
+        } catch (LogicException|Error $e) {
             $this->logger->critical('Unchecked exception in handler: ' . $e->getMessage());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in handler: ' . $e->getMessage());
         }
     }
@@ -430,13 +463,13 @@ final class ActorCell implements ActorContext
     {
         $handler = $this->currentBehavior->handler();
 
-        if ($handler->isNone()) { // @phpstan-ignore method.impossibleType
+        if ($handler->isNone()) {
             $this->deadLetters->tell($message);
+
             return;
         }
 
         $fn = $handler->get();
-        \assert(\is_callable($fn));
 
         try {
             /** @var BehaviorWithState<T, mixed> $result */
@@ -445,9 +478,9 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Stateful handler threw NexusException: ' . $e->getMessage());
             $this->supervision->decide($e);
-        } catch (\LogicException|\Error $e) {
+        } catch (LogicException|Error $e) {
             $this->logger->critical('Unchecked exception in stateful handler: ' . $e->getMessage());
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in stateful handler: ' . $e->getMessage());
         }
     }
@@ -463,6 +496,7 @@ final class ActorCell implements ActorContext
 
         if ($behavior->isStopped()) {
             $this->initiateStop();
+
             return;
         }
 
@@ -470,6 +504,7 @@ final class ActorCell implements ActorContext
             if ($this->currentEnvelope !== null) {
                 $this->deadLetters->tell($this->currentEnvelope->message);
             }
+
             return;
         }
 
@@ -489,17 +524,17 @@ final class ActorCell implements ActorContext
     {
         if ($result->isStopped()) {
             $this->initiateStop();
+
             return;
         }
 
         // Update state if provided
-        if ($result->state()->isSome()) { // @phpstan-ignore method.impossibleType
+        if ($result->state()->isSome()) {
             $this->currentState = $result->state()->get();
         }
 
         // Swap behavior if provided
-        if ($result->behavior()->isSome()) { // @phpstan-ignore method.impossibleType
-            /** @var Behavior<T> $newBehavior */
+        if ($result->behavior()->isSome()) {
             $newBehavior = $result->behavior()->get();
             $this->currentBehavior = $newBehavior;
 
@@ -515,7 +550,7 @@ final class ActorCell implements ActorContext
      *
      * @param ActorCell<object> $cell
      */
-    private function spawnMessageLoop(ActorCell $cell, Mailbox $mailbox): void
+    private function spawnMessageLoop(self $cell, Mailbox $mailbox): void
     {
         $this->runtime->spawn(static function () use ($cell, $mailbox): void {
             while ($cell->isAlive()) {
@@ -534,6 +569,7 @@ final class ActorCell implements ActorContext
         if (!$this->state->canTransitionTo($target)) {
             throw new InvalidActorStateTransition($this->state, $target);
         }
+
         $this->state = $target;
     }
 }

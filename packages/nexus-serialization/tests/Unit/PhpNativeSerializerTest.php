@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
@@ -10,6 +9,8 @@ use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use stdClass;
 
 #[CoversClass(PhpNativeSerializer::class)]
 final class PhpNativeSerializerTest extends TestCase
@@ -70,16 +71,13 @@ final class PhpNativeSerializerTest extends TestCase
 
         $this->expectException(MessageDeserializationException::class);
 
-        (void) $serializer->deserialize($data, \stdClass::class);
+        (void) $serializer->deserialize($data, stdClass::class);
     }
 }
 
 final readonly class SimpleMessage
 {
-    public function __construct(
-        public string $text,
-        public int $number,
-    ) {}
+    public function __construct(public string $text, public int $number,) {}
 }
 
 final class NonSerializableMessage
@@ -87,15 +85,13 @@ final class NonSerializableMessage
     /**
      * @param resource|false $handle
      */
-    public function __construct(
-        public mixed $handle,
-    ) {}
+    public function __construct(public mixed $handle,) {}
 
     /**
-     * @return never
+     * @return array<string, mixed>
      */
     public function __serialize(): array
     {
-        throw new \RuntimeException('Cannot serialize');
+        throw new RuntimeException('Cannot serialize');
     }
 }

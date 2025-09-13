@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+/** @psalm-api */
 enum BehaviorTag: string
 {
     case Receive = 'receive';

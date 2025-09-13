@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
@@ -11,19 +10,13 @@ use Monadial\Nexus\Serialization\ValinorMessageSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(ValinorMessageSerializer::class)]
 final class ValinorMessageSerializerTest extends TestCase
 {
     private TypeRegistry $registry;
     private ValinorMessageSerializer $serializer;
-
-    protected function setUp(): void
-    {
-        $this->registry = new TypeRegistry();
-        $this->registry->register(ValinorTestMessage::class, 'valinor.test');
-        $this->serializer = new ValinorMessageSerializer($this->registry);
-    }
 
     #[Test]
     public function serializesSimpleReadonlyMessageToJson(): void
@@ -86,7 +79,7 @@ final class ValinorMessageSerializerTest extends TestCase
     {
         $this->expectException(MessageSerializationException::class);
 
-        (void) $this->serializer->serialize(new \stdClass());
+        (void) $this->serializer->serialize(new stdClass());
     }
 
     #[Test]
@@ -96,12 +89,16 @@ final class ValinorMessageSerializerTest extends TestCase
 
         (void) $this->serializer->deserialize('{invalid-json', 'valinor.test');
     }
+
+    protected function setUp(): void
+    {
+        $this->registry = new TypeRegistry();
+        $this->registry->register(ValinorTestMessage::class, 'valinor.test');
+        $this->serializer = new ValinorMessageSerializer($this->registry);
+    }
 }
 
 final readonly class ValinorTestMessage
 {
-    public function __construct(
-        public string $text,
-        public int $number,
-    ) {}
+    public function __construct(public string $text, public int $number,) {}
 }

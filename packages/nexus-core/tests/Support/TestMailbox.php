@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
@@ -9,8 +8,8 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
@@ -21,9 +20,7 @@ final class TestMailbox implements Mailbox
     private array $queue = [];
     private bool $closed = false;
 
-    public function __construct(
-        private readonly MailboxConfig $config,
-    ) {}
+    public function __construct(private readonly MailboxConfig $config,) {}
 
     public static function unbounded(): self
     {
@@ -49,7 +46,7 @@ final class TestMailbox implements Mailbox
                 OverflowStrategy::DropNewest => EnqueueResult::Dropped,
                 OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($envelope),
                 OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
-                OverflowStrategy::ThrowException => throw new MailboxOverflowException( // @phpstan-ignore missingType.checkedException
+                OverflowStrategy::ThrowException => throw new MailboxOverflowException(
                     $envelope->target,
                     $this->config->capacity,
                     $this->config->strategy,
@@ -67,7 +64,8 @@ final class TestMailbox implements Mailbox
     {
         if ($this->queue === []) {
             /** @var Option<Envelope> $none */
-            $none = Option::none(); // @phpstan-ignore varTag.type
+            $none = Option::none();
+
             return $none;
         }
 

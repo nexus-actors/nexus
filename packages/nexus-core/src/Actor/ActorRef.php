@@ -1,13 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use NoDiscard;
 
 /**
+ * @psalm-api
+ *
  * @template T of object
  */
 interface ActorRef
@@ -21,9 +23,10 @@ interface ActorRef
      * @return R
      * @throws AskTimeoutException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function ask(callable $messageFactory, Duration $timeout): object;
 
     public function path(): ActorPath;
+
     public function isAlive(): bool;
 }

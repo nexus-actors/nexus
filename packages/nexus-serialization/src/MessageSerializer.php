@@ -1,13 +1,15 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
 
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
+use NoDiscard;
 
 /**
+ * @psalm-api
+ *
  * Serializes and deserializes message objects to and from strings.
  */
 interface MessageSerializer
@@ -17,7 +19,7 @@ interface MessageSerializer
      *
      * @throws MessageSerializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function serialize(object $message): string;
 
     /**
@@ -25,6 +27,6 @@ interface MessageSerializer
      *
      * @throws MessageDeserializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function deserialize(string $data, string $type): object;
 }

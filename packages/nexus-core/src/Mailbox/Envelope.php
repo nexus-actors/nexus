@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Mailbox;
@@ -8,6 +7,9 @@ use Fp\Collections\HashMap;
 use Monadial\Nexus\Core\Actor\ActorPath;
 
 /**
+ * @psalm-api
+ * @psalm-immutable
+ *
  * Immutable message wrapper carrying sender, target, and metadata.
  */
 final readonly class Envelope
@@ -28,7 +30,8 @@ final readonly class Envelope
     public static function of(object $message, ActorPath $sender, ActorPath $target): self
     {
         /** @var HashMap<string, string> $empty fp4php infers HashMap<never, never> for empty collections */
-        $empty = HashMap::collect([]); // @phpstan-ignore varTag.type
+        $empty = HashMap::collect([]);
+
         return new self($message, $sender, $target, $empty);
     }
 

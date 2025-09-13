@@ -1,26 +1,33 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
 
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
+use NoDiscard;
+use Override;
+use Throwable;
+use function serialize;
+use function unserialize;
 
 /**
+ * @psalm-api
+ *
  * Serializer using PHP's native serialize()/unserialize().
  */
 final readonly class PhpNativeSerializer implements MessageSerializer
 {
     /**
-     * @throws MessageSerializationException @phpstan-ignore throws.unusedType
+     * @throws MessageSerializationException
      */
-    #[\NoDiscard]
+    #[Override]
+    #[NoDiscard]
     public function serialize(object $message): string
     {
         try {
-            return \serialize($message);
-        } catch (\Throwable $e) { // @phpstan-ignore catch.neverThrown
+            return serialize($message);
+        } catch (Throwable $e) {
             throw new MessageSerializationException($message::class, $e->getMessage(), $e);
         }
     }
@@ -28,12 +35,13 @@ final readonly class PhpNativeSerializer implements MessageSerializer
     /**
      * @throws MessageDeserializationException
      */
-    #[\NoDiscard]
+    #[Override]
+    #[NoDiscard]
     public function deserialize(string $data, string $type): object
     {
         try {
-            $result = @\unserialize($data);
-        } catch (\Throwable $e) { // @phpstan-ignore catch.neverThrown
+            $result = @unserialize($data);
+        } catch (Throwable $e) {
             throw new MessageDeserializationException($type, $e->getMessage(), $e);
         }
 

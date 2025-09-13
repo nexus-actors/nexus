@@ -1,13 +1,16 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use NoDiscard;
+use Override;
 
 /**
+ * @psalm-api
+ *
  * Null-object ActorRef that captures dead letters.
  *
  * Messages sent via tell() are captured in an internal list for inspection.
@@ -28,6 +31,7 @@ final class DeadLetterRef implements ActorRef
         $this->path = ActorPath::fromString('/system/deadLetters');
     }
 
+    #[Override]
     public function tell(object $message): void
     {
         $this->captured[] = $message;
@@ -39,17 +43,20 @@ final class DeadLetterRef implements ActorRef
      * @return R
      * @throws AskTimeoutException
      */
-    #[\NoDiscard]
+    #[Override]
+    #[NoDiscard]
     public function ask(callable $messageFactory, Duration $timeout): object
     {
         throw new AskTimeoutException($this->path, $timeout);
     }
 
+    #[Override]
     public function path(): ActorPath
     {
         return $this->path;
     }
 
+    #[Override]
     public function isAlive(): bool
     {
         return false;

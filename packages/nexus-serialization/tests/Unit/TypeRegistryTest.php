@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
 
+use LogicException;
 use Monadial\Nexus\Serialization\MessageType;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -53,7 +53,7 @@ final class TypeRegistryTest extends TestCase
         $registry = new TypeRegistry();
         $registry->register(TestMessage::class, 'test.message');
 
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage('test.message');
 
         $registry->register(AnotherTestMessage::class, 'test.message');
@@ -74,7 +74,7 @@ final class TypeRegistryTest extends TestCase
     {
         $registry = new TypeRegistry();
 
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage(TestMessage::class);
 
         $registry->registerFromAttribute(TestMessage::class);
@@ -92,22 +92,16 @@ final class TypeRegistryTest extends TestCase
 
 final readonly class TestMessage
 {
-    public function __construct(
-        public string $content,
-    ) {}
+    public function __construct(public string $content,) {}
 }
 
 final readonly class AnotherTestMessage
 {
-    public function __construct(
-        public string $content,
-    ) {}
+    public function __construct(public string $content,) {}
 }
 
 #[MessageType('annotated.message')]
 final readonly class AnnotatedMessage
 {
-    public function __construct(
-        public string $content,
-    ) {}
+    public function __construct(public string $content,) {}
 }

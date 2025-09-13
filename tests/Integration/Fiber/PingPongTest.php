@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -147,13 +146,15 @@ final class PingPongTest extends TestCase
 
         // Pinger: on start sends Ping, captures Pong replies
         /** @var Behavior<object> $pingerBehavior */
-        $pingerBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$pongsCaptured): Behavior {
-            if ($msg instanceof Pong) {
-                $pongsCaptured[] = $msg;
-            }
-
-            return Behavior::same();
-        });
+        $pingerBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$pongsCaptured): Behavior {
+                if ($msg instanceof Pong) {
+                    $pongsCaptured[] = $msg;
+                }
+    
+                return Behavior::same();
+            },
+        );
 
         $pingerRef = $system->spawn(Props::fromBehavior($pingerBehavior), 'pinger');
 

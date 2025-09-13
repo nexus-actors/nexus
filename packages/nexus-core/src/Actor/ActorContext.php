@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -11,6 +10,8 @@ use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Psr\Log\LoggerInterface;
 
 /**
+ * @psalm-api
+ *
  * @template T of object
  */
 interface ActorContext
@@ -53,6 +54,7 @@ interface ActorContext
     public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, object $message): Cancellable;
 
     public function stash(): void;
+
     public function unstashAll(): void;
 
     public function log(): LoggerInterface;

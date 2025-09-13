@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Mailbox;
@@ -10,6 +9,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(Envelope::class)]
 final class EnvelopeTest extends TestCase
@@ -17,7 +17,7 @@ final class EnvelopeTest extends TestCase
     #[Test]
     public function ofCreatesWithEmptyMetadata(): void
     {
-        $message = new \stdClass();
+        $message = new stdClass();
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
 
@@ -33,7 +33,7 @@ final class EnvelopeTest extends TestCase
     public function withMetadataReturnsNewInstanceWithUpdatedMetadata(): void
     {
         $envelope = Envelope::of(
-            new \stdClass(),
+            new stdClass(),
             ActorPath::fromString('/sender'),
             ActorPath::fromString('/target'),
         );
@@ -54,7 +54,7 @@ final class EnvelopeTest extends TestCase
         $newSender = ActorPath::fromString('/new-sender');
 
         $envelope = Envelope::of(
-            new \stdClass(),
+            new stdClass(),
             $originalSender,
             ActorPath::fromString('/target'),
         );
@@ -69,7 +69,7 @@ final class EnvelopeTest extends TestCase
     #[Test]
     public function immutabilityOriginalUnchangedAfterWither(): void
     {
-        $message = new \stdClass();
+        $message = new stdClass();
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
 
@@ -89,7 +89,7 @@ final class EnvelopeTest extends TestCase
     #[Test]
     public function constructorAcceptsMetadata(): void
     {
-        $message = new \stdClass();
+        $message = new stdClass();
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
         /** @var HashMap<string, string> $metadata */

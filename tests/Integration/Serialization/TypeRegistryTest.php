@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Serialization;
@@ -90,6 +89,7 @@ final class TypeRegistryTest extends TestCase
             UserProfileUpdated::class,
             PaymentProcessed::class,
         ];
+
         foreach ($messageClasses as $class) {
             $registry->registerFromAttribute($class);
         }

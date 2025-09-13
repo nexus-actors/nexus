@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Mailbox;
 
+/** @psalm-api */
 enum OverflowStrategy: string
 {
     case DropNewest = 'drop_newest';

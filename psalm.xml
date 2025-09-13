@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="1"
+    findUnusedCode="true"
+    reportMixedIssues="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+>
+    <projectFiles>
+        <directory name="packages/nexus-core/src" />
+        <directory name="packages/nexus-runtime-fiber/src" />
+        <directory name="packages/nexus-runtime-swoole/src" />
+        <directory name="packages/nexus-serialization/src" />
+        <ignoreFiles>
+            <directory name="vendor" />
+        </ignoreFiles>
+    </projectFiles>
+
+    <plugins>
+        <pluginClass class="Fp\PsalmPlugin\FunctionalPlugin" />
+    </plugins>
+
+    <issueHandlers>
+        <!-- fp4php Fiber generics use 4 template params which Psalm sees as excessive -->
+        <TooManyTemplateParams errorLevel="suppress" />
+    </issueHandlers>
+</psalm>

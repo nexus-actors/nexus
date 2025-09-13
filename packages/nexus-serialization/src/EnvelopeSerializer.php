@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
@@ -7,8 +6,11 @@ namespace Monadial\Nexus\Serialization;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
+use NoDiscard;
 
 /**
+ * @psalm-api
+ *
  * Serializes and deserializes Envelope instances.
  */
 interface EnvelopeSerializer
@@ -18,7 +20,7 @@ interface EnvelopeSerializer
      *
      * @throws MessageSerializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function serialize(Envelope $envelope): string;
 
     /**
@@ -26,6 +28,6 @@ interface EnvelopeSerializer
      *
      * @throws MessageDeserializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function deserialize(string $data): Envelope;
 }

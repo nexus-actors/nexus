@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Serialization\Messages;
@@ -9,8 +8,5 @@ use Monadial\Nexus\Serialization\MessageType;
 #[MessageType('order.placed')]
 final readonly class OrderPlaced
 {
-    public function __construct(
-        public string $orderId,
-        public float $amount,
-    ) {}
+    public function __construct(public string $orderId, public float $amount,) {}
 }

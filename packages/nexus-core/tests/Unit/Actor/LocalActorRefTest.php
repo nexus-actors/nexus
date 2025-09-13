@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -11,6 +10,8 @@ use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use stdClass;
 
 #[CoversClass(LocalActorRef::class)]
 final class LocalActorRefTest extends TestCase
@@ -20,9 +21,9 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/greeter');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => true);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => true);
 
-        $message = new \stdClass();
+        $message = new stdClass();
         $message->text = 'hello';
         $ref->tell($message);
 
@@ -39,7 +40,7 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/orders');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => true);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => true);
 
         self::assertTrue($path->equals($ref->path()));
     }
@@ -49,7 +50,7 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/worker');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => true);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => true);
 
         self::assertTrue($ref->isAlive());
     }
@@ -59,7 +60,7 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/worker');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => false);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => false);
 
         self::assertFalse($ref->isAlive());
     }
@@ -69,12 +70,12 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/dead');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => false);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => false);
 
         $mailbox->close();
 
         // Should NOT throw — fire-and-forget semantics
-        $ref->tell(new \stdClass());
+        $ref->tell(new stdClass());
 
         self::assertSame(0, $mailbox->count());
     }
@@ -84,11 +85,11 @@ final class LocalActorRefTest extends TestCase
     {
         $mailbox = TestMailbox::unbounded();
         $path = ActorPath::fromString('/user/service');
-        $ref = new LocalActorRef($path, $mailbox, static fn(): bool => true);
+        $ref = new LocalActorRef($path, $mailbox, static fn (): bool => true);
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('ask() requires ActorSystem');
 
-        $ref->ask(static fn($replyTo) => new \stdClass(), Duration::seconds(5));
+        $ref->ask(static fn ($replyTo) => new stdClass(), Duration::seconds(5));
     }
 }

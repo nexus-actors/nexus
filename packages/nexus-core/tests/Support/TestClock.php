@@ -1,22 +1,22 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Core\Duration;
 use Psr\Clock\ClockInterface;
 
 final class TestClock implements ClockInterface
 {
-    private \DateTimeImmutable $now;
+    private DateTimeImmutable $now;
 
-    public function __construct(?\DateTimeImmutable $start = null)
+    public function __construct(?DateTimeImmutable $start = null)
     {
-        $this->now = $start ?? new \DateTimeImmutable('2026-01-01T00:00:00+00:00');
+        $this->now = $start ?? new DateTimeImmutable('2026-01-01T00:00:00+00:00');
     }
 
-    public function now(): \DateTimeImmutable
+    public function now(): DateTimeImmutable
     {
         return $this->now;
     }
@@ -27,7 +27,7 @@ final class TestClock implements ClockInterface
         $this->now = $this->now->modify("+{$microseconds} microseconds");
     }
 
-    public function set(\DateTimeImmutable $time): void
+    public function set(DateTimeImmutable $time): void
     {
         $this->now = $time;
     }

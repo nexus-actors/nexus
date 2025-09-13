@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Supervision;
 
+/** @psalm-api */
 enum StrategyType: string
 {
     case OneForOne = 'one_for_one';

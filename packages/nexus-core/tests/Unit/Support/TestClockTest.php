@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Support;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -18,7 +18,7 @@ final class TestClockTest extends TestCase
     {
         $clock = new TestClock();
 
-        $expected = new \DateTimeImmutable('2026-01-01T00:00:00+00:00');
+        $expected = new DateTimeImmutable('2026-01-01T00:00:00+00:00');
 
         self::assertEquals($expected, $clock->now());
     }
@@ -26,7 +26,7 @@ final class TestClockTest extends TestCase
     #[Test]
     public function nowReturnsCustomStartTime(): void
     {
-        $start = new \DateTimeImmutable('2025-06-15T12:30:00+00:00');
+        $start = new DateTimeImmutable('2025-06-15T12:30:00+00:00');
         $clock = new TestClock($start);
 
         self::assertEquals($start, $clock->now());
@@ -91,7 +91,7 @@ final class TestClockTest extends TestCase
     public function setReplacesCurrentTime(): void
     {
         $clock = new TestClock();
-        $newTime = new \DateTimeImmutable('2030-12-25T18:00:00+00:00');
+        $newTime = new DateTimeImmutable('2030-12-25T18:00:00+00:00');
 
         $clock->set($newTime);
 
@@ -104,7 +104,7 @@ final class TestClockTest extends TestCase
         $clock = new TestClock();
         $clock->advance(Duration::seconds(100));
 
-        $newTime = new \DateTimeImmutable('2026-01-01T00:00:00+00:00');
+        $newTime = new DateTimeImmutable('2026-01-01T00:00:00+00:00');
         $clock->set($newTime);
 
         self::assertEquals($newTime, $clock->now());

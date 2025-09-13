@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
@@ -11,9 +10,13 @@ use Monadial\Nexus\Serialization\DefaultEnvelopeSerializer;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use NoDiscard;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Throwable;
+use function serialize;
+use function unserialize;
 
 #[CoversClass(DefaultEnvelopeSerializer::class)]
 final class DefaultEnvelopeSerializerTest extends TestCase
@@ -102,10 +105,7 @@ final class DefaultEnvelopeSerializerTest extends TestCase
 
 final readonly class EnvelopeTestMessage
 {
-    public function __construct(
-        public string $text,
-        public int $number,
-    ) {}
+    public function __construct(public string $text, public int $number,) {}
 }
 
 /**
@@ -116,26 +116,30 @@ final readonly class FakeMessageSerializer implements MessageSerializer
     /**
      * @throws MessageSerializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function serialize(object $message): string
     {
         try {
-            return \serialize($message);
-        } catch (\Throwable $e) { // @phpstan-ignore missingType.checkedException
-            throw new MessageSerializationException($message::class, $e->getMessage(), $e);
+            return serialize($message);
+        } catch (Throwable $e) {
+throw new MessageSerializationException(
+            $message::class,
+            $e->getMessage(),
+            $e,
+        );
         }
     }
 
     /**
      * @throws MessageDeserializationException
      */
-    #[\NoDiscard]
+    #[NoDiscard]
     public function deserialize(string $data, string $type): object
     {
         try {
-            $result = \unserialize($data);
-        } catch (\Throwable $e) { // @phpstan-ignore missingType.checkedException
-            throw new MessageDeserializationException($type, $e->getMessage(), $e);
+            $result = unserialize($data);
+        } catch (Throwable $e) {
+throw new MessageDeserializationException($type, $e->getMessage(), $e);
         }
 
         if (!is_object($result)) {

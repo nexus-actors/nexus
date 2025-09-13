@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -36,28 +35,32 @@ final class StashingTest extends TestCase
 
         // "Ready" behavior: processes WorkItem messages and records their IDs
         /** @var Behavior<object> $readyBehavior */
-        $readyBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
-            if ($msg instanceof WorkItem) {
-                $processedIds[] = $msg->id;
-            }
-
-            return Behavior::same();
-        });
+        $readyBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
+                if ($msg instanceof WorkItem) {
+                    $processedIds[] = $msg->id;
+                }
+    
+                return Behavior::same();
+            },
+        );
 
         // "Initializing" behavior: stashes WorkItems, transitions on Initialize
         /** @var Behavior<object> $initBehavior */
-        $initBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
-            if ($msg instanceof Initialize) {
-                $ctx->unstashAll();
-
-                return $readyBehavior;
-            }
-
-            // Stash everything else
+        $initBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
+                if ($msg instanceof Initialize) {
+                    $ctx->unstashAll();
+    
+                    return $readyBehavior;
+                }
+    
+                // Stash everything else
             $ctx->stash();
-
-            return Behavior::same();
-        });
+    
+                return Behavior::same();
+            },
+        );
 
         $ref = $system->spawn(Props::fromBehavior($initBehavior), 'stasher');
 
@@ -91,26 +94,30 @@ final class StashingTest extends TestCase
         $processedIds = [];
 
         /** @var Behavior<object> $readyBehavior */
-        $readyBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
-            if ($msg instanceof WorkItem) {
-                $processedIds[] = $msg->id;
-            }
-
-            return Behavior::same();
-        });
+        $readyBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
+                if ($msg instanceof WorkItem) {
+                    $processedIds[] = $msg->id;
+                }
+    
+                return Behavior::same();
+            },
+        );
 
         /** @var Behavior<object> $initBehavior */
-        $initBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
-            if ($msg instanceof Initialize) {
-                $ctx->unstashAll();
-
-                return $readyBehavior;
-            }
-
-            $ctx->stash();
-
-            return Behavior::same();
-        });
+        $initBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
+                if ($msg instanceof Initialize) {
+                    $ctx->unstashAll();
+    
+                    return $readyBehavior;
+                }
+    
+                $ctx->stash();
+    
+                return Behavior::same();
+            },
+        );
 
         $ref = $system->spawn(Props::fromBehavior($initBehavior), 'stasher');
 
@@ -142,26 +149,30 @@ final class StashingTest extends TestCase
         $processedIds = [];
 
         /** @var Behavior<object> $readyBehavior */
-        $readyBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
-            if ($msg instanceof WorkItem) {
-                $processedIds[] = $msg->id;
-            }
-
-            return Behavior::same();
-        });
+        $readyBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$processedIds): Behavior {
+                if ($msg instanceof WorkItem) {
+                    $processedIds[] = $msg->id;
+                }
+    
+                return Behavior::same();
+            },
+        );
 
         /** @var Behavior<object> $initBehavior */
-        $initBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
-            if ($msg instanceof Initialize) {
-                $ctx->unstashAll();
-
-                return $readyBehavior;
-            }
-
-            $ctx->stash();
-
-            return Behavior::same();
-        });
+        $initBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
+                if ($msg instanceof Initialize) {
+                    $ctx->unstashAll();
+    
+                    return $readyBehavior;
+                }
+    
+                $ctx->stash();
+    
+                return Behavior::same();
+            },
+        );
 
         $ref = $system->spawn(Props::fromBehavior($initBehavior), 'stasher');
 

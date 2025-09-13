@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -12,6 +11,7 @@ use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(Props::class)]
 final class PropsTest extends TestCase
@@ -19,7 +19,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function fromBehaviorCreatesPropsWithDefaults(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
         $props = Props::fromBehavior($behavior);
@@ -32,7 +32,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function withMailboxReturnsNewPropsWithCustomMailbox(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $original = Props::fromBehavior($behavior);
 
@@ -55,11 +55,11 @@ final class PropsTest extends TestCase
     #[Test]
     public function withSupervisionReturnsNewPropsWithStrategy(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $original = Props::fromBehavior($behavior);
 
-        $strategy = new \stdClass();
+        $strategy = new stdClass();
         $updated = $original->withSupervision($strategy);
 
         // Original is unchanged (immutability)
@@ -77,10 +77,10 @@ final class PropsTest extends TestCase
     #[Test]
     public function immutabilityChainedWithers(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
-        $strategy = new \stdClass();
+        $strategy = new stdClass();
         $mailbox = MailboxConfig::bounded(50);
 
         $props = Props::fromBehavior($behavior)

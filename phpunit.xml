@@ -22,8 +22,8 @@
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
-        <testsuite name="phpstan">
-            <directory>packages/nexus-phpstan/tests</directory>
+        <testsuite name="psalm">
+            <directory>packages/nexus-psalm/tests</directory>
         </testsuite>
     </testsuites>
     <source>

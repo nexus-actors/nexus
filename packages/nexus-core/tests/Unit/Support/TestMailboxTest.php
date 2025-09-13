@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Support;
@@ -8,36 +7,18 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(TestMailbox::class)]
 final class TestMailboxTest extends TestCase
 {
-    private function createEnvelope(string $content = 'hello'): Envelope
-    {
-        return Envelope::of(
-            new \stdClass(),
-            ActorPath::fromString('/sender'),
-            ActorPath::fromString('/target'),
-        );
-    }
-
-    private function createEnvelopeWithMessage(object $message): Envelope
-    {
-        return Envelope::of(
-            $message,
-            ActorPath::fromString('/sender'),
-            ActorPath::fromString('/target'),
-        );
-    }
-
     #[Test]
     public function unboundedFactoryCreatesUnboundedMailbox(): void
     {
@@ -256,5 +237,23 @@ final class TestMailboxTest extends TestCase
 
         $mailbox->dequeue();
         self::assertSame(1, $mailbox->count());
+    }
+
+    private function createEnvelope(string $content = 'hello'): Envelope
+    {
+        return Envelope::of(
+            new stdClass(),
+            ActorPath::fromString('/sender'),
+            ActorPath::fromString('/target'),
+        );
+    }
+
+    private function createEnvelopeWithMessage(object $message): Envelope
+    {
+        return Envelope::of(
+            $message,
+            ActorPath::fromString('/sender'),
+            ActorPath::fromString('/target'),
+        );
     }
 }

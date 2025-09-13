@@ -34,11 +34,14 @@ test-swoole: ## Swoole integration tests
 test-serialization: ## Serialization integration tests
 	$(DC) vendor/bin/phpunit --testsuite=integration-serialization
 
-test-phpstan-rules: ## PHPStan custom rule tests
-	$(DC) vendor/bin/phpunit --testsuite=phpstan
+psalm: ## Run Psalm analysis
+	$(DC) vendor/bin/psalm
 
-phpstan: ## Run PHPStan analysis
-	$(DC) vendor/bin/phpstan analyse
+phpcs: ## Run PHPCS check
+	$(DC) vendor/bin/phpcs
+
+phpcbf: ## Fix PHPCS violations
+	$(DC) vendor/bin/phpcbf
 
 mutation: ## Mutation testing
 	$(DC) vendor/bin/infection --min-msi=80 --min-covered-msi=90
@@ -49,4 +52,4 @@ cs: ## Code style check
 cs-fix: ## Fix code style
 	$(DC) vendor/bin/php-cs-fixer fix
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-phpstan-rules phpstan mutation cs cs-fix
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization psalm phpcs phpcbf mutation cs cs-fix

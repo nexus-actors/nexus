@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Lifecycle;
@@ -16,6 +15,7 @@ use Monadial\Nexus\Core\Lifecycle\Terminated;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[CoversClass(PreStart::class)]
 #[CoversClass(PostStop::class)]
@@ -44,7 +44,7 @@ final class SignalTest extends TestCase
     #[Test]
     public function preRestartImplementsSignalAndCarriesCause(): void
     {
-        $cause = new \RuntimeException('test error');
+        $cause = new RuntimeException('test error');
         $signal = new PreRestart($cause);
 
         self::assertInstanceOf(Signal::class, $signal);
@@ -54,7 +54,7 @@ final class SignalTest extends TestCase
     #[Test]
     public function postRestartImplementsSignalAndCarriesCause(): void
     {
-        $cause = new \RuntimeException('test error');
+        $cause = new RuntimeException('test error');
         $signal = new PostRestart($cause);
 
         self::assertInstanceOf(Signal::class, $signal);
@@ -75,7 +75,7 @@ final class SignalTest extends TestCase
     public function childFailedImplementsSignalAndCarriesChildAndCause(): void
     {
         $child = $this->createActorRef('/user/child');
-        $cause = new \RuntimeException('child error');
+        $cause = new RuntimeException('child error');
         $signal = new ChildFailed($child, $cause);
 
         self::assertInstanceOf(Signal::class, $signal);

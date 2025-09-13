@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
@@ -21,9 +20,7 @@ final class TestRuntime implements Runtime
     private bool $running = false;
     private int $spawnCounter = 0;
 
-    public function __construct(
-        private readonly TestClock $clock = new TestClock(),
-    ) {}
+    public function __construct(private readonly TestClock $clock = new TestClock(),) {}
 
     public function name(): string
     {

@@ -1,28 +1,29 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Exception\InvalidActorPathException;
+use Override;
+use Stringable;
 
 /**
+ * @psalm-api
+ *
  * Immutable actor path in the hierarchy.
  *
  * Represents a fully-qualified path like `/user/orders/order-123`.
  * The root path is represented as `/`.
  */
-final readonly class ActorPath implements \Stringable
+final readonly class ActorPath implements Stringable
 {
     private const string NAME_PATTERN = '/^[a-zA-Z0-9_\-\.]+$/';
 
     /**
      * @param list<string> $elements Path segments (empty for root, e.g. ['user', 'orders'] for /user/orders)
      */
-    private function __construct(
-        private array $elements,
-    ) {}
+    private function __construct(private array $elements,) {}
 
     /**
      * Creates the root path `/`.
@@ -87,7 +88,8 @@ final readonly class ActorPath implements \Stringable
     {
         if ($this->elements === []) {
             /** @var Option<self> $none fp4php returns Option<empty>, covariant to Option<self> */
-            $none = Option::none(); // @phpstan-ignore varTag.type
+            $none = Option::none();
+
             return $none;
         }
 
@@ -131,15 +133,6 @@ final readonly class ActorPath implements \Stringable
         return count($this->elements);
     }
 
-    public function __toString(): string
-    {
-        if ($this->elements === []) {
-            return '/';
-        }
-
-        return '/' . implode('/', $this->elements);
-    }
-
     /**
      * Checks if this path starts with the given ancestor's elements.
      */
@@ -150,5 +143,15 @@ final readonly class ActorPath implements \Stringable
         }
 
         return array_slice($this->elements, 0, count($ancestor->elements)) === $ancestor->elements;
+    }
+
+    #[Override]
+    public function __toString(): string
+    {
+        if ($this->elements === []) {
+            return '/';
+        }
+
+        return '/' . implode('/', $this->elements);
     }
 }

@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -8,20 +7,17 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 
 /**
+ * @psalm-api
+ *
  * @template T of object
  */
 final readonly class Props
 {
     /**
      * @param Behavior<T> $behavior
-     * @param MailboxConfig $mailbox
      * @param Option<object> $supervision  Will be typed as SupervisionStrategy in Task 5b
      */
-    private function __construct(
-        public Behavior $behavior,
-        public MailboxConfig $mailbox,
-        public Option $supervision,
-    ) {}
+    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision,) {}
 
     /**
      * @template U of object
@@ -31,7 +27,7 @@ final readonly class Props
     public static function fromBehavior(Behavior $behavior): self
     {
         /** @var Option<object> $none */
-        $none = Option::none(); // @phpstan-ignore varTag.type
+        $none = Option::none();
 
         return new self($behavior, MailboxConfig::unbounded(), $none);
     }

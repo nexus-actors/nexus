@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use DateTimeImmutable;
 use Fp\Collections\HashMap;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
@@ -14,12 +14,15 @@ use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Runtime\Runtime;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Override;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
+ * @psalm-api
+ *
  * Entry point for the actor hierarchy.
  *
  * Manages the lifecycle of all actors in the system, provides a dead-letter
@@ -61,14 +64,15 @@ final class ActorSystem
         ?EventDispatcherInterface $eventDispatcher = null,
     ): self {
         $resolvedClock = $clock ?? new class implements ClockInterface {
-            public function now(): \DateTimeImmutable
+            #[Override]
+            public function now(): DateTimeImmutable
             {
-                return new \DateTimeImmutable();
+                return new DateTimeImmutable();
             }
         };
 
         /** @var HashMap<string, ActorRef<object>> $emptyChildren */
-        $emptyChildren = HashMap::collect([]); // @phpstan-ignore varTag.type
+        $emptyChildren = HashMap::collect([]);
 
         return new self(
             $name,
@@ -92,7 +96,7 @@ final class ActorSystem
      */
     public function spawn(Props $props, string $name): ActorRef
     {
-        if ($this->children->get($name)->isSome()) { // @phpstan-ignore method.impossibleType
+        if ($this->children->get($name)->isSome()) {
             throw new ActorNameExistsException($this->userGuardianPath, $name);
         }
 
@@ -213,7 +217,7 @@ final class ActorSystem
         $childPath = $this->userGuardianPath->child($name);
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        $childSupervision = $props->supervision->isSome() // @phpstan-ignore method.impossibleType
+        $childSupervision = $props->supervision->isSome()
             ? $props->supervision->get()
             : SupervisionStrategy::oneForOne();
 
@@ -221,9 +225,8 @@ final class ActorSystem
         $typedSupervision = $childSupervision;
 
         /** @var Option<ActorRef<object>> $parentOpt */
-        $parentOpt = Option::none(); // @phpstan-ignore varTag.type
+        $parentOpt = Option::none();
 
-        /** @var ActorCell<T> $childCell */
         $childCell = new ActorCell(
             $props->behavior,
             $childPath,

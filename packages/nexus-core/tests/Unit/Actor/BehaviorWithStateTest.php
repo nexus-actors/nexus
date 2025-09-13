@@ -1,12 +1,10 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorTag;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -49,7 +47,7 @@ final class BehaviorWithStateTest extends TestCase
     #[Test]
     public function withBehaviorSwitchesBothBehaviorAndState(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $newBehavior = Behavior::receive($handler);
         $result = BehaviorWithState::withBehavior($newBehavior, 'new-state');
 
@@ -73,7 +71,7 @@ final class BehaviorWithStateTest extends TestCase
     #[Test]
     public function behaviorAccessorReturnsOption(): void
     {
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $withBehavior = BehaviorWithState::withBehavior($behavior, 0);
         self::assertSame($behavior, $withBehavior->behavior()->get());

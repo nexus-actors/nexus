@@ -1,9 +1,9 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Exception;
 
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorState;
 use Monadial\Nexus\Core\Duration;
@@ -25,6 +25,7 @@ use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[CoversClass(NexusException::class)]
 #[CoversClass(NexusLogicException::class)]
@@ -46,7 +47,7 @@ final class ExceptionHierarchyTest extends TestCase
     public function nexusExceptionExtendsRuntimeException(): void
     {
         $exception = $this->createMock(NexusException::class);
-        self::assertInstanceOf(\RuntimeException::class, $exception);
+        self::assertInstanceOf(RuntimeException::class, $exception);
     }
 
     #[Test]
@@ -118,7 +119,7 @@ final class ExceptionHierarchyTest extends TestCase
     {
         $path = ActorPath::fromString('/user/orders/child');
         $window = Duration::seconds(60);
-        $lastFailure = new \RuntimeException('boom');
+        $lastFailure = new RuntimeException('boom');
 
         $exception = new MaxRetriesExceededException($path, 3, $window, $lastFailure);
 
@@ -135,7 +136,7 @@ final class ExceptionHierarchyTest extends TestCase
     public function nexusLogicExceptionExtendsLogicException(): void
     {
         $exception = $this->createMock(NexusLogicException::class);
-        self::assertInstanceOf(\LogicException::class, $exception);
+        self::assertInstanceOf(LogicException::class, $exception);
     }
 
     #[Test]
@@ -195,7 +196,7 @@ final class ExceptionHierarchyTest extends TestCase
     #[Test]
     public function checkedExceptionsSupportPreviousChaining(): void
     {
-        $cause = new \RuntimeException('root cause');
+        $cause = new RuntimeException('root cause');
         $path = ActorPath::fromString('/user/orders');
 
         $exception = new AskTimeoutException($path, Duration::seconds(5), $cause);

@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
@@ -12,7 +11,9 @@ use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
+use Override;
 
+/** @psalm-api */
 final class FiberRuntime implements Runtime
 {
     private FiberScheduler $scheduler;
@@ -31,16 +32,19 @@ final class FiberRuntime implements Runtime
         $this->scheduler = new FiberScheduler();
     }
 
+    #[Override]
     public function name(): string
     {
         return 'fiber';
     }
 
+    #[Override]
     public function createMailbox(MailboxConfig $config): Mailbox
     {
         return new FiberMailbox($config, ActorPath::root());
     }
 
+    #[Override]
     public function spawn(callable $actorLoop): string
     {
         $id = 'fiber-' . $this->nextId++;
@@ -52,16 +56,25 @@ final class FiberRuntime implements Runtime
         return $id;
     }
 
+    #[Override]
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable
     {
-        return $this->scheduler->scheduleOnce($delay, $callback(...), $this->now());
+        /** @var \Closure():void $closure */
+        $closure = $callback(...);
+
+        return $this->scheduler->scheduleOnce($delay, $closure, $this->now());
     }
 
+    #[Override]
     public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, callable $callback): Cancellable
     {
-        return $this->scheduler->scheduleRepeatedly($initialDelay, $interval, $callback(...), $this->now());
+        /** @var \Closure():void $closure */
+        $closure = $callback(...);
+
+        return $this->scheduler->scheduleRepeatedly($initialDelay, $interval, $closure, $this->now());
     }
 
+    #[Override]
     public function yield(): void
     {
         if (Fiber::getCurrent() !== null) {
@@ -69,23 +82,28 @@ final class FiberRuntime implements Runtime
         }
     }
 
+    #[Override]
     public function sleep(Duration $duration): void
     {
         $micros = $duration->toMicros();
+
         if ($micros > 0) {
             usleep($micros);
         }
     }
 
+    #[Override]
     public function run(): void
     {
         $this->running = true;
         $this->shutdownRequested = false;
 
+        /** @psalm-suppress RedundantCondition -- running is mutated by tick()/hasWork() */
         while ($this->running) {
             $this->tick();
             $this->scheduler->advanceTimers($this->now());
 
+            /** @psalm-suppress TypeDoesNotContainType -- shutdownRequested is mutated externally */
             if ($this->shutdownRequested && $this->allFibersComplete()) {
                 $this->running = false;
 
@@ -103,11 +121,13 @@ final class FiberRuntime implements Runtime
         }
     }
 
+    #[Override]
     public function shutdown(Duration $timeout): void
     {
         $this->shutdownRequested = true;
     }
 
+    #[Override]
     public function isRunning(): bool
     {
         return $this->running;

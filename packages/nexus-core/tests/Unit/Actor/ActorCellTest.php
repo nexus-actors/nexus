@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -27,16 +26,12 @@ use Psr\Log\NullLogger;
 
 final readonly class TestMessage
 {
-    public function __construct(
-        public string $value,
-    ) {}
+    public function __construct(public string $value,) {}
 }
 
 final readonly class TestReply
 {
-    public function __construct(
-        public string $value,
-    ) {}
+    public function __construct(public string $value,) {}
 }
 
 #[CoversClass(ActorCell::class)]
@@ -46,53 +41,11 @@ final class ActorCellTest extends TestCase
     private DeadLetterRef $deadLetters;
     private NullLogger $logger;
 
-    protected function setUp(): void
-    {
-        $this->runtime = new TestRuntime();
-        $this->deadLetters = new DeadLetterRef();
-        $this->logger = new NullLogger();
-    }
-
-    // ---- Helpers ----
-
-    /**
-     * @template T of object
-     * @param Behavior<T> $behavior
-     * @return ActorCell<T>
-     */
-    private function createCell(
-        Behavior $behavior,
-        ?ActorPath $path = null,
-        ?TestMailbox $mailbox = null,
-    ): ActorCell {
-        $path ??= ActorPath::fromString('/user/test');
-        $mailbox ??= TestMailbox::unbounded();
-
-        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
-        $noParent = Option::none(); // @phpstan-ignore varTag.type
-
-        return new ActorCell(
-            $behavior,
-            $path,
-            $mailbox,
-            $this->runtime,
-            $noParent,
-            SupervisionStrategy::oneForOne(),
-            $this->runtime->clock(),
-            $this->logger,
-            $this->deadLetters,
-        );
-    }
-
-    // ======================================================================
-    // State Machine Tests
-    // ======================================================================
-
     #[Test]
     public function starts_in_new_state(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -104,7 +57,7 @@ final class ActorCellTest extends TestCase
     public function start_transitions_to_running(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -120,11 +73,12 @@ final class ActorCellTest extends TestCase
 
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         )->onSignal(static function (ActorContext $ctx, Signal $signal) use (&$signalReceived): Behavior {
             if ($signal instanceof PreStart) {
                 $signalReceived = true;
             }
+
             return Behavior::same();
         });
 
@@ -138,7 +92,7 @@ final class ActorCellTest extends TestCase
     public function stop_transitions_to_stopped(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -155,11 +109,12 @@ final class ActorCellTest extends TestCase
 
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         )->onSignal(static function (ActorContext $ctx, Signal $signal) use (&$signalReceived): Behavior {
             if ($signal instanceof PostStop) {
                 $signalReceived = true;
             }
+
             return Behavior::same();
         });
 
@@ -174,7 +129,7 @@ final class ActorCellTest extends TestCase
     public function stop_closes_mailbox(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $mailbox = TestMailbox::unbounded();
@@ -200,6 +155,7 @@ final class ActorCellTest extends TestCase
                 if ($msg instanceof TestMessage) {
                     $received = $msg->value;
                 }
+
                 return Behavior::same();
             },
         );
@@ -226,6 +182,7 @@ final class ActorCellTest extends TestCase
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$callCount): Behavior {
                 $callCount++;
+
                 return Behavior::same();
             },
         );
@@ -255,7 +212,7 @@ final class ActorCellTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::stopped(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::stopped(),
         );
 
         $cell = $this->createCell($behavior);
@@ -280,13 +237,14 @@ final class ActorCellTest extends TestCase
         $secondBehavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$secondHandlerCalled): Behavior {
                 $secondHandlerCalled = true;
+
                 return Behavior::same();
             },
         );
 
         /** @var Behavior<TestMessage> */
         $firstBehavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => $secondBehavior,
+            static fn (ActorContext $ctx, object $msg): Behavior => $secondBehavior,
         );
 
         $cell = $this->createCell($firstBehavior);
@@ -314,7 +272,7 @@ final class ActorCellTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::unhandled(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::unhandled(),
         );
 
         $cell = $this->createCell($behavior);
@@ -343,11 +301,12 @@ final class ActorCellTest extends TestCase
 
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         )->onSignal(static function (ActorContext $ctx, Signal $signal) use (&$signalReceived): Behavior {
             if ($signal instanceof PreStart) {
                 $signalReceived = true;
             }
+
             return Behavior::same();
         });
 
@@ -368,9 +327,9 @@ final class ActorCellTest extends TestCase
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::withState(
             0,
-            static function (ActorContext $ctx, object $msg, int $state): BehaviorWithState {
-                return BehaviorWithState::next($state + 1);
-            },
+            static fn (ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::next(
+                $state + 1,
+            ),
         );
 
         $cell = $this->createCell($behavior);
@@ -392,6 +351,7 @@ final class ActorCellTest extends TestCase
             0,
             static function (ActorContext $ctx, object $msg, int $state) use (&$finalState): BehaviorWithState {
                 $finalState = $state;
+
                 return BehaviorWithState::same();
             },
         );
@@ -406,6 +366,7 @@ final class ActorCellTest extends TestCase
             0,
             static function (ActorContext $ctx, object $msg, int $state) use (&$capturedStates): BehaviorWithState {
                 $capturedStates[] = $state;
+
                 return BehaviorWithState::next($state + 1);
             },
         );
@@ -440,6 +401,7 @@ final class ActorCellTest extends TestCase
                     $ctx->stash();
                     $stashCalled = true;
                 }
+
                 return Behavior::same();
             },
         );
@@ -468,6 +430,7 @@ final class ActorCellTest extends TestCase
                 if ($msg instanceof TestMessage) {
                     $processOrder[] = $msg->value;
                 }
+
                 return Behavior::same();
             },
         );
@@ -477,10 +440,13 @@ final class ActorCellTest extends TestCase
             static function (ActorContext $ctx, object $msg) use ($unstashBehavior): Behavior {
                 if ($msg instanceof TestMessage && $msg->value === 'trigger-unstash') {
                     $ctx->unstashAll();
+
                     return $unstashBehavior;
                 }
+
                 // Stash everything else
                 $ctx->stash();
+
                 return Behavior::same();
             },
         );
@@ -535,10 +501,11 @@ final class ActorCellTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $childRef = $ctx->spawn(Props::fromBehavior($childBehavior), 'child-1');
                 }
+
                 return Behavior::same();
             },
         );
@@ -566,11 +533,12 @@ final class ActorCellTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-a');
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-b');
                 }
+
                 return Behavior::same();
             },
         );
@@ -597,10 +565,11 @@ final class ActorCellTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'worker');
                 }
+
                 return Behavior::same();
             },
         );
@@ -632,7 +601,7 @@ final class ActorCellTest extends TestCase
     public function self_returns_self_ref(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior, ActorPath::fromString('/user/me'));
@@ -652,6 +621,7 @@ final class ActorCellTest extends TestCase
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$capturedSender): Behavior {
                 $capturedSender = $ctx->sender();
+
                 return Behavior::same();
             },
         );
@@ -674,7 +644,7 @@ final class ActorCellTest extends TestCase
     public function path_returns_actor_path(): void
     {
         $behavior = Behavior::receive(
-            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $path = ActorPath::fromString('/user/my-actor');
@@ -698,8 +668,9 @@ final class ActorCellTest extends TestCase
             static function (ActorContext $ctx) use (&$factoryCalled, &$receivedContext): Behavior {
                 $factoryCalled = true;
                 $receivedContext = $ctx;
+
                 return Behavior::receive(
-                    static fn(ActorContext $c, object $msg): Behavior => Behavior::same(),
+                    static fn (ActorContext $c, object $msg): Behavior => Behavior::same(),
                 );
             },
         );
@@ -711,4 +682,40 @@ final class ActorCellTest extends TestCase
         self::assertNotNull($receivedContext);
         self::assertSame(ActorState::Running, $cell->actorState());
     }
+
+    protected function setUp(): void
+    {
+        $this->runtime = new TestRuntime();
+        $this->deadLetters = new DeadLetterRef();
+        $this->logger = new NullLogger();
+    }
+
+    // ---- Helpers ----
+
+    /**
+     * @template T of object
+     * @param Behavior<T> $behavior
+     * @return ActorCell<T>
+     */
+    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null,): ActorCell {
+        $path ??= ActorPath::fromString('/user/test');
+        $mailbox ??= TestMailbox::unbounded();
+
+        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
+        $noParent = Option::none();
+
+        return new ActorCell(
+            $behavior,
+            $path,
+            $mailbox,
+            $this->runtime,
+            $noParent,
+            SupervisionStrategy::oneForOne(),
+            $this->runtime->clock(),
+            $this->logger,
+            $this->deadLetters,
+        );
+    }// ======================================================================
+// State Machine Tests
+// ======================================================================
 }

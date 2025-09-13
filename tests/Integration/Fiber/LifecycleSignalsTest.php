@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -14,6 +13,7 @@ use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 final class LifecycleSignalsTest extends TestCase
 {
@@ -177,7 +177,7 @@ final class LifecycleSignalsTest extends TestCase
         $ref = $system->spawn(Props::fromBehavior($stopOnFirstMessage), 'self-stopper');
 
         // Send a message to trigger self-stop
-        $ref->tell(new \stdClass());
+        $ref->tell(new stdClass());
 
         $runtime->scheduleOnce(Duration::millis(200), static function () use ($system): void {
             $system->shutdown(Duration::seconds(1));

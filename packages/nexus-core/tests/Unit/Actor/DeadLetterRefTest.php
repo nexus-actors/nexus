@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -12,6 +11,7 @@ use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(DeadLetterRef::class)]
 final class DeadLetterRefTest extends TestCase
@@ -28,7 +28,7 @@ final class DeadLetterRefTest extends TestCase
     public function tellCapturesMessage(): void
     {
         $ref = new DeadLetterRef();
-        $message = new \stdClass();
+        $message = new stdClass();
         $message->text = 'hello';
 
         $ref->tell($message);
@@ -42,11 +42,11 @@ final class DeadLetterRefTest extends TestCase
     {
         $ref = new DeadLetterRef();
 
-        $msg1 = new \stdClass();
+        $msg1 = new stdClass();
         $msg1->id = 1;
-        $msg2 = new \stdClass();
+        $msg2 = new stdClass();
         $msg2->id = 2;
-        $msg3 = new \stdClass();
+        $msg3 = new stdClass();
         $msg3->id = 3;
 
         $ref->tell($msg1);
@@ -66,7 +66,7 @@ final class DeadLetterRefTest extends TestCase
         $timeout = Duration::seconds(5);
 
         try {
-            (void) $ref->ask(static fn(ActorRef $replyTo): object => new \stdClass(), $timeout); // @phpstan-ignore cast.useless, shipmonk.unusedParameter
+            (void) $ref->ask(static fn (ActorRef $replyTo): object => new stdClass(), $timeout);
             self::fail('Expected AskTimeoutException was not thrown');
         } catch (AskTimeoutException $e) {
             self::assertTrue($ref->path()->equals($e->target));
