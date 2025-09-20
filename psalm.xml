@@ -10,6 +10,7 @@
     <projectFiles>
         <directory name="packages/nexus-core/src" />
         <directory name="packages/nexus-runtime-fiber/src" />
+        <directory name="packages/nexus-runtime-step/src" />
         <directory name="packages/nexus-runtime-swoole/src" />
         <directory name="packages/nexus-serialization/src" />
         <ignoreFiles>

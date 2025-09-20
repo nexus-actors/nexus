@@ -29,6 +29,7 @@
         "psr-4": {
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "packages/nexus-runtime-fiber/src/",
+            "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
             "Monadial\\Nexus\\Runtime\\Swoole\\": "packages/nexus-runtime-swoole/src/",
             "Monadial\\Nexus\\Serialization\\": "packages/nexus-serialization/src/",
             "Monadial\\Nexus\\Psalm\\": "packages/nexus-psalm/src/"
@@ -38,6 +39,7 @@
         "psr-4": {
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
             "Monadial\\Nexus\\Runtime\\Fiber\\Tests\\": "packages/nexus-runtime-fiber/tests/",
+            "Monadial\\Nexus\\Runtime\\Step\\Tests\\": "packages/nexus-runtime-step/tests/",
             "Monadial\\Nexus\\Runtime\\Swoole\\Tests\\": "packages/nexus-runtime-swoole/tests/",
             "Monadial\\Nexus\\Serialization\\Tests\\": "packages/nexus-serialization/tests/",
             "Monadial\\Nexus\\Psalm\\Tests\\": "packages/nexus-psalm/tests/",
