@@ -20,6 +20,7 @@
         "phpunit/phpunit": "^11.0",
         "slevomat/coding-standard": "^8.0",
         "squizlabs/php_codesniffer": "^4.0",
+        "swoole/ide-helper": "^5.0",
         "vimeo/psalm": "^6.0"
     },
     "autoload": {
