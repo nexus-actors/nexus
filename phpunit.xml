@@ -26,6 +26,9 @@
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
+        <testsuite name="performance">
+            <directory>tests/Performance</directory>
+        </testsuite>
         <testsuite name="psalm">
             <directory>packages/nexus-psalm/tests</directory>
         </testsuite>
