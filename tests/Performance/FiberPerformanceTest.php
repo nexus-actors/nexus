@@ -23,6 +23,10 @@ use stdClass;
  *   - Actor creation: <50μs per actor
  *   - Message latency (same process): <10μs p99
  *
+ * Key fix: actors self-shutdown when processing completes, so run() exits
+ * immediately instead of waiting for a fixed timer. This measures actual
+ * processing time, not setup + wait time.
+ *
  * Run: vendor/bin/phpunit --testsuite=performance --filter=Fiber
  */
 final class FiberPerformanceTest extends TestCase
@@ -34,7 +38,7 @@ final class FiberPerformanceTest extends TestCase
      */
     public function testMessageThroughput(): void
     {
-        $messageCount = 10_000;
+        $messageCount = 100_000;
 
         $metrics = Benchmark::measure(
             "Fiber: {$messageCount} messages to single actor",
@@ -42,28 +46,28 @@ final class FiberPerformanceTest extends TestCase
             static function () use ($messageCount): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-throughput', $runtime);
-    
+
                 $processed = 0;
-    
+
                 /** @var Behavior<object> $behavior */
                 $behavior = Behavior::receive(
-                    static function (ActorContext $ctx, object $msg) use (&$processed): Behavior {
+                    static function (ActorContext $ctx, object $msg) use (&$processed, $messageCount, $system): Behavior {
                         $processed++;
-        
-                    return Behavior::same();
+
+                        if ($processed >= $messageCount) {
+                            $system->shutdown(Duration::millis(100));
+                        }
+
+                        return Behavior::same();
                     },
                 );
-    
+
                 $ref = $system->spawn(Props::fromBehavior($behavior), 'sink');
-    
+
                 for ($i = 0; $i < $messageCount; $i++) {
                     $ref->tell(new stdClass());
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -74,6 +78,7 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure actor spawn rate: how many actors can be spawned per second.
+     * Measures only spawn() calls, not the run loop.
      *
      * Target: <50μs per actor (>20K actors/sec)
      */
@@ -81,40 +86,48 @@ final class FiberPerformanceTest extends TestCase
     {
         $actorCount = 1_000;
 
-        $metrics = Benchmark::measure(
-            "Fiber: spawn {$actorCount} actors",
-            $actorCount,
-            static function () use ($actorCount): void {
-                $runtime = new FiberRuntime();
-                $system = ActorSystem::create('fiber-spawn', $runtime);
-    
-                /** @var Behavior<object> $behavior */
-                $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
-                    return Behavior::same();
-                });
-    
-                for ($i = 0; $i < $actorCount; $i++) {
-                    $system->spawn(Props::fromBehavior($behavior), "actor-{$i}");
-                }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
-                $runtime->run();
-            },
-        );
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('fiber-spawn', $runtime);
 
-        fwrite(STDERR, "\n  " . $metrics->report() . "\n");
-        self::assertGreaterThan(0, $metrics->opsPerSecond);
+        /** @var Behavior<object> $behavior */
+        $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+            return Behavior::same();
+        });
+
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $actorCount; $i++) {
+            $system->spawn(Props::fromBehavior($behavior), "actor-{$i}");
+        }
+
+        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+        $opsPerSecond = $elapsedMs > 0
+            ? $actorCount / $elapsedMs * 1000
+            : 0;
+        $usPerActor = $elapsedMs * 1000 / $actorCount;
+
+        // Clean up
+        $system->shutdown(Duration::millis(100));
+        $runtime->run();
+
+        fwrite(STDERR, sprintf(
+            "\n  [Fiber: spawn %s actors] %.1fms (%.0f ops/sec, %.1fμs/actor)\n",
+            number_format($actorCount),
+            $elapsedMs,
+            $opsPerSecond,
+            $usPerActor,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
     }
 
     /**
      * Measure actor killing: time to stop actors via PoisonPill.
+     * Actors process PoisonPill and terminate; run() exits when all fibers complete.
      */
     public function testActorKillRate(): void
     {
-        $actorCount = 100;
+        $actorCount = 500;
 
         $metrics = Benchmark::measure(
             "Fiber: kill {$actorCount} actors via PoisonPill",
@@ -122,27 +135,23 @@ final class FiberPerformanceTest extends TestCase
             static function () use ($actorCount): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-kill', $runtime);
-    
+
                 /** @var Behavior<object> $behavior */
                 $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
                     return Behavior::same();
                 });
-    
+
                 $refs = [];
-    
+
                 for ($i = 0; $i < $actorCount; $i++) {
                     $refs[] = $system->spawn(Props::fromBehavior($behavior), "actor-{$i}");
                 }
-    
-                // Kill all actors via PoisonPill
-            foreach ($refs as $ref) {
+
+                // Kill all actors via PoisonPill — run() exits when all fibers terminate
+                foreach ($refs as $ref) {
                     $ref->tell(new PoisonPill());
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -153,10 +162,11 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure burst message dispatch: send N messages at once, measure total delivery time.
+     * Actor self-shutdowns when all messages processed.
      */
     public function testBurstMessageDispatch(): void
     {
-        $burstSize = 5_000;
+        $burstSize = 50_000;
 
         $metrics = Benchmark::measure(
             "Fiber: burst of {$burstSize} messages",
@@ -164,31 +174,30 @@ final class FiberPerformanceTest extends TestCase
             static function () use ($burstSize): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-burst', $runtime);
-    
+
                 $processed = 0;
-    
+
                 /** @var Behavior<object> $behavior */
                 $behavior = Behavior::receive(
-                    static function (ActorContext $ctx, object $msg) use (&$processed): Behavior {
+                    static function (ActorContext $ctx, object $msg) use (&$processed, $burstSize, $system): Behavior {
                         $processed++;
-        
-                    return Behavior::same();
+
+                        if ($processed >= $burstSize) {
+                            $system->shutdown(Duration::millis(100));
+                        }
+
+                        return Behavior::same();
                     },
                 );
-    
+
                 $ref = $system->spawn(Props::fromBehavior($behavior), 'burst-sink');
-    
-                // Send all messages in a tight burst
-            $msg = new stdClass();
-    
+
+                $msg = new stdClass();
+
                 for ($i = 0; $i < $burstSize; $i++) {
                     $ref->tell($msg);
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -199,13 +208,14 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure memory per actor: how much memory each spawned actor consumes.
+     * Uses memory_get_usage(false) for actual PHP object memory, not OS page allocations.
      */
     public function testMemoryPerActor(): void
     {
         $actorCount = 1_000;
 
         gc_collect_cycles();
-        $memBefore = memory_get_usage(true);
+        $memBefore = memory_get_usage(false);
 
         $runtime = new FiberRuntime();
         $system = ActorSystem::create('fiber-memory', $runtime);
@@ -219,13 +229,11 @@ final class FiberPerformanceTest extends TestCase
             $system->spawn(Props::fromBehavior($behavior), "actor-{$i}");
         }
 
-        $memAfter = memory_get_usage(true);
+        $memAfter = memory_get_usage(false);
         $bytesPerActor = ($memAfter - $memBefore) / $actorCount;
 
-        $runtime->scheduleOnce(Duration::millis(200), static function () use ($system): void {
-            $system->shutdown(Duration::seconds(1));
-        });
-
+        // Clean up
+        $system->shutdown(Duration::millis(100));
         $runtime->run();
 
         fwrite(STDERR, sprintf(
@@ -237,14 +245,17 @@ final class FiberPerformanceTest extends TestCase
 
         // Sanity: each actor should use < 100KB
         self::assertLessThan(100_000, $bytesPerActor);
+        // Should be non-zero with proper measurement
+        self::assertGreaterThan(0, $bytesPerActor);
     }
 
     /**
      * Measure stateful actor throughput with state transitions.
+     * Actor self-shutdowns when all transitions complete.
      */
     public function testStatefulActorThroughput(): void
     {
-        $messageCount = 10_000;
+        $messageCount = 100_000;
 
         $metrics = Benchmark::measure(
             "Fiber: {$messageCount} stateful transitions",
@@ -252,25 +263,27 @@ final class FiberPerformanceTest extends TestCase
             static function () use ($messageCount): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-stateful', $runtime);
-    
+
                 /** @var Behavior<object> $behavior */
                 $behavior = Behavior::withState(
                     0,
-                    static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
-                        return BehaviorWithState::next($count + 1);
+                    static function (ActorContext $ctx, object $msg, int $count) use ($messageCount, $system): BehaviorWithState {
+                        $next = $count + 1;
+
+                        if ($next >= $messageCount) {
+                            $system->shutdown(Duration::millis(100));
+                        }
+
+                        return BehaviorWithState::next($next);
                     },
                 );
-    
+
                 $ref = $system->spawn(Props::fromBehavior($behavior), 'counter');
-    
+
                 for ($i = 0; $i < $messageCount; $i++) {
                     $ref->tell(new Increment());
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -281,6 +294,7 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure fan-out: one sender distributes messages to many actors.
+     * Shared counter across all sinks triggers shutdown when total reached.
      */
     public function testFanOutThroughput(): void
     {
@@ -291,31 +305,37 @@ final class FiberPerformanceTest extends TestCase
         $metrics = Benchmark::measure(
             "Fiber: fan-out {$fanOut} actors x {$messagesPerActor} msgs",
             $totalMessages,
-            static function () use ($fanOut, $messagesPerActor): void {
+            static function () use ($fanOut, $messagesPerActor, $totalMessages): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-fanout', $runtime);
-    
+
+                $totalReceived = 0;
+
                 /** @var Behavior<object> $behavior */
-                $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
-                    return Behavior::same();
-                });
-    
+                $behavior = Behavior::receive(
+                    static function (ActorContext $ctx, object $msg) use (&$totalReceived, $totalMessages, $system): Behavior {
+                        $totalReceived++;
+
+                        if ($totalReceived >= $totalMessages) {
+                            $system->shutdown(Duration::millis(100));
+                        }
+
+                        return Behavior::same();
+                    },
+                );
+
                 $refs = [];
-    
+
                 for ($i = 0; $i < $fanOut; $i++) {
                     $refs[] = $system->spawn(Props::fromBehavior($behavior), "worker-{$i}");
                 }
-    
+
                 for ($round = 0; $round < $messagesPerActor; $round++) {
                     foreach ($refs as $ref) {
                         $ref->tell(new stdClass());
                     }
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(1000), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -326,12 +346,17 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure ping-pong latency: inter-actor communication round trips.
+     * Pinger triggers shutdown when all rounds complete.
+     *
+     * This test reveals Fiber's scheduling overhead: each round trip requires
+     * at least 2 tick() cycles with usleep(100) between each, adding ~200μs
+     * minimum latency per round trip.
      *
      * Target: <10μs p99 same-process latency
      */
     public function testPingPongLatency(): void
     {
-        $rounds = 1_000;
+        $rounds = 5_000;
 
         $metrics = Benchmark::measure(
             "Fiber: {$rounds} ping-pong round trips",
@@ -340,50 +365,52 @@ final class FiberPerformanceTest extends TestCase
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-latency', $runtime);
                 $completed = 0;
-    
+
                 /** @var Behavior<object> $pongBehavior */
                 $pongBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
                     if (isset($msg->replyTo)) {
                         $msg->replyTo->tell(new stdClass());
                     }
-    
+
                     return Behavior::same();
                 });
-    
+
                 $pongerRef = $system->spawn(Props::fromBehavior($pongBehavior), 'ponger');
-    
+
                 /** @var Behavior<object> $pingBehavior */
                 $pingBehavior = Behavior::receive(
-                    static function (ActorContext $ctx, object $msg) use (&$completed, $pongerRef, $rounds): Behavior {
+                    static function (ActorContext $ctx, object $msg) use (&$completed, $pongerRef, $rounds, $system): Behavior {
                         $completed++;
-        
-                    if ($completed < $rounds) {
+
+                        if ($completed >= $rounds) {
+                            $system->shutdown(Duration::millis(100));
+                        } else {
                             $pongerRef->tell((object) ['replyTo' => $ctx->self()]);
                         }
-        
-                    return Behavior::same();
+
+                        return Behavior::same();
                     },
                 );
-    
+
                 $pingerRef = $system->spawn(Props::fromBehavior($pingBehavior), 'pinger');
-    
+
                 // Kick off the first ping
-            $pongerRef->tell((object) ['replyTo' => $pingerRef]);
-    
-                $runtime->scheduleOnce(Duration::millis(2000), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+                $pongerRef->tell((object) ['replyTo' => $pingerRef]);
+
                 $runtime->run();
             },
         );
 
+        $usPerRoundTrip = $metrics->elapsedMs * 1000 / $rounds;
+
         fwrite(STDERR, "\n  " . $metrics->report() . "\n");
+        fwrite(STDERR, sprintf("    → %.1fμs per round trip\n", $usPerRoundTrip));
         self::assertGreaterThan(0, $metrics->opsPerSecond);
     }
 
     /**
      * Measure multi-dispatch: single actor sends to multiple targets in one message handler.
+     * Shared counter across sinks triggers shutdown when all messages received.
      */
     public function testMultiDispatchFromSingleActor(): void
     {
@@ -394,49 +421,49 @@ final class FiberPerformanceTest extends TestCase
         $metrics = Benchmark::measure(
             "Fiber: multi-dispatch {$targetCount} targets x {$rounds} rounds",
             $totalMessages,
-            static function () use ($targetCount, $rounds): void {
+            static function () use ($targetCount, $rounds, $totalMessages): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-multi', $runtime);
-    
+
                 $received = 0;
-    
+
                 /** @var Behavior<object> $sinkBehavior */
                 $sinkBehavior = Behavior::receive(
-                    static function (ActorContext $ctx, object $msg) use (&$received): Behavior {
+                    static function (ActorContext $ctx, object $msg) use (&$received, $totalMessages, $system): Behavior {
                         $received++;
-        
-                    return Behavior::same();
+
+                        if ($received >= $totalMessages) {
+                            $system->shutdown(Duration::millis(100));
+                        }
+
+                        return Behavior::same();
                     },
                 );
-    
+
                 $targets = [];
-    
+
                 for ($i = 0; $i < $targetCount; $i++) {
                     $targets[] = $system->spawn(Props::fromBehavior($sinkBehavior), "target-{$i}");
                 }
-    
+
                 // Dispatcher actor: receives a "go" message and dispatches to all targets
-            /** @var Behavior<object> $dispatcherBehavior */
+                /** @var Behavior<object> $dispatcherBehavior */
                 $dispatcherBehavior = Behavior::receive(
                     static function (ActorContext $ctx, object $msg) use ($targets): Behavior {
                         foreach ($targets as $target) {
                             $target->tell(new stdClass());
                         }
-        
-                    return Behavior::same();
+
+                        return Behavior::same();
                     },
                 );
-    
+
                 $dispatcher = $system->spawn(Props::fromBehavior($dispatcherBehavior), 'dispatcher');
-    
+
                 for ($round = 0; $round < $rounds; $round++) {
                     $dispatcher->tell(new stdClass());
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(1000), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
                 $runtime->run();
             },
         );
@@ -447,10 +474,11 @@ final class FiberPerformanceTest extends TestCase
 
     /**
      * Measure spawn-then-kill cycle: create and stop actors in rapid succession.
+     * run() exits when all fibers (PoisonPill-killed actors) terminate.
      */
     public function testSpawnKillCycle(): void
     {
-        $cycles = 200;
+        $cycles = 500;
 
         $metrics = Benchmark::measure(
             "Fiber: {$cycles} spawn-kill cycles",
@@ -458,21 +486,18 @@ final class FiberPerformanceTest extends TestCase
             static function () use ($cycles): void {
                 $runtime = new FiberRuntime();
                 $system = ActorSystem::create('fiber-spawn-kill', $runtime);
-    
+
                 /** @var Behavior<object> $behavior */
                 $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
                     return Behavior::same();
                 });
-    
+
                 for ($i = 0; $i < $cycles; $i++) {
                     $ref = $system->spawn(Props::fromBehavior($behavior), "ephemeral-{$i}");
                     $system->stop($ref);
                 }
-    
-                $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-                    $system->shutdown(Duration::seconds(1));
-                });
-    
+
+                // run() exits when all fibers terminate (PoisonPill processed)
                 $runtime->run();
             },
         );
