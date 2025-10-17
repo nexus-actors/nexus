@@ -79,6 +79,60 @@ final class SwoolePerformanceTest extends TestCase
     }
 
     /**
+     * Measure raw message dispatch rate: how fast tell() can enqueue messages.
+     * Isolates the enqueue path (Channel::push + Envelope creation) from processing.
+     * Measured inside Co\run since Channel::push requires coroutine context.
+     */
+    public function testMessageDispatchRate(): void
+    {
+        $messageCount = 100_000;
+
+        $dispatchElapsedMs = 0.0;
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('swoole-dispatch', $runtime);
+
+        /** @var Behavior<object> $behavior */
+        $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+            return Behavior::same();
+        });
+
+        $ref = $system->spawn(Props::fromBehavior($behavior), 'sink');
+
+        // Measure tell() dispatch rate inside coroutine context
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            static function () use ($ref, $messageCount, &$dispatchElapsedMs, $system): void {
+                $msg = new stdClass();
+                $start = hrtime(true);
+
+                for ($i = 0; $i < $messageCount; $i++) {
+                    $ref->tell($msg);
+                }
+
+                $dispatchElapsedMs = (hrtime(true) - $start) / 1_000_000;
+
+                // Schedule shutdown after dispatch measurement is captured
+                $system->shutdown(Duration::millis(100));
+            },
+        );
+
+        $runtime->run();
+
+        $opsPerSecond = $dispatchElapsedMs > 0
+            ? $messageCount / $dispatchElapsedMs * 1000
+            : 0;
+
+        fwrite(STDERR, sprintf(
+            "\n  [Swoole: dispatch %s messages] %.1fms (%.0f dispatch/sec)\n",
+            number_format($messageCount),
+            $dispatchElapsedMs,
+            $opsPerSecond,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
+    }
+
+    /**
      * Measure actor spawn rate: how many actors can be spawned per second.
      * Measures only spawn() calls (before run).
      *

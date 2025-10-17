@@ -77,6 +77,50 @@ final class FiberPerformanceTest extends TestCase
     }
 
     /**
+     * Measure raw message dispatch rate: how fast tell() can enqueue messages.
+     * Isolates the enqueue path (SplQueue::enqueue + Envelope creation) from processing.
+     */
+    public function testMessageDispatchRate(): void
+    {
+        $messageCount = 100_000;
+
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('fiber-dispatch', $runtime);
+
+        /** @var Behavior<object> $behavior */
+        $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+            return Behavior::same();
+        });
+
+        $ref = $system->spawn(Props::fromBehavior($behavior), 'sink');
+
+        $msg = new stdClass();
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $messageCount; $i++) {
+            $ref->tell($msg);
+        }
+
+        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+        $opsPerSecond = $elapsedMs > 0
+            ? $messageCount / $elapsedMs * 1000
+            : 0;
+
+        // Clean up
+        $system->shutdown(Duration::millis(100));
+        $runtime->run();
+
+        fwrite(STDERR, sprintf(
+            "\n  [Fiber: dispatch %s messages] %.1fms (%.0f dispatch/sec)\n",
+            number_format($messageCount),
+            $elapsedMs,
+            $opsPerSecond,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
+    }
+
+    /**
      * Measure actor spawn rate: how many actors can be spawned per second.
      * Measures only spawn() calls, not the run loop.
      *
