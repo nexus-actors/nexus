@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Error;
-use Fp\Collections\HashMap;
 use Fp\Functional\Option\Option;
 use LogicException;
 use Monadial\Nexus\Core\Duration;
@@ -53,11 +52,11 @@ final class ActorCell implements ActorContext
     /** @var ActorRef<T> */
     private ActorRef $selfRef;
 
-    /** @var HashMap<string, ActorRef<object>> */
-    private HashMap $childrenMap;
+    /** @var array<string, ActorRef<object>> */
+    private array $childrenMap = [];
 
-    /** @var HashMap<string, ActorRef<object>> */
-    private HashMap $watchers;
+    /** @var array<string, ActorRef<object>> */
+    private array $watchers = [];
 
     /** @var list<Envelope> */
     private array $stashBuffer = [];
@@ -80,14 +79,6 @@ final class ActorCell implements ActorContext
         private readonly DeadLetterRef $deadLetters,
     ) {
         $this->currentBehavior = $behavior;
-
-        /** @var HashMap<string, ActorRef<object>> $emptyChildren */
-        $emptyChildren = HashMap::collect([]);
-        $this->childrenMap = $emptyChildren;
-
-        /** @var HashMap<string, ActorRef<object>> $emptyWatchers */
-        $emptyWatchers = HashMap::collect([]);
-        $this->watchers = $emptyWatchers;
 
         /** @var ActorRef<T> $ref */
         $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn (): bool => $this->isAlive());
@@ -175,7 +166,7 @@ final class ActorCell implements ActorContext
         $this->transitionTo(ActorState::Stopping);
 
         // Stop all children
-        foreach ($this->childrenMap->values()->toList() as $child) {
+        foreach ($this->childrenMap as $child) {
             $child->tell(new PoisonPill());
         }
 
@@ -219,7 +210,7 @@ final class ActorCell implements ActorContext
     public function spawn(Props $props, string $name): ActorRef
     {
         // Check for duplicate child name
-        if ($this->childrenMap->get($name)->isSome()) {
+        if (isset($this->childrenMap[$name])) {
             throw new ActorNameExistsException($this->actorPath, $name);
         }
 
@@ -252,7 +243,7 @@ final class ActorCell implements ActorContext
         $this->spawnMessageLoop($childCell, $childMailbox);
 
         $childRef = $childCell->self();
-        $this->childrenMap = $this->childrenMap->appended($name, $childRef);
+        $this->childrenMap[$name] = $childRef;
 
         return $childRef;
     }
@@ -268,12 +259,19 @@ final class ActorCell implements ActorContext
     #[Override]
     public function child(string $name): Option
     {
-        return $this->childrenMap->get($name);
+        if (isset($this->childrenMap[$name])) {
+            return Option::some($this->childrenMap[$name]);
+        }
+
+        /** @var Option<ActorRef<object>> $none */
+        $none = Option::none();
+
+        return $none;
     }
 
-    /** @return HashMap<string, ActorRef<object>> */
+    /** @return array<string, ActorRef<object>> */
     #[Override]
-    public function children(): HashMap
+    public function children(): array
     {
         return $this->childrenMap;
     }
@@ -283,7 +281,7 @@ final class ActorCell implements ActorContext
     public function watch(ActorRef $target): void
     {
         $target->tell(new Watch($this->selfRef));
-        $this->watchers = $this->watchers->appended((string) $target->path(), $target);
+        $this->watchers[(string) $target->path()] = $target;
     }
 
     /** @param ActorRef<object> $target */
@@ -291,7 +289,7 @@ final class ActorCell implements ActorContext
     public function unwatch(ActorRef $target): void
     {
         $target->tell(new Unwatch($this->selfRef));
-        $this->watchers = $this->watchers->removed((string) $target->path());
+        unset($this->watchers[(string) $target->path()]);
     }
 
     /** @param T $message */
@@ -397,9 +395,9 @@ final class ActorCell implements ActorContext
                 $this->transitionTo(ActorState::Running);
             }
         } elseif ($message instanceof Watch) {
-            $this->watchers = $this->watchers->appended((string) $message->watcher->path(), $message->watcher);
+            $this->watchers[(string) $message->watcher->path()] = $message->watcher;
         } elseif ($message instanceof Unwatch) {
-            $this->watchers = $this->watchers->removed((string) $message->watcher->path());
+            unset($this->watchers[(string) $message->watcher->path()]);
         }
     }
 

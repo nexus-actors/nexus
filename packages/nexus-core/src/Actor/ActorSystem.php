@@ -4,7 +4,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use DateTimeImmutable;
-use Fp\Collections\HashMap;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
@@ -30,15 +29,15 @@ use Psr\Log\NullLogger;
  */
 final class ActorSystem
 {
-    /** @var HashMap<string, ActorRef<object>> */
-    private HashMap $children;
+    /** @var array<string, ActorRef<object>> */
+    private array $children;
 
     private int $anonymousCounter = 0;
 
     private readonly ActorPath $userGuardianPath;
 
     /**
-     * @param HashMap<string, ActorRef<object>> $initialChildren
+     * @param array<string, ActorRef<object>> $initialChildren
      */
     private function __construct(
         private readonly string $systemName,
@@ -47,7 +46,7 @@ final class ActorSystem
         private readonly LoggerInterface $logger,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly DeadLetterRef $deadLetters,
-        HashMap $initialChildren,
+        array $initialChildren,
     ) {
         $this->children = $initialChildren;
         $this->userGuardianPath = ActorPath::fromString('/user');
@@ -71,9 +70,6 @@ final class ActorSystem
             }
         };
 
-        /** @var HashMap<string, ActorRef<object>> $emptyChildren */
-        $emptyChildren = HashMap::collect([]);
-
         return new self(
             $name,
             $runtime,
@@ -81,7 +77,7 @@ final class ActorSystem
             $logger ?? new NullLogger(),
             $eventDispatcher ?? new NullDispatcher(),
             new DeadLetterRef(),
-            $emptyChildren,
+            [],
         );
     }
 
@@ -96,12 +92,12 @@ final class ActorSystem
      */
     public function spawn(Props $props, string $name): ActorRef
     {
-        if ($this->children->get($name)->isSome()) {
+        if (isset($this->children[$name])) {
             throw new ActorNameExistsException($this->userGuardianPath, $name);
         }
 
         $ref = $this->createActorCell($props, $name);
-        $this->children = $this->children->appended($name, $ref);
+        $this->children[$name] = $ref;
 
         return $ref;
     }
@@ -118,7 +114,7 @@ final class ActorSystem
     {
         $name = 'auto-' . $this->anonymousCounter++;
         $ref = $this->createActorCell($props, $name);
-        $this->children = $this->children->appended($name, $ref);
+        $this->children[$name] = $ref;
 
         return $ref;
     }
@@ -191,7 +187,7 @@ final class ActorSystem
     public function shutdown(Duration $timeout): void
     {
         // Stop all top-level actors — this closes mailboxes so message loops exit
-        foreach ($this->children->values()->toList() as $child) {
+        foreach ($this->children as $child) {
             $this->stop($child);
         }
 

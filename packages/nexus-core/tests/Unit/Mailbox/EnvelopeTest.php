@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Mailbox;
 
-use Fp\Collections\HashMap;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -26,7 +25,7 @@ final class EnvelopeTest extends TestCase
         self::assertSame($message, $envelope->message);
         self::assertTrue($envelope->sender->equals($sender));
         self::assertTrue($envelope->target->equals($target));
-        self::assertSame([], $envelope->metadata->toArray());
+        self::assertSame([], $envelope->metadata);
     }
 
     #[Test]
@@ -38,13 +37,11 @@ final class EnvelopeTest extends TestCase
             ActorPath::fromString('/target'),
         );
 
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([['trace-id', 'abc-123']]);
-        $updated = $envelope->withMetadata($metadata);
+        $updated = $envelope->withMetadata(['trace-id' => 'abc-123']);
 
         self::assertNotSame($envelope, $updated);
-        self::assertSame([], $envelope->metadata->toArray());
-        self::assertSame(['trace-id' => 'abc-123'], $updated->metadata->toArray());
+        self::assertSame([], $envelope->metadata);
+        self::assertSame(['trace-id' => 'abc-123'], $updated->metadata);
     }
 
     #[Test]
@@ -75,15 +72,13 @@ final class EnvelopeTest extends TestCase
 
         $original = Envelope::of($message, $sender, $target);
 
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([['key', 'value']]);
-        $original->withMetadata($metadata);
+        $original->withMetadata(['key' => 'value']);
         $original->withSender(ActorPath::fromString('/other'));
 
         self::assertSame($message, $original->message);
         self::assertTrue($original->sender->equals($sender));
         self::assertTrue($original->target->equals($target));
-        self::assertSame([], $original->metadata->toArray());
+        self::assertSame([], $original->metadata);
     }
 
     #[Test]
@@ -92,14 +87,12 @@ final class EnvelopeTest extends TestCase
         $message = new stdClass();
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([['request-id', 'req-456']]);
 
-        $envelope = new Envelope($message, $sender, $target, $metadata);
+        $envelope = new Envelope($message, $sender, $target, ['request-id' => 'req-456']);
 
         self::assertSame($message, $envelope->message);
         self::assertTrue($envelope->sender->equals($sender));
         self::assertTrue($envelope->target->equals($target));
-        self::assertSame(['request-id' => 'req-456'], $envelope->metadata->toArray());
+        self::assertSame(['request-id' => 'req-456'], $envelope->metadata);
     }
 }

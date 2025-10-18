@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Mailbox;
 
-use Fp\Collections\HashMap;
 use Monadial\Nexus\Core\Actor\ActorPath;
 
 /**
@@ -15,13 +14,13 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 final readonly class Envelope
 {
     /**
-     * @param HashMap<string, string> $metadata
+     * @param array<string, string> $metadata
      */
     public function __construct(
         public object $message,
         public ActorPath $sender,
         public ActorPath $target,
-        public HashMap $metadata,
+        public array $metadata = [],
     ) {}
 
     /**
@@ -29,18 +28,15 @@ final readonly class Envelope
      */
     public static function of(object $message, ActorPath $sender, ActorPath $target): self
     {
-        /** @var HashMap<string, string> $empty fp4php infers HashMap<never, never> for empty collections */
-        $empty = HashMap::collect([]);
-
-        return new self($message, $sender, $target, $empty);
+        return new self($message, $sender, $target);
     }
 
     /**
      * Returns a new Envelope with updated metadata.
      *
-     * @param HashMap<string, string> $metadata
+     * @param array<string, string> $metadata
      */
-    public function withMetadata(HashMap $metadata): self
+    public function withMetadata(array $metadata): self
     {
         return new self($this->message, $this->sender, $this->target, $metadata);
     }

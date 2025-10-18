@@ -553,7 +553,7 @@ final class ActorCellTest extends TestCase
         ));
 
         $children = $cell->children();
-        self::assertSame(2, $children->count());
+        self::assertCount(2, $children);
     }
 
     #[Test]

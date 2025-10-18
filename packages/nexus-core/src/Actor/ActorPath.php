@@ -30,7 +30,15 @@ final readonly class ActorPath implements Stringable
      */
     public static function root(): self
     {
-        return new self([]);
+        /**
+         * @psalm-suppress ImpureStaticVariable
+         * @psalm-suppress MixedAssignment
+         * @psalm-suppress MixedReturnStatement
+         * @var ?self $instance
+         */
+        static $instance = null;
+
+        return $instance ??= new self([]);
     }
 
     /**

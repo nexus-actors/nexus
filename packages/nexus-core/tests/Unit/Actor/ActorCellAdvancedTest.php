@@ -333,7 +333,7 @@ final class ActorCellAdvancedTest extends TestCase
             ActorPath::fromString('/user/parent'),
         ));
 
-        self::assertSame(2, $cell->children()->count());
+        self::assertCount(2, $cell->children());
 
         // Stop the parent -- initiateStop() iterates children and sends PoisonPill
         $cell->initiateStop();

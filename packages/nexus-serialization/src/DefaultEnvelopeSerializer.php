@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
 
-use Fp\Collections\HashMap;
 use JsonException;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Mailbox\Envelope;
@@ -34,7 +33,7 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
     {
         $serializedMessage = $this->messageSerializer->serialize($envelope->message);
 
-        $metadataArray = $envelope->metadata->toArray();
+        $metadataArray = $envelope->metadata;
 
         $payload = [
             'message' => $serializedMessage,
@@ -78,14 +77,6 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
             throw new MessageDeserializationException('Envelope', 'Invalid actor path: ' . $e->getMessage(), $e);
         }
 
-        $metadata = HashMap::collectPairs(
-            array_map(
-                static fn (string $key, string $value): array => [$key, $value],
-                array_keys($payload['metadata']),
-                array_values($payload['metadata']),
-            ),
-        );
-
-        return new Envelope($message, $sender, $target, $metadata);
+        return new Envelope($message, $sender, $target, $payload['metadata']);
     }
 }

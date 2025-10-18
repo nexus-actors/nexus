@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Fp\Collections\HashMap;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
@@ -38,8 +37,8 @@ interface ActorContext
     /** @return Option<ActorRef<object>> */
     public function child(string $name): Option;
 
-    /** @return HashMap<string, ActorRef<object>> */
-    public function children(): HashMap;
+    /** @return array<string, ActorRef<object>> */
+    public function children(): array;
 
     /** @param ActorRef<object> $target */
     public function watch(ActorRef $target): void;

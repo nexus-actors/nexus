@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Serialization;
 
-use Fp\Collections\HashMap;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Serialization\DefaultEnvelopeSerializer;
@@ -104,25 +103,23 @@ final class EnvelopeSerializationTest extends TestCase
 
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([
-            ['trace-id', 'abc-123-def-456'],
-            ['request-id', 'req-789'],
-            ['correlation-id', 'corr-001'],
-        ]);
         $envelope = new Envelope(
             new OrderPlaced('ORD-META', 42.0),
             $sender,
             $target,
-            $metadata,
+            [
+                'correlation-id' => 'corr-001',
+                'request-id' => 'req-789',
+                'trace-id' => 'abc-123-def-456',
+            ],
         );
 
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);
 
-        self::assertSame('abc-123-def-456', $restored->metadata->get('trace-id')->get());
-        self::assertSame('req-789', $restored->metadata->get('request-id')->get());
-        self::assertSame('corr-001', $restored->metadata->get('correlation-id')->get());
+        self::assertSame('abc-123-def-456', $restored->metadata['trace-id']);
+        self::assertSame('req-789', $restored->metadata['request-id']);
+        self::assertSame('corr-001', $restored->metadata['correlation-id']);
     }
 
     #[Test]
@@ -139,9 +136,7 @@ final class EnvelopeSerializationTest extends TestCase
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);
 
-        /** @var array<string, string> $metaArray */
-        $metaArray = $restored->metadata->toArray();
-        self::assertCount(0, $metaArray);
+        self::assertCount(0, $restored->metadata);
     }
 
     #[Test]
@@ -156,9 +151,7 @@ final class EnvelopeSerializationTest extends TestCase
         $message = new ShipmentCreated('SHP-ENV', $address);
         $sender = ActorPath::fromString('/user/warehouse');
         $target = ActorPath::fromString('/user/shipping');
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([['priority', 'high']]);
-        $envelope = new Envelope($message, $sender, $target, $metadata);
+        $envelope = new Envelope($message, $sender, $target, ['priority' => 'high']);
 
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);
@@ -171,7 +164,7 @@ final class EnvelopeSerializationTest extends TestCase
         self::assertSame('US', $restored->message->address->country);
         self::assertSame('/user/warehouse', (string) $restored->sender);
         self::assertSame('/user/shipping', (string) $restored->target);
-        self::assertSame('high', $restored->metadata->get('priority')->get());
+        self::assertSame('high', $restored->metadata['priority']);
     }
 
     #[Test]
@@ -187,16 +180,14 @@ final class EnvelopeSerializationTest extends TestCase
             new CartItem('SKU-2', 1, 99.99),
         ];
         $message = new CartUpdated('CART-ENV', $items);
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([
-            ['session-id', 'sess-abc'],
-            ['user-agent', 'test-client/1.0'],
-        ]);
         $envelope = new Envelope(
             $message,
             ActorPath::fromString('/user/web'),
             ActorPath::fromString('/user/cart-service'),
-            $metadata,
+            [
+                'session-id' => 'sess-abc',
+                'user-agent' => 'test-client/1.0',
+            ],
         );
 
         $data = $serializer->serialize($envelope);
@@ -209,7 +200,7 @@ final class EnvelopeSerializationTest extends TestCase
         self::assertSame(3, $restored->message->items[0]->quantity);
         self::assertSame(12.50, $restored->message->items[0]->price);
         self::assertSame('SKU-2', $restored->message->items[1]->productId);
-        self::assertSame('sess-abc', $restored->metadata->get('session-id')->get());
-        self::assertSame('test-client/1.0', $restored->metadata->get('user-agent')->get());
+        self::assertSame('sess-abc', $restored->metadata['session-id']);
+        self::assertSame('test-client/1.0', $restored->metadata['user-agent']);
     }
 }

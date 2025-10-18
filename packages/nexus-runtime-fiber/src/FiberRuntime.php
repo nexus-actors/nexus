@@ -27,6 +27,8 @@ final class FiberRuntime implements Runtime
 
     private bool $shutdownRequested = false;
 
+    private bool $wakeupPending = false;
+
     public function __construct()
     {
         $this->scheduler = new FiberScheduler();
@@ -41,7 +43,9 @@ final class FiberRuntime implements Runtime
     #[Override]
     public function createMailbox(MailboxConfig $config): Mailbox
     {
-        return new FiberMailbox($config, ActorPath::root());
+        return new FiberMailbox($config, ActorPath::root(), function (): void {
+            $this->wakeupPending = true;
+        });
     }
 
     #[Override]
@@ -116,8 +120,12 @@ final class FiberRuntime implements Runtime
                 break;
             }
 
-            // Small sleep to prevent busy spin
-            usleep(100);
+            // Only sleep when no messages were enqueued during this tick
+            if ($this->wakeupPending) {
+                $this->wakeupPending = false;
+            } else {
+                usleep(100);
+            }
         }
     }
 

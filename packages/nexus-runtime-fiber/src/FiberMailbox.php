@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
 
+use Closure;
 use Fiber;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -29,7 +30,23 @@ final class FiberMailbox implements Mailbox
     /** @var list<Fiber<mixed, mixed, mixed, mixed>> */
     private array $waiters = [];
 
-    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor,) {
+    /** @var array<int, true> */
+    private array $waiterSet = [];
+
+    /** @var ?\Closure():void */
+    private ?Closure $onEnqueue;
+
+    /**
+     * @param ?\Closure():void $onEnqueue
+     */
+    public function __construct(
+        private readonly MailboxConfig $config,
+        private readonly ActorPath $actor,
+        ?callable $onEnqueue = null,
+    ) {
+        $this->onEnqueue = $onEnqueue !== null
+            ? $onEnqueue(...)
+            : null;
         /** @var \SplQueue<Envelope> $queue */
         $queue = new SplQueue();
         $this->queue = $queue;
@@ -52,6 +69,10 @@ final class FiberMailbox implements Mailbox
 
         $this->queue->enqueue($envelope);
         $this->resumeWaiter();
+
+        if ($this->onEnqueue !== null) {
+            ($this->onEnqueue)();
+        }
 
         return EnqueueResult::Accepted;
     }
@@ -90,8 +111,11 @@ final class FiberMailbox implements Mailbox
                 }
 
                 // Register as waiter only if not already registered
-                if (!in_array($fiber, $this->waiters, true)) {
+                $fiberId = spl_object_id($fiber);
+
+                if (!isset($this->waiterSet[$fiberId])) {
                     $this->waiters[] = $fiber;
+                    $this->waiterSet[$fiberId] = true;
                 }
 
                 Fiber::suspend('mailbox_wait');
@@ -176,7 +200,8 @@ final class FiberMailbox implements Mailbox
     private function resumeWaiter(): void
     {
         if ($this->waiters !== []) {
-            array_shift($this->waiters);
+            $fiber = array_shift($this->waiters);
+            unset($this->waiterSet[spl_object_id($fiber)]);
             // The waiter will be resumed by the runtime event loop
         }
     }
@@ -185,6 +210,7 @@ final class FiberMailbox implements Mailbox
     {
         $waiters = $this->waiters;
         $this->waiters = [];
+        $this->waiterSet = [];
 
         foreach ($waiters as $fiber) {
             if ($fiber->isSuspended()) {

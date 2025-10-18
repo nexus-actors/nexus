@@ -22,7 +22,7 @@ final class FiberScheduler
         $cancellable = new FiberCancellable();
         $fireAt = $this->addDuration($now, $delay);
 
-        $this->timers[] = new TimerEntry(
+        $timer = new TimerEntry(
             callback: $callback,
             fireAt: $fireAt,
             repeating: false,
@@ -30,7 +30,7 @@ final class FiberScheduler
             cancellable: $cancellable,
         );
 
-        $this->sortTimers();
+        $this->insertSorted($timer);
 
         return $cancellable;
     }
@@ -47,7 +47,7 @@ final class FiberScheduler
         $cancellable = new FiberCancellable();
         $fireAt = $this->addDuration($now, $initialDelay);
 
-        $this->timers[] = new TimerEntry(
+        $timer = new TimerEntry(
             callback: $callback,
             fireAt: $fireAt,
             repeating: true,
@@ -55,7 +55,7 @@ final class FiberScheduler
             cancellable: $cancellable,
         );
 
-        $this->sortTimers();
+        $this->insertSorted($timer);
 
         return $cancellable;
     }
@@ -88,7 +88,7 @@ final class FiberScheduler
         }
 
         $this->timers = $remaining;
-        $this->sortTimers();
+        usort($this->timers, static fn (TimerEntry $a, TimerEntry $b): int => $a->fireAt <=> $b->fireAt);
     }
 
     public function hasPendingTimers(): bool
@@ -126,8 +126,21 @@ final class FiberScheduler
         return $result;
     }
 
-    private function sortTimers(): void
+    /**
+     * Insert a timer in sorted position (O(n) scan, avoids O(n log n) full sort).
+     */
+    private function insertSorted(TimerEntry $timer): void
     {
-        usort($this->timers, static fn (TimerEntry $a, TimerEntry $b): int => $a->fireAt <=> $b->fireAt);
+        $count = count($this->timers);
+
+        for ($i = $count - 1; $i >= 0; $i--) {
+            if ($this->timers[$i]->fireAt <= $timer->fireAt) {
+                array_splice($this->timers, $i + 1, 0, [$timer]);
+
+                return;
+            }
+        }
+
+        array_splice($this->timers, 0, 0, [$timer]);
     }
 }

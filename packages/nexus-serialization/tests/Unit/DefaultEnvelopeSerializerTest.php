@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
 
-use Fp\Collections\HashMap;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Serialization\DefaultEnvelopeSerializer;
@@ -67,20 +66,18 @@ final class DefaultEnvelopeSerializerTest extends TestCase
 
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
-        /** @var HashMap<string, string> $metadata */
-        $metadata = HashMap::collectPairs([['trace-id', 'abc-123'], ['request-id', 'req-456']]);
         $envelope = new Envelope(
             new EnvelopeTestMessage('test', 1),
             $sender,
             $target,
-            $metadata,
+            ['trace-id' => 'abc-123', 'request-id' => 'req-456'],
         );
 
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);
 
-        self::assertSame('abc-123', $restored->metadata->get('trace-id')->get());
-        self::assertSame('req-456', $restored->metadata->get('request-id')->get());
+        self::assertSame('abc-123', $restored->metadata['trace-id']);
+        self::assertSame('req-456', $restored->metadata['request-id']);
     }
 
     #[Test]
