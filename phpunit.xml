@@ -13,6 +13,8 @@
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
+            <directory>packages/nexus-cluster/tests/Unit</directory>
+            <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -25,6 +27,9 @@
         </testsuite>
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
+        </testsuite>
+        <testsuite name="integration-cluster">
+            <directory>tests/Integration/Cluster</directory>
         </testsuite>
         <testsuite name="performance">
             <directory>tests/Performance</directory>
@@ -40,6 +45,8 @@
             <directory>packages/nexus-runtime-step/src</directory>
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
+            <directory>packages/nexus-cluster/src</directory>
+            <directory>packages/nexus-cluster-swoole/src</directory>
         </include>
     </source>
 </phpunit>

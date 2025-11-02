@@ -13,6 +13,8 @@
         <directory name="packages/nexus-runtime-step/src" />
         <directory name="packages/nexus-runtime-swoole/src" />
         <directory name="packages/nexus-serialization/src" />
+        <directory name="packages/nexus-cluster/src" />
+        <directory name="packages/nexus-cluster-swoole/src" />
         <ignoreFiles>
             <directory name="vendor" />
         </ignoreFiles>

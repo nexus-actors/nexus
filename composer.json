@@ -33,7 +33,9 @@
             "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
             "Monadial\\Nexus\\Runtime\\Swoole\\": "packages/nexus-runtime-swoole/src/",
             "Monadial\\Nexus\\Serialization\\": "packages/nexus-serialization/src/",
-            "Monadial\\Nexus\\Psalm\\": "packages/nexus-psalm/src/"
+            "Monadial\\Nexus\\Psalm\\": "packages/nexus-psalm/src/",
+            "Monadial\\Nexus\\Cluster\\": "packages/nexus-cluster/src/",
+            "Monadial\\Nexus\\Cluster\\Swoole\\": "packages/nexus-cluster-swoole/src/"
         }
     },
     "autoload-dev": {
@@ -45,7 +47,9 @@
             "Monadial\\Nexus\\Serialization\\Tests\\": "packages/nexus-serialization/tests/",
             "Monadial\\Nexus\\Psalm\\Tests\\": "packages/nexus-psalm/tests/",
             "Monadial\\Nexus\\Tests\\Integration\\": "tests/Integration/",
-            "Monadial\\Nexus\\Tests\\Performance\\": "tests/Performance/"
+            "Monadial\\Nexus\\Tests\\Performance\\": "tests/Performance/",
+            "Monadial\\Nexus\\Cluster\\Tests\\": "packages/nexus-cluster/tests/",
+            "Monadial\\Nexus\\Cluster\\Swoole\\Tests\\": "packages/nexus-cluster-swoole/tests/"
         }
     },
     "config": {
