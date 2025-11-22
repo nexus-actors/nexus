@@ -40,6 +40,19 @@ final readonly class LocalActorRef implements ActorRef
     }
 
     /**
+     * Deliver a pre-formed envelope directly to the mailbox.
+     * Used by cluster transport to preserve sender path from remote workers.
+     */
+    public function enqueueEnvelope(Envelope $envelope): void
+    {
+        try {
+            $_ = $this->mailbox->enqueue($envelope);
+        } catch (MailboxClosedException) {
+            // fire-and-forget: silently drop messages to closed mailboxes
+        }
+    }
+
+    /**
      * @template R of object
      * @param callable(ActorRef<R>): T $messageFactory
      * @return R
