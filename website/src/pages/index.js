@@ -1,0 +1,655 @@
+import React from 'react';
+import Layout from '@theme/Layout';
+import Link from '@docusaurus/Link';
+import CodeBlock from '@theme/CodeBlock';
+import styles from './index.module.css';
+
+/* ------------------------------------------------------------------ */
+/* Code examples                                                       */
+/* ------------------------------------------------------------------ */
+
+const heroCode = `$runtime = new FiberRuntime();
+$system  = ActorSystem::create('my-app', $runtime);
+
+// Define a stateful counter actor
+$counter = Behavior::withState(0, static function (
+    ActorContext $ctx, object $msg, int $count,
+): BehaviorWithState {
+    return match (true) {
+        $msg instanceof Increment
+            => BehaviorWithState::next($count + 1),
+
+        $msg instanceof GetCount => tap(
+            BehaviorWithState::same(),
+            fn () => $msg->replyTo->tell(new Count($count)),
+        ),
+
+        default => BehaviorWithState::same(),
+    };
+});
+
+// Spawn it. Send messages. That's it.
+$ref = $system->spawn(Props::fromBehavior($counter), 'counter');
+$ref->tell(new Increment());
+$ref->tell(new Increment());
+$ref->tell(new GetCount(replyTo: $probeRef));`;
+
+const supervisionCode = `// When an actor fails, its parent decides what happens.
+// No try/catch. No manual retry logic. Just policy.
+
+$strategy = SupervisionStrategy::exponentialBackoff(
+    initialBackoff: Duration::millis(100),
+    maxBackoff:     Duration::seconds(30),
+    maxRetries:     5,
+    multiplier:     2.0,
+    decider: static fn (Throwable $e) => match (true) {
+        $e instanceof TransientError => Directive::Restart,
+        $e instanceof FatalError     => Directive::Stop,
+        default                      => Directive::Escalate,
+    },
+);
+
+$props = Props::fromBehavior($behavior)
+    ->withSupervision($strategy)
+    ->withMailbox(MailboxConfig::bounded(10_000));`;
+
+const classActorCode = `// Class-based actors with lifecycle hooks
+// and PSR-11 dependency injection.
+
+final class OrderProcessor extends AbstractActor
+{
+    public function __construct(
+        private readonly PaymentGateway $payments,
+        private readonly Inventory $inventory,
+    ) {}
+
+    public function onPreStart(ActorContext $ctx): void
+    {
+        $ctx->log()->info('OrderProcessor started');
+    }
+
+    public function handle(
+        ActorContext $ctx, object $message,
+    ): Behavior {
+        if ($message instanceof ProcessOrder) {
+            $this->payments->charge($message->order);
+            $this->inventory->reserve($message->items);
+            $message->replyTo->tell(new OrderConfirmed(
+                orderId: $message->orderId,
+            ));
+        }
+
+        return Behavior::same();
+    }
+}
+
+// Spawn from your DI container
+$ref = $system->spawn(
+    Props::fromContainer($container, OrderProcessor::class),
+    'order-processor',
+);`;
+
+const runtimeCode = `// Development: PHP Fibers. Zero extensions needed.
+$system = ActorSystem::create('dev', new FiberRuntime());
+
+// Production: Swoole coroutines. 100K+ concurrent actors.
+$system = ActorSystem::create('prod', new SwooleRuntime(
+    new SwooleConfig(
+        maxCoroutines: 100_000,
+        enableCoroutineHook: true,
+    ),
+));
+
+// Your actor code doesn't change. Not a single line.
+$ref = $system->spawn(Props::fromBehavior($behavior), 'worker');
+$ref->tell(new ProcessTask($payload));`;
+
+const stashingCode = `// Actors can buffer messages during initialization.
+// When ready, unstash and process them in order.
+
+$initializing = Behavior::receive(
+    static function (ActorContext $ctx, object $msg)
+        use ($ready): Behavior
+    {
+        if ($msg instanceof DatabaseReady) {
+            // Connection established. Process buffered work.
+            $ctx->unstashAll();
+            return $ready;
+        }
+
+        // Not ready yet. Buffer this message.
+        $ctx->stash();
+        return Behavior::same();
+    },
+);
+
+$ref = $system->spawn(Props::fromBehavior($initializing), 'db-writer');
+
+// These arrive before the database is ready.
+// They're stashed, then replayed in order.
+$ref->tell(new WriteRecord($data1));
+$ref->tell(new WriteRecord($data2));
+$ref->tell(new DatabaseReady($connection));`;
+
+/* ------------------------------------------------------------------ */
+/* Data                                                                */
+/* ------------------------------------------------------------------ */
+
+const pillars = [
+  {
+    title: 'Concurrent by Design',
+    desc: 'Each actor is a lightweight unit of computation with its own mailbox and state. No shared memory. No locks. No race conditions. Thousands of actors run concurrently, communicating only through immutable messages.',
+  },
+  {
+    title: 'Fault-Tolerant by Default',
+    desc: 'When something fails -- and it will -- the supervision hierarchy handles it automatically. Parent actors decide whether to restart, stop, or escalate failures. Your system recovers without human intervention.',
+  },
+  {
+    title: 'Type-Safe at Every Layer',
+    desc: 'Every ActorRef carries its message type as a generic parameter. Send the wrong message type and Psalm catches it during analysis -- not at 3 AM in production. The entire API is built around readonly classes and immutable value objects.',
+  },
+];
+
+const features = [
+  {
+    title: 'Stateful Actors',
+    description: 'Manage state explicitly with Behavior::withState(). State transitions are pure functions. No hidden side effects, no shared globals.',
+    icon: '\u03BB',
+  },
+  {
+    title: 'Supervision Strategies',
+    description: 'One-for-one, all-for-one, and exponential backoff. Custom decider functions per exception type. Automatic retry with configurable limits.',
+    icon: '\u25B3',
+  },
+  {
+    title: 'Message Stashing',
+    description: 'Buffer messages during transitional states. Unstash when ready. Messages replay in order. Perfect for initialization sequences.',
+    icon: '\u29D6',
+  },
+  {
+    title: 'Scheduled Messages',
+    description: 'One-shot and repeating timers with cancellation. Schedule messages to self or other actors. Nanosecond-precision Duration values.',
+    icon: '\u23F1',
+  },
+  {
+    title: 'Actor Hierarchies',
+    description: 'Actors spawn children. Children have paths like /user/orders/order-123. Watch actors for termination signals. Full lifecycle management.',
+    icon: '\u2387',
+  },
+  {
+    title: 'Dead Letter Office',
+    description: 'Messages sent to stopped actors are captured, not silently dropped. Inspect dead letters for debugging. No message goes unaccounted for.',
+    icon: '\u2709',
+  },
+  {
+    title: 'Immutable Everything',
+    description: 'Readonly classes, immutable behaviors, Option types from fp4php. State is passed, not mutated. The compiler enforces discipline your team can trust.',
+    icon: '\u2205',
+  },
+  {
+    title: 'PSR Integration',
+    description: 'PSR-11 containers for DI, PSR-3 logging, PSR-14 event dispatching, PSR-20 clocks. Nexus works with your existing stack, not against it.',
+    icon: '\u2713',
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/* Components                                                          */
+/* ------------------------------------------------------------------ */
+
+function Hero() {
+  return (
+    <section className={styles.hero}>
+      <div className={styles.heroGrid} />
+      <div className={styles.heroInner}>
+        <div className={styles.heroBadge}>
+          Open source &middot; MIT licensed &middot; PHP 8.5+
+        </div>
+        <h1 className={styles.heroTitle}>
+          Concurrent PHP,<br />
+          <span className={styles.heroAccent}>done right.</span>
+        </h1>
+        <p className={styles.heroTagline}>
+          Nexus is a production-grade actor system that brings Erlang/OTP
+          and Akka patterns to PHP. Type-safe actors, supervision trees,
+          pluggable runtimes, and zero shared mutable state.
+        </p>
+        <div className={styles.heroCta}>
+          <Link className={styles.ctaPrimary} to="/docs/getting-started/installation">
+            Get Started
+          </Link>
+          <Link className={styles.ctaGhost} to="/docs/intro">
+            Why Nexus?
+          </Link>
+          <Link
+            className={styles.ctaGhost}
+            href="https://github.com/monadial/nexus"
+          >
+            GitHub
+          </Link>
+        </div>
+        <div className={styles.heroCodeWrap}>
+          <CodeBlock language="php" title="counter.php" showLineNumbers>
+            {heroCode}
+          </CodeBlock>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Problem() {
+  return (
+    <section className={styles.problem}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>
+          PHP can handle HTTP.<br />
+          But what about everything else?
+        </h2>
+        <div className={styles.problemGrid}>
+          <div className={styles.problemCard}>
+            <h3 className={styles.problemCardTitle}>The queue worker trap</h3>
+            <p className={styles.problemCardText}>
+              You start with a simple Redis queue. Then you need retries. Then
+              error handling. Then state management. Then monitoring. Six months
+              later, you've built half of Erlang/OTP -- poorly -- spread across
+              a dozen worker scripts.
+            </p>
+          </div>
+          <div className={styles.problemCard}>
+            <h3 className={styles.problemCardTitle}>No structure for concurrency</h3>
+            <p className={styles.problemCardText}>
+              PHP has fibers and coroutines now, but no framework for using
+              them safely. No supervision. No message protocols. No way to
+              reason about concurrent state. Raw concurrency primitives are
+              like raw SQL -- powerful and dangerous.
+            </p>
+          </div>
+          <div className={styles.problemCard}>
+            <h3 className={styles.problemCardTitle}>The language barrier</h3>
+            <p className={styles.problemCardText}>
+              Teams are told to "just use Go" or "switch to Elixir" for
+              concurrent workloads. But your domain knowledge, your team's
+              expertise, and your existing codebase are all in PHP. You
+              shouldn't have to rewrite everything.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Pillars() {
+  return (
+    <section className={styles.pillars}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Built on proven principles</h2>
+        <p className={styles.sectionSub}>
+          The actor model has powered telecom switches, stock exchanges, and
+          social networks for decades. Nexus brings the same patterns to PHP.
+        </p>
+        <div className={styles.pillarGrid}>
+          {pillars.map((p, i) => (
+            <div key={i} className={styles.pillarCard}>
+              <div className={styles.pillarNumber}>0{i + 1}</div>
+              <h3 className={styles.pillarTitle}>{p.title}</h3>
+              <p className={styles.pillarDesc}>{p.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ShowcaseSection({ title, description, code, codeTitle, reversed }) {
+  return (
+    <section className={`${styles.showcase} ${reversed ? styles.showcaseReversed : ''}`}>
+      <div className={styles.showcaseInner}>
+        <div className={styles.showcaseText}>
+          <h2 className={styles.showcaseTitle}>{title}</h2>
+          <p className={styles.showcaseDesc}>{description}</p>
+        </div>
+        <div className={styles.showcaseCode}>
+          <CodeBlock language="php" title={codeTitle} showLineNumbers>
+            {code}
+          </CodeBlock>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Showcases() {
+  return (
+    <div className={styles.showcases}>
+      <div className={styles.showcasesDivider}>
+        <h2 className={styles.sectionTitle}>See it in action</h2>
+        <p className={styles.sectionSub}>
+          Real patterns, real code. Every example runs as-is.
+        </p>
+      </div>
+
+      <ShowcaseSection
+        title="Supervision that handles failure for you"
+        description="Actors fail. Networks drop. Databases timeout. Instead of wrapping everything in try/catch, define a supervision strategy once. The parent actor applies it automatically -- restart with backoff, stop permanently, or escalate to the next level. Your business logic stays clean."
+        code={supervisionCode}
+        codeTitle="supervision.php"
+      />
+
+      <ShowcaseSection
+        title="Class-based actors with dependency injection"
+        description="Not everything fits in a closure. For complex actors, extend AbstractActor and get lifecycle hooks (onPreStart, onPostStop), constructor injection via PSR-11 containers, and clean separation of concerns. Spawn them from your DI container with a single line."
+        code={classActorCode}
+        codeTitle="OrderProcessor.php"
+        reversed
+      />
+
+      <ShowcaseSection
+        title="One codebase, two runtimes"
+        description="Develop locally with the Fiber runtime -- zero extensions required, instant startup, built into PHP. Deploy to production with the Swoole runtime -- true coroutines, native channels, 100K+ concurrent actors. Switch runtimes by changing a single constructor. Your actor code stays identical."
+        code={runtimeCode}
+        codeTitle="runtime.php"
+      />
+
+      <ShowcaseSection
+        title="Stash now, process later"
+        description="Some actors need to initialize before handling work -- connecting to a database, loading configuration, warming caches. With stashing, incoming messages are buffered transparently. When the actor is ready, unstash replays them in order. No messages lost, no timing hacks."
+        code={stashingCode}
+        codeTitle="stashing.php"
+        reversed
+      />
+    </div>
+  );
+}
+
+function Features() {
+  return (
+    <section className={styles.features}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Everything you need</h2>
+        <p className={styles.sectionSub}>
+          A complete toolkit for building concurrent PHP systems.
+        </p>
+        <div className={styles.featuresGrid}>
+          {features.map((f, i) => (
+            <div key={i} className={styles.featureCard}>
+              <span className={styles.featureIcon}>{f.icon}</span>
+              <h3 className={styles.featureTitle}>{f.title}</h3>
+              <p className={styles.featureDesc}>{f.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HowItWorks() {
+  const steps = [
+    {
+      step: '01',
+      title: 'Define your messages',
+      desc: 'Messages are plain readonly classes. No interfaces to implement, no serialization boilerplate. Just data.',
+      code: `readonly class PlaceOrder {\n    public function __construct(\n        public string $orderId,\n        public array $items,\n        public ActorRef $replyTo,\n    ) {}\n}`,
+    },
+    {
+      step: '02',
+      title: 'Write a behavior',
+      desc: 'A behavior is a pure function: it receives a message and returns the next behavior. Stateless or stateful — your choice.',
+      code: `$handler = Behavior::receive(\n    static function (ActorContext $ctx, object $msg)\n        : Behavior\n    {\n        if ($msg instanceof PlaceOrder) {\n            // process the order\n            $msg->replyTo->tell(new OrderPlaced(\n                $msg->orderId,\n            ));\n        }\n        return Behavior::same();\n    },\n);`,
+    },
+    {
+      step: '03',
+      title: 'Spawn actors',
+      desc: 'Actors are spawned from Props — a configuration object that binds a behavior to a mailbox and supervision strategy.',
+      code: `$props = Props::fromBehavior($handler)\n    ->withMailbox(MailboxConfig::bounded(5000))\n    ->withSupervision(\n        SupervisionStrategy::exponentialBackoff(\n            initialBackoff: Duration::millis(100),\n            maxBackoff: Duration::seconds(30),\n        ),\n    );\n\n$ref = $system->spawn($props, 'order-service');`,
+    },
+    {
+      step: '04',
+      title: 'Send messages and run',
+      desc: 'Tell an actor to do something. The runtime handles scheduling, mailbox delivery, and concurrency. You focus on business logic.',
+      code: `$ref->tell(new PlaceOrder(\n    orderId: 'ORD-2024-001',\n    items: ['widget-a', 'widget-b'],\n    replyTo: $confirmationActor,\n));\n\n// Start the event loop\n$system->run();`,
+    },
+  ];
+
+  return (
+    <section className={styles.howItWorks}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Four steps to your first actor</h2>
+        <p className={styles.sectionSub}>
+          No framework magic. No code generation. Just straightforward PHP.
+        </p>
+        <div className={styles.stepsGrid}>
+          {steps.map((s, i) => (
+            <div key={i} className={styles.stepCard}>
+              <div className={styles.stepHeader}>
+                <span className={styles.stepNumber}>{s.step}</span>
+                <h3 className={styles.stepTitle}>{s.title}</h3>
+              </div>
+              <p className={styles.stepDesc}>{s.desc}</p>
+              <div className={styles.stepCode}>
+                <CodeBlock language="php">{s.code}</CodeBlock>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UseCases() {
+  const cases = [
+    {
+      title: 'Event-Driven Microservices',
+      desc: 'Replace sprawling queue consumers with actors that own their state and communicate through typed messages. Each service is an actor — or a tree of actors — with built-in fault recovery.',
+    },
+    {
+      title: 'Real-Time Data Pipelines',
+      desc: 'Ingest, transform, and route high-volume data streams. Actors process messages concurrently with backpressure-aware mailboxes. No data loss, no manual flow control.',
+    },
+    {
+      title: 'Task Orchestration',
+      desc: 'Coordinate multi-step workflows where each step may fail independently. Parent actors supervise workers, retry transient failures, and escalate permanent ones — automatically.',
+    },
+    {
+      title: 'IoT and Device Management',
+      desc: 'One actor per device. Thousands of concurrent connections, each with its own state and lifecycle. Actors start when devices connect and stop cleanly when they disconnect.',
+    },
+    {
+      title: 'Financial Transaction Processing',
+      desc: 'Process payments, transfers, and settlements with actors that guarantee message ordering. Stateful actors maintain account balances without database locks.',
+    },
+    {
+      title: 'Game Servers and Simulations',
+      desc: 'Model game entities as actors. Players, rooms, NPCs — each with independent state and behavior. Concurrent updates without shared memory or mutex contention.',
+    },
+  ];
+
+  return (
+    <section className={styles.useCases}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Built for real work</h2>
+        <p className={styles.sectionSub}>
+          Nexus isn't a toy. It's designed for production systems<br />
+          where reliability and performance matter.
+        </p>
+        <div className={styles.useCasesGrid}>
+          {cases.map((c, i) => (
+            <div key={i} className={styles.useCaseCard}>
+              <h3 className={styles.useCaseTitle}>{c.title}</h3>
+              <p className={styles.useCaseDesc}>{c.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Philosophy() {
+  return (
+    <section className={styles.philosophy}>
+      <div className={styles.sectionInner}>
+        <div className={styles.philoGrid}>
+          <div className={styles.philoMain}>
+            <h2 className={styles.philoTitle}>
+              We didn't invent the actor model.<br />
+              We brought it home to PHP.
+            </h2>
+            <p className={styles.philoText}>
+              The actor model was conceived in 1973. Erlang proved it could run
+              telecom systems with 99.9999999% uptime. Akka scaled it to millions
+              of concurrent users on the JVM. These aren't experimental ideas —
+              they're battle-tested patterns with decades of production validation.
+            </p>
+            <p className={styles.philoText}>
+              PHP teams have been locked out of these patterns. Not because the
+              language can't handle it — PHP 8.5 has fibers, readonly classes,
+              generics via static analysis, and a pipe operator. The missing piece
+              was a framework that takes these primitives seriously.
+            </p>
+            <p className={styles.philoText}>
+              Nexus fills that gap. Every design decision serves a single goal:
+              let PHP developers build concurrent systems with the same
+              confidence that Erlang and Akka developers have enjoyed for years.
+            </p>
+          </div>
+          <div className={styles.philoSide}>
+            <div className={styles.philoValue}>
+              <h4 className={styles.philoValueTitle}>Explicit over implicit</h4>
+              <p className={styles.philoValueText}>
+                State is passed as function arguments, not hidden in object
+                properties. Behaviors are returned, not mutated. You can read
+                any actor handler and understand it completely.
+              </p>
+            </div>
+            <div className={styles.philoValue}>
+              <h4 className={styles.philoValueTitle}>Let it crash</h4>
+              <p className={styles.philoValueText}>
+                Don't write defensive code against every possible failure.
+                Write actors that handle the happy path. Let the supervision
+                hierarchy handle everything else.
+              </p>
+            </div>
+            <div className={styles.philoValue}>
+              <h4 className={styles.philoValueTitle}>Composition over inheritance</h4>
+              <p className={styles.philoValueText}>
+                Behaviors compose. Props compose. Supervision strategies
+                compose. Small, focused pieces snap together into complex
+                systems. No deep class hierarchies.
+              </p>
+            </div>
+            <div className={styles.philoValue}>
+              <h4 className={styles.philoValueTitle}>No magic</h4>
+              <p className={styles.philoValueText}>
+                No annotations that generate code. No runtime reflection.
+                No hidden service locators. Every behavior is a plain
+                function. Every message is a plain class.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Architecture() {
+  return (
+    <section className={styles.architecture}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Modular by design</h2>
+        <p className={styles.sectionSub}>
+          Pick what you need. Leave what you don't.
+        </p>
+        <div className={styles.archGrid}>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-core</code>
+            <p className={styles.archDesc}>
+              Actors, behaviors, supervision, mailboxes, and the full type-safe
+              API. Runtime-agnostic. Zero dependencies beyond PSR interfaces.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-runtime-fiber</code>
+            <p className={styles.archDesc}>
+              Fiber-based runtime. No extensions. Cooperative multitasking
+              with PHP's native fiber scheduler. Ideal for development and testing.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-runtime-swoole</code>
+            <p className={styles.archDesc}>
+              Swoole coroutine runtime. Native channels, true async I/O,
+              100K+ concurrent actors. Built for production workloads.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-serialization</code>
+            <p className={styles.archDesc}>
+              Message serialization with envelope protocol. PHP native
+              serializer for speed, Valinor mapper for structured wire formats.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BottomCta() {
+  return (
+    <section className={styles.bottomCta}>
+      <div className={styles.heroGrid} />
+      <div className={styles.bottomCtaInner}>
+        <h2 className={styles.bottomCtaTitle}>
+          Stop fighting concurrency.<br />
+          Start building with it.
+        </h2>
+        <p className={styles.bottomCtaSub}>
+          Install Nexus and spawn your first actor in under five minutes.
+        </p>
+        <div className={styles.bottomCtaCode}>
+          <code>composer require monadial/nexus-core monadial/nexus-runtime-fiber</code>
+        </div>
+        <div className={styles.heroCta}>
+          <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">
+            Quick Start Guide
+          </Link>
+          <Link className={styles.ctaGhost} to="/docs/core-concepts/actors">
+            Explore the API
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
+export default function Home() {
+  return (
+    <Layout
+      title="Concurrent PHP, done right"
+      description="Nexus is a production-grade actor system for PHP 8.5+ with type-safe actors, supervision trees, and pluggable runtimes."
+    >
+      <main className={styles.landing}>
+        <Hero />
+        <Problem />
+        <Pillars />
+        <Showcases />
+        <Features />
+        <HowItWorks />
+        <UseCases />
+        <Philosophy />
+        <Architecture />
+        <BottomCta />
+      </main>
+    </Layout>
+  );
+}
