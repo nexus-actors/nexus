@@ -13,6 +13,12 @@
     <file>packages/nexus-core/tests</file>
     <file>packages/nexus-runtime-fiber/tests</file>
     <file>packages/nexus-serialization/tests</file>
+    <file>packages/nexus-cluster/src</file>
+    <file>packages/nexus-cluster/tests</file>
+    <file>packages/nexus-cluster-swoole/src</file>
+    <file>packages/nexus-cluster-swoole/tests</file>
+    <file>packages/nexus-app/src</file>
+    <file>packages/nexus-app/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->
