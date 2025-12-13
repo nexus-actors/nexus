@@ -23,7 +23,7 @@ Key features:
 - **`ConsistentHashRing`** determines actor placement without coordination.
 - **`RemoteActorRef`** provides location-transparent cross-worker messaging.
 - **`UnixSocketTransport`** uses AF_UNIX domain sockets with length-prefixed
-  framing. Benchmarked at 233K msgs/sec per worker pair.
+  framing. Benchmarked at 255K msgs/sec per worker pair.
 - **`SwooleTableDirectory`** provides O(1) shared-memory actor lookups.
 - Pure PHP abstractions in `nexus-cluster` are designed to support future
   multi-server implementations without changes to actor code.

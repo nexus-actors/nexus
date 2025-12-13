@@ -8,7 +8,7 @@ use Monadial\Nexus\Cluster\ClusterConfig;
 use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
-use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
+use Monadial\Nexus\Cluster\Serialization\CompactClusterSerializer;
 use Monadial\Nexus\Cluster\Swoole\Directory\SwooleTableDirectory;
 use Monadial\Nexus\Cluster\Swoole\Transport\UnixSocketTransport;
 use Monadial\Nexus\Core\Actor\ActorSystem;
@@ -43,7 +43,7 @@ final class ClusterBootstrap
 
     private function __construct(private readonly ClusterConfig $config)
     {
-        $this->serializer = new PhpNativeClusterSerializer();
+        $this->serializer = new CompactClusterSerializer();
     }
 
     public static function create(ClusterConfig $config): self

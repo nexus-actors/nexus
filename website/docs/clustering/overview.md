@@ -77,10 +77,10 @@ Benchmarked on a single machine (all workers in one process pool):
 
 | Metric | Result |
 |---|---|
-| Cross-worker throughput | 233K msgs/sec per worker pair |
-| Cross-worker round-trip latency | 20.8 us/roundtrip |
-| Serialization throughput | 196K serialize+deserialize cycles/sec |
-| Multi-worker fan-out (4 workers) | 204K msgs/sec aggregate |
+| Cross-worker throughput | 255K msgs/sec per worker pair |
+| Cross-worker round-trip latency | 10.8 us/roundtrip |
+| Serialization throughput | 1.13M serialize+deserialize cycles/sec |
+| Multi-worker fan-out (4 workers) | 195K msgs/sec aggregate |
 
 ## Package split
 

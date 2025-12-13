@@ -18,9 +18,15 @@ use Swoole\Coroutine\Socket;
  *
  * Each worker creates a server socket and connects as a client to all other workers.
  * Fully coroutine-friendly — non-blocking reads and writes.
+ *
+ * Optimizations:
+ * - Read buffering: receives up to 65536 bytes at once and parses multiple
+ *   frames from the buffer. Reduces read syscalls from 2N to ~N/batch_size.
  */
 final class UnixSocketTransport implements Transport
 {
+    private const int READ_BUFFER_SIZE = 65536;
+
     private ?Socket $serverSocket = null;
 
     /** @var array<int, Socket> Worker ID -> client socket */
@@ -131,29 +137,43 @@ final class UnixSocketTransport implements Transport
         $this->listener = null;
     }
 
+    /**
+     * Read buffered: receives large chunks and parses multiple frames.
+     */
     private function handleConnection(Socket $conn): void
     {
+        $buffer = '';
+
         while (!$this->closed) {
-            /** @var string|false $lenBytes */
-            $lenBytes = $conn->recvAll(4, 1.0);
+            /** @var string|false $chunk */
+            $chunk = $conn->recv(self::READ_BUFFER_SIZE, 1.0);
 
-            if ($lenBytes === '' || $lenBytes === false || strlen($lenBytes) < 4) {
+            if ($chunk === '' || $chunk === false) {
+                if ($buffer !== '') {
+                    continue; // Partial frame in buffer, wait for more data
+                }
+
                 break;
             }
 
-            /** @var array{1: int} $unpacked */
-            $unpacked = unpack('N', $lenBytes);
-            $len = $unpacked[1];
+            $buffer .= $chunk;
 
-            /** @var string|false $data */
-            $data = $conn->recvAll($len, 5.0);
+            // Parse all complete frames from the buffer
+            while (strlen($buffer) >= 4) {
+                /** @var array{1: int} $unpacked */
+                $unpacked = unpack('N', $buffer);
+                $len = $unpacked[1];
 
-            if ($data === '' || $data === false || strlen($data) < $len) {
-                break;
-            }
+                if (strlen($buffer) < 4 + $len) {
+                    break; // Incomplete frame, wait for more data
+                }
 
-            if ($this->listener !== null) {
-                ($this->listener)($data);
+                $data = substr($buffer, 4, $len);
+                $buffer = substr($buffer, 4 + $len);
+
+                if ($this->listener !== null) {
+                    ($this->listener)($data);
+                }
             }
         }
 

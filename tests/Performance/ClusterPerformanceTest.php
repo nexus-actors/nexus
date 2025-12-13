@@ -7,7 +7,7 @@ use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
 use Monadial\Nexus\Cluster\RemoteActorRef;
-use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
+use Monadial\Nexus\Cluster\Serialization\CompactClusterSerializer;
 use Monadial\Nexus\Cluster\Swoole\Transport\UnixSocketTransport;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -60,7 +60,7 @@ final class ClusterPerformanceTest extends TestCase
         run(function () use (&$elapsedMs, &$delivered, $messageCount): void {
             $workerCount = 2;
             $ring = new ConsistentHashRing($workerCount);
-            $serializer = new PhpNativeClusterSerializer();
+            $serializer = new CompactClusterSerializer();
             $directory = new InMemoryDirectory();
 
             $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
@@ -155,7 +155,7 @@ final class ClusterPerformanceTest extends TestCase
         run(function () use (&$elapsedMs, &$completed, $rounds): void {
             $workerCount = 2;
             $ring = new ConsistentHashRing($workerCount);
-            $serializer = new PhpNativeClusterSerializer();
+            $serializer = new CompactClusterSerializer();
             $directory = new InMemoryDirectory();
 
             $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
@@ -268,7 +268,7 @@ final class ClusterPerformanceTest extends TestCase
     public function serializationThroughput(): void
     {
         $iterations = 100_000;
-        $serializer = new PhpNativeClusterSerializer();
+        $serializer = new CompactClusterSerializer();
         $envelope = Envelope::of(
             (object) ['payload' => 'benchmark-data', 'seq' => 42],
             ActorPath::fromString('/user/sender'),
@@ -305,7 +305,7 @@ final class ClusterPerformanceTest extends TestCase
         run(function () use (&$elapsedMs, &$delivered, $messageCount): void {
             $workerCount = 4;
             $ring = new ConsistentHashRing($workerCount);
-            $serializer = new PhpNativeClusterSerializer();
+            $serializer = new CompactClusterSerializer();
             $directory = new InMemoryDirectory();
 
             $transports = [];
