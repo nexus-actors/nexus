@@ -1,15 +1,15 @@
 ---
 sidebar_position: 3
-title: Running a Cluster
+title: Running Multi-Process
 ---
 
-# Running a Cluster
+# Running Multi-Process
 
 ## ClusterBootstrap
 
-`ClusterBootstrap` is the entry point for starting a multi-process cluster.
-It creates a `Swoole\Process\Pool`, sets up transport and directory
-infrastructure, and starts each worker with a `ClusterNode`.
+`ClusterBootstrap` is the entry point for multi-process scaling. It creates a
+`Swoole\Process\Pool`, sets up transport and directory infrastructure, and
+starts each worker with a `ClusterNode`.
 
 ```php
 use Monadial\Nexus\Cluster\ClusterConfig;
@@ -90,18 +90,34 @@ ClusterBootstrap::create($config)
     ->run();
 ```
 
-## Running with Docker
+## Running a script
 
-The cluster requires the Swoole extension. Use the provided Docker setup:
+Multi-process scaling requires the Swoole PHP extension. Save your script as a
+regular PHP file and run it directly:
+
+```bash
+# If you have Swoole installed locally
+php cluster.php
+
+# Or via Docker (Swoole provided by the container)
+docker compose exec php-swoole php cluster.php
+```
+
+The `run()` call blocks -- the script stays alive until the process pool is
+stopped (e.g., via `SIGTERM` or `Ctrl+C`).
+
+### With Docker Compose
+
+If using the provided Docker setup:
 
 ```bash
 # Start containers
 make up
 
-# Run cluster (from a PHP script using ClusterBootstrap)
-docker compose exec php-swoole php your-cluster-script.php
+# Run your scaling script
+docker compose exec php-swoole php your-script.php
 
-# Run cluster integration tests
+# Run integration tests
 make test-cluster
 ```
 

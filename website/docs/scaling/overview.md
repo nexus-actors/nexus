@@ -1,14 +1,23 @@
 ---
 sidebar_position: 1
-title: Clustering Overview
+title: Scaling Overview
 ---
 
-# Clustering Overview
+# Multi-Process Scaling
 
-Nexus clustering distributes actors across multiple worker processes on a single
-machine, utilizing all available CPU cores. Each worker runs an independent
-`ActorSystem` with its own `SwooleRuntime`, while a shared directory and Unix
-socket transport enable transparent cross-worker messaging.
+:::caution Work in Progress
+Nexus is under active development and **not production-ready**. APIs may change
+without notice.
+:::
+
+Nexus scales actors across multiple worker processes on a single machine,
+utilizing all available CPU cores. Each worker runs an independent `ActorSystem`
+with its own `SwooleRuntime`, while a shared directory and Unix socket transport
+enable transparent cross-worker messaging.
+
+This is **single-machine scaling** via Swoole's `Process\Pool` -- not
+distributed clustering across multiple servers. True multi-server clustering
+(TCP transport, distributed directory) is a [planned future feature](../contributing/roadmap.md).
 
 ## Architecture
 
@@ -73,7 +82,7 @@ sockets to the owning worker.
 
 ## Performance
 
-Benchmarked on a single machine (all workers in one process pool):
+Benchmarked on a single machine (Apple M4 Max, all workers in one process pool):
 
 | Metric | Result |
 |---|---|
@@ -82,15 +91,30 @@ Benchmarked on a single machine (all workers in one process pool):
 | Serialization throughput | 1.13M serialize+deserialize cycles/sec |
 | Multi-worker fan-out (4 workers) | 195K msgs/sec aggregate |
 
+## Scaling vs clustering
+
+| | Multi-process scaling | Multi-server clustering |
+|---|---|---|
+| **Status** | Implemented | Planned |
+| **Scope** | Single machine, multiple CPU cores | Multiple machines over network |
+| **Transport** | Unix domain sockets (AF_UNIX) | TCP (future) |
+| **Directory** | Shared memory (`Swoole\Table`) | Distributed directory (future) |
+| **Use case** | Utilize all cores on one server | Horizontal scale-out |
+
+The pure PHP abstractions in `nexus-cluster` (`Transport`, `ActorDirectory`,
+`ClusterSerializer`) are designed to support both. Future multi-server
+clustering will provide new transport and directory implementations without
+changes to actor code.
+
 ## Package split
 
-Clustering is split across two packages:
+Scaling is split across two packages:
 
 | Package | Purpose |
 |---|---|
 | **nexus-cluster** | Pure PHP interfaces and abstractions. No Swoole dependency. |
 | **nexus-cluster-swoole** | Swoole implementations: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap`. |
 
-This separation means the clustering abstractions (`Transport`, `ActorDirectory`,
-`ClusterSerializer`) can be implemented for other runtimes or transport layers
-(e.g., TCP for multi-server clustering) without modifying actor code.
+The packages are named `nexus-cluster` (not `nexus-scaling`) because the same
+abstractions will power both single-machine scaling and future multi-server
+clustering.

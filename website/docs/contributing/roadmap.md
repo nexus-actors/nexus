@@ -8,13 +8,16 @@ title: Roadmap
 This page outlines planned features for Nexus. Items are listed roughly in
 order of priority.
 
-## Multi-process clustering
+## Multi-process scaling
 
 **Status:** Implemented.
 
-Multi-process clustering is available via the `nexus-cluster` and
-`nexus-cluster-swoole` packages. See the [Clustering documentation](../clustering/overview.md)
+Multi-process scaling is available via the `nexus-cluster` and
+`nexus-cluster-swoole` packages. See the [Scaling documentation](../scaling/overview.md)
 for full details.
+
+This is single-machine scaling via Swoole's `Process\Pool` -- utilizing all CPU
+cores on one server. Not to be confused with multi-server clustering (see below).
 
 Key features:
 
@@ -26,14 +29,14 @@ Key features:
   framing. Benchmarked at 255K msgs/sec per worker pair.
 - **`SwooleTableDirectory`** provides O(1) shared-memory actor lookups.
 - Pure PHP abstractions in `nexus-cluster` are designed to support future
-  multi-server implementations without changes to actor code.
+  multi-server clustering without changes to actor code.
 
 ## Multi-server clustering
 
 **Status:** Planned.
 
-The second clustering milestone extends the system across multiple physical
-or virtual servers:
+True distributed clustering extends the system across multiple physical or
+virtual servers:
 
 - TCP transport for cross-server messaging.
 - Distributed actor directory with consistency guarantees.

@@ -57,10 +57,10 @@ final readonly class ActorDefinition
 }
 ```
 
-## Single-process vs cluster
+## Single-process vs multi-process
 
 `NexusApp::run()` runs all actors in a single process. For multi-process
-clustering, use `ClusterBootstrap` from `nexus-cluster-swoole` instead:
+scaling, use `ClusterBootstrap` from `nexus-cluster-swoole` instead:
 
 ```php
 // Single process

@@ -5,9 +5,10 @@ title: nexus-cluster
 
 # nexus-cluster
 
-Pure PHP abstractions for multi-process clustering. Defines interfaces for
-transport, directory, and serialization, plus the core routing logic. Has no
-dependency on Swoole or any specific runtime.
+Pure PHP abstractions for multi-process scaling and future multi-server
+clustering. Defines interfaces for transport, directory, and serialization,
+plus the core routing logic. Has no dependency on Swoole or any specific
+runtime.
 
 **Namespace:** `Monadial\Nexus\Cluster\`
 
@@ -143,7 +144,9 @@ interface ClusterSerializer
 }
 ```
 
-Default implementation: `PhpNativeClusterSerializer`.
+Default implementation: `CompactClusterSerializer` (compact binary format,
+~6x smaller than PHP native serialization). A `PhpNativeClusterSerializer`
+is also available.
 
 ## Test doubles
 

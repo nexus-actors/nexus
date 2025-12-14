@@ -96,12 +96,19 @@ final readonly class SwooleTableDirectory implements ActorDirectory
 `createTable()` creates a `Swoole\Table` with a single `worker_id` column.
 Pass the same `Table` instance to each worker's `SwooleTableDirectory`.
 
+### CompactClusterSerializer
+
+Implements `Monadial\Nexus\Cluster\Serialization\ClusterSerializer`.
+
+Compact binary format that sends actor paths as raw UTF-8 strings and only
+calls PHP `serialize()` on the message object. ~6x smaller wire format than
+full PHP serialization. Benchmarked at 1.13M serialize+deserialize cycles/sec.
+
+This is the default serializer used by `ClusterBootstrap`.
+
 ### PhpNativeClusterSerializer
 
 Implements `Monadial\Nexus\Cluster\Serialization\ClusterSerializer`.
 
-Uses PHP's native `serialize()` / `unserialize()` for maximum IPC performance.
-Benchmarked at 196K serialize+deserialize cycles/sec.
-
-Suitable for same-machine clustering where all workers share the same codebase
-and class definitions.
+Uses PHP's native `serialize()` / `unserialize()` on the full `Envelope`.
+Available as an alternative when full object graph serialization is needed.

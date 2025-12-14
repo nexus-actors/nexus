@@ -102,4 +102,4 @@ identical across runtimes.
 - You are running in production with high-concurrency requirements.
 - Your workload involves thousands of concurrent actors or 100K+ connections.
 - You need true async I/O via Swoole's coroutine hooking (database, HTTP, filesystem).
-- You need [multi-process clustering](../clustering/overview.md) to utilize all CPU cores.
+- You need [multi-process scaling](../scaling/overview.md) to utilize all CPU cores.

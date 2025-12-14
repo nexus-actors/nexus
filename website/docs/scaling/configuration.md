@@ -3,11 +3,11 @@ sidebar_position: 2
 title: Configuration
 ---
 
-# Cluster Configuration
+# Scaling Configuration
 
 ## ClusterConfig
 
-`ClusterConfig` is an immutable value object that defines the cluster topology.
+`ClusterConfig` is an immutable value object that defines the multi-process topology.
 
 ```php
 use Monadial\Nexus\Cluster\ClusterConfig;
@@ -88,9 +88,13 @@ interface ClusterSerializer
 }
 ```
 
-The default implementation, `PhpNativeClusterSerializer`, uses PHP's native
-`serialize()` / `unserialize()`. This is optimal for same-machine IPC where
-all workers share the same code and class definitions.
+The default implementation, `CompactClusterSerializer`, sends actor paths as raw
+UTF-8 strings and only calls `serialize()` on the message object. This compact
+binary format is ~6x smaller than full PHP serialization and optimal for
+same-machine IPC where all workers share the same code and class definitions.
+
+A `PhpNativeClusterSerializer` is also available if you need full PHP object
+graph serialization.
 
 For custom serialization (e.g., JSON or Protocol Buffers), implement the
 `ClusterSerializer` interface and pass it to `ClusterBootstrap::withSerializer()`.

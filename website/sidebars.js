@@ -35,11 +35,11 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Clustering',
+      label: 'Scaling',
       items: [
-        'clustering/overview',
-        'clustering/configuration',
-        'clustering/bootstrap',
+        'scaling/overview',
+        'scaling/configuration',
+        'scaling/bootstrap',
       ],
     },
     {

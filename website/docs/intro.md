@@ -5,10 +5,16 @@ title: Introduction
 
 # Introduction
 
-Nexus is a production-grade actor system for PHP 8.5+, drawing inspiration from
-Akka (JVM) and OTP (Erlang/Elixir). It brings the actor model -- lightweight
-concurrent entities communicating through asynchronous message passing -- to the
-PHP ecosystem for the first time as a fully typed, composable library.
+:::caution Work in Progress
+Nexus is under active development and **not production-ready**. APIs may change
+without notice. Use it for experimentation, prototyping, and learning -- not for
+production workloads yet.
+:::
+
+Nexus is an actor system for PHP 8.5+, drawing inspiration from Akka (JVM) and
+OTP (Erlang/Elixir). It brings the actor model -- lightweight concurrent
+entities communicating through asynchronous message passing -- to the PHP
+ecosystem as a fully typed, composable library.
 
 ## The problem
 
@@ -55,8 +61,8 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-core** | `monadial/nexus-core` | Actors, behaviors, supervision, mailboxes, and the `ActorSystem` entry point. Pure abstractions with no runtime dependency. |
 | **nexus-runtime-fiber** | `monadial/nexus-runtime-fiber` | Fiber-based runtime using PHP 8.1+ native fibers with cooperative scheduling. Ideal for development and testing. |
 | **nexus-runtime-swoole** | `monadial/nexus-runtime-swoole` | Swoole-based runtime using coroutines and native channels. Designed for production workloads with true parallelism. |
-| **nexus-cluster** | `monadial/nexus-cluster` | Pure PHP clustering abstractions: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
-| **nexus-cluster-swoole** | `monadial/nexus-cluster-swoole` | Swoole clustering: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap` with `Process\Pool`. |
+| **nexus-cluster** | `monadial/nexus-cluster` | Pure PHP abstractions for multi-process scaling and future clustering: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
+| **nexus-cluster-swoole** | `monadial/nexus-cluster-swoole` | Swoole multi-process scaling: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap` with `Process\Pool`. |
 | **nexus-serialization** | `monadial/nexus-serialization` | Valinor-based message serialization with a type registry for wire-format encoding and decoding. |
 | **nexus-app** | `monadial/nexus-app` | Application kernel for declarative actor registration and single-process execution. |
 | **nexus-psalm** | `monadial/nexus-psalm` | Psalm plugin providing static analysis support for actor message protocols and behavior types. |
