@@ -8,31 +8,43 @@ import styles from './index.module.css';
 /* Code examples                                                       */
 /* ------------------------------------------------------------------ */
 
-const heroCode = `$runtime = new FiberRuntime();
-$system  = ActorSystem::create('my-app', $runtime);
+const heroCode = `<?php // demo.php — run: php demo.php
+require __DIR__ . '/vendor/autoload.php';
 
-// Define a stateful counter actor
+use Monadial\\Nexus\\Core\\Actor\\{ActorContext, ActorSystem, Behavior, BehaviorWithState, Props};
+use Monadial\\Nexus\\Core\\Duration;
+use Monadial\\Nexus\\Runtime\\Fiber\\FiberRuntime;
+
+// 1. Create the actor system
+$system = ActorSystem::create('demo', new FiberRuntime());
+
+// 2. Define a stateful counter actor
 $counter = Behavior::withState(0, static function (
     ActorContext $ctx, object $msg, int $count,
 ): BehaviorWithState {
-    return match (true) {
-        $msg instanceof Increment
-            => BehaviorWithState::next($count + 1),
-
-        $msg instanceof GetCount => tap(
-            BehaviorWithState::same(),
-            fn () => $msg->replyTo->tell(new Count($count)),
-        ),
-
-        default => BehaviorWithState::same(),
-    };
+    if ($msg instanceof Increment) {
+        $next = $count + 1;
+        $ctx->log()->info("Counter incremented to {$next}");
+        return BehaviorWithState::next($next);
+    }
+    return BehaviorWithState::same();
 });
 
-// Spawn it. Send messages. That's it.
+// 3. Spawn it and send messages
 $ref = $system->spawn(Props::fromBehavior($counter), 'counter');
-$ref->tell(new Increment());
-$ref->tell(new Increment());
-$ref->tell(new GetCount(replyTo: $probeRef));`;
+for ($i = 0; $i < 5; $i++) {
+    $ref->tell(new Increment());
+}
+
+// 4. Shut down after processing
+$system->runtime()->scheduleOnce(
+    Duration::millis(100),
+    fn () => $system->shutdown(Duration::seconds(1)),
+);
+$system->run(); // blocks until done
+
+// Messages: readonly class Increment {}
+`;
 
 const supervisionCode = `// When an actor fails, its parent decides what happens.
 // No try/catch. No manual retry logic. Just policy.
@@ -201,37 +213,44 @@ function Hero() {
   return (
     <section className={styles.hero}>
       <div className={styles.heroGrid} />
-      <div className={styles.heroInner}>
-        <div className={styles.heroBadge}>
-          Open source &middot; MIT licensed &middot; PHP 8.5+
+      <div className={styles.heroSplit}>
+        <div className={styles.heroLeft}>
+          <div className={styles.heroBadge}>
+            Work in progress &middot; Open source &middot; MIT licensed &middot; PHP 8.5+
+          </div>
+          <h1 className={styles.heroTitle}>
+            Concurrent PHP,<br />
+            <span className={styles.heroAccent}>done right.</span>
+          </h1>
+          <p className={styles.heroTagline}>
+            Nexus is an actor system that brings Erlang/OTP and Akka patterns
+            to PHP. Type-safe actors, supervision trees, pluggable runtimes,
+            and zero shared mutable state. Currently under active development.
+          </p>
+          <div className={styles.heroCta}>
+            <Link className={styles.ctaPrimary} to="/docs/getting-started/installation">
+              Get Started
+            </Link>
+            <Link className={styles.ctaGhost} to="/docs/intro">
+              Why Nexus?
+            </Link>
+            <Link
+              className={styles.ctaGhost}
+              href="https://github.com/monadial/nexus"
+            >
+              GitHub
+            </Link>
+          </div>
+          <div className={styles.heroInstall}>
+            <code>composer require monadial/nexus-core</code>
+          </div>
         </div>
-        <h1 className={styles.heroTitle}>
-          Concurrent PHP,<br />
-          <span className={styles.heroAccent}>done right.</span>
-        </h1>
-        <p className={styles.heroTagline}>
-          Nexus is a production-grade actor system that brings Erlang/OTP
-          and Akka patterns to PHP. Type-safe actors, supervision trees,
-          pluggable runtimes, and zero shared mutable state.
-        </p>
-        <div className={styles.heroCta}>
-          <Link className={styles.ctaPrimary} to="/docs/getting-started/installation">
-            Get Started
-          </Link>
-          <Link className={styles.ctaGhost} to="/docs/intro">
-            Why Nexus?
-          </Link>
-          <Link
-            className={styles.ctaGhost}
-            href="https://github.com/monadial/nexus"
-          >
-            GitHub
-          </Link>
-        </div>
-        <div className={styles.heroCodeWrap}>
-          <CodeBlock language="php" title="counter.php" showLineNumbers>
-            {heroCode}
-          </CodeBlock>
+        <div className={styles.heroRight}>
+          <div className={styles.heroCodeWrap}>
+            <CodeBlock language="php" title="demo.php — 5 minutes to your first actor" showLineNumbers>
+              {heroCode}
+            </CodeBlock>
+          </div>
         </div>
       </div>
     </section>
@@ -471,10 +490,10 @@ function UseCases() {
   return (
     <section className={styles.useCases}>
       <div className={styles.sectionInner}>
-        <h2 className={styles.sectionTitle}>Built for real work</h2>
+        <h2 className={styles.sectionTitle}>Designed for real work</h2>
         <p className={styles.sectionSub}>
-          Nexus isn't a toy. It's designed for production systems<br />
-          where reliability and performance matter.
+          Nexus is under active development. These are the use cases<br />
+          we're building towards.
         </p>
         <div className={styles.useCasesGrid}>
           {cases.map((c, i) => (
@@ -606,14 +625,13 @@ function BottomCta() {
       <div className={styles.heroGrid} />
       <div className={styles.bottomCtaInner}>
         <h2 className={styles.bottomCtaTitle}>
-          Stop fighting concurrency.<br />
-          Start building with it.
+          Try it in five minutes.
         </h2>
         <p className={styles.bottomCtaSub}>
-          Install Nexus and spawn your first actor in under five minutes.
+          Install, create demo.php, and run it. That's the whole setup.
         </p>
         <div className={styles.bottomCtaCode}>
-          <code>composer require monadial/nexus-core monadial/nexus-runtime-fiber</code>
+          <code>composer require monadial/nexus-core monadial/nexus-runtime-fiber && php demo.php</code>
         </div>
         <div className={styles.heroCta}>
           <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">
@@ -636,7 +654,7 @@ export default function Home() {
   return (
     <Layout
       title="Concurrent PHP, done right"
-      description="Nexus is a production-grade actor system for PHP 8.5+ with type-safe actors, supervision trees, and pluggable runtimes."
+      description="Nexus is an actor system for PHP 8.5+ with type-safe actors, supervision trees, and pluggable runtimes. Work in progress."
     >
       <main className={styles.landing}>
         <Hero />

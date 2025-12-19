@@ -4,7 +4,7 @@ const { themes } = require('prism-react-renderer');
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: 'Nexus',
-  tagline: 'A production-grade actor system for PHP 8.5+',
+  tagline: 'An actor system for PHP 8.5+ (work in progress)',
   favicon: 'img/favicon.ico',
 
   url: 'https://nexus.monadial.com',
@@ -49,9 +49,24 @@ const config = {
             type: 'docSidebar',
             sidebarId: 'docsSidebar',
             position: 'left',
-            label: 'Documentation',
+            label: 'Docs',
           },
-{
+          {
+            to: '/docs/getting-started/quick-start',
+            label: 'Quick Start',
+            position: 'left',
+          },
+          {
+            to: '/docs/core-concepts/actors',
+            label: 'Core Concepts',
+            position: 'left',
+          },
+          {
+            to: '/docs/packages/core',
+            label: 'API',
+            position: 'left',
+          },
+          {
             href: 'https://github.com/monadial/nexus',
             label: 'GitHub',
             position: 'right',

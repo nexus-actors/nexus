@@ -56,7 +56,10 @@
 .hero {
   position: relative;
   overflow: hidden;
-  padding: 7rem 2rem 5rem;
+  padding: 6rem 2rem 5rem;
+  min-height: 90vh;
+  display: flex;
+  align-items: center;
 }
 
 .heroGrid {
@@ -68,14 +71,26 @@
   pointer-events: none;
 }
 
-.heroInner {
+.heroSplit {
   position: relative;
-  max-width: 1000px;
+  max-width: 1400px;
   margin: 0 auto;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1.15fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+.heroLeft {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+}
+
+.heroRight {
+  display: flex;
   align-items: center;
-  text-align: center;
 }
 
 .heroBadge {
@@ -91,7 +106,7 @@
 
 .heroTitle {
   font-family: var(--nx-font-mono);
-  font-size: 4.5rem;
+  font-size: 4rem;
   font-weight: 800;
   line-height: 1.1;
   margin: 0 0 1.5rem;
@@ -106,24 +121,35 @@
 }
 
 .heroTagline {
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: var(--nx-text-muted);
   line-height: 1.7;
   margin: 0 0 2rem;
-  max-width: 700px;
 }
 
 .heroCta {
   display: flex;
   gap: 1rem;
-  margin-bottom: 3.5rem;
   flex-wrap: wrap;
-  justify-content: center;
+}
+
+.heroInstall {
+  margin-top: 2rem;
+  font-family: var(--nx-font-mono);
+  font-size: 0.85rem;
+  color: var(--nx-text-dim);
+  background: var(--nx-bg-raised);
+  border: 1px solid var(--nx-border);
+  border-radius: 8px;
+  padding: 0.65rem 1.25rem;
+}
+
+.heroInstall code {
+  color: var(--nx-accent);
 }
 
 .heroCodeWrap {
   width: 100%;
-  max-width: 720px;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--nx-border);
@@ -492,6 +518,8 @@
   border: 1px solid var(--nx-border);
   border-radius: 12px;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .stepHeader {
@@ -530,7 +558,36 @@
 .stepCode {
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--nx-border);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.stepCode > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+.stepCode pre {
+  flex: 1;
+  margin: 0 !important;
+  border-radius: 8px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.stepCode :global(.codeBlockContainer_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Container-styles-module),
+.stepCode :global([class*='codeBlockContainer']) {
+  border: none !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  border-radius: 8px !important;
 }
 
 /* ---- Use Cases --------------------------------------------------- */
@@ -639,6 +696,28 @@
 }
 
 @media (max-width: 996px) {
+  .hero {
+    min-height: auto;
+  }
+
+  .heroSplit {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .heroLeft {
+    align-items: center;
+    text-align: center;
+  }
+
+  .heroCta {
+    justify-content: center;
+  }
+
+  .heroInstall {
+    align-self: center;
+  }
+
   .heroTitle {
     font-size: 3.25rem;
   }
@@ -684,7 +763,7 @@
 
 @media (max-width: 640px) {
   .hero {
-    padding: 4rem 1rem 3rem;
+    padding: 3rem 1rem 2rem;
   }
 
   .heroTitle {
@@ -692,7 +771,7 @@
   }
 
   .heroTagline {
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
 
   .sectionTitle {
