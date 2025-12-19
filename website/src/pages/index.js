@@ -8,43 +8,27 @@ import styles from './index.module.css';
 /* Code examples                                                       */
 /* ------------------------------------------------------------------ */
 
-const heroCode = `<?php // demo.php — run: php demo.php
-require __DIR__ . '/vendor/autoload.php';
+const heroCode = `// Messages are plain readonly classes
+readonly class Increment {}
 
-use Monadial\\Nexus\\Core\\Actor\\{ActorContext, ActorSystem, Behavior, BehaviorWithState, Props};
-use Monadial\\Nexus\\Core\\Duration;
-use Monadial\\Nexus\\Runtime\\Fiber\\FiberRuntime;
-
-// 1. Create the actor system
-$system = ActorSystem::create('demo', new FiberRuntime());
-
-// 2. Define a stateful counter actor
-$counter = Behavior::withState(0, static function (
+// Stateful actor: receives messages, returns next state
+$counter = Behavior::withState(0, function (
     ActorContext $ctx, object $msg, int $count,
 ): BehaviorWithState {
     if ($msg instanceof Increment) {
-        $next = $count + 1;
-        $ctx->log()->info("Counter incremented to {$next}");
-        return BehaviorWithState::next($next);
+        $ctx->log()->info("count: " . ($count + 1));
+        return BehaviorWithState::next($count + 1);
     }
     return BehaviorWithState::same();
 });
 
-// 3. Spawn it and send messages
+// Create system, spawn actor, send messages
+$system = ActorSystem::create('app', new FiberRuntime());
 $ref = $system->spawn(Props::fromBehavior($counter), 'counter');
-for ($i = 0; $i < 5; $i++) {
-    $ref->tell(new Increment());
-}
-
-// 4. Shut down after processing
-$system->runtime()->scheduleOnce(
-    Duration::millis(100),
-    fn () => $system->shutdown(Duration::seconds(1)),
-);
-$system->run(); // blocks until done
-
-// Messages: readonly class Increment {}
-`;
+$ref->tell(new Increment());
+$ref->tell(new Increment());
+$ref->tell(new Increment());
+$system->run();`;
 
 const supervisionCode = `// When an actor fails, its parent decides what happens.
 // No try/catch. No manual retry logic. Just policy.
@@ -216,23 +200,22 @@ function Hero() {
       <div className={styles.heroSplit}>
         <div className={styles.heroLeft}>
           <div className={styles.heroBadge}>
-            Work in progress &middot; Open source &middot; MIT licensed &middot; PHP 8.5+
+            WIP &middot; Open source &middot; PHP 8.5+
           </div>
           <h1 className={styles.heroTitle}>
-            Concurrent PHP,<br />
-            <span className={styles.heroAccent}>done right.</span>
+            The actor model<br />
+            <span className={styles.heroAccent}>for PHP.</span>
           </h1>
           <p className={styles.heroTagline}>
-            Nexus is an actor system that brings Erlang/OTP and Akka patterns
-            to PHP. Type-safe actors, supervision trees, pluggable runtimes,
-            and zero shared mutable state. Currently under active development.
+            Type-safe actors, supervision trees, pluggable runtimes.
+            Erlang/OTP and Akka patterns — in PHP you already know.
           </p>
           <div className={styles.heroCta}>
-            <Link className={styles.ctaPrimary} to="/docs/getting-started/installation">
-              Get Started
+            <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">
+              Quick Start
             </Link>
             <Link className={styles.ctaGhost} to="/docs/intro">
-              Why Nexus?
+              Docs
             </Link>
             <Link
               className={styles.ctaGhost}
@@ -242,12 +225,12 @@ function Hero() {
             </Link>
           </div>
           <div className={styles.heroInstall}>
-            <code>composer require monadial/nexus-core</code>
+            <code>composer require monadial/nexus</code>
           </div>
         </div>
         <div className={styles.heroRight}>
           <div className={styles.heroCodeWrap}>
-            <CodeBlock language="php" title="demo.php — 5 minutes to your first actor" showLineNumbers>
+            <CodeBlock language="php" title="demo.php" showLineNumbers>
               {heroCode}
             </CodeBlock>
           </div>
