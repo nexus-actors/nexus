@@ -82,14 +82,14 @@ sockets to the owning worker.
 
 ## Performance
 
-Benchmarked on a single machine (Apple M4 Max, all workers in one process pool):
+See the [full performance benchmarks](../architecture/performance.md) for
+detailed numbers across all runtimes. Highlights for multi-process scaling:
 
 | Metric | Result |
 |---|---|
-| Cross-worker throughput | 255K msgs/sec per worker pair |
-| Cross-worker round-trip latency | 10.8 us/roundtrip |
-| Serialization throughput | 1.13M serialize+deserialize cycles/sec |
-| Multi-worker fan-out (4 workers) | 195K msgs/sec aggregate |
+| Cross-worker throughput | **260K** msgs/sec per worker pair |
+| Cross-worker round-trip latency | **20 us**/roundtrip |
+| Serialization throughput | **1.18M** cycles/sec |
 
 ## Scaling vs clustering
 

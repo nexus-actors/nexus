@@ -62,6 +62,7 @@ const sidebars = {
       items: [
         'architecture/design-philosophy',
         'architecture/internals',
+        'architecture/performance',
       ],
     },
     {
