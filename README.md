@@ -1,6 +1,9 @@
 # Nexus
 
-A production-grade actor system for PHP 8.5+.
+> **Work in Progress.** Nexus is under active development and not production-ready.
+> APIs may change without notice.
+
+An actor system for PHP 8.5+.
 
 ## Why Nexus?
 
@@ -99,7 +102,7 @@ composer require monadial/nexus-runtime-swoole
 
 ## Documentation
 
-Full documentation is available at [nexus.monadial.com](https://nexus.monadial.com).
+Full documentation is available at [monadial.github.io/nexus](https://monadial.github.io/nexus/).
 
 ## Requirements
 
