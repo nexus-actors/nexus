@@ -7,8 +7,8 @@ const config = {
   tagline: 'An actor system for PHP 8.5+ (work in progress)',
   favicon: 'img/favicon.ico',
 
-  url: 'https://nexus.monadial.com',
-  baseUrl: '/',
+  url: 'https://monadial.github.io',
+  baseUrl: '/nexus/',
 
   organizationName: 'monadial',
   projectName: 'nexus',
