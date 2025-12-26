@@ -8,6 +8,7 @@ composer.lock
 *.swp
 *.swo
 .idea/
+docs/plans/
 .vscode/
 .DS_Store
 .worktrees/
