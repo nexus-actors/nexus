@@ -19,7 +19,7 @@ PHP has mature tools for HTTP request handling, but nothing serious for building
 - **Supervision that actually works.** Actors form a hierarchy. Parents supervise children. When something fails, the supervision strategy decides what happens -- restart, stop, escalate, or back off exponentially. No more try/catch pyramids.
 - **PHP 8.5+ native.** Nexus uses `readonly class`, pipe operator support, `#[NoDiscard]`, and generic templates throughout. It's built for modern PHP, not retrofitted onto it.
 - **PSR everywhere.** PSR-11 containers for dependency injection. PSR-3 logging. PSR-14 event dispatching. PSR-20 clocks. Nexus plugs into your existing stack.
-- **Designed for clustering.** The `ActorRef` interface is the same whether the actor is in the same process, a different worker, or (eventually) a different server. Location transparency is baked into the architecture, not bolted on.
+- **Multi-process scaling.** Scale actors across all CPU cores on a single machine via Swoole's `Process\Pool`. The `ActorRef` interface is the same whether the actor is local or on another worker. Location transparency is baked into the architecture, not bolted on.
 
 ## Quick Example
 
@@ -76,6 +76,7 @@ $system->run();
 - **Scheduled messages** -- one-shot and repeating timers via `$ctx->scheduleOnce()` / `$ctx->scheduleRepeatedly()`
 - **Ask pattern** -- request-response with timeout: `$ref->ask($factory, Duration::millis(200))`
 - **Dead letters** -- undeliverable messages routed to the dead-letter endpoint
+- **Multi-process scaling** -- transparent cross-worker messaging via Unix sockets and shared-memory directory
 
 ## Installation
 
@@ -96,7 +97,10 @@ composer require monadial/nexus-runtime-swoole
 | [`monadial/nexus-core`](packages/nexus-core) | Behaviors, actors, supervision, mailboxes, and the core API |
 | [`monadial/nexus-runtime-fiber`](packages/nexus-runtime-fiber) | Fiber runtime -- actors as PHP fibers with cooperative scheduling |
 | [`monadial/nexus-runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
+| [`monadial/nexus-cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
+| [`monadial/nexus-cluster-swoole`](packages/nexus-cluster-swoole) | Swoole scaling -- Unix socket transport, shared-memory directory, cluster bootstrap |
 | [`monadial/nexus-serialization`](packages/nexus-serialization) | Valinor-based message serialization with type registry |
+| [`monadial/nexus-app`](packages/nexus-app) | Application layer -- PSR-11 container integration for actor systems |
 | [`monadial/nexus-psalm`](packages/nexus-psalm) | Psalm plugin for generic type inference on actors and behaviors |
 | [`monadial/nexus`](packages/nexus) | Meta-package: core + Fiber runtime + serialization |
 
