@@ -1,0 +1,24 @@
+{
+    "name": "monadial/nexus-persistence",
+    "description": "Nexus persistence — event sourcing and durable state for actors.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "monadial/nexus-core": "^1.0",
+        "monadial/nexus-serialization": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Persistence\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Persistence\\Tests\\": "tests/"
+        }
+    }
+}

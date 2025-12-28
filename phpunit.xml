@@ -16,6 +16,7 @@
             <directory>packages/nexus-cluster/tests/Unit</directory>
             <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
+            <directory>packages/nexus-persistence/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -31,6 +32,12 @@
         </testsuite>
         <testsuite name="integration-cluster">
             <directory>tests/Integration/Cluster</directory>
+        </testsuite>
+        <testsuite name="unit-persistence">
+            <directory>packages/nexus-persistence/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="integration-persistence">
+            <directory>tests/Integration/Persistence</directory>
         </testsuite>
         <testsuite name="performance">
             <directory>tests/Performance</directory>
@@ -49,6 +56,7 @@
             <directory>packages/nexus-cluster/src</directory>
             <directory>packages/nexus-cluster-swoole/src</directory>
             <directory>packages/nexus-app/src</directory>
+            <directory>packages/nexus-persistence/src</directory>
         </include>
     </source>
 </phpunit>
