@@ -23,6 +23,7 @@
 
     <plugins>
         <pluginClass class="Fp\PsalmPlugin\FunctionalPlugin" />
+        <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
     </plugins>
 
     <issueHandlers>
