@@ -95,12 +95,16 @@ final readonly class Props
      * @param class-string<ActorHandler<U>> $actorClass
      * @return Props<U>
      *
-     * @psalm-suppress InvalidReturnType template U is erased at runtime; container returns mixed
+     * @psalm-suppress InvalidReturnType, InvalidReturnStatement template U erased through closure into fromFactory
      */
     public static function fromContainer(ContainerInterface $container, string $actorClass): self
     {
-        /** @psalm-suppress MixedReturnStatement, InvalidReturnStatement container->get() returns mixed */
-        return self::fromFactory(static fn (): ActorHandler => $container->get($actorClass));
+        return self::fromFactory(static function () use ($container, $actorClass): ActorHandler {
+            $handler = $container->get($actorClass);
+            assert($handler instanceof ActorHandler);
+
+            return $handler;
+        });
     }
 
     /**
