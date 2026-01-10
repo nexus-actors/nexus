@@ -30,9 +30,22 @@ final class PluginTest extends TestCase
         $output = $this->runPsalmOnFixture('ReadonlyMessageFixture.php');
         $lines = $this->filterIssueLines($output, 'NonReadonlyMessage');
 
-        // Only one issue — for BadMessage, not for GoodMessage
-        self::assertCount(1, $lines, 'Expected exactly 1 NonReadonlyMessage issue');
-        self::assertStringContains('BadMessage', $lines[0]);
+        // 3 issues: tell() + scheduleOnce() + scheduleRepeatedly() — all for BadMessage, never GoodMessage
+        self::assertCount(3, $lines, 'Expected exactly 3 NonReadonlyMessage issues');
+        self::assertStringNotContains('GoodMessage', $output);
+    }
+
+    #[Test]
+    public function readonlyMessageRuleDetectsScheduledMutableMessage(): void
+    {
+        $output = $this->runPsalmOnFixture('ReadonlyMessageFixture.php');
+        $lines = $this->filterIssueLines($output, 'NonReadonlyMessage');
+
+        // 3 issues: tell (line 27), scheduleOnce (line 39), scheduleRepeatedly (line 40)
+        self::assertCount(3, $lines, 'Expected 3 NonReadonlyMessage issues');
+        self::assertStringContains(':27:', $lines[0], 'First issue should be tell() on line 27');
+        self::assertStringContains(':39:', $lines[1], 'Second issue should be scheduleOnce on line 39');
+        self::assertStringContains(':40:', $lines[2], 'Third issue should be scheduleRepeatedly on line 40');
     }
 
     #[Test]

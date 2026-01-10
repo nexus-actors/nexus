@@ -11,7 +11,7 @@ final class NonReadonlyMessage extends PluginIssue
     public function __construct(string $className, CodeLocation $codeLocation)
     {
         parent::__construct(
-            'Message class "' . $className . '" passed to ActorRef::tell() should be readonly.'
+            'Message class "' . $className . '" should be readonly.'
             . ' Actor messages must be immutable to ensure safe concurrent messaging.',
             $codeLocation,
         );

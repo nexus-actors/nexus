@@ -12,21 +12,29 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class ReadonlyMessageRule implements AfterMethodCallAnalysisInterface
 {
-    private const string TELL_METHOD = 'Monadial\Nexus\Core\Actor\ActorRef::tell';
+    /** @var array<string, int> method ID → message argument index */
+    private const array CHECKED_METHODS = [
+        'monadial\nexus\core\actor\actorref::tell' => 0,
+        'monadial\nexus\core\actor\actorcontext::scheduleonce' => 1,
+        'monadial\nexus\core\actor\actorcontext::schedulerepeatedly' => 2,
+    ];
 
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
-        if (!self::isTellCall($event->getDeclaringMethodId())) {
+        $messageArgIndex = self::messageArgIndex($event->getDeclaringMethodId());
+
+        if ($messageArgIndex === null) {
             return;
         }
 
         $args = $event->getExpr()->getArgs();
 
-        if ($args === []) {
+        if (!isset($args[$messageArgIndex])) {
             return;
         }
 
-        $argType = $event->getStatementsSource()->getNodeTypeProvider()->getType($args[0]->value);
+        $messageArg = $args[$messageArgIndex];
+        $argType = $event->getStatementsSource()->getNodeTypeProvider()->getType($messageArg->value);
 
         if ($argType === null) {
             return;
@@ -56,15 +64,15 @@ final class ReadonlyMessageRule implements AfterMethodCallAnalysisInterface
             IssueBuffer::accepts(
                 new NonReadonlyMessage(
                     $atomic->value,
-                    new CodeLocation($event->getStatementsSource(), $args[0]->value),
+                    new CodeLocation($event->getStatementsSource(), $messageArg->value),
                 ),
                 $event->getStatementsSource()->getSuppressedIssues(),
             );
         }
     }
 
-    private static function isTellCall(string $declaringMethodId): bool
+    private static function messageArgIndex(string $declaringMethodId): ?int
     {
-        return strcasecmp($declaringMethodId, self::TELL_METHOD) === 0;
+        return self::CHECKED_METHODS[strtolower($declaringMethodId)] ?? null;
     }
 }
