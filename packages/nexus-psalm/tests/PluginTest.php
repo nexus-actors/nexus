@@ -49,6 +49,24 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function clusterMessageRuleDetectsUnregisteredMessage(): void
+    {
+        $output = $this->runPsalmOnFixture('ClusterMessageFixture.php');
+        $lines = $this->filterIssueLines($output, 'NonSerializableClusterMessage');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 NonSerializableClusterMessage issue');
+        self::assertStringContains('UnregisteredMessage', $lines[0]);
+    }
+
+    #[Test]
+    public function clusterMessageRuleAllowsRegisteredMessage(): void
+    {
+        $output = $this->runPsalmOnFixture('ClusterMessageFixture.php');
+
+        self::assertStringNotContains('RegisteredMessage', $output);
+    }
+
+    #[Test]
     public function mutableActorStateRuleDetectsPublicMutableProperty(): void
     {
         $output = $this->runPsalmOnFixture('MutableActorStateFixture.php');

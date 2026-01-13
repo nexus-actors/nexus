@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm;
 
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
+use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
 use Monadial\Nexus\Psalm\Hook\PropsFromContainerReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Psalm\Plugin\PluginEntryPointInterface;
@@ -18,6 +19,7 @@ final class Plugin implements PluginEntryPointInterface
         $hooks = [
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
+            NonSerializableClusterMessageRule::class,
             PropsFromContainerReturnTypeProvider::class,
         ];
 
