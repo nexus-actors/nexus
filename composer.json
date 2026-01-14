@@ -8,6 +8,7 @@
         "azjezz/psl": "^4.0",
         "brick/math": "^0.12",
         "cuyz/valinor": "^1.0",
+        "doctrine/dbal": "^4.0",
         "fp4php/functional": "^6.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -37,7 +38,8 @@
             "Monadial\\Nexus\\Cluster\\": "packages/nexus-cluster/src/",
             "Monadial\\Nexus\\Cluster\\Swoole\\": "packages/nexus-cluster-swoole/src/",
             "Monadial\\Nexus\\App\\": "packages/nexus-app/src/",
-            "Monadial\\Nexus\\Persistence\\": "packages/nexus-persistence/src/"
+            "Monadial\\Nexus\\Persistence\\": "packages/nexus-persistence/src/",
+            "Monadial\\Nexus\\Persistence\\Dbal\\": "packages/nexus-persistence-dbal/src/"
         }
     },
     "autoload-dev": {
@@ -53,7 +55,8 @@
             "Monadial\\Nexus\\Cluster\\Tests\\": "packages/nexus-cluster/tests/",
             "Monadial\\Nexus\\Cluster\\Swoole\\Tests\\": "packages/nexus-cluster-swoole/tests/",
             "Monadial\\Nexus\\App\\Tests\\": "packages/nexus-app/tests/",
-            "Monadial\\Nexus\\Persistence\\Tests\\": "packages/nexus-persistence/tests/"
+            "Monadial\\Nexus\\Persistence\\Tests\\": "packages/nexus-persistence/tests/",
+            "Monadial\\Nexus\\Persistence\\Dbal\\Tests\\": "packages/nexus-persistence-dbal/tests/"
         }
     },
     "config": {
