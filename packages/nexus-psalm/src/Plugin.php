@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
 
+use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
 use Monadial\Nexus\Psalm\Hook\PropsFromContainerReturnTypeProvider;
@@ -20,6 +21,7 @@ final class Plugin implements PluginEntryPointInterface
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
             NonSerializableClusterMessageRule::class,
+            BlockingCallInHandlerRule::class,
             PropsFromContainerReturnTypeProvider::class,
         ];
 

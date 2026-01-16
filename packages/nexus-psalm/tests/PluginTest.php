@@ -67,6 +67,24 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function blockingCallRuleDetectsBlockingInHandler(): void
+    {
+        $output = $this->runPsalmOnFixture('BlockingCallFixture.php');
+        $lines = $this->filterIssueLines($output, 'BlockingCallInHandler');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 BlockingCallInHandler issue');
+        self::assertStringContains('sleep', $lines[0]);
+    }
+
+    #[Test]
+    public function blockingCallRuleIgnoresNonActorClasses(): void
+    {
+        $output = $this->runPsalmOnFixture('BlockingCallFixture.php');
+
+        self::assertStringNotContains('RegularClassWithSleep', $output);
+    }
+
+    #[Test]
     public function mutableActorStateRuleDetectsPublicMutableProperty(): void
     {
         $output = $this->runPsalmOnFixture('MutableActorStateFixture.php');
