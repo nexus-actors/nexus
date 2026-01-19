@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Psalm;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
-use Monadial\Nexus\Psalm\Hook\PropsFromContainerReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -22,7 +22,7 @@ final class Plugin implements PluginEntryPointInterface
             MutableActorStateRule::class,
             NonSerializableClusterMessageRule::class,
             BlockingCallInHandlerRule::class,
-            PropsFromContainerReturnTypeProvider::class,
+            PropsReturnTypeProvider::class,
         ];
 
         foreach ($hooks as $hook) {
