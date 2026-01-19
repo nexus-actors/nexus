@@ -1,0 +1,24 @@
+{
+    "name": "monadial/nexus-persistence-doctrine",
+    "description": "Nexus persistence Doctrine ORM adapter — entity-based event store, snapshot store, and durable state store.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "monadial/nexus-persistence": "^1.0",
+        "doctrine/orm": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Persistence\\Doctrine\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Persistence\\Doctrine\\Tests\\": "tests/"
+        }
+    }
+}
