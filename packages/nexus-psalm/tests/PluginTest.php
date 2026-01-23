@@ -85,6 +85,25 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function closureCaptureRuleDetectsRefCapture(): void
+    {
+        $output = $this->runPsalmOnFixture('ClosureCaptureFixture.php');
+        $lines = $this->filterIssueLines($output, 'MutableClosureCapture');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 MutableClosureCapture issue');
+        self::assertStringContains('counter', $lines[0]);
+    }
+
+    #[Test]
+    public function closureCaptureRuleAllowsValueCapture(): void
+    {
+        $output = $this->runPsalmOnFixture('ClosureCaptureFixture.php');
+
+        self::assertStringNotContains('factoryWithValueCapture', $output);
+        self::assertStringNotContains('factoryWithArrowFunction', $output);
+    }
+
+    #[Test]
     public function mutableActorStateRuleDetectsPublicMutableProperty(): void
     {
         $output = $this->runPsalmOnFixture('MutableActorStateFixture.php');

@@ -5,6 +5,7 @@ namespace Monadial\Nexus\Psalm;
 
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
+use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
@@ -22,6 +23,7 @@ final class Plugin implements PluginEntryPointInterface
             MutableActorStateRule::class,
             NonSerializableClusterMessageRule::class,
             BlockingCallInHandlerRule::class,
+            MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
         ];
 
