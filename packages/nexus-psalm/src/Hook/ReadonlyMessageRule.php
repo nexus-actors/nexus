@@ -12,11 +12,10 @@ use Psalm\Type\Atomic\TNamedObject;
 
 final class ReadonlyMessageRule implements AfterMethodCallAnalysisInterface
 {
-    /** @var array<string, int> method ID → message argument index */
     private const array CHECKED_METHODS = [
-        'monadial\nexus\core\actor\actorref::tell' => 0,
         'monadial\nexus\core\actor\actorcontext::scheduleonce' => 1,
         'monadial\nexus\core\actor\actorcontext::schedulerepeatedly' => 2,
+        'monadial\nexus\core\actor\actorref::tell' => 0,
     ];
 
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
