@@ -12,22 +12,22 @@ use Doctrine\ORM\Mapping as ORM;
 class EventEntry
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'string', length: 255)]
+    #[ORM\Column(name: 'persistence_id', type: 'string', length: 255)]
     public string $persistenceId;
 
     #[ORM\Id]
-    #[ORM\Column(type: 'bigint')]
+    #[ORM\Column(name: 'sequence_nr', type: 'bigint')]
     public int $sequenceNr;
 
-    #[ORM\Column(type: 'string', length: 255)]
+    #[ORM\Column(name: 'event_type', type: 'string', length: 255)]
     public string $eventType;
 
-    #[ORM\Column(type: 'text')]
+    #[ORM\Column(name: 'event_data', type: 'text')]
     public string $eventData;
 
-    #[ORM\Column(type: 'text', nullable: true)]
+    #[ORM\Column(name: 'metadata', type: 'text', nullable: true)]
     public ?string $metadata = null;
 
-    #[ORM\Column(type: 'datetime_immutable')]
+    #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
     public \DateTimeImmutable $timestamp;
 }

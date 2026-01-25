@@ -11,19 +11,19 @@ use Doctrine\ORM\Mapping as ORM;
 class SnapshotEntry
 {
     #[ORM\Id]
-    #[ORM\Column(type: 'string', length: 255)]
+    #[ORM\Column(name: 'persistence_id', type: 'string', length: 255)]
     public string $persistenceId;
 
     #[ORM\Id]
-    #[ORM\Column(type: 'bigint')]
+    #[ORM\Column(name: 'sequence_nr', type: 'bigint')]
     public int $sequenceNr;
 
-    #[ORM\Column(type: 'string', length: 255)]
+    #[ORM\Column(name: 'state_type', type: 'string', length: 255)]
     public string $stateType;
 
-    #[ORM\Column(type: 'text')]
+    #[ORM\Column(name: 'state_data', type: 'text')]
     public string $stateData;
 
-    #[ORM\Column(type: 'datetime_immutable')]
+    #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
     public \DateTimeImmutable $timestamp;
 }
