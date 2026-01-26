@@ -37,6 +37,9 @@ test-serialization: ## Serialization integration tests
 test-cluster: ## Cluster integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
 
+test-persistence: ## Persistence unit + integration tests
+	$(DC) vendor/bin/phpunit --testsuite=unit-persistence,unit-persistence-dbal,unit-persistence-doctrine,integration-persistence
+
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
 
@@ -55,4 +58,4 @@ cs: ## Code style check
 cs-fix: ## Fix code style
 	$(DC) vendor/bin/php-cs-fixer fix
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster psalm phpcs phpcbf mutation cs cs-fix
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix
