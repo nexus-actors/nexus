@@ -22,6 +22,7 @@ const sidebars = {
         'core-concepts/mailboxes',
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
+        'core-concepts/persistence',
       ],
     },
     {
@@ -52,6 +53,9 @@ const sidebars = {
         'packages/cluster',
         'packages/cluster-swoole',
         'packages/serialization',
+        'packages/persistence',
+        'packages/persistence-dbal',
+        'packages/persistence-doctrine',
         'packages/app',
         'packages/psalm',
       ],

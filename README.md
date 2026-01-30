@@ -76,6 +76,7 @@ $system->run();
 - **Scheduled messages** -- one-shot and repeating timers via `$ctx->scheduleOnce()` / `$ctx->scheduleRepeatedly()`
 - **Ask pattern** -- request-response with timeout: `$ref->ask($factory, Duration::millis(200))`
 - **Dead letters** -- undeliverable messages routed to the dead-letter endpoint
+- **Persistence & event sourcing** -- event-sourced actors and durable state actors with pluggable storage backends (in-memory, DBAL, Doctrine ORM)
 - **Multi-process scaling** -- transparent cross-worker messaging via Unix sockets and shared-memory directory
 
 ## Installation
@@ -90,6 +91,18 @@ For the Swoole production runtime:
 composer require monadial/nexus-runtime-swoole
 ```
 
+For persistence and event sourcing:
+
+```bash
+composer require monadial/nexus-persistence
+
+# With Doctrine DBAL storage:
+composer require monadial/nexus-persistence-dbal
+
+# With Doctrine ORM storage:
+composer require monadial/nexus-persistence-doctrine
+```
+
 ## Packages
 
 | Package | Description |
@@ -99,6 +112,9 @@ composer require monadial/nexus-runtime-swoole
 | [`monadial/nexus-runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
 | [`monadial/nexus-cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
 | [`monadial/nexus-cluster-swoole`](packages/nexus-cluster-swoole) | Swoole scaling -- Unix socket transport, shared-memory directory, cluster bootstrap |
+| [`monadial/nexus-persistence`](packages/nexus-persistence) | Persistence core -- event sourcing, durable state, snapshot strategies, in-memory stores |
+| [`monadial/nexus-persistence-dbal`](packages/nexus-persistence-dbal) | DBAL persistence adapter -- Doctrine DBAL-backed event, snapshot, and state stores |
+| [`monadial/nexus-persistence-doctrine`](packages/nexus-persistence-doctrine) | Doctrine ORM persistence adapter -- entity-based event, snapshot, and state stores |
 | [`monadial/nexus-serialization`](packages/nexus-serialization) | Valinor-based message serialization with type registry |
 | [`monadial/nexus-app`](packages/nexus-app) | Application layer -- PSR-11 container integration for actor systems |
 | [`monadial/nexus-psalm`](packages/nexus-psalm) | Psalm plugin for generic type inference on actors and behaviors |
