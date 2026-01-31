@@ -9,9 +9,11 @@ Swoole-specific implementations for `nexus-cluster` interfaces. Provides
 Unix domain socket transport, shared-memory actor directory, and the
 `ClusterBootstrap` entry point.
 
+**Composer:** `monadial/nexus-cluster-swoole`
+
 **Namespace:** `Monadial\Nexus\Cluster\Swoole\`
 
-**Requires:** Swoole PHP extension 5.0+
+**Requires:** Swoole PHP extension 6.0+
 
 ## Classes
 
@@ -112,3 +114,13 @@ Implements `Monadial\Nexus\Cluster\Serialization\ClusterSerializer`.
 
 Uses PHP's native `serialize()` / `unserialize()` on the full `Envelope`.
 Available as an alternative when full object graph serialization is needed.
+
+## Static analysis
+
+See [nexus-psalm](./psalm.md) for Psalm rules that apply to clustered actors:
+
+- **NonSerializableClusterMessage** -- Catches messages missing `#[MessageType]`
+  before they cause runtime serialization failures.
+- **NonReadonlyMessage** -- Ensures all actor messages are immutable.
+- **BlockingCallInHandler** -- Flags blocking calls (`sleep`, `file_get_contents`,
+  etc.) that would starve the Swoole coroutine runtime.

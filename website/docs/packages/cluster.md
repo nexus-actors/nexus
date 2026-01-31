@@ -10,6 +10,8 @@ clustering. Defines interfaces for transport, directory, and serialization,
 plus the core routing logic. Has no dependency on Swoole or any specific
 runtime.
 
+**Composer:** `monadial/nexus-cluster`
+
 **Namespace:** `Monadial\Nexus\Cluster\`
 
 ## Classes
@@ -156,3 +158,24 @@ The package includes in-memory implementations for unit testing:
   simulate incoming messages and `getSent()` / `getSentTo(int)` to inspect
   outgoing messages.
 - **`InMemoryDirectory`** -- Simple array-backed directory for testing.
+
+## Static analysis
+
+The [nexus-psalm](./psalm.md) plugin includes a rule specifically for cluster
+safety:
+
+- **NonSerializableClusterMessage** -- Flags messages sent via
+  `RemoteActorRef::tell()` that lack a `#[MessageType]` attribute. Cluster
+  messages must be registered in `TypeRegistry` for cross-worker serialization.
+
+```php
+use Monadial\Nexus\Serialization\MessageType;
+
+#[MessageType('order.created')]
+final readonly class OrderCreated {} // OK — registered
+
+final readonly class UnregisteredEvent {} // ERROR when sent via RemoteActorRef
+```
+
+The standard `NonReadonlyMessage` rule also applies to cluster messages --
+all messages (local and remote) must be `readonly`.
