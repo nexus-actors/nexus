@@ -36,6 +36,9 @@ composer require monadial/nexus-runtime-fiber
 # Swoole runtime (production)
 composer require monadial/nexus-runtime-swoole
 
+# Step runtime (deterministic testing)
+composer require --dev monadial/nexus-runtime-step
+
 # Message serialization (wire format via Valinor)
 composer require monadial/nexus-serialization
 

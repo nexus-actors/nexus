@@ -143,9 +143,10 @@ while ($cell->isAlive()) {
 ```
 
 The loop blocks on `dequeueBlocking()` -- in the Fiber runtime this suspends
-the fiber, and in the Swoole runtime this suspends the coroutine. When the
-mailbox is closed (during actor shutdown), a `MailboxClosedException` breaks
-the loop.
+the fiber, in the Swoole runtime this suspends the coroutine, and in the Step
+runtime the fiber always suspends to give the test control over when each
+message is processed. When the mailbox is closed (during actor shutdown), a
+`MailboxClosedException` breaks the loop.
 
 This loop is spawned by `ActorSystem` (for top-level actors) and by
 `ActorCell` (for child actors) via `$runtime->spawn()`.

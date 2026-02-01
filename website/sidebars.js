@@ -32,6 +32,7 @@ const sidebars = {
         'runtimes/overview',
         'runtimes/fiber',
         'runtimes/swoole',
+        'runtimes/step',
       ],
     },
     {
@@ -50,6 +51,7 @@ const sidebars = {
         'packages/core',
         'packages/runtime-fiber',
         'packages/runtime-swoole',
+        'packages/runtime-step',
         'packages/cluster',
         'packages/cluster-swoole',
         'packages/serialization',

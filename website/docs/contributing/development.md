@@ -89,6 +89,9 @@ nexus/
     nexus-runtime-swoole/    # Swoole-based runtime
       src/
       tests/
+    nexus-runtime-step/      # Deterministic testing runtime
+      src/
+      tests/
     nexus-serialization/     # Message serialization
       src/
       tests/

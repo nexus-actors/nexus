@@ -41,7 +41,7 @@ interface Runtime
 
 Each method serves a specific role in the actor lifecycle:
 
-- **`name()`** -- Returns a string identifier for the runtime (`'fiber'` or `'swoole'`).
+- **`name()`** -- Returns a string identifier for the runtime (`'fiber'`, `'swoole'`, or `'step'`).
 - **`createMailbox()`** -- Creates a runtime-specific `Mailbox` implementation from a `MailboxConfig`.
 - **`spawn()`** -- Registers a callable as a new concurrent task (fiber or coroutine) and returns an identifier string.
 - **`scheduleOnce()`** -- Schedules a one-shot callback after `$delay`. Returns a `Cancellable` handle.
@@ -52,18 +52,19 @@ Each method serves a specific role in the actor lifecycle:
 - **`shutdown()`** -- Signals the runtime to stop within the given timeout.
 - **`isRunning()`** -- Returns whether the event loop is currently active.
 
-## Two implementations
+## Three implementations
 
-Nexus ships with two runtime implementations:
+Nexus ships with three runtime implementations:
 
-| Runtime | Class | Extension required | Concurrency model |
-|---|---|---|---|
-| Fiber | `FiberRuntime` | None | PHP 8.1+ native Fibers |
-| Swoole | `SwooleRuntime` | Swoole 5.0+ | Swoole coroutines |
+| Runtime | Class | Extension required | Concurrency model | Use case |
+|---|---|---|---|---|
+| Fiber | `FiberRuntime` | None | PHP 8.1+ native Fibers | Development |
+| Swoole | `SwooleRuntime` | Swoole 5.0+ | Swoole coroutines | Production |
+| Step | `StepRuntime` | None | Manual stepping (Fibers internally) | Testing |
 
-Both implement the `Runtime` interface identically. Actor code never references
-a specific runtime class -- it depends only on the `Runtime` interface and the
-core abstractions (`Mailbox`, `Cancellable`, `Duration`).
+All three implement the `Runtime` interface identically. Actor code never
+references a specific runtime class -- it depends only on the `Runtime`
+interface and the core abstractions (`Mailbox`, `Cancellable`, `Duration`).
 
 ## Runtime pluggability
 
@@ -85,14 +86,30 @@ use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
 $system = ActorSystem::create('my-system', new SwooleRuntime(new SwooleConfig()));
 ```
 
+For deterministic testing, use the Step runtime with its virtual clock:
+
+```php
+use Monadial\Nexus\Runtime\Step\StepRuntime;
+
+$runtime = new StepRuntime();
+$system = ActorSystem::create('test-system', $runtime, clock: $runtime->clock());
+```
+
 All actor behaviors, Props definitions, and supervision strategies remain
 identical across runtimes.
 
 ## When to use which
 
+**StepRuntime** is the right choice when:
+
+- You are writing unit or integration tests for actor behavior.
+- You need deterministic, reproducible message processing order.
+- You need to control time (advance virtual clock, trigger timers on demand).
+- You want to verify state after each individual message.
+
 **FiberRuntime** is the right choice when:
 
-- You are developing or testing locally and do not want to install extensions.
+- You are developing locally and do not want to install extensions.
 - Your application handles moderate concurrency (tens to hundreds of actors).
 - You are running single-process CLI tools or simple services.
 - You need a zero-dependency setup for CI pipelines.
