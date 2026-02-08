@@ -100,6 +100,42 @@ $system = ActorSystem::create('prod', new SwooleRuntime(
 $ref = $system->spawn(Props::fromBehavior($behavior), 'worker');
 $ref->tell(new ProcessTask($payload));`;
 
+const eventSourcingCode = `// Events are immutable facts. State rebuilds from history.
+// Crash? Restart? State recovers automatically.
+
+#[MessageType('account.deposited')]
+readonly class Deposited {
+    public function __construct(public float $amount) {}
+}
+
+$account = EventSourcedBehavior::create(
+    persistenceId: PersistenceId::of('account', 'ACC-001'),
+    emptyState: new AccountState(balance: 0.0),
+    commandHandler: function (AccountState $state, object $cmd)
+        : Effect
+    {
+        if ($cmd instanceof Deposit) {
+            return Effect::persist(new Deposited($cmd->amount))
+                ->thenReply($cmd->replyTo,
+                    fn ($s) => new Balance($s->balance));
+        }
+        return Effect::unhandled();
+    },
+    eventHandler: function (AccountState $state, object $event)
+        : AccountState
+    {
+        return match (true) {
+            $event instanceof Deposited => new AccountState(
+                balance: $state->balance + $event->amount,
+            ),
+            default => $state,
+        };
+    },
+)
+->withSnapshotStrategy(SnapshotStrategy::everyN(100))
+->withEventStore($eventStore)
+->toBehavior();`;
+
 const stashingCode = `// Actors can buffer messages during initialization.
 // When ready, unstash and process them in order.
 
@@ -179,8 +215,18 @@ const features = [
   },
   {
     title: 'Immutable Everything',
-    description: 'Readonly classes, immutable behaviors, Option types from fp4php. State is passed, not mutated. The compiler enforces discipline your team can trust.',
+    description: 'Readonly classes, immutable behaviors, value objects everywhere. State is passed, not mutated. Static analysis enforces discipline your team can trust.',
     icon: '\u2205',
+  },
+  {
+    title: 'Event Sourcing',
+    description: 'Persist events, rebuild state from history. Automatic crash recovery. Configurable snapshot strategies and retention policies. DBAL and Doctrine backends.',
+    icon: '\u25C9',
+  },
+  {
+    title: 'Durable State',
+    description: 'Simpler alternative to event sourcing. Persist the latest state directly. Same actor lifecycle integration, same backend options, less ceremony.',
+    icon: '\u25A3',
   },
   {
     title: 'PSR Integration',
@@ -203,12 +249,12 @@ function Hero() {
             WIP &middot; Open source &middot; PHP 8.5+
           </div>
           <h1 className={styles.heroTitle}>
-            The actor model<br />
-            <span className={styles.heroAccent}>for PHP.</span>
+            Concurrent PHP,<br />
+            <span className={styles.heroAccent}>done right.</span>
           </h1>
           <p className={styles.heroTagline}>
-            Type-safe actors, supervision trees, pluggable runtimes.
-            Erlang/OTP and Akka patterns — in PHP you already know.
+            Type-safe actors, supervision trees, event sourcing, pluggable runtimes.
+            Erlang/OTP and Akka patterns — in the PHP you already know.
           </p>
           <div className={styles.heroCta}>
             <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">
@@ -335,7 +381,7 @@ function Showcases() {
 
       <ShowcaseSection
         title="Supervision that handles failure for you"
-        description="Actors fail. Networks drop. Databases timeout. Instead of wrapping everything in try/catch, define a supervision strategy once. The parent actor applies it automatically -- restart with backoff, stop permanently, or escalate to the next level. Your business logic stays clean."
+        description="Actors fail. Networks drop. Databases time out. Instead of wrapping everything in try/catch, define a supervision strategy once. The parent actor applies it automatically -- restart with backoff, stop permanently, or escalate to the next level. Your business logic stays clean."
         code={supervisionCode}
         codeTitle="supervision.php"
       />
@@ -361,6 +407,13 @@ function Showcases() {
         code={stashingCode}
         codeTitle="stashing.php"
         reversed
+      />
+
+      <ShowcaseSection
+        title="Event sourcing, built into the actor model"
+        description="Persist events, not state. Every state change is captured as an immutable fact. Actors rebuild their state from event history on startup -- crash recovery is automatic. Snapshot strategies keep recovery fast. Swap between DBAL and Doctrine stores with zero code changes."
+        code={eventSourcingCode}
+        codeTitle="event-sourcing.php"
       />
     </div>
   );
@@ -462,7 +515,7 @@ function UseCases() {
     },
     {
       title: 'Financial Transaction Processing',
-      desc: 'Process payments, transfers, and settlements with actors that guarantee message ordering. Stateful actors maintain account balances without database locks.',
+      desc: 'Process payments, transfers, and settlements with event-sourced actors. Every transaction is an immutable event with full audit trail. Actors maintain account balances without database locks.',
     },
     {
       title: 'Game Servers and Simulations',
@@ -510,8 +563,8 @@ function Philosophy() {
             <p className={styles.philoText}>
               PHP teams have been locked out of these patterns. Not because the
               language can't handle it — PHP 8.5 has fibers, readonly classes,
-              generics via static analysis, and a pipe operator. The missing piece
-              was a framework that takes these primitives seriously.
+              enums, and first-class callable syntax. The missing piece was a
+              framework that takes these primitives seriously.
             </p>
             <p className={styles.philoText}>
               Nexus fills that gap. Every design decision serves a single goal:
@@ -596,6 +649,20 @@ function Architecture() {
               serializer for speed, Valinor mapper for structured wire formats.
             </p>
           </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-persistence</code>
+            <p className={styles.archDesc}>
+              Event sourcing and durable state abstractions. Effects, snapshots,
+              retention policies, and in-memory stores for testing.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-cluster</code>
+            <p className={styles.archDesc}>
+              Multi-process scaling with consistent hash ring, remote actor refs,
+              and pluggable transport/directory/serialization interfaces.
+            </p>
+          </div>
         </div>
       </div>
     </section>
@@ -637,7 +704,7 @@ export default function Home() {
   return (
     <Layout
       title="Concurrent PHP, done right"
-      description="Nexus is an actor system for PHP 8.5+ with type-safe actors, supervision trees, and pluggable runtimes. Work in progress."
+      description="Nexus is an actor system for PHP 8.5+ with type-safe actors, supervision trees, event sourcing, and pluggable runtimes. Work in progress."
     >
       <main className={styles.landing}>
         <Hero />
