@@ -19,9 +19,9 @@ PostgreSQL, MySQL, etc.).
 
 | Class | Description |
 |---|---|
-| `DbalEventStore` | `EventStore` implementation using DBAL. Constructor: `Connection`. |
-| `DbalSnapshotStore` | `SnapshotStore` implementation using DBAL. Constructor: `Connection`. |
-| `DbalDurableStateStore` | `DurableStateStore` implementation using DBAL. Constructor: `Connection`. |
+| `DbalEventStore` | `EventStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. |
+| `DbalSnapshotStore` | `SnapshotStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). |
+| `DbalDurableStateStore` | `DurableStateStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses optimistic locking via `WHERE version = ?` on updates. |
 | `PersistenceSchemaManager` | Creates and drops database tables. Constructor: `Connection`. Methods: `createSchema()`, `dropSchema()`. Lives in `Schema\` sub-namespace. |
 
 ## Table schema
@@ -56,7 +56,7 @@ Index: `idx_event_journal_pid` on `persistence_id`.
 | Column | Type | Notes |
 |---|---|---|
 | `persistence_id` | `VARCHAR(255)` | Primary key |
-| `revision` | `BIGINT` | |
+| `version` | `BIGINT` | Optimistic lock version |
 | `state_type` | `VARCHAR(255)` | |
 | `state_data` | `TEXT` | |
 | `timestamp` | `DATETIME` | Immutable |
@@ -78,4 +78,10 @@ $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'path' => 
 $eventStore = new DbalEventStore($connection);
 $snapshotStore = new DbalSnapshotStore($connection);
 $durableStateStore = new DbalDurableStateStore($connection);
+
+// With a custom serializer
+use Monadial\Nexus\Serialization\MessageSerializer;
+
+$eventStore = new DbalEventStore($connection, $customSerializer);
+$durableStateStore = new DbalDurableStateStore($connection, $customSerializer);
 ```

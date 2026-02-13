@@ -50,29 +50,29 @@ final class DurableStateEngine
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
-            $revision = 0;
+            $version = 0;
 
             $existing = $stateStore->get($persistenceId);
             if ($existing !== null) {
                 $state = $existing->state;
-                $revision = $existing->revision;
+                $version = $existing->version;
             }
 
             // === Command Processing Phase ===
             return Behavior::withState(
-                ['state' => $state, 'revision' => $revision],
+                ['state' => $state, 'version' => $version],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
                     $persistenceId, $commandHandler, $stateStore,
                 ): BehaviorWithState {
-                    /** @var array{state: object, revision: int} $data */
+                    /** @var array{state: object, version: int} $data */
                     $state = $data['state'];
-                    $revision = $data['revision'];
+                    $version = $data['version'];
 
                     $effect = $commandHandler($state, $ctx, $msg);
 
                     return match ($effect->type) {
                         DurableEffectType::Persist => self::handlePersist(
-                            $effect, $revision, $persistenceId, $stateStore,
+                            $effect, $version, $persistenceId, $stateStore,
                         ),
                         DurableEffectType::None => BehaviorWithState::same(),
                         DurableEffectType::Unhandled => BehaviorWithState::same(),
@@ -86,21 +86,21 @@ final class DurableStateEngine
     }
 
     /**
-     * Handle a Persist effect: increment revision, upsert state,
+     * Handle a Persist effect: increment version, upsert state,
      * execute side effects.
      */
     private static function handlePersist(
         DurableEffect $effect,
-        int $revision,
+        int $version,
         PersistenceId $persistenceId,
         DurableStateStore $stateStore,
     ): BehaviorWithState {
-        $newRevision = $revision + 1;
+        $newVersion = $version + 1;
         $newState = $effect->state;
 
         $stateStore->upsert($persistenceId, new DurableStateEnvelope(
             persistenceId: $persistenceId,
-            revision: $newRevision,
+            version: $newVersion,
             state: $newState,
             stateType: $newState::class,
             timestamp: new DateTimeImmutable(),
@@ -111,7 +111,7 @@ final class DurableStateEngine
             $sideEffect($newState);
         }
 
-        return BehaviorWithState::next(['state' => $newState, 'revision' => $newRevision]);
+        return BehaviorWithState::next(['state' => $newState, 'version' => $newVersion]);
     }
 
     /**

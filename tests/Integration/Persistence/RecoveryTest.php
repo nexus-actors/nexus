@@ -231,7 +231,7 @@ final class RecoveryTest extends TestCase
         // Pre-populate the durable state store
         $stateStore->upsert($persistenceId, new DurableStateEnvelope(
             persistenceId: $persistenceId,
-            revision: 5,
+            version: 5,
             state: new ValueState('recovered-value'),
             stateType: ValueState::class,
             timestamp: new DateTimeImmutable(),
@@ -284,7 +284,7 @@ final class RecoveryTest extends TestCase
         self::assertInstanceOf(ValueReply::class, $captured[0]);
         self::assertSame('recovered-value', $captured[0]->value);
 
-        // Send a new command and verify revision continues from recovered state
+        // Send a new command and verify version continues from recovered state
         $runtime2 = new FiberRuntime();
         $system2 = ActorSystem::create('recovery-durable-test-2', $runtime2);
 
@@ -312,10 +312,10 @@ final class RecoveryTest extends TestCase
 
         $system2->run();
 
-        // Verify the revision was incremented from the recovered value (5 -> 6)
+        // Verify the version was incremented from the recovered value (5 -> 6)
         $envelope = $stateStore->get($persistenceId);
         self::assertNotNull($envelope);
-        self::assertSame(6, $envelope->revision);
+        self::assertSame(6, $envelope->version);
         self::assertInstanceOf(ValueState::class, $envelope->state);
         self::assertSame('updated', $envelope->state->value);
     }

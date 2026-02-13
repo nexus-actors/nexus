@@ -72,10 +72,7 @@ abstract class AbstractEventSourcedActor
      */
     public function withSnapshotStore(SnapshotStore $store): static
     {
-        $clone = clone $this;
-        $clone->snapshotStore = $store;
-
-        return $clone;
+        return clone($this, ['snapshotStore' => $store]);
     }
 
     /**
@@ -83,10 +80,7 @@ abstract class AbstractEventSourcedActor
      */
     public function withSnapshotStrategy(SnapshotStrategy $strategy): static
     {
-        $clone = clone $this;
-        $clone->snapshotStrategy = $strategy;
-
-        return $clone;
+        return clone($this, ['snapshotStrategy' => $strategy]);
     }
 
     /**
@@ -94,10 +88,7 @@ abstract class AbstractEventSourcedActor
      */
     public function withRetention(RetentionPolicy $policy): static
     {
-        $clone = clone $this;
-        $clone->retentionPolicy = $policy;
-
-        return $clone;
+        return clone($this, ['retentionPolicy' => $policy]);
     }
 
     /**

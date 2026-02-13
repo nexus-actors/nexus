@@ -18,13 +18,6 @@ readonly class EventEnvelope
 
     public function withMetadata(array $metadata): self
     {
-        return new self(
-            $this->persistenceId,
-            $this->sequenceNr,
-            $this->event,
-            $this->eventType,
-            $this->timestamp,
-            array_merge($this->metadata, $metadata),
-        );
+        return clone($this, ['metadata' => array_merge($this->metadata, $metadata)]);
     }
 }

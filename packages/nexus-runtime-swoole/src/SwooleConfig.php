@@ -17,16 +17,16 @@ final readonly class SwooleConfig
 
     public function withDefaultMailboxCapacity(int $capacity): self
     {
-        return new self($capacity, $this->enableCoroutineHook, $this->maxCoroutines);
+        return clone($this, ['defaultMailboxCapacity' => $capacity]);
     }
 
     public function withEnableCoroutineHook(bool $enable): self
     {
-        return new self($this->defaultMailboxCapacity, $enable, $this->maxCoroutines);
+        return clone($this, ['enableCoroutineHook' => $enable]);
     }
 
     public function withMaxCoroutines(int $max): self
     {
-        return new self($this->defaultMailboxCapacity, $this->enableCoroutineHook, $max);
+        return clone($this, ['maxCoroutines' => $max]);
     }
 }

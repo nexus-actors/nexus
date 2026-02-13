@@ -5,15 +5,20 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\Doctrine;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\OptimisticLockException;
 use Monadial\Nexus\Persistence\Doctrine\Entity\DurableStateEntry;
+use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use Monadial\Nexus\Persistence\State\DurableStateStore;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 
 final class DoctrineDurableStateStore implements DurableStateStore
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     public function get(PersistenceId $id): ?DurableStateEnvelope
@@ -26,8 +31,8 @@ final class DoctrineDurableStateStore implements DurableStateStore
 
         return new DurableStateEnvelope(
             persistenceId: $id,
-            revision: (int) $entry->revision,
-            state: unserialize($entry->stateData),
+            version: (int) $entry->version,
+            state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
             stateType: $entry->stateType,
             timestamp: $entry->timestamp,
         );
@@ -38,17 +43,28 @@ final class DoctrineDurableStateStore implements DurableStateStore
         $entry = $this->em->find(DurableStateEntry::class, $id->toString());
 
         if ($entry === null) {
-            $entry = new DurableStateEntry();
-            $entry->persistenceId = $id->toString();
+            $entry = new DurableStateEntry(
+                persistenceId: $id->toString(),
+                stateType: $state->stateType,
+                stateData: $this->serializer->serialize($state->state),
+                timestamp: $state->timestamp,
+            );
+        } else {
+            $entry->update($state->stateType, $this->serializer->serialize($state->state), $state->timestamp);
         }
 
-        $entry->revision = $state->revision;
-        $entry->stateType = $state->stateType;
-        $entry->stateData = serialize($state->state);
-        $entry->timestamp = $state->timestamp;
-
         $this->em->persist($entry);
-        $this->em->flush();
+
+        try {
+            $this->em->flush();
+        } catch (OptimisticLockException $e) {
+            throw new ConcurrentModificationException(
+                $id,
+                $state->version - 1,
+                "Optimistic lock failed for persistence ID '{$id->toString()}'",
+                $e,
+            );
+        }
     }
 
     public function delete(PersistenceId $id): void

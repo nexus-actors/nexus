@@ -10,20 +10,22 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'nexus_snapshot_store')]
 class SnapshotEntry
 {
-    #[ORM\Id]
-    #[ORM\Column(name: 'persistence_id', type: 'string', length: 255)]
-    public string $persistenceId;
+    public function __construct(
+        #[ORM\Id]
+        #[ORM\Column(name: 'persistence_id', type: 'string', length: 255)]
+        public private(set) string $persistenceId,
 
-    #[ORM\Id]
-    #[ORM\Column(name: 'sequence_nr', type: 'bigint')]
-    public int $sequenceNr;
+        #[ORM\Id]
+        #[ORM\Column(name: 'sequence_nr', type: 'bigint')]
+        public private(set) int $sequenceNr,
 
-    #[ORM\Column(name: 'state_type', type: 'string', length: 255)]
-    public string $stateType;
+        #[ORM\Column(name: 'state_type', type: 'string', length: 255)]
+        public private(set) string $stateType,
 
-    #[ORM\Column(name: 'state_data', type: 'text')]
-    public string $stateData;
+        #[ORM\Column(name: 'state_data', type: 'text')]
+        public private(set) string $stateData,
 
-    #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
-    public \DateTimeImmutable $timestamp;
+        #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
+        public private(set) \DateTimeImmutable $timestamp,
+    ) {}
 }

@@ -64,7 +64,7 @@ final class PersistenceSchemaManager
         // Durable state
         $durableState = $schema->createTable('nexus_durable_state');
         $durableState->addColumn('persistence_id', 'string', ['length' => 255]);
-        $durableState->addColumn('revision', 'bigint');
+        $durableState->addColumn('version', 'bigint');
         $durableState->addColumn('state_type', 'string', ['length' => 255]);
         $durableState->addColumn('state_data', 'text');
         $durableState->addColumn('timestamp', 'datetime_immutable');

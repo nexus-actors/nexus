@@ -19,9 +19,9 @@ Doctrine ORM adapter for Nexus persistence -- entity-based stores that use
 
 | Class | Description |
 |---|---|
-| `DoctrineEventStore` | `EventStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`. |
-| `DoctrineSnapshotStore` | `SnapshotStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`. |
-| `DoctrineDurableStateStore` | `DurableStateStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`. |
+| `DoctrineEventStore` | `EventStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. |
+| `DoctrineSnapshotStore` | `SnapshotStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). |
+| `DoctrineDurableStateStore` | `DurableStateStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses Doctrine's `#[ORM\Version]` for optimistic locking. |
 
 ## ORM entities
 
@@ -31,7 +31,7 @@ Doctrine ORM adapter for Nexus persistence -- entity-based stores that use
 |---|---|
 | `EventEntry` | ORM entity mapped to `nexus_event_journal`. Properties: `persistenceId`, `sequenceNr`, `eventType`, `eventData`, `metadata`, `timestamp`. |
 | `SnapshotEntry` | ORM entity mapped to `nexus_snapshot_store`. Properties: `persistenceId`, `sequenceNr`, `stateType`, `stateData`, `timestamp`. |
-| `DurableStateEntry` | ORM entity mapped to `nexus_durable_state`. Properties: `persistenceId`, `revision`, `stateType`, `stateData`, `timestamp`. |
+| `DurableStateEntry` | ORM entity mapped to `nexus_durable_state`. Properties: `persistenceId`, `version` (with `#[ORM\Version]`), `stateType`, `stateData`, `timestamp`. |
 
 ## Usage
 
@@ -54,4 +54,10 @@ $em = new EntityManager($connection, $config);
 $eventStore = new DoctrineEventStore($em);
 $snapshotStore = new DoctrineSnapshotStore($em);
 $durableStateStore = new DoctrineDurableStateStore($em);
+
+// With a custom serializer
+use Monadial\Nexus\Serialization\MessageSerializer;
+
+$eventStore = new DoctrineEventStore($em, $customSerializer);
+$durableStateStore = new DoctrineDurableStateStore($em, $customSerializer);
 ```

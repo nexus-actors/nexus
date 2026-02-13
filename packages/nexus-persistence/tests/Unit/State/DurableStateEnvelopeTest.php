@@ -22,14 +22,14 @@ final class DurableStateEnvelopeTest extends TestCase
 
         $envelope = new DurableStateEnvelope(
             persistenceId: $persistenceId,
-            revision: 3,
+            version: 3,
             state: $state,
             stateType: 'CounterState',
             timestamp: $timestamp,
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
-        self::assertSame(3, $envelope->revision);
+        self::assertSame(3, $envelope->version);
         self::assertSame($state, $envelope->state);
         self::assertSame('CounterState', $envelope->stateType);
         self::assertSame($timestamp, $envelope->timestamp);
@@ -40,7 +40,7 @@ final class DurableStateEnvelopeTest extends TestCase
     {
         $envelope = new DurableStateEnvelope(
             persistenceId: PersistenceId::of('counter', 'counter-1'),
-            revision: 1,
+            version: 1,
             state: new \stdClass(),
             stateType: 'CounterState',
             timestamp: new \DateTimeImmutable(),

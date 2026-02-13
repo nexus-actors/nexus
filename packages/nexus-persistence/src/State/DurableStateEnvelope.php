@@ -9,7 +9,7 @@ readonly class DurableStateEnvelope
 {
     public function __construct(
         public PersistenceId $persistenceId,
-        public int $revision,
+        public int $version,
         public object $state,
         public string $stateType,
         public \DateTimeImmutable $timestamp,

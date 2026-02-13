@@ -70,6 +70,39 @@ Tools to improve the development and debugging experience:
 - **Message tracing** -- Record and replay message flows for debugging
   complex actor interactions.
 
+## Optimistic locking for persistence
+
+**Status:** Implemented.
+
+Concurrency control for persistent actors when multiple processes or cluster
+nodes access the same event store or state store:
+
+- **Optimistic locking** -- Each persisted event or state carries a version
+  number. On write, the store checks that the version matches the expected
+  value. If another process wrote first, a `ConcurrentModificationException` is
+  thrown and the actor can retry or escalate via supervision. Zero database
+  locks, no contention under normal operation.
+- **Event stores** -- The composite primary key `(persistence_id, sequence_nr)`
+  provides natural optimistic locking. Duplicate sequence numbers are caught and
+  wrapped in `ConcurrentModificationException`.
+- **Durable state stores** -- The `version` column is checked on every update.
+  DBAL uses `WHERE version = ?`; Doctrine uses `#[ORM\Version]` for automatic
+  version management.
+- **Injectable serializers** -- All DBAL and Doctrine stores accept a
+  `MessageSerializer` constructor parameter (default: `PhpNativeSerializer`),
+  allowing custom serialization strategies (JSON, Valinor, etc.).
+
+## Pessimistic locking for persistence
+
+**Status:** Planned.
+
+Pessimistic locking for high-conflict workloads:
+
+- Acquire a database-level lock (e.g. `SELECT ... FOR UPDATE`) before processing
+  a command. Guarantees exclusive access but introduces contention.
+- Best for workloads where retries would be expensive (financial transactions,
+  inventory).
+
 ## Additional runtimes
 
 **Status:** Under consideration.

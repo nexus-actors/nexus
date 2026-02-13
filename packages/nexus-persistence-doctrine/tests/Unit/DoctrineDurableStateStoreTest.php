@@ -10,6 +10,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\ORMSetup;
 use Doctrine\ORM\Tools\SchemaTool;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineDurableStateStore;
+use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -45,16 +46,16 @@ final class DoctrineDurableStateStoreTest extends TestCase
         $this->id = PersistenceId::of('counter', 'counter-1');
     }
 
-    private function makeState(int $revision, int $value = 0): DurableStateEnvelope
+    private function makeState(int $version, int $value = 0): DurableStateEnvelope
     {
         $state = new \stdClass();
         $state->value = $value;
 
         return new DurableStateEnvelope(
             persistenceId: $this->id,
-            revision: $revision,
+            version: $version,
             state: $state,
-            stateType: 'CounterState',
+            stateType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
         );
     }
@@ -68,8 +69,8 @@ final class DoctrineDurableStateStoreTest extends TestCase
 
         $loaded = $this->store->get($this->id);
         self::assertNotNull($loaded);
-        self::assertSame(1, $loaded->revision);
-        self::assertSame('CounterState', $loaded->stateType);
+        self::assertSame(1, $loaded->version);
+        self::assertSame(\stdClass::class, $loaded->stateType);
         self::assertEquals(42, $loaded->state->value);
     }
 
@@ -84,7 +85,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
 
         $loaded = $this->store->get($this->id);
         self::assertNotNull($loaded);
-        self::assertSame(2, $loaded->revision);
+        self::assertSame(2, $loaded->version);
         self::assertEquals(20, $loaded->state->value);
     }
 
@@ -131,9 +132,9 @@ final class DoctrineDurableStateStoreTest extends TestCase
 
         $envelope = new DurableStateEnvelope(
             persistenceId: $this->id,
-            revision: 1,
+            version: 1,
             state: $state,
-            stateType: 'CounterState',
+            stateType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
         );
 
@@ -143,5 +144,23 @@ final class DoctrineDurableStateStoreTest extends TestCase
         self::assertNotNull($loaded);
         self::assertEquals(['a', 'b', 'c'], $loaded->state->items);
         self::assertSame(3, $loaded->state->count);
+    }
+
+    #[Test]
+    public function upsertStaleVersionThrowsConcurrentModification(): void
+    {
+        // Insert initial state (version=1 via Doctrine)
+        $this->store->upsert($this->id, $this->makeState(1, 10));
+
+        // Simulate a concurrent update by changing the version directly in the DB
+        $this->em->getConnection()->executeStatement(
+            "UPDATE nexus_durable_state SET version = 99 WHERE persistence_id = :pid",
+            ['pid' => $this->id->toString()],
+        );
+
+        // Next upsert should fail — entity was loaded with version=1 but DB now has version=99
+        $this->expectException(ConcurrentModificationException::class);
+
+        $this->store->upsert($this->id, $this->makeState(2, 20));
     }
 }

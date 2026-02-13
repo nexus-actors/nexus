@@ -145,7 +145,7 @@ final class AbstractDurableStateActorTest extends TestCase
         $envelope = $stateStore->get($persistenceId);
 
         self::assertNotNull($envelope);
-        self::assertSame(3, $envelope->revision);
+        self::assertSame(3, $envelope->version);
         self::assertInstanceOf(WalletState::class, $envelope->state);
         self::assertSame(60, $envelope->state->balance);
     }

@@ -4,33 +4,51 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Doctrine;
 
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Exception\EntityIdentityCollisionException;
 use Monadial\Nexus\Persistence\Doctrine\Entity\EventEntry;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
+use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 
 final class DoctrineEventStore implements EventStore
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
-        foreach ($events as $envelope) {
-            $entry = new EventEntry();
-            $entry->persistenceId = $id->toString();
-            $entry->sequenceNr = $envelope->sequenceNr;
-            $entry->eventType = $envelope->eventType;
-            $entry->eventData = serialize($envelope->event);
-            $entry->metadata = !empty($envelope->metadata) ? json_encode($envelope->metadata) : null;
-            $entry->timestamp = $envelope->timestamp;
+        try {
+            foreach ($events as $envelope) {
+                $entry = new EventEntry(
+                    persistenceId: $id->toString(),
+                    sequenceNr: $envelope->sequenceNr,
+                    eventType: $envelope->eventType,
+                    eventData: $this->serializer->serialize($envelope->event),
+                    timestamp: $envelope->timestamp,
+                    metadata: !empty($envelope->metadata) ? json_encode($envelope->metadata) : null,
+                );
 
-            $this->em->persist($entry);
+                $this->em->persist($entry);
+            }
+
+            $this->em->flush();
+        } catch (UniqueConstraintViolationException | EntityIdentityCollisionException $e) {
+            $sequenceNr = $events[0]->sequenceNr ?? 0;
+
+            throw new ConcurrentModificationException(
+                $id,
+                $sequenceNr,
+                "Duplicate sequence number for persistence ID '{$id->toString()}'",
+                $e,
+            );
         }
-
-        $this->em->flush();
     }
 
     /** @return iterable<EventEnvelope> */
@@ -51,7 +69,7 @@ final class DoctrineEventStore implements EventStore
             yield new EventEnvelope(
                 persistenceId: $id,
                 sequenceNr: (int) $entry->sequenceNr,
-                event: unserialize($entry->eventData),
+                event: $this->serializer->deserialize($entry->eventData, $entry->eventType),
                 eventType: $entry->eventType,
                 timestamp: $entry->timestamp,
                 metadata: $entry->metadata !== null ? json_decode($entry->metadata, true) : [],
