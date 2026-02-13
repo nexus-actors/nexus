@@ -140,7 +140,7 @@ final class DurableStateEngineTest extends TestCase
         // Verify state was persisted in the DurableStateStore
         $envelope = $stateStore->get($this->persistenceId);
         self::assertNotNull($envelope);
-        self::assertSame(1, $envelope->revision);
+        self::assertSame(1, $envelope->version);
         self::assertInstanceOf(AccountState::class, $envelope->state);
         self::assertSame(100, $envelope->state->balance);
         self::assertSame(AccountState::class, $envelope->stateType);
@@ -164,7 +164,7 @@ final class DurableStateEngineTest extends TestCase
         // Pre-populate the state store
         $stateStore->upsert($this->persistenceId, new DurableStateEnvelope(
             persistenceId: $this->persistenceId,
-            revision: 5,
+            version: 5,
             state: new AccountState(500),
             stateType: AccountState::class,
             timestamp: new DateTimeImmutable(),
@@ -195,14 +195,14 @@ final class DurableStateEngineTest extends TestCase
     }
 
     #[Test]
-    public function recovery_continues_revision_after_existing_state(): void
+    public function recovery_continues_version_after_existing_state(): void
     {
         $stateStore = new InMemoryDurableStateStore();
 
-        // Pre-populate with revision 5
+        // Pre-populate with version 5
         $stateStore->upsert($this->persistenceId, new DurableStateEnvelope(
             persistenceId: $this->persistenceId,
-            revision: 5,
+            version: 5,
             state: new AccountState(500),
             stateType: AccountState::class,
             timestamp: new DateTimeImmutable(),
@@ -224,12 +224,12 @@ final class DurableStateEngineTest extends TestCase
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        // New command should produce revision=6
+        // New command should produce version=6
         $cell->processMessage($this->envelope(new SetBalance(600)));
 
         $envelope = $stateStore->get($this->persistenceId);
         self::assertNotNull($envelope);
-        self::assertSame(6, $envelope->revision);
+        self::assertSame(6, $envelope->version);
         self::assertSame(600, $envelope->state->balance);
     }
 
@@ -269,7 +269,7 @@ final class DurableStateEngineTest extends TestCase
 
         // No new state should be persisted after the first one
         $envelope = $stateStore->get($this->persistenceId);
-        self::assertSame(1, $envelope->revision); // only one persist
+        self::assertSame(1, $envelope->version); // only one persist
 
         // All three state observations: first sees empty, second sees 100, third sees 100
         self::assertCount(3, $states);
@@ -320,7 +320,7 @@ final class DurableStateEngineTest extends TestCase
 
         // No new state should be persisted for the reply
         $envelope = $stateStore->get($this->persistenceId);
-        self::assertSame(2, $envelope->revision); // only the two SetBalance persists
+        self::assertSame(2, $envelope->version); // only the two SetBalance persists
     }
 
     // ========================================================================
@@ -435,7 +435,7 @@ final class DurableStateEngineTest extends TestCase
     // ========================================================================
 
     #[Test]
-    public function revision_increments_correctly_across_multiple_persists(): void
+    public function version_increments_correctly_across_multiple_persists(): void
     {
         $stateStore = new InMemoryDurableStateStore();
 
@@ -457,15 +457,15 @@ final class DurableStateEngineTest extends TestCase
 
         $cell->processMessage($this->envelope(new SetBalance(100)));
         $envelope1 = $stateStore->get($this->persistenceId);
-        self::assertSame(1, $envelope1->revision);
+        self::assertSame(1, $envelope1->version);
 
         $cell->processMessage($this->envelope(new SetBalance(200)));
         $envelope2 = $stateStore->get($this->persistenceId);
-        self::assertSame(2, $envelope2->revision);
+        self::assertSame(2, $envelope2->version);
 
         $cell->processMessage($this->envelope(new SetBalance(300)));
         $envelope3 = $stateStore->get($this->persistenceId);
-        self::assertSame(3, $envelope3->revision);
+        self::assertSame(3, $envelope3->version);
         self::assertSame(300, $envelope3->state->balance);
     }
 

@@ -38,7 +38,7 @@ final readonly class Envelope
      */
     public function withMetadata(array $metadata): self
     {
-        return new self($this->message, $this->sender, $this->target, $metadata);
+        return clone($this, ['metadata' => $metadata]);
     }
 
     /**
@@ -46,6 +46,6 @@ final readonly class Envelope
      */
     public function withSender(ActorPath $sender): self
     {
-        return new self($this->message, $sender, $this->target, $this->metadata);
+        return clone($this, ['sender' => $sender]);
     }
 }

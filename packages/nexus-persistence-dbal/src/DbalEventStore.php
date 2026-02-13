@@ -5,30 +5,46 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\Dbal;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
+use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 
 final class DbalEventStore implements EventStore
 {
     public function __construct(
         private readonly Connection $connection,
+        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
-        $this->connection->transactional(function () use ($id, $events): void {
-            foreach ($events as $envelope) {
-                $this->connection->insert('nexus_event_journal', [
-                    'persistence_id' => $id->toString(),
-                    'sequence_nr' => $envelope->sequenceNr,
-                    'event_type' => $envelope->eventType,
-                    'event_data' => serialize($envelope->event),
-                    'metadata' => !empty($envelope->metadata) ? json_encode($envelope->metadata) : null,
-                    'timestamp' => $envelope->timestamp->format('Y-m-d H:i:s'),
-                ]);
-            }
-        });
+        try {
+            $this->connection->transactional(function () use ($id, $events): void {
+                foreach ($events as $envelope) {
+                    $this->connection->insert('nexus_event_journal', [
+                        'persistence_id' => $id->toString(),
+                        'sequence_nr' => $envelope->sequenceNr,
+                        'event_type' => $envelope->eventType,
+                        'event_data' => $this->serializer->serialize($envelope->event),
+                        'metadata' => !empty($envelope->metadata) ? json_encode($envelope->metadata) : null,
+                        'timestamp' => $envelope->timestamp->format('Y-m-d H:i:s'),
+                    ]);
+                }
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            $sequenceNr = $events[0]->sequenceNr ?? 0;
+
+            throw new ConcurrentModificationException(
+                $id,
+                $sequenceNr,
+                "Duplicate sequence number for persistence ID '{$id->toString()}'",
+                $e,
+            );
+        }
     }
 
     /** @return iterable<EventEnvelope> */
@@ -51,7 +67,7 @@ final class DbalEventStore implements EventStore
             yield new EventEnvelope(
                 persistenceId: $id,
                 sequenceNr: (int) $row['sequence_nr'],
-                event: unserialize($row['event_data']),
+                event: $this->serializer->deserialize($row['event_data'], $row['event_type']),
                 eventType: $row['event_type'],
                 timestamp: new \DateTimeImmutable($row['timestamp']),
                 metadata: $row['metadata'] !== null ? json_decode($row['metadata'], true) : [],

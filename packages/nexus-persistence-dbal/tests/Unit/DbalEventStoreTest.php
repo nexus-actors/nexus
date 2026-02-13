@@ -9,6 +9,7 @@ use Doctrine\DBAL\DriverManager;
 use Monadial\Nexus\Persistence\Dbal\DbalEventStore;
 use Monadial\Nexus\Persistence\Dbal\Schema\PersistenceSchemaManager;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
+use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -29,7 +30,7 @@ final class DbalEventStoreTest extends TestCase
         $this->id = PersistenceId::of('order', 'order-1');
     }
 
-    private function makeEnvelope(int $sequenceNr, string $eventType = 'OrderPlaced'): EventEnvelope
+    private function makeEnvelope(int $sequenceNr, string $eventType = \stdClass::class): EventEnvelope
     {
         return new EventEnvelope(
             persistenceId: $this->id,
@@ -50,26 +51,26 @@ final class DbalEventStoreTest extends TestCase
         $loaded = iterator_to_array($this->store->load($this->id));
         self::assertCount(1, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
-        self::assertSame('OrderPlaced', $loaded[0]->eventType);
+        self::assertSame(\stdClass::class, $loaded[0]->eventType);
     }
 
     #[Test]
     public function persistsMultipleEventsAtomically(): void
     {
-        $e1 = $this->makeEnvelope(1, 'OrderPlaced');
-        $e2 = $this->makeEnvelope(2, 'OrderConfirmed');
-        $e3 = $this->makeEnvelope(3, 'OrderShipped');
+        $e1 = $this->makeEnvelope(1);
+        $e2 = $this->makeEnvelope(2);
+        $e3 = $this->makeEnvelope(3);
 
         $this->store->persist($this->id, $e1, $e2, $e3);
 
         $loaded = iterator_to_array($this->store->load($this->id));
         self::assertCount(3, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
-        self::assertSame('OrderPlaced', $loaded[0]->eventType);
+        self::assertSame(\stdClass::class, $loaded[0]->eventType);
         self::assertSame(2, $loaded[1]->sequenceNr);
-        self::assertSame('OrderConfirmed', $loaded[1]->eventType);
+        self::assertSame(\stdClass::class, $loaded[1]->eventType);
         self::assertSame(3, $loaded[2]->sequenceNr);
-        self::assertSame('OrderShipped', $loaded[2]->eventType);
+        self::assertSame(\stdClass::class, $loaded[2]->eventType);
     }
 
     #[Test]
@@ -160,7 +161,7 @@ final class DbalEventStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: 1,
             event: new \stdClass(),
-            eventType: 'OrderPlaced',
+            eventType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
             metadata: ['source' => 'api', 'user_id' => '123'],
         );
@@ -193,7 +194,7 @@ final class DbalEventStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: 1,
             event: $event,
-            eventType: 'OrderPlaced',
+            eventType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
         );
 
@@ -202,5 +203,15 @@ final class DbalEventStoreTest extends TestCase
         $loaded = iterator_to_array($this->store->load($this->id));
         self::assertEquals('order-42', $loaded[0]->event->orderId);
         self::assertEquals(99.95, $loaded[0]->event->amount);
+    }
+
+    #[Test]
+    public function persistDuplicateSequenceThrowsConcurrentModification(): void
+    {
+        $this->store->persist($this->id, $this->makeEnvelope(1));
+
+        $this->expectException(ConcurrentModificationException::class);
+
+        $this->store->persist($this->id, $this->makeEnvelope(1));
     }
 }

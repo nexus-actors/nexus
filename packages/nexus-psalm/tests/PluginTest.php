@@ -135,6 +135,25 @@ final class PluginTest extends TestCase
         self::assertStringNotContains('RegularClassWithMutableProperty', $output);
     }
 
+    #[Test]
+    public function cloneWithReturnTypeMatchesFirstArgument(): void
+    {
+        $output = $this->runPsalmOnFixture('CloneWithFixture.php');
+        $lines = $this->filterIssueLines($output, 'Trace');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 Trace issue from @psalm-trace');
+        self::assertStringContains('CloneWithFixture', $lines[0], 'clone() should return CloneWithFixture, not object');
+    }
+
+    #[Test]
+    public function cloneWithDoesNotProduceTypeErrors(): void
+    {
+        $output = $this->runPsalmOnFixture('CloneWithFixture.php');
+
+        self::assertStringNotContains('LessSpecificReturnStatement', $output);
+        self::assertStringNotContains('MoreSpecificReturnType', $output);
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm;
 
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
+use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
@@ -25,6 +26,7 @@ final class Plugin implements PluginEntryPointInterface
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
+            CloneWithReturnTypeProvider::class,
         ];
 
         foreach ($hooks as $hook) {

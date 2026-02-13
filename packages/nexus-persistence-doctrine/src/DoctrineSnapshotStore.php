@@ -9,21 +9,25 @@ use Monadial\Nexus\Persistence\Doctrine\Entity\SnapshotEntry;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 
 final class DoctrineSnapshotStore implements SnapshotStore
 {
     public function __construct(
         private readonly EntityManagerInterface $em,
+        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
-        $entry = new SnapshotEntry();
-        $entry->persistenceId = $id->toString();
-        $entry->sequenceNr = $snapshot->sequenceNr;
-        $entry->stateType = $snapshot->stateType;
-        $entry->stateData = serialize($snapshot->state);
-        $entry->timestamp = $snapshot->timestamp;
+        $entry = new SnapshotEntry(
+            persistenceId: $id->toString(),
+            sequenceNr: $snapshot->sequenceNr,
+            stateType: $snapshot->stateType,
+            stateData: $this->serializer->serialize($snapshot->state),
+            timestamp: $snapshot->timestamp,
+        );
 
         $this->em->persist($entry);
         $this->em->flush();
@@ -48,7 +52,7 @@ final class DoctrineSnapshotStore implements SnapshotStore
         return new SnapshotEnvelope(
             persistenceId: $id,
             sequenceNr: (int) $entry->sequenceNr,
-            state: unserialize($entry->stateData),
+            state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
             stateType: $entry->stateType,
             timestamp: $entry->timestamp,
         );

@@ -90,7 +90,7 @@ final class DurableStateActorTest extends TestCase
         self::assertNotNull($envelope);
         self::assertInstanceOf(ValueState::class, $envelope->state);
         self::assertSame('final', $envelope->state->value);
-        self::assertSame(3, $envelope->revision);
+        self::assertSame(3, $envelope->version);
     }
 
     #[Test]
@@ -166,6 +166,6 @@ final class DurableStateActorTest extends TestCase
         self::assertNotNull($envelope);
         self::assertInstanceOf(ValueState::class, $envelope->state);
         self::assertSame('world', $envelope->state->value);
-        self::assertSame(2, $envelope->revision);
+        self::assertSame(2, $envelope->version);
     }
 }

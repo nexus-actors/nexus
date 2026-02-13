@@ -22,14 +22,14 @@ final class InMemoryDurableStateStoreTest extends TestCase
         $this->id = PersistenceId::of('counter', 'counter-1');
     }
 
-    private function makeState(int $revision, int $value = 0): DurableStateEnvelope
+    private function makeState(int $version, int $value = 0): DurableStateEnvelope
     {
         $state = new \stdClass();
         $state->value = $value;
 
         return new DurableStateEnvelope(
             persistenceId: $this->id,
-            revision: $revision,
+            version: $version,
             state: $state,
             stateType: 'CounterState',
             timestamp: new \DateTimeImmutable(),

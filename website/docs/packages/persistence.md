@@ -65,7 +65,7 @@ packages (`nexus-persistence-dbal`, `nexus-persistence-doctrine`) implement.
 | `DurableEffect` | Immutable effect type. Factories: `persist(object)`, `none()`, `unhandled()`, `stash()`, `stop()`, `reply(ActorRef, object)`. Chaining: `thenReply(ActorRef, Closure)`, `thenRun(Closure)`. |
 | `DurableEffectType` | Enum: `Persist`, `None`, `Unhandled`, `Stash`, `Stop`, `Reply`. |
 | `DurableStateStore` | Interface: `get(PersistenceId): ?DurableStateEnvelope`, `upsert(PersistenceId, DurableStateEnvelope)`, `delete(PersistenceId)`. |
-| `DurableStateEnvelope` | Readonly wrapper. Properties: `persistenceId`, `revision`, `state`, `stateType`, `timestamp`. |
+| `DurableStateEnvelope` | Readonly wrapper. Properties: `persistenceId`, `version`, `state`, `stateType`, `timestamp`. |
 | `InMemoryDurableStateStore` | In-memory `DurableStateStore` implementation for testing. |
 
 ## Exception namespace
@@ -75,3 +75,4 @@ packages (`nexus-persistence-dbal`, `nexus-persistence-doctrine`) implement.
 | Class | Description |
 |---|---|
 | `RecoveryException` | Thrown on recovery failure. Property: `persistenceId`. |
+| `ConcurrentModificationException` | Thrown on version conflict during persistence. Properties: `persistenceId`, `expectedVersion`. |

@@ -54,7 +54,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: $sequenceNr,
             state: $state,
-            stateType: 'OrderState',
+            stateType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
         );
     }
@@ -69,7 +69,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
         $loaded = $this->store->load($this->id);
         self::assertNotNull($loaded);
         self::assertSame(5, $loaded->sequenceNr);
-        self::assertSame('OrderState', $loaded->stateType);
+        self::assertSame(\stdClass::class, $loaded->stateType);
         self::assertEquals(500, $loaded->state->total);
     }
 
@@ -136,7 +136,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: 5,
             state: $state,
-            stateType: 'OrderState',
+            stateType: \stdClass::class,
             timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
         );
 

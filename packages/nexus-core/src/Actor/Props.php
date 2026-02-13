@@ -155,7 +155,7 @@ final readonly class Props
      */
     public function withMailbox(MailboxConfig $config): self
     {
-        return new self($this->behavior, $config, $this->supervision);
+        return clone($this, ['mailbox' => $config]);
     }
 
     /**
@@ -163,6 +163,6 @@ final readonly class Props
      */
     public function withSupervision(object $strategy): self
     {
-        return new self($this->behavior, $this->mailbox, Option::some($strategy));
+        return clone($this, ['supervision' => Option::some($strategy)]);
     }
 }

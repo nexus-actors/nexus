@@ -100,7 +100,7 @@ final class PersistenceSchemaManagerTest extends TestCase
 
         $columnNames = array_keys($columns);
         self::assertContains('persistence_id', $columnNames);
-        self::assertContains('revision', $columnNames);
+        self::assertContains('version', $columnNames);
         self::assertContains('state_type', $columnNames);
         self::assertContains('state_data', $columnNames);
         self::assertContains('timestamp', $columnNames);

@@ -25,11 +25,11 @@ final readonly class MailboxConfig
 
     public function withCapacity(int $capacity): self
     {
-        return new self($capacity, $this->strategy, $this->bounded);
+        return clone($this, ['capacity' => $capacity]);
     }
 
     public function withStrategy(OverflowStrategy $strategy): self
     {
-        return new self($this->capacity, $strategy, $this->bounded);
+        return clone($this, ['strategy' => $strategy]);
     }
 }

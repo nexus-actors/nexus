@@ -43,12 +43,7 @@ final class DurableStateBehavior
 
     public function withStateStore(DurableStateStore $store): self
     {
-        return new self(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-            $store,
-        );
+        return clone($this, ['stateStore' => $store]);
     }
 
     /**

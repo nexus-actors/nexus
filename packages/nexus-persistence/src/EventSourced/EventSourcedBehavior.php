@@ -52,34 +52,22 @@ final class EventSourcedBehavior
 
     public function withEventStore(EventStore $store): self
     {
-        return new self(
-            $this->persistenceId, $this->emptyState, $this->commandHandler, $this->eventHandler,
-            $store, $this->snapshotStore, $this->snapshotStrategy, $this->retentionPolicy,
-        );
+        return clone($this, ['eventStore' => $store]);
     }
 
     public function withSnapshotStore(SnapshotStore $store): self
     {
-        return new self(
-            $this->persistenceId, $this->emptyState, $this->commandHandler, $this->eventHandler,
-            $this->eventStore, $store, $this->snapshotStrategy, $this->retentionPolicy,
-        );
+        return clone($this, ['snapshotStore' => $store]);
     }
 
     public function withSnapshotStrategy(SnapshotStrategy $strategy): self
     {
-        return new self(
-            $this->persistenceId, $this->emptyState, $this->commandHandler, $this->eventHandler,
-            $this->eventStore, $this->snapshotStore, $strategy, $this->retentionPolicy,
-        );
+        return clone($this, ['snapshotStrategy' => $strategy]);
     }
 
     public function withRetention(RetentionPolicy $policy): self
     {
-        return new self(
-            $this->persistenceId, $this->emptyState, $this->commandHandler, $this->eventHandler,
-            $this->eventStore, $this->snapshotStore, $this->snapshotStrategy, $policy,
-        );
+        return clone($this, ['retentionPolicy' => $policy]);
     }
 
     /**
