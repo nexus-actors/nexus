@@ -15,6 +15,8 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
+use Monadial\Nexus\Persistence\Locking\PessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableEffect;
 use Monadial\Nexus\Persistence\State\DurableStateEngine;
@@ -596,6 +598,110 @@ final class DurableStateEngineTest extends TestCase
         self::assertNotNull($recoveredState);
         self::assertInstanceOf(AccountState::class, $recoveredState);
         self::assertSame(300, $recoveredState->balance);
+    }
+
+    // ========================================================================
+    // Test: Pessimistic locking calls provider withLock
+    // ========================================================================
+
+    #[Test]
+    public function pessimistic_locking_calls_provider_withLock(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $tracker = new \stdClass();
+        $tracker->called = false;
+
+        $lockProvider = new class ($tracker) implements PessimisticLockProvider {
+            public function __construct(private readonly \stdClass $tracker) {}
+
+            public function withLock(PersistenceId $id, \Closure $callback): mixed
+            {
+                $this->tracker->called = true;
+
+                return $callback();
+            }
+        };
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg): DurableEffect {
+                if ($msg instanceof SetBalance) {
+                    return DurableEffect::persist(new AccountState($msg->amount));
+                }
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+            LockingStrategy::pessimistic($lockProvider),
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new SetBalance(100)));
+
+        self::assertTrue($tracker->called);
+
+        // Verify persist still works correctly through the lock
+        $envelope = $stateStore->get($this->persistenceId);
+        self::assertNotNull($envelope);
+        self::assertSame(100, $envelope->state->balance);
+    }
+
+    // ========================================================================
+    // Test: Pessimistic locking re-reads state from store
+    // ========================================================================
+
+    #[Test]
+    public function pessimistic_locking_rereads_state_from_store(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $observedStates = [];
+
+        $lockProvider = new class ($stateStore, $this->persistenceId) implements PessimisticLockProvider {
+            public function __construct(
+                private readonly InMemoryDurableStateStore $store,
+                private readonly PersistenceId $persistenceId,
+            ) {}
+
+            public function withLock(PersistenceId $id, \Closure $callback): mixed
+            {
+                // Simulate another process writing to the store BEFORE callback executes
+                // This should be visible to the command handler via pessimistic re-read
+                $this->store->upsert($this->persistenceId, new DurableStateEnvelope(
+                    persistenceId: $this->persistenceId,
+                    version: 10,
+                    state: new AccountState(999),
+                    stateType: AccountState::class,
+                    timestamp: new \DateTimeImmutable(),
+                ));
+
+                return $callback();
+            }
+        };
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$observedStates): DurableEffect {
+                $observedStates[] = $state;
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+            LockingStrategy::pessimistic($lockProvider),
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        // Command handler should see state=999 (from the simulated concurrent write)
+        $cell->processMessage($this->envelope(new DurableDoNothing()));
+
+        self::assertCount(1, $observedStates);
+        self::assertInstanceOf(AccountState::class, $observedStates[0]);
+        self::assertSame(999, $observedStates[0]->balance);
     }
 
     // ========================================================================

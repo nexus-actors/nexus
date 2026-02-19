@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 /**
@@ -37,6 +38,7 @@ final class DurableStateEngine
      * @param S $emptyState Initial empty state before any persisted state
      * @param Closure(S, ActorContext, object): DurableEffect $commandHandler Processes commands, returns DurableEffect
      * @param DurableStateStore $stateStore Store for persisting and loading state
+     * @param LockingStrategy|null $lockingStrategy Concurrency control (default: optimistic)
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -44,9 +46,11 @@ final class DurableStateEngine
         object $emptyState,
         Closure $commandHandler,
         DurableStateStore $stateStore,
+        ?LockingStrategy $lockingStrategy = null,
     ): Behavior {
+        $locking = $lockingStrategy ?? LockingStrategy::optimistic();
         return Behavior::setup(static function (ActorContext $ctx) use (
-            $persistenceId, $emptyState, $commandHandler, $stateStore,
+            $persistenceId, $emptyState, $commandHandler, $stateStore, $locking,
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
@@ -62,24 +66,37 @@ final class DurableStateEngine
             return Behavior::withState(
                 ['state' => $state, 'version' => $version],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
-                    $persistenceId, $commandHandler, $stateStore,
+                    $persistenceId, $commandHandler, $stateStore, $locking,
                 ): BehaviorWithState {
                     /** @var array{state: object, version: int} $data */
-                    $state = $data['state'];
-                    $version = $data['version'];
+                    return $locking->withLock($persistenceId, static function () use (
+                        $data, $ctx, $msg, $persistenceId, $commandHandler, $stateStore, $locking,
+                    ): BehaviorWithState {
+                        $state = $data['state'];
+                        $version = $data['version'];
 
-                    $effect = $commandHandler($state, $ctx, $msg);
+                        // Pessimistic: re-read current state from store
+                        if ($locking->isPessimistic()) {
+                            $existing = $stateStore->get($persistenceId);
+                            if ($existing !== null) {
+                                $state = $existing->state;
+                                $version = $existing->version;
+                            }
+                        }
 
-                    return match ($effect->type) {
-                        DurableEffectType::Persist => self::handlePersist(
-                            $effect, $version, $persistenceId, $stateStore,
-                        ),
-                        DurableEffectType::None => BehaviorWithState::same(),
-                        DurableEffectType::Unhandled => BehaviorWithState::same(),
-                        DurableEffectType::Stash => self::handleStash($ctx),
-                        DurableEffectType::Stop => BehaviorWithState::stopped(),
-                        DurableEffectType::Reply => self::handleReply($effect),
-                    };
+                        $effect = $commandHandler($state, $ctx, $msg);
+
+                        return match ($effect->type) {
+                            DurableEffectType::Persist => self::handlePersist(
+                                $effect, $version, $persistenceId, $stateStore,
+                            ),
+                            DurableEffectType::None => BehaviorWithState::same(),
+                            DurableEffectType::Unhandled => BehaviorWithState::same(),
+                            DurableEffectType::Stash => self::handleStash($ctx),
+                            DurableEffectType::Stop => BehaviorWithState::stopped(),
+                            DurableEffectType::Reply => self::handleReply($effect),
+                        };
+                    });
                 },
             );
         });

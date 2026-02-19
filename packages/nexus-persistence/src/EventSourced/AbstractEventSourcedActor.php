@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Persistence\Event\EventStore;
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 
@@ -28,12 +29,14 @@ abstract class AbstractEventSourcedActor
     private ?SnapshotStore $snapshotStore = null;
     private SnapshotStrategy $snapshotStrategy;
     private RetentionPolicy $retentionPolicy;
+    private LockingStrategy $lockingStrategy;
 
     public function __construct(
         private readonly EventStore $eventStore,
     ) {
         $this->snapshotStrategy = SnapshotStrategy::never();
         $this->retentionPolicy = RetentionPolicy::none();
+        $this->lockingStrategy = LockingStrategy::optimistic();
     }
 
     /**
@@ -92,6 +95,14 @@ abstract class AbstractEventSourcedActor
     }
 
     /**
+     * @return static
+     */
+    public function withLockingStrategy(LockingStrategy $strategy): static
+    {
+        return clone($this, ['lockingStrategy' => $strategy]);
+    }
+
+    /**
      * Build a Behavior by delegating to PersistenceEngine::create().
      */
     public function toBehavior(): Behavior
@@ -105,6 +116,7 @@ abstract class AbstractEventSourcedActor
             $this->snapshotStore,
             $this->snapshotStrategy,
             $this->retentionPolicy,
+            $this->lockingStrategy,
         );
     }
 

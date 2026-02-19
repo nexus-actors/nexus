@@ -24,7 +24,7 @@ final class PersistenceSchemaManagerTest extends TestCase
     }
 
     #[Test]
-    public function createSchemaCreatesAllThreeTables(): void
+    public function createSchemaCreatesAllTables(): void
     {
         $this->schemaManager->createSchema();
 
@@ -32,6 +32,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertTrue($sm->tablesExist(['nexus_event_journal']));
         self::assertTrue($sm->tablesExist(['nexus_snapshot_store']));
         self::assertTrue($sm->tablesExist(['nexus_durable_state']));
+        self::assertTrue($sm->tablesExist(['nexus_persistence_lock']));
     }
 
     #[Test]
@@ -44,6 +45,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertTrue($sm->tablesExist(['nexus_event_journal']));
         self::assertTrue($sm->tablesExist(['nexus_snapshot_store']));
         self::assertTrue($sm->tablesExist(['nexus_durable_state']));
+        self::assertTrue($sm->tablesExist(['nexus_persistence_lock']));
     }
 
     #[Test]
@@ -107,6 +109,19 @@ final class PersistenceSchemaManagerTest extends TestCase
     }
 
     #[Test]
+    public function lockTableHasPersistenceIdPrimaryKey(): void
+    {
+        $this->schemaManager->createSchema();
+
+        $columns = $this->connection->createSchemaManager()
+            ->listTableColumns('nexus_persistence_lock');
+
+        $columnNames = array_keys($columns);
+        self::assertContains('persistence_id', $columnNames);
+        self::assertCount(1, $columnNames);
+    }
+
+    #[Test]
     public function dropSchemaRemovesAllTables(): void
     {
         $this->schemaManager->createSchema();
@@ -116,6 +131,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertFalse($sm->tablesExist(['nexus_event_journal']));
         self::assertFalse($sm->tablesExist(['nexus_snapshot_store']));
         self::assertFalse($sm->tablesExist(['nexus_durable_state']));
+        self::assertFalse($sm->tablesExist(['nexus_persistence_lock']));
     }
 
     #[Test]

@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\State;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 /**
@@ -20,9 +21,13 @@ use Monadial\Nexus\Persistence\PersistenceId;
  */
 abstract class AbstractDurableStateActor
 {
+    private LockingStrategy $lockingStrategy;
+
     public function __construct(
         private readonly DurableStateStore $stateStore,
-    ) {}
+    ) {
+        $this->lockingStrategy = LockingStrategy::optimistic();
+    }
 
     /**
      * The unique persistence identity for this actor.
@@ -47,6 +52,14 @@ abstract class AbstractDurableStateActor
     abstract public function handleCommand(object $state, ActorContext $ctx, object $command): DurableEffect;
 
     /**
+     * @return static
+     */
+    public function withLockingStrategy(LockingStrategy $strategy): static
+    {
+        return clone($this, ['lockingStrategy' => $strategy]);
+    }
+
+    /**
      * Build a Behavior by delegating to DurableStateEngine::create().
      */
     public function toBehavior(): Behavior
@@ -56,6 +69,7 @@ abstract class AbstractDurableStateActor
             $this->emptyState(),
             $this->handleCommand(...),
             $this->stateStore,
+            $this->lockingStrategy,
         );
     }
 

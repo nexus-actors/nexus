@@ -29,7 +29,7 @@ final class PersistenceSchemaManager
     {
         $schemaManager = $this->connection->createSchemaManager();
 
-        foreach (['nexus_event_journal', 'nexus_snapshot_store', 'nexus_durable_state'] as $tableName) {
+        foreach (['nexus_event_journal', 'nexus_snapshot_store', 'nexus_durable_state', 'nexus_persistence_lock'] as $tableName) {
             if ($schemaManager->tablesExist([$tableName])) {
                 $schemaManager->dropTable($tableName);
             }
@@ -69,6 +69,11 @@ final class PersistenceSchemaManager
         $durableState->addColumn('state_data', 'text');
         $durableState->addColumn('timestamp', 'datetime_immutable');
         $durableState->setPrimaryKey(['persistence_id']);
+
+        // Pessimistic lock
+        $lock = $schema->createTable('nexus_persistence_lock');
+        $lock->addColumn('persistence_id', 'string', ['length' => 255]);
+        $lock->setPrimaryKey(['persistence_id']);
 
         return $schema->getTables();
     }

@@ -8,6 +8,7 @@ const sidebars = {
       items: [
         'getting-started/installation',
         'getting-started/quick-start',
+        'getting-started/persistent-actors',
         'getting-started/concepts',
       ],
     },
