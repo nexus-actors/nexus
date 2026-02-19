@@ -111,7 +111,7 @@ readonly class Deposited {
 $account = EventSourcedBehavior::create(
     persistenceId: PersistenceId::of('account', 'ACC-001'),
     emptyState: new AccountState(balance: 0.0),
-    commandHandler: function (AccountState $state, object $cmd)
+    commandHandler: function (AccountState $state, ActorContext $ctx, object $cmd)
         : Effect
     {
         if ($cmd instanceof Deposit) {
@@ -162,6 +162,25 @@ $ref = $system->spawn(Props::fromBehavior($initializing), 'db-writer');
 $ref->tell(new WriteRecord($data1));
 $ref->tell(new WriteRecord($data2));
 $ref->tell(new DatabaseReady($connection));`;
+
+const scalingCode = `// One machine, all CPU cores. Actors span processes transparently.
+// Same ActorRef API -- senders don't know if it's local or remote.
+
+$cluster = ClusterBootstrap::create(
+    ClusterConfig::withWorkers(16),
+)
+->onWorkerStart(function (ClusterNode $node): void {
+    // Each worker runs an independent ActorSystem.
+    // The hash ring decides which worker owns which actor.
+    $node->spawn(
+        Props::fromBehavior($orderBehavior),
+        'order-processor',
+    );
+})
+->run();
+
+// Cross-worker messaging uses Unix domain sockets.
+// 255K msgs/sec per worker pair. Zero config.`;
 
 /* ------------------------------------------------------------------ */
 /* Data                                                                */
@@ -229,6 +248,16 @@ const features = [
     icon: '\u25A3',
   },
   {
+    title: 'Multi-Process Scaling',
+    description: 'Scale across all CPU cores with ClusterBootstrap and Swoole Process\\Pool. Consistent hash ring for actor placement. Unix socket transport at 255K msgs/sec.',
+    icon: '\u2B21',
+  },
+  {
+    title: 'Deterministic Testing',
+    description: 'StepRuntime and VirtualClock let you control time and execution order. Write tests that are fast, deterministic, and free of timing flakiness.',
+    icon: '\u2316',
+  },
+  {
     title: 'PSR Integration',
     description: 'PSR-11 containers for DI, PSR-3 logging, PSR-14 event dispatching, PSR-20 clocks. Nexus works with your existing stack, not against it.',
     icon: '\u2713',
@@ -253,7 +282,7 @@ function Hero() {
             <span className={styles.heroAccent}>done right.</span>
           </h1>
           <p className={styles.heroTagline}>
-            Type-safe actors, supervision trees, event sourcing, pluggable runtimes.
+            Type-safe actors, supervision trees, event sourcing, multi-process scaling, pluggable runtimes.
             Erlang/OTP and Akka patterns — in the PHP you already know.
           </p>
           <div className={styles.heroCta}>
@@ -414,6 +443,14 @@ function Showcases() {
         description="Persist events, not state. Every state change is captured as an immutable fact. Actors rebuild their state from event history on startup -- crash recovery is automatic. Snapshot strategies keep recovery fast. Swap between DBAL and Doctrine stores with zero code changes."
         code={eventSourcingCode}
         codeTitle="event-sourcing.php"
+      />
+
+      <ShowcaseSection
+        title="Scale across all CPU cores"
+        description="ClusterBootstrap starts a Swoole Process\Pool where each worker runs an independent ActorSystem. A consistent hash ring decides actor placement. Cross-worker messaging uses Unix domain sockets at 255K msgs/sec. Your actor code stays exactly the same -- only the deployment topology changes."
+        code={scalingCode}
+        codeTitle="cluster.php"
+        reversed
       />
     </div>
   );
@@ -653,14 +690,42 @@ function Architecture() {
             <code className={styles.archPkg}>monadial/nexus-persistence</code>
             <p className={styles.archDesc}>
               Event sourcing and durable state abstractions. Effects, snapshots,
-              retention policies, and in-memory stores for testing.
+              retention policies, concurrency control, and in-memory stores for testing.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-persistence-dbal</code>
+            <p className={styles.archDesc}>
+              Doctrine DBAL storage backends. SQL-backed event, snapshot, and
+              durable state stores. Works with SQLite, PostgreSQL, MySQL.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-persistence-doctrine</code>
+            <p className={styles.archDesc}>
+              Doctrine ORM adapter. Entity-based stores using EntityManager.
+              Same table schema as the DBAL package.
             </p>
           </div>
           <div className={styles.archCard}>
             <code className={styles.archPkg}>monadial/nexus-cluster</code>
             <p className={styles.archDesc}>
-              Multi-process scaling with consistent hash ring, remote actor refs,
-              and pluggable transport/directory/serialization interfaces.
+              Pure PHP abstractions for scaling: consistent hash ring, remote
+              actor refs, pluggable transport and directory interfaces.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-cluster-swoole</code>
+            <p className={styles.archDesc}>
+              Swoole multi-process scaling. ClusterBootstrap, Unix socket
+              transport, shared-memory actor directory via Swoole\Table.
+            </p>
+          </div>
+          <div className={styles.archCard}>
+            <code className={styles.archPkg}>monadial/nexus-psalm</code>
+            <p className={styles.archDesc}>
+              Psalm plugin for static analysis of actor message protocols.
+              Type providers and rules that catch errors before runtime.
             </p>
           </div>
         </div>

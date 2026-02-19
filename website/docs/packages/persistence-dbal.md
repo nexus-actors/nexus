@@ -22,6 +22,7 @@ PostgreSQL, MySQL, etc.).
 | `DbalEventStore` | `EventStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. |
 | `DbalSnapshotStore` | `SnapshotStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). |
 | `DbalDurableStateStore` | `DurableStateStore` implementation using DBAL. Constructor: `Connection`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses optimistic locking via `WHERE version = ?` on updates. |
+| `DbalPessimisticLockProvider` | `PessimisticLockProvider` implementation using `SELECT ... FOR UPDATE`. Constructor: `Connection`. Uses a dedicated `nexus_persistence_lock` table for row-level locks. |
 | `PersistenceSchemaManager` | Creates and drops database tables. Constructor: `Connection`. Methods: `createSchema()`, `dropSchema()`. Lives in `Schema\` sub-namespace. |
 
 ## Table schema
@@ -61,6 +62,15 @@ Index: `idx_event_journal_pid` on `persistence_id`.
 | `state_data` | `TEXT` | |
 | `timestamp` | `DATETIME` | Immutable |
 
+### nexus_persistence_lock
+
+| Column | Type | Notes |
+|---|---|---|
+| `persistence_id` | `VARCHAR(255)` | Primary key |
+
+Used by `DbalPessimisticLockProvider` to acquire exclusive row-level locks via
+`SELECT ... FOR UPDATE`.
+
 ## Usage
 
 ```php
@@ -84,4 +94,15 @@ use Monadial\Nexus\Serialization\MessageSerializer;
 
 $eventStore = new DbalEventStore($connection, $customSerializer);
 $durableStateStore = new DbalDurableStateStore($connection, $customSerializer);
+
+// Pessimistic locking
+use Monadial\Nexus\Persistence\Dbal\DbalPessimisticLockProvider;
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
+
+$lockProvider = new DbalPessimisticLockProvider($connection);
+
+$behavior = EventSourcedBehavior::create($persistenceId, $emptyState, $commandHandler, $eventHandler)
+    ->withEventStore($eventStore)
+    ->withLockingStrategy(LockingStrategy::pessimistic($lockProvider))
+    ->toBehavior();
 ```

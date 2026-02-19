@@ -70,38 +70,60 @@ Tools to improve the development and debugging experience:
 - **Message tracing** -- Record and replay message flows for debugging
   complex actor interactions.
 
-## Optimistic locking for persistence
+## Concurrency control for persistence
 
 **Status:** Implemented.
 
-Concurrency control for persistent actors when multiple processes or cluster
-nodes access the same event store or state store:
+Configurable concurrency control for persistent actors via `LockingStrategy`,
+supporting both optimistic and pessimistic modes per actor:
 
-- **Optimistic locking** -- Each persisted event or state carries a version
-  number. On write, the store checks that the version matches the expected
-  value. If another process wrote first, a `ConcurrentModificationException` is
-  thrown and the actor can retry or escalate via supervision. Zero database
-  locks, no contention under normal operation.
-- **Event stores** -- The composite primary key `(persistence_id, sequence_nr)`
-  provides natural optimistic locking. Duplicate sequence numbers are caught and
-  wrapped in `ConcurrentModificationException`.
-- **Durable state stores** -- The `version` column is checked on every update.
-  DBAL uses `WHERE version = ?`; Doctrine uses `#[ORM\Version]` for automatic
-  version management.
+- **`LockingStrategy`** value object with `optimistic()` and
+  `pessimistic(PessimisticLockProvider)` factories. Configurable per actor via
+  `withLockingStrategy()` on both functional builders and class-based actors.
+- **Optimistic mode** (default) -- zero-overhead pass-through. Event stores use
+  composite primary key `(persistence_id, sequence_nr)` for natural conflict
+  detection. Durable state stores use version checking (`WHERE version = ?` in
+  DBAL, `#[ORM\Version]` in Doctrine). Conflicts throw
+  `ConcurrentModificationException`.
+- **Pessimistic mode** -- acquires an exclusive database lock before command
+  processing, re-reads state from the store (catches writes by other processes),
+  then processes the command and persists within the lock scope. Best for
+  high-conflict workloads where retries are expensive (financial transactions,
+  inventory).
+- **`DbalPessimisticLockProvider`** uses a `nexus_persistence_lock` table with
+  `SELECT ... FOR UPDATE` for row-level locking.
+- **`DoctrinePessimisticLockProvider`** is a convenience wrapper delegating to
+  the DBAL provider via the EntityManager's connection.
 - **Injectable serializers** -- All DBAL and Doctrine stores accept a
   `MessageSerializer` constructor parameter (default: `PhpNativeSerializer`),
   allowing custom serialization strategies (JSON, Valinor, etc.).
 
-## Pessimistic locking for persistence
+## Symfony integration
 
 **Status:** Planned.
 
-Pessimistic locking for high-conflict workloads:
+A `nexus-symfony` bundle providing deep integration between Nexus and the
+Symfony framework:
 
-- Acquire a database-level lock (e.g. `SELECT ... FOR UPDATE`) before processing
-  a command. Guarantees exclusive access but introduces contention.
-- Best for workloads where retries would be expensive (financial transactions,
-  inventory).
+- **Symfony Messenger transport** -- Dispatch Symfony Messenger messages to Nexus
+  actors. Actors act as message handlers, benefiting from supervision, mailbox
+  backpressure, and concurrent processing.
+- **Actor-aware Dependency Injection** -- Register actor behaviors as services
+  in the Symfony container. Inject dependencies (repositories, API clients,
+  loggers) into actor factories via standard Symfony DI.
+- **Swoole Runtime integration** -- Run the full Symfony HTTP kernel inside
+  Swoole workers alongside the actor system. Handle HTTP requests and actor
+  messages in the same process with shared async I/O.
+- **Console commands** -- Artisan-style commands to inspect running actors, dump
+  the actor hierarchy, and manage the cluster from the CLI.
+- **Event dispatcher bridge** -- Bridge between Symfony's `EventDispatcher` and
+  Nexus actor messages. Symfony events can trigger actor messages and vice versa.
+- **Profiler integration** -- Web Debug Toolbar panel showing actor count,
+  message throughput, mailbox depths, and supervision events during development.
+
+The goal is for Symfony applications to use actors as naturally as they use
+services and message handlers today -- with full access to Symfony's ecosystem
+(Doctrine, Security, Messenger, Cache) from within actors.
 
 ## Additional runtimes
 

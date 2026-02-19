@@ -63,7 +63,11 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-runtime-swoole** | `monadial/nexus-runtime-swoole` | Swoole-based runtime using coroutines and native channels. Designed for production workloads with true parallelism. |
 | **nexus-cluster** | `monadial/nexus-cluster` | Pure PHP abstractions for multi-process scaling and future clustering: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
 | **nexus-cluster-swoole** | `monadial/nexus-cluster-swoole` | Swoole multi-process scaling: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap` with `Process\Pool`. |
+| **nexus-persistence** | `monadial/nexus-persistence` | Event sourcing and durable state abstractions. Effects, snapshots, retention policies, concurrency control, and in-memory stores for testing. |
+| **nexus-persistence-dbal** | `monadial/nexus-persistence-dbal` | Doctrine DBAL storage backends for persistence. SQL-backed event, snapshot, and durable state stores. |
+| **nexus-persistence-doctrine** | `monadial/nexus-persistence-doctrine` | Doctrine ORM adapter for persistence. Entity-based stores using `EntityManagerInterface`. |
 | **nexus-serialization** | `monadial/nexus-serialization` | Valinor-based message serialization with a type registry for wire-format encoding and decoding. |
+| **nexus-runtime-step** | `monadial/nexus-runtime-step` | Deterministic step-by-step runtime for testing. Paired with `VirtualClock` for time-controlled tests. |
 | **nexus-app** | `monadial/nexus-app` | Application kernel for declarative actor registration and single-process execution. |
 | **nexus-psalm** | `monadial/nexus-psalm` | Psalm plugin providing static analysis support for actor message protocols and behavior types. |
 

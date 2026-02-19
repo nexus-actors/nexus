@@ -250,5 +250,6 @@ Everything else stays the same. The core APIs are runtime-agnostic.
 
 ## Next steps
 
+- [Persistent Actors](./persistent-actors.md) -- make actors survive restarts with event sourcing.
 - [Key Concepts](./concepts.md) -- understand the actor model in depth.
 - [Supervision](/docs/core-concepts/supervision) -- learn how parent actors handle child failures.

@@ -162,6 +162,7 @@ classes for both persistence models. Extend `AbstractEventSourcedActor` or
 ```php
 use Monadial\Nexus\Persistence\EventSourced\AbstractEventSourcedActor;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
+use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Props;
@@ -169,7 +170,7 @@ use Monadial\Nexus\Core\Actor\Props;
 final class OrderActor extends AbstractEventSourcedActor
 {
     public function __construct(
-        EventStoreInterface $eventStore,
+        EventStore $eventStore,
         private readonly string $orderId,
     ) {
         parent::__construct($eventStore);
@@ -208,8 +209,8 @@ event log. On recovery, the actor loads the latest snapshot and only replays
 events that occurred after it.
 
 ```php
-use Monadial\Nexus\Persistence\Snapshot\SnapshotStrategy;
-use Monadial\Nexus\Persistence\Snapshot\RetentionPolicy;
+use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
+use Monadial\Nexus\Persistence\EventSourced\RetentionPolicy;
 
 $behavior = EventSourcedBehavior::create(
     PersistenceId::of('account', 'acc-1'),
@@ -258,9 +259,42 @@ Nexus ships with several storage backend implementations:
 | `DbalEventStore` / `DbalSnapshotStore` / `DbalDurableStateStore` | Doctrine DBAL -- works with any SQL database |
 | `DoctrineEventStore` / `DoctrineSnapshotStore` / `DoctrineDurableStateStore` | Doctrine ORM |
 
-All stores implement the same interfaces (`EventStoreInterface`,
-`SnapshotStoreInterface`, `DurableStateStoreInterface`), so you can swap
-backends without changing actor code.
+All stores implement the same interfaces (`EventStore`, `SnapshotStore`,
+`DurableStateStore`), so you can swap backends without changing actor code.
+
+## Concurrency Control
+
+When multiple processes or cluster nodes access the same persistent actor,
+concurrent writes can conflict. Nexus supports two locking strategies:
+
+- **Optimistic** (default) -- no locks acquired. Conflicts are detected at write
+  time via version checks. If another process wrote first, a
+  `ConcurrentModificationException` is thrown. Best for low-conflict workloads.
+- **Pessimistic** -- acquires an exclusive database lock before command
+  processing, re-reads state from the store, then processes and persists within
+  the lock scope. Best for high-conflict workloads where retries are expensive.
+
+```php
+use Monadial\Nexus\Persistence\Locking\LockingStrategy;
+use Monadial\Nexus\Persistence\Dbal\DbalPessimisticLockProvider;
+
+// Default: optimistic (no configuration needed)
+$behavior = EventSourcedBehavior::create(/* ... */)
+    ->withEventStore($eventStore)
+    ->toBehavior();
+
+// Pessimistic: wrap command processing in a database lock
+$lockProvider = new DbalPessimisticLockProvider($connection);
+
+$behavior = EventSourcedBehavior::create(/* ... */)
+    ->withEventStore($eventStore)
+    ->withLockingStrategy(LockingStrategy::pessimistic($lockProvider))
+    ->toBehavior();
+```
+
+Both `EventSourcedBehavior` and `DurableStateBehavior` support
+`withLockingStrategy()`. The class-based APIs (`AbstractEventSourcedActor`,
+`AbstractDurableStateActor`) also expose `withLockingStrategy()`.
 
 ## Choosing Between Event Sourcing and Durable State
 
