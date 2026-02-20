@@ -1,0 +1,420 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Critical Rules
+
+- **Never add `Co-Authored-By: Claude` to commits.** The user does not want Claude attribution in commit messages.
+- **Always use Docker for everything.** No local PHP is installed. All commands (tests, linting, Psalm, Composer) must run through `docker compose exec php` or via `make` targets. Never suggest running `php`, `composer`, `vendor/bin/*` directly on the host.
+- **GrumPHP pre-commit hooks run via Docker.** Both the `pre-commit` and `commit-msg` hooks execute through `docker compose exec -T php`. If a hook fails with `env: php: No such file or directory`, the hook needs to be updated to use Docker.
+
+## Project Overview
+
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 13 packages under `packages/`, each published independently to Packagist.
+
+## Development Environment
+
+```bash
+make build          # Build Docker images (php, php-fiber, php-swoole)
+make install        # composer install inside container
+make up / make down # Start/stop containers
+make shell          # Interactive bash in PHP container
+```
+
+**Docker services** (`docker-compose.yml`):
+- `php` — Full environment (Xdebug + Swoole) for development
+- `php-fiber` — Fiber-only for unit/integration tests and CI
+- `php-swoole` — Swoole-only for cluster tests and CI
+
+**Dockerfile targets** (`docker/Dockerfile`):
+- `php-fiber` — PHP 8.5 CLI + Xdebug
+- `php-swoole` — PHP 8.5 CLI + Swoole 6.0
+- `php-full` — Both Xdebug and Swoole
+
+## Commands
+
+### Testing
+
+```bash
+make test                # All test suites
+make test-unit           # Unit tests only (all packages)
+make test-fiber          # Fiber integration tests
+make test-swoole         # Swoole integration tests (uses php-swoole container)
+make test-cluster        # Cluster integration tests (uses php-swoole container)
+make test-persistence    # Persistence unit + integration tests
+make test-serialization  # Serialization integration tests
+make mutation            # Infection mutation testing (min 80% MSI, 90% covered)
+
+# Single test file
+docker compose exec php vendor/bin/phpunit packages/nexus-core/tests/Unit/Actor/ActorSystemTest.php
+
+# Single test method
+docker compose exec php vendor/bin/phpunit --filter=testMethodName packages/nexus-core/tests/Unit/Actor/ActorSystemTest.php
+
+# Performance benchmarks
+docker compose exec php vendor/bin/phpunit --testsuite=performance --filter=Fiber
+docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filter="Swoole|Cluster"
+
+# Export benchmark results as JSON
+docker compose exec -e BENCHMARK_JSON=/app/results.jsonl php vendor/bin/phpunit --testsuite=performance
+```
+
+### Linting & Static Analysis
+
+```bash
+make psalm      # Psalm type checking (level 1 strict)
+make phpcs      # PHPCS standards check
+make phpcbf     # Auto-fix PHPCS violations
+make cs         # PHP-CS-Fixer dry-run (PER-CS2.0)
+make cs-fix     # PHP-CS-Fixer auto-fix
+```
+
+### Pre-commit Hooks
+
+GrumPHP runs four checks on every commit via Docker (`grumphp.yml`):
+1. **PHP-CS-Fixer** — Code style (PER-CS2.0:risky)
+2. **PHPCS** — Coding standards (Slevomat extensions)
+3. **Psalm** — Static type analysis (level 1)
+4. **PHPUnit** — Unit test suite (always runs)
+
+All four must pass. The hooks execute through `docker compose exec -T php`.
+
+## Code Style Rules
+
+- **PER-CS2.0** coding standard with Slevomat extensions
+- Arrays with string keys **must be sorted alphabetically** (`SlevomatCodingStandard.Arrays.AlphabeticallySortedByKeys`)
+- Ternary operators **must be multi-line** (`SlevomatCodingStandard.ControlStructures.RequireMultiLineTernaryOperator`)
+- **Blank line required before** `if`/`for`/`foreach`/`while`/`switch`/`try` blocks (`SlevomatCodingStandard.ControlStructures.BlockControlStructureSpacing`)
+- All classes are `final` by default, all value objects are `readonly`
+- Ordered imports: class, function, const (each alphabetical)
+- Trailing commas in all multiline contexts
+- Psalm runs in strict mode (level 1) — explicit `(float)` casts don't satisfy `InvalidOperand` for int/float mixing; use `@psalm-suppress InvalidOperand` on the **method docblock** instead
+
+## Architecture
+
+### Design Philosophy
+
+1. **Location Transparency** — Actor code is identical whether sending to local or remote actors. `ActorRef<T>` abstracts `LocalActorRef` (in-process) and `RemoteActorRef` (cross-worker).
+2. **Immutability-First** — All core types use `readonly` + `final`. Behaviors, Props, Duration, Envelope, ActorPath, SupervisionStrategy are value objects. Mutation returns new instances via `clone()`.
+3. **Generic Type Safety** — Heavy use of Psalm generics: `ActorRef<T>`, `Behavior<T>`, `Props<T>`, `ActorContext<T>`. Psalm Level 1 enforces type safety at compile time.
+4. **Functional Composition** — Behaviors are closures, enabling composition. `Behavior::receive(fn(...) => ...)`, `Behavior::setup(fn(...) => ...)`.
+5. **Pluggable Runtimes** — `Runtime` interface abstracts concurrency. Same actor code runs on Fiber (cooperative multitasking), Swoole (coroutines + true async I/O), or Step (deterministic testing).
+6. **Supervision Trees** — Parent actors supervise children with configurable strategies (restart, stop, escalate, backoff). Akka-style "let it crash" philosophy.
+7. **Fail-Fast** — Exceptions in handlers are caught by supervision. Dead letters capture undeliverable messages. Clear exception hierarchy with `NexusException` base.
+
+### Package Dependency Graph
+
+```
+nexus-core (no dependencies — foundational)
+├── nexus-runtime-fiber    → Core only
+├── nexus-runtime-swoole   → Core only
+├── nexus-runtime-step     → Core only (deterministic test runtime)
+├── nexus-app              → Core only (PSR-11 bootstrap)
+├── nexus-serialization    → Core only
+│   └── nexus-persistence  → Core, Serialization
+│       ├── nexus-persistence-dbal     → Persistence, Core, Serialization
+│       └── nexus-persistence-doctrine → Persistence, Core, Serialization
+├── nexus-cluster          → Core only
+│   └── nexus-cluster-swoole → Cluster, Core, RuntimeSwoole
+└── nexus-psalm            → (standalone Psalm plugin)
+```
+
+Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
+
+### Core Actor Model (nexus-core/src/)
+
+**`Behavior<T>`** (`Actor/Behavior.php`) — Immutable behavior definition. The heart of the actor model. Returns from handlers to represent what the actor does next.
+- `Behavior::receive(fn(ActorContext<T>, T): Behavior<T>)` — Stateless message handler
+- `Behavior::withState($initialState, fn(ActorContext<T>, T, S): BehaviorWithState<T,S>)` — Stateful handler
+- `Behavior::setup(fn(ActorContext<T>): Behavior<T>)` — Factory that resolves behavior at startup
+- `Behavior::same()` — Keep current behavior (no change)
+- `Behavior::stopped()` — Stop the actor
+- `Behavior::unhandled()` — Message not handled (routes to dead letters)
+- `->onSignal(fn(ActorContext<T>, Signal): Behavior<T>)` — Attach lifecycle signal handler
+
+**`BehaviorWithState<T, S>`** (`Actor/BehaviorWithState.php`) — Result type for stateful handlers:
+- `BehaviorWithState::next($newState)` — Same behavior, new state
+- `BehaviorWithState::same()` — Keep both behavior and state
+- `BehaviorWithState::stopped()` — Stop the actor
+- `BehaviorWithState::withBehavior($behavior, $state)` — Switch behavior and state
+
+**`ActorRef<T>`** (`Actor/ActorRef.php`) — Type-safe reference to an actor:
+- `tell(object $message): void` — Fire-and-forget
+- `ask(callable(ActorRef<R>): T, Duration $timeout): R` — Request-response with timeout
+- `path(): ActorPath` / `isAlive(): bool`
+- Implementations: `LocalActorRef<T>` (enqueues to mailbox), `RemoteActorRef<T>` (serializes + sends via transport), `DeadLetterRef` (null object)
+
+**`ActorContext<T>`** (`Actor/ActorContext.php`) — Runtime context passed to handlers:
+- `self(): ActorRef<T>` / `parent(): Option<ActorRef>` / `sender(): Option<ActorRef>`
+- `spawn(Props<C>, string $name): ActorRef<C>` — Spawn child actor
+- `stop(ActorRef $child)` / `child(string)` / `children()`
+- `watch(ActorRef)` / `unwatch(ActorRef)` — Death watch
+- `scheduleOnce(Duration, object): Cancellable` / `scheduleRepeatedly(Duration, Duration, object): Cancellable`
+- `stash(): void` / `unstashAll(): void` — Message buffering
+- `log(): LoggerInterface` — PSR-3 logger
+
+**`Props<T>`** (`Actor/Props.php`) — Immutable spawn configuration:
+- `Props::fromBehavior(Behavior<T>)` — Closure-based actor
+- `Props::fromFactory(fn(): ActorHandler<T>)` — Class-based actor
+- `Props::fromStatefulFactory(fn(): StatefulActorHandler<T,S>)` — Stateful class actor
+- `Props::fromContainer(ContainerInterface, string $class)` — PSR-11 DI
+- `->withMailbox(MailboxConfig)` / `->withSupervision(SupervisionStrategy)`
+
+**`ActorSystem`** (`Actor/ActorSystem.php`) — Entry point:
+- `ActorSystem::create(string $name, Runtime, ?Clock, ?Logger, ?EventDispatcher)`
+- `spawn(Props<T>, string $name): ActorRef<T>` / `spawnAnonymous(Props<T>): ActorRef<T>`
+- `run(): void` — Start event loop (blocking)
+- `shutdown(Duration $timeout): void`
+- `deadLetters(): DeadLetterRef`
+
+**`ActorCell<T>`** (`Actor/ActorCell.php`) — Internal engine implementing `ActorContext<T>`. Manages the behavior state machine, children map, watchers, stash buffer, and message processing. States: `New → Starting → Running → {Suspended, Stopping} → Stopped`.
+
+### Actor Definition Patterns
+
+**Closure-based (simplest):**
+```php
+$behavior = Behavior::receive(static fn(ActorContext $ctx, object $msg) => match(true) {
+    $msg instanceof Greet => /* handle */ Behavior::same(),
+    default => Behavior::unhandled(),
+});
+$ref = $system->spawn(Props::fromBehavior($behavior), 'greeter');
+```
+
+**Stateful closure-based:**
+```php
+$behavior = Behavior::withState(0, static fn(ActorContext $ctx, object $msg, int $count) => match(true) {
+    $msg instanceof Increment => BehaviorWithState::next($count + 1),
+    $msg instanceof GetCount => /* reply */ BehaviorWithState::same(),
+});
+```
+
+**Setup-based (lazy initialization):**
+```php
+$behavior = Behavior::setup(static function (ActorContext $ctx): Behavior {
+    $child = $ctx->spawn(Props::fromBehavior($childBehavior), 'child');
+    return Behavior::receive(static fn($ctx, $msg) => /* use $child */ Behavior::same());
+});
+```
+
+**Class-based (`ActorHandler`):**
+```php
+class GreeterActor implements ActorHandler {
+    public function handle(ActorContext $ctx, object $message): Behavior {
+        return Behavior::same();
+    }
+}
+$ref = $system->spawn(Props::fromFactory(fn() => new GreeterActor()), 'greeter');
+```
+
+**Class-based with lifecycle (`AbstractActor`):**
+```php
+class MyActor extends AbstractActor {
+    public function onPreStart(ActorContext $ctx): void { /* init */ }
+    public function handle(ActorContext $ctx, object $message): Behavior { return Behavior::same(); }
+    public function onPostStop(ActorContext $ctx): void { /* cleanup */ }
+}
+```
+
+**Stateful class-based (`StatefulActorHandler`):**
+```php
+class CounterActor implements StatefulActorHandler {
+    public function initialState(): int { return 0; }
+    public function handle(ActorContext $ctx, object $msg, int $state): BehaviorWithState {
+        return BehaviorWithState::next($state + 1);
+    }
+}
+$ref = $system->spawn(Props::fromStatefulFactory(fn() => new CounterActor()), 'counter');
+```
+
+### Messages and Signals
+
+**User messages** — `readonly class` objects by convention (Psalm plugin enforces `readonly`):
+```php
+readonly class Greet { public function __construct(public string $name, public ActorRef $replyTo) {} }
+readonly class Greeted { public function __construct(public string $greeting) {} }
+```
+
+**System messages** (`Core\Message\`) — Internal control, processed before user messages:
+- `PoisonPill` — Graceful shutdown (stops children, delivers PostStop, closes mailbox)
+- `Watch(ActorRef $watcher)` / `Unwatch(ActorRef $watcher)` — Death watch registration
+- `Suspend` / `Resume` — Pause/resume processing
+- `DeadLetter` — Undeliverable message wrapper
+
+**Lifecycle signals** (`Core\Lifecycle\`) — Handled via `behavior->onSignal(...)`:
+- `PreStart` — After actor starts, before first message
+- `PostStop` — During shutdown, after children stopped
+- `Terminated(ActorRef)` — Watched actor terminated
+- `ChildFailed(ActorRef, Throwable)` — Child threw exception
+
+### Mailbox System
+
+**`Mailbox`** interface (`Mailbox/Mailbox.php`):
+- `enqueue(Envelope): EnqueueResult` — Returns `Accepted`, `Dropped`, or `Backpressured`
+- `dequeue(): Option<Envelope>` — Non-blocking poll
+- `dequeueBlocking(Duration $timeout): Envelope` — Blocking wait (fiber suspends)
+- `close()` — Close and wake all waiters
+
+**`MailboxConfig`** — `bounded(capacity, strategy)` or `unbounded()`
+**`OverflowStrategy`** — `DropNewest`, `DropOldest`, `Backpressure`, `ThrowException`
+**`Envelope`** — Immutable wrapper: `message`, `sender` (ActorPath), `target` (ActorPath), `metadata`
+
+### Supervision
+
+**`SupervisionStrategy`** (`Supervision/SupervisionStrategy.php`):
+- `SupervisionStrategy::oneForOne(maxRetries, window, decider)` — Restart only failed child
+- `SupervisionStrategy::allForOne(maxRetries, window, decider)` — Restart all children
+- `SupervisionStrategy::exponentialBackoff(initialBackoff, maxBackoff, maxRetries, multiplier, decider)` — Restart with delay
+- Custom decider: `fn(Throwable): Directive` where `Directive` is `Restart|Stop|Resume|Escalate`
+
+### Runtime Abstraction
+
+**`Runtime`** interface (`Runtime/Runtime.php`):
+- `createMailbox(MailboxConfig): Mailbox`
+- `spawn(callable $actorLoop): string` — Spawn fiber/task for actor message loop
+- `scheduleOnce(Duration, callable): Cancellable` / `scheduleRepeatedly(Duration, Duration, callable): Cancellable`
+- `yield()` / `sleep(Duration)` — Cooperative scheduling
+- `run()` / `shutdown(Duration)` / `isRunning()`
+
+**FiberRuntime** — Each actor runs in its own PHP Fiber. Fibers suspend when waiting for messages (`dequeueBlocking` suspends fiber), resume when mailbox has data. `FiberScheduler` manages timer-based callbacks via priority queue.
+
+**SwooleRuntime** — Uses Swoole coroutines and channels. True async I/O, multi-process scaling.
+
+**StepRuntime** — Deterministic testing. `step()` processes one message, `drain()` processes all queued.
+
+### Duration Value Object
+
+**`Duration`** (`Duration.php`) — Nanosecond-precision immutable:
+- `Duration::seconds(n)` / `millis(n)` / `micros(n)` / `nanos(n)` / `zero()`
+- Arithmetic: `plus()`, `minus()`, `multipliedBy()`, `dividedBy()`
+- Comparison: `equals()`, `isGreaterThan()`, `isLessThan()`, `compareTo()`
+- Conversion: `toNanos()`, `toMillis()`, `toSeconds()`, `toSecondsFloat()`
+
+### Persistence
+
+**Event Sourcing** — Commands produce events, events replay to rebuild state:
+```php
+EventSourcedBehavior::create($persistenceId, $emptyState, $commandHandler, $eventHandler)
+    ->withEventStore($eventStore)
+    ->withSnapshotStore($snapshotStore)
+    ->withSnapshotStrategy(SnapshotStrategy::everyN(10))
+    ->withRetention(RetentionPolicy::snapshotAndEvents(3, deleteEventsTo: true))
+    ->withLockingStrategy(LockingStrategy::optimistic())
+    ->toBehavior()
+```
+
+- `PersistenceId::of('EntityType', 'entity-id')` — Unique identity
+- `Effect::persist(...$events)` / `Effect::none()` / `Effect::stash()` / `Effect::stop()` / `Effect::reply($to, $msg)`
+- Side effects: `->thenRun(fn($state) => ...)` / `->thenReply($to, fn($state) => $msg)`
+- `PersistenceEngine` handles startup recovery (load snapshot → replay events → ready)
+- Stores: `InMemoryEventStore`, `DbalEventStore`, `DoctrineEventStore`
+
+**Durable State** — Simpler model, persists full state snapshots (no event history):
+```php
+DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
+    ->withStateStore($stateStore)
+    ->toBehavior()
+```
+- `DurableEffect::persist($newState)` / `none()` / `stash()` / `stop()` / `reply()`
+- `DurableStateEngine` handles startup recovery (load latest state → ready)
+
+**Locking** — `LockingStrategy::optimistic()` (default, version conflict detection) or `LockingStrategy::pessimistic($lockProvider)` (exclusive lock before command processing).
+
+### Clustering
+
+- `ClusterNode` — Per-worker coordinator. Routes via hash ring, handles transport messages.
+- `ConsistentHashRing` — Determines actor-to-worker assignment.
+- `RemoteActorRef<T>` — Proxy that serializes + sends via transport. Same `ActorRef<T>` interface.
+- `Transport` interface — `send(targetWorker, data)` / `listen(callback)`. Implementations: `InMemoryTransport` (tests), `UnixSocketTransport` (Swoole).
+- `ActorDirectory` — Service registry for actor path → worker ID mappings.
+- `CompactClusterSerializer` — Wire format: `[2B target len][target][2B sender len][sender][message bytes]`. ~6x smaller than PHP `serialize()`.
+
+### Application Bootstrap (nexus-app)
+
+```php
+NexusApp::create('my-app')
+    ->actor('orders', Props::fromBehavior($orderBehavior))
+    ->actor('payments', Props::fromFactory(fn() => new PaymentActor()))
+    ->onStart(function(ActorSystem $system) { /* setup */ })
+    ->run(new FiberRuntime());
+```
+
+### Serialization (nexus-serialization)
+
+- `MessageSerializer` — `serialize(object): string` / `deserialize(string, string $type): object`
+- `EnvelopeSerializer` — Wraps message serializer, handles envelope structure
+- Implementations: `PhpNativeSerializer` (PHP serialize/unserialize), Valinor-based mapper
+- `DefaultEnvelopeSerializer` — JSON envelope with delegated message serialization
+
+### Psalm Plugin (nexus-psalm)
+
+Custom Psalm plugin with 7 hooks for actor-specific validation:
+1. **ReadonlyMessageRule** — Messages passed to `tell()` must be `readonly` classes
+2. **MutableActorStateRule** — `ActorHandler`/`StatefulActorHandler` properties must be `readonly`
+3. **NonSerializableClusterMessageRule** — `RemoteActorRef::tell()` messages need `#[MessageType]` attribute
+4. **BlockingCallInHandlerRule** — Detects blocking calls (`sleep`, `file_get_contents`, `curl_exec`, etc.) in handlers
+5. **MutableClosureCaptureRule** — `Props::fromFactory()` closures must not capture by reference (`&$var`)
+6. **PropsReturnTypeProvider** — Infers generic types for `Props::from*()` methods
+7. **CloneWithReturnTypeProvider** — Type inference for `clone()` operations
+
+### Exception Hierarchy
+
+All exceptions extend `NexusException` (abstract, extends `RuntimeException`):
+- `ActorInitializationException` — Setup/startup failed
+- `ActorNameExistsException` — Duplicate child name in spawn
+- `AskTimeoutException` — Request-response timeout
+- `MailboxClosedException` — Enqueue/dequeue on closed mailbox
+- `MailboxOverflowException` — Bounded queue at capacity with ThrowException strategy
+- `InvalidActorStateTransition` — Invalid lifecycle state change
+- `InvalidActorPathException` — Malformed actor path
+- `MaxRetriesExceededException` — Supervision retry limit hit
+
+## Test Organization
+
+- Unit tests: `packages/*/tests/Unit/`
+- Integration tests: `tests/Integration/{Fiber,Swoole,Step,Serialization,Cluster,Persistence}/`
+- Performance tests: `tests/Performance/`
+- Test utilities: `packages/nexus-core/tests/Support/` (TestRuntime, TestMailbox, TestClock — included in `phpunit.xml` `<source>` for coverage)
+- PHPUnit attributes: `#[CoversClass(ClassName::class)]` on test classes, `#[CoversNothing]` for interface tests, `#[Test]` on methods
+
+### Integration Test Pattern
+
+All Fiber integration tests follow this pattern:
+```php
+$runtime = new FiberRuntime();
+$system = ActorSystem::create('test', $runtime);
+$ref = $system->spawn(Props::fromBehavior($behavior), 'actor-name');
+$ref->tell(new MyMessage());
+$runtime->scheduleOnce(Duration::millis(500), fn() => $system->shutdown(Duration::seconds(1)));
+$system->run(); // blocks until shutdown
+self::assertSame($expected, $captured);
+```
+
+Swoole tests differ: messages must be sent inside `scheduleOnce()` callbacks (Swoole channels require coroutine context).
+
+## CI Pipeline
+
+**ci.yml** — Runs on push to main and PRs (Docker-based):
+1. `build-images` — Build php-fiber and php-swoole Docker images (cached via GHA)
+2. `lint` — PHPCS + PHP-CS-Fixer
+3. `static-analysis` — Psalm + Deptrac (with `php -d error_reporting="E_ALL & ~E_DEPRECATED"` for deptrac PHP 8.5 compat)
+4. `unit-tests` — Unit tests with coverage + Swoole unit tests + Psalm plugin tests + coverage-guard (90% method coverage minimum)
+5. `integration-fiber` — Fiber, Serialization, Step, Persistence integration tests
+6. `integration-swoole` — Swoole + Cluster integration tests
+7. `mutation-testing` — Infection on PRs only (`continue-on-error: true` for PHPUnit 13 compat)
+
+**benchmark.yml** — Runs on push to main, collects JSON results, commits to `website/static/benchmarks/history.json`
+
+**split.yml** — Splits each package to its own GitHub repo via splitsh-lite
+
+**deploy-docs.yml** — Docusaurus deployment to GitHub Pages
+
+## Monorepo Package Updates
+
+When modifying dev dependency versions (e.g., PHPUnit), update both the root `composer.json` AND all 11 `packages/*/composer.json` files — each package is published independently to Packagist.
+
+## PSR Integration
+
+- **PSR-3** (LoggerInterface) — Actor logging via `$ctx->log()`
+- **PSR-11** (ContainerInterface) — Actor resolution via `Props::fromContainer()`
+- **PSR-14** (EventDispatcherInterface) — System-level event dispatching
+- **PSR-20** (ClockInterface) — Time abstraction (TestClock for deterministic tests)
