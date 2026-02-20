@@ -16,7 +16,7 @@
         "psr/log": "^3.0"
     },
     "require-dev": {
-        "deptrac/deptrac": "^2.0",
+        "deptrac/deptrac": "^4.6",
         "fp4php/functional-psalm-plugin": "^1.0",
         "friendsofphp/php-cs-fixer": "^3.0",
         "infection/infection": "^0.32",

@@ -82,7 +82,7 @@ sockets to the owning worker.
 
 ## Performance
 
-See the [full performance benchmarks](../architecture/performance.md) for
+See the [full performance benchmarks](../architecture/performance.mdx) for
 detailed numbers across all runtimes. Highlights for multi-process scaling:
 
 | Metric | Result |

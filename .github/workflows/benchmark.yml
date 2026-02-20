@@ -9,6 +9,9 @@ on:
       - 'docs/**'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 concurrency:
   group: benchmark-${{ github.ref }}
   cancel-in-progress: true

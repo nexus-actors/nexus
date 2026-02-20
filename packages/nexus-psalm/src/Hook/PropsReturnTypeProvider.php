@@ -11,6 +11,7 @@ use Override;
 use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
+use Psalm\Type\Atomic;
 use Psalm\Type\Atomic\TCallable;
 use Psalm\Type\Atomic\TClassString;
 use Psalm\Type\Atomic\TClosure;
@@ -128,7 +129,7 @@ final class PropsReturnTypeProvider implements MethodReturnTypeProviderInterface
         return null;
     }
 
-    private static function getCallableReturnType(mixed $atomic): ?Union
+    private static function getCallableReturnType(Atomic $atomic): ?Union
     {
         if ($atomic instanceof TClosure) {
             return $atomic->return_type;

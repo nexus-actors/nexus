@@ -79,7 +79,10 @@ deptrac:
       - Core
     RuntimeStep:
       - Core
-    Psalm: ~
+    Psalm:
+      - Core
+      - Cluster
+      - Serialization
     Cluster:
       - Core
     ClusterSwoole:
@@ -95,5 +98,6 @@ deptrac:
       - Serialization
     PersistenceDoctrine:
       - Persistence
+      - PersistenceDbal
       - Core
       - Serialization
