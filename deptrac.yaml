@@ -1,0 +1,99 @@
+deptrac:
+  paths:
+    - packages
+
+  exclude_files:
+    - '#.*/tests/.*#'
+    - '#.*/vendor/.*#'
+
+  layers:
+    - name: Core
+      collectors:
+        - type: directory
+          value: packages/nexus-core/src/.*
+
+    - name: App
+      collectors:
+        - type: directory
+          value: packages/nexus-app/src/.*
+
+    - name: Serialization
+      collectors:
+        - type: directory
+          value: packages/nexus-serialization/src/.*
+
+    - name: RuntimeFiber
+      collectors:
+        - type: directory
+          value: packages/nexus-runtime-fiber/src/.*
+
+    - name: RuntimeSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-runtime-swoole/src/.*
+
+    - name: RuntimeStep
+      collectors:
+        - type: directory
+          value: packages/nexus-runtime-step/src/.*
+
+    - name: Psalm
+      collectors:
+        - type: directory
+          value: packages/nexus-psalm/src/.*
+
+    - name: Cluster
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster/src/.*
+
+    - name: ClusterSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-swoole/src/.*
+
+    - name: Persistence
+      collectors:
+        - type: directory
+          value: packages/nexus-persistence/src/.*
+
+    - name: PersistenceDbal
+      collectors:
+        - type: directory
+          value: packages/nexus-persistence-dbal/src/.*
+
+    - name: PersistenceDoctrine
+      collectors:
+        - type: directory
+          value: packages/nexus-persistence-doctrine/src/.*
+
+  ruleset:
+    Core: ~
+    App:
+      - Core
+    Serialization:
+      - Core
+    RuntimeFiber:
+      - Core
+    RuntimeSwoole:
+      - Core
+    RuntimeStep:
+      - Core
+    Psalm: ~
+    Cluster:
+      - Core
+    ClusterSwoole:
+      - Cluster
+      - Core
+      - RuntimeSwoole
+    Persistence:
+      - Core
+      - Serialization
+    PersistenceDbal:
+      - Persistence
+      - Core
+      - Serialization
+    PersistenceDoctrine:
+      - Persistence
+      - Core
+      - Serialization

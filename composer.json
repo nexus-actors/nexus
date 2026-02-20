@@ -16,11 +16,13 @@
         "psr/log": "^3.0"
     },
     "require-dev": {
+        "deptrac/deptrac": "^2.0",
         "fp4php/functional-psalm-plugin": "^1.0",
         "friendsofphp/php-cs-fixer": "^3.0",
         "infection/infection": "^0.32",
         "phpro/grumphp": "^2.19",
         "phpunit/phpunit": "^11.0",
+        "shipmonk/coverage-guard": "^1.0",
         "slevomat/coding-standard": "^8.0",
         "squizlabs/php_codesniffer": "^4.0",
         "swoole/ide-helper": "^5.0",
