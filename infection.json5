@@ -1,0 +1,26 @@
+{
+    "$schema": "vendor/infection/infection/resources/schema.json",
+    "source": {
+        "directories": [
+            "packages/nexus-core/src",
+            "packages/nexus-runtime-fiber/src",
+            "packages/nexus-runtime-step/src",
+            "packages/nexus-runtime-swoole/src",
+            "packages/nexus-serialization/src",
+            "packages/nexus-cluster/src",
+            "packages/nexus-cluster-swoole/src",
+            "packages/nexus-app/src",
+            "packages/nexus-persistence/src",
+            "packages/nexus-persistence-dbal/src",
+            "packages/nexus-persistence-doctrine/src"
+        ]
+    },
+    "logs": {
+        "text": "infection.log"
+    },
+    "minMsi": 80,
+    "minCoveredMsi": 90,
+    "phpUnit": {
+        "configDir": "."
+    }
+}

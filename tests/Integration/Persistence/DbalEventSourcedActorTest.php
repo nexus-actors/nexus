@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Persistence;
@@ -32,27 +31,6 @@ final class DbalEventSourcedActorTest extends TestCase
     private Connection $connection;
 
     private string $dbPath;
-
-    protected function setUp(): void
-    {
-        $this->dbPath = '/tmp/nexus_test_' . uniqid() . '.db';
-
-        $this->connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'path' => $this->dbPath,
-        ]);
-
-        (new PersistenceSchemaManager($this->connection))->createSchema();
-    }
-
-    protected function tearDown(): void
-    {
-        $this->connection->close();
-
-        if (file_exists($this->dbPath)) {
-            unlink($this->dbPath);
-        }
-    }
 
     #[Test]
     public function fullLifecycleWithDbalEventStore(): void
@@ -105,12 +83,20 @@ final class DbalEventSourcedActorTest extends TestCase
 
         // Phase 1: Add 3 items with snapshot every 2 events
         $captured = [];
-        $this->runActorSystem('snap1', $persistenceId, $eventStore, $snapshotStore, static function ($ref, $probeRef): void {
-            $ref->tell(new AddItem('x'));
-            $ref->tell(new AddItem('y'));
-            $ref->tell(new AddItem('z'));
-            $ref->tell(new GetItems($probeRef));
-        }, $captured, SnapshotStrategy::everyN(2));
+        $this->runActorSystem(
+            'snap1',
+            $persistenceId,
+            $eventStore,
+            $snapshotStore,
+            static function ($ref, $probeRef): void {
+                $ref->tell(new AddItem('x'));
+                $ref->tell(new AddItem('y'));
+                $ref->tell(new AddItem('z'));
+                $ref->tell(new GetItems($probeRef));
+            },
+            $captured,
+            SnapshotStrategy::everyN(2),
+        );
 
         self::assertCount(1, $captured);
         self::assertInstanceOf(ItemsReply::class, $captured[0]);
@@ -126,9 +112,17 @@ final class DbalEventSourcedActorTest extends TestCase
 
         // Phase 2: Recover from snapshot + remaining events
         $captured2 = [];
-        $this->runActorSystem('snap2', $persistenceId, $eventStore, $snapshotStore, static function ($ref, $probeRef): void {
-            $ref->tell(new GetItems($probeRef));
-        }, $captured2, SnapshotStrategy::everyN(2));
+        $this->runActorSystem(
+            'snap2',
+            $persistenceId,
+            $eventStore,
+            $snapshotStore,
+            static function ($ref, $probeRef): void {
+                $ref->tell(new GetItems($probeRef));
+            },
+            $captured2,
+            SnapshotStrategy::everyN(2),
+        );
 
         self::assertCount(1, $captured2);
         self::assertInstanceOf(ItemsReply::class, $captured2[0]);
@@ -170,6 +164,27 @@ final class DbalEventSourcedActorTest extends TestCase
         self::assertSame(2, $events[1]->sequenceNr);
         self::assertSame(3, $events[2]->sequenceNr);
         self::assertSame('eggs', $events[2]->event->item);
+    }
+
+    protected function setUp(): void
+    {
+        $this->dbPath = '/tmp/nexus_test_' . uniqid() . '.db';
+
+        $this->connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'path' => $this->dbPath,
+        ]);
+
+        (new PersistenceSchemaManager($this->connection))->createSchema();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->connection->close();
+
+        if (file_exists($this->dbPath)) {
+            unlink($this->dbPath);
+        }
     }
 
     /**

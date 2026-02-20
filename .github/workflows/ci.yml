@@ -80,6 +80,9 @@ jobs:
       - name: PHPCS
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpcs
 
+      - name: PHP-CS-Fixer
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/php-cs-fixer fix --dry-run --diff --no-interaction
+
   static-analysis:
     needs: build-images
     runs-on: ubuntu-latest
