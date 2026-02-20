@@ -50,7 +50,7 @@ final class LockingStrategyTest extends TestCase
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->expects(self::once())
             ->method('withLock')
-            ->with($id, self::isType('callable'))
+            ->with($id, self::isInstanceOf(Closure::class))
             ->willReturnCallback(static fn(PersistenceId $id, Closure $cb): mixed => $cb());
 
         $strategy = LockingStrategy::pessimistic($provider);

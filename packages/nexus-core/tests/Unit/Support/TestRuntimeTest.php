@@ -9,11 +9,11 @@ use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-#[CoversClass(TestRuntime::class)]
+#[CoversNothing]
 final class TestRuntimeTest extends TestCase
 {
     #[Test]
