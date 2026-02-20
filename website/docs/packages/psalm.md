@@ -9,7 +9,7 @@ Psalm plugin for static analysis of Nexus actor code. Provides custom rules
 that enforce actor-model safety and type providers that improve generic type
 inference.
 
-**Composer:** `monadial/nexus-psalm`
+**Composer:** `nexus-actors/psalm`
 
 **Namespace:** `Monadial\Nexus\Psalm\`
 

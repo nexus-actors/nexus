@@ -294,13 +294,13 @@ function Hero() {
             </Link>
             <Link
               className={styles.ctaGhost}
-              href="https://github.com/monadial/nexus"
+              href="https://github.com/nexus-actors/nexus"
             >
               GitHub
             </Link>
           </div>
           <div className={styles.heroInstall}>
-            <code>composer require monadial/nexus</code>
+            <code>composer require nexus-actors/nexus</code>
           </div>
         </div>
         <div className={styles.heroRight}>
@@ -659,70 +659,70 @@ function Architecture() {
         </p>
         <div className={styles.archGrid}>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-core</code>
+            <code className={styles.archPkg}>nexus-actors/core</code>
             <p className={styles.archDesc}>
               Actors, behaviors, supervision, mailboxes, and the full type-safe
               API. Runtime-agnostic. Zero dependencies beyond PSR interfaces.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-runtime-fiber</code>
+            <code className={styles.archPkg}>nexus-actors/runtime-fiber</code>
             <p className={styles.archDesc}>
               Fiber-based runtime. No extensions. Cooperative multitasking
               with PHP's native fiber scheduler. Ideal for development and testing.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-runtime-swoole</code>
+            <code className={styles.archPkg}>nexus-actors/runtime-swoole</code>
             <p className={styles.archDesc}>
               Swoole coroutine runtime. Native channels, true async I/O,
               100K+ concurrent actors. Built for production workloads.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-serialization</code>
+            <code className={styles.archPkg}>nexus-actors/serialization</code>
             <p className={styles.archDesc}>
               Message serialization with envelope protocol. PHP native
               serializer for speed, Valinor mapper for structured wire formats.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-persistence</code>
+            <code className={styles.archPkg}>nexus-actors/persistence</code>
             <p className={styles.archDesc}>
               Event sourcing and durable state abstractions. Effects, snapshots,
               retention policies, concurrency control, and in-memory stores for testing.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-persistence-dbal</code>
+            <code className={styles.archPkg}>nexus-actors/persistence-dbal</code>
             <p className={styles.archDesc}>
               Doctrine DBAL storage backends. SQL-backed event, snapshot, and
               durable state stores. Works with SQLite, PostgreSQL, MySQL.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-persistence-doctrine</code>
+            <code className={styles.archPkg}>nexus-actors/persistence-doctrine</code>
             <p className={styles.archDesc}>
               Doctrine ORM adapter. Entity-based stores using EntityManager.
               Same table schema as the DBAL package.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-cluster</code>
+            <code className={styles.archPkg}>nexus-actors/cluster</code>
             <p className={styles.archDesc}>
               Pure PHP abstractions for scaling: consistent hash ring, remote
               actor refs, pluggable transport and directory interfaces.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-cluster-swoole</code>
+            <code className={styles.archPkg}>nexus-actors/cluster-swoole</code>
             <p className={styles.archDesc}>
               Swoole multi-process scaling. ClusterBootstrap, Unix socket
               transport, shared-memory actor directory via Swoole\Table.
             </p>
           </div>
           <div className={styles.archCard}>
-            <code className={styles.archPkg}>monadial/nexus-psalm</code>
+            <code className={styles.archPkg}>nexus-actors/psalm</code>
             <p className={styles.archDesc}>
               Psalm plugin for static analysis of actor message protocols.
               Type providers and rules that catch errors before runtime.
@@ -746,7 +746,7 @@ function BottomCta() {
           Install, create demo.php, and run it. That's the whole setup.
         </p>
         <div className={styles.bottomCtaCode}>
-          <code>composer require monadial/nexus-core monadial/nexus-runtime-fiber && php demo.php</code>
+          <code>composer require nexus-actors/core nexus-actors/runtime-fiber && php demo.php</code>
         </div>
         <div className={styles.heroCta}>
           <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">

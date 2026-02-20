@@ -10,7 +10,7 @@ mailboxes, lifecycle signals, and the `ActorSystem` entry point. It has no
 runtime dependency -- concurrency is delegated to whichever `Runtime`
 implementation is injected.
 
-**Composer:** `monadial/nexus-core`
+**Composer:** `nexus-actors/core`
 
 ## Actor namespace
 

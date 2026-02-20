@@ -9,7 +9,7 @@ Doctrine ORM adapter for Nexus persistence -- entity-based stores that use
 `EntityManager` for all database operations. Shares the same table schema as
 `nexus-persistence-dbal`.
 
-**Composer:** `monadial/nexus-persistence-doctrine`
+**Composer:** `nexus-actors/persistence-doctrine`
 
 **Namespace:** `Monadial\Nexus\Persistence\Doctrine\`
 
@@ -45,7 +45,7 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineSnapshotStore;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineDurableStateStore;
 
 $config = ORMSetup::createAttributeMetadataConfiguration(
-    paths: [__DIR__ . '/vendor/monadial/nexus-persistence-doctrine/src/Entity'],
+    paths: [__DIR__ . '/vendor/nexus-actors/persistence-doctrine/src/Entity'],
     isDevMode: true,
 );
 

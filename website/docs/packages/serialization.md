@@ -9,7 +9,7 @@ Message serialization and deserialization for Nexus. Provides two serializer
 implementations and a type registry for mapping between class names and
 wire-format identifiers.
 
-**Composer:** `monadial/nexus-serialization`
+**Composer:** `nexus-actors/serialization`
 
 **Namespace:** `Monadial\Nexus\Serialization\`
 

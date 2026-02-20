@@ -12,7 +12,7 @@ All tooling (Composer, PHPUnit, Psalm, etc.) runs inside Docker containers, so y
 ## Getting Started
 
 ```bash
-git clone git@github.com:monadial/nexus.git
+git clone git@github.com:nexus-actors/nexus.git
 cd nexus
 make build
 make install

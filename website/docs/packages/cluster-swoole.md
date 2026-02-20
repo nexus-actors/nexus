@@ -9,7 +9,7 @@ Swoole-specific implementations for `nexus-cluster` interfaces. Provides
 Unix domain socket transport, shared-memory actor directory, and the
 `ClusterBootstrap` entry point.
 
-**Composer:** `monadial/nexus-cluster-swoole`
+**Composer:** `nexus-actors/cluster-swoole`
 
 **Namespace:** `Monadial\Nexus\Cluster\Swoole\`
 

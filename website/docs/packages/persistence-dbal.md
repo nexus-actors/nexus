@@ -9,7 +9,7 @@ Doctrine DBAL adapter for Nexus persistence -- SQL-backed stores using
 parameterized queries. Supports any database supported by DBAL (SQLite,
 PostgreSQL, MySQL, etc.).
 
-**Composer:** `monadial/nexus-persistence-dbal`
+**Composer:** `nexus-actors/persistence-dbal`
 
 **Namespace:** `Monadial\Nexus\Persistence\Dbal\`
 

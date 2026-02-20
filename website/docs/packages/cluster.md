@@ -10,7 +10,7 @@ clustering. Defines interfaces for transport, directory, and serialization,
 plus the core routing logic. Has no dependency on Swoole or any specific
 runtime.
 
-**Composer:** `monadial/nexus-cluster`
+**Composer:** `nexus-actors/cluster`
 
 **Namespace:** `Monadial\Nexus\Cluster\`
 

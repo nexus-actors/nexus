@@ -5,7 +5,7 @@
 If you discover a security vulnerability in Nexus, please report it responsibly.
 **Do not open a public issue.**
 
-Instead, use [GitHub's private vulnerability reporting](https://github.com/monadial/nexus/security/advisories/new) feature for this repository. This ensures the report stays confidential until a fix is available.
+Instead, use [GitHub's private vulnerability reporting](https://github.com/nexus-actors/nexus/security/advisories/new) feature for this repository. This ensures the report stays confidential until a fix is available.
 
 ### What to Include
 

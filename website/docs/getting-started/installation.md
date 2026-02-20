@@ -15,11 +15,11 @@ title: Installation
 
 ### Meta-package (recommended for most projects)
 
-The `monadial/nexus` meta-package installs `nexus-core`, `nexus-runtime-fiber`,
+The `nexus-actors/nexus` meta-package installs `nexus-core`, `nexus-runtime-fiber`,
 and `nexus-serialization` in one step:
 
 ```bash
-composer require monadial/nexus
+composer require nexus-actors/nexus
 ```
 
 ### Individual packages
@@ -28,22 +28,22 @@ Install only the packages you need:
 
 ```bash
 # Core abstractions (actors, behaviors, supervision, mailboxes)
-composer require monadial/nexus-core
+composer require nexus-actors/core
 
 # Fiber runtime (development and testing)
-composer require monadial/nexus-runtime-fiber
+composer require nexus-actors/runtime-fiber
 
 # Swoole runtime (production)
-composer require monadial/nexus-runtime-swoole
+composer require nexus-actors/runtime-swoole
 
 # Step runtime (deterministic testing)
-composer require --dev monadial/nexus-runtime-step
+composer require --dev nexus-actors/runtime-step
 
 # Message serialization (wire format via Valinor)
-composer require monadial/nexus-serialization
+composer require nexus-actors/serialization
 
 # Psalm plugin (static analysis)
-composer require --dev monadial/nexus-psalm
+composer require --dev nexus-actors/psalm
 ```
 
 ### Swoole runtime dependency
@@ -106,7 +106,7 @@ vendor/bin/phpunit
 You can also confirm the packages are installed:
 
 ```bash
-composer show monadial/*
+composer show nexus-actors/*
 ```
 
 This should list the Nexus packages along with their installed versions.

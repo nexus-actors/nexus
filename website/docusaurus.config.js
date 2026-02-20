@@ -7,10 +7,10 @@ const config = {
   tagline: 'An actor system for PHP 8.5+ (work in progress)',
   favicon: 'img/favicon.ico',
 
-  url: 'https://monadial.github.io',
+  url: 'https://nexus-actors.github.io',
   baseUrl: '/nexus/',
 
-  organizationName: 'monadial',
+  organizationName: 'nexus-actors',
   projectName: 'nexus',
 
   onBrokenLinks: 'throw',
@@ -30,7 +30,7 @@ const config = {
       ({
         docs: {
           sidebarPath: './sidebars.js',
-          editUrl: 'https://github.com/monadial/nexus/tree/main/website/',
+          editUrl: 'https://github.com/nexus-actors/nexus/tree/main/website/',
         },
         theme: {
           customCss: './src/css/custom.css',
@@ -67,7 +67,7 @@ const config = {
             position: 'left',
           },
           {
-            href: 'https://github.com/monadial/nexus',
+            href: 'https://github.com/nexus-actors/nexus',
             label: 'GitHub',
             position: 'right',
           },
@@ -87,8 +87,8 @@ const config = {
           {
             title: 'Community',
             items: [
-              { label: 'GitHub', href: 'https://github.com/monadial/nexus' },
-              { label: 'Issues', href: 'https://github.com/monadial/nexus/issues' },
+              { label: 'GitHub', href: 'https://github.com/nexus-actors/nexus' },
+              { label: 'Issues', href: 'https://github.com/nexus-actors/nexus/issues' },
             ],
           },
         ],

@@ -82,47 +82,47 @@ $system->run();
 ## Installation
 
 ```bash
-composer require monadial/nexus-core monadial/nexus-runtime-fiber
+composer require nexus-actors/core nexus-actors/runtime-fiber
 ```
 
 For the Swoole production runtime:
 
 ```bash
-composer require monadial/nexus-runtime-swoole
+composer require nexus-actors/runtime-swoole
 ```
 
 For persistence and event sourcing:
 
 ```bash
-composer require monadial/nexus-persistence
+composer require nexus-actors/persistence
 
 # With Doctrine DBAL storage:
-composer require monadial/nexus-persistence-dbal
+composer require nexus-actors/persistence-dbal
 
 # With Doctrine ORM storage:
-composer require monadial/nexus-persistence-doctrine
+composer require nexus-actors/persistence-doctrine
 ```
 
 ## Packages
 
 | Package | Description |
 |---|---|
-| [`monadial/nexus-core`](packages/nexus-core) | Behaviors, actors, supervision, mailboxes, and the core API |
-| [`monadial/nexus-runtime-fiber`](packages/nexus-runtime-fiber) | Fiber runtime -- actors as PHP fibers with cooperative scheduling |
-| [`monadial/nexus-runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
-| [`monadial/nexus-cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
-| [`monadial/nexus-cluster-swoole`](packages/nexus-cluster-swoole) | Swoole scaling -- Unix socket transport, shared-memory directory, cluster bootstrap |
-| [`monadial/nexus-persistence`](packages/nexus-persistence) | Persistence core -- event sourcing, durable state, snapshot strategies, in-memory stores |
-| [`monadial/nexus-persistence-dbal`](packages/nexus-persistence-dbal) | DBAL persistence adapter -- Doctrine DBAL-backed event, snapshot, and state stores |
-| [`monadial/nexus-persistence-doctrine`](packages/nexus-persistence-doctrine) | Doctrine ORM persistence adapter -- entity-based event, snapshot, and state stores |
-| [`monadial/nexus-serialization`](packages/nexus-serialization) | Valinor-based message serialization with type registry |
-| [`monadial/nexus-app`](packages/nexus-app) | Application layer -- PSR-11 container integration for actor systems |
-| [`monadial/nexus-psalm`](packages/nexus-psalm) | Psalm plugin for generic type inference on actors and behaviors |
-| [`monadial/nexus`](packages/nexus) | Meta-package: core + Fiber runtime + serialization |
+| [`nexus-actors/core`](packages/nexus-core) | Behaviors, actors, supervision, mailboxes, and the core API |
+| [`nexus-actors/runtime-fiber`](packages/nexus-runtime-fiber) | Fiber runtime -- actors as PHP fibers with cooperative scheduling |
+| [`nexus-actors/runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
+| [`nexus-actors/cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
+| [`nexus-actors/cluster-swoole`](packages/nexus-cluster-swoole) | Swoole scaling -- Unix socket transport, shared-memory directory, cluster bootstrap |
+| [`nexus-actors/persistence`](packages/nexus-persistence) | Persistence core -- event sourcing, durable state, snapshot strategies, in-memory stores |
+| [`nexus-actors/persistence-dbal`](packages/nexus-persistence-dbal) | DBAL persistence adapter -- Doctrine DBAL-backed event, snapshot, and state stores |
+| [`nexus-actors/persistence-doctrine`](packages/nexus-persistence-doctrine) | Doctrine ORM persistence adapter -- entity-based event, snapshot, and state stores |
+| [`nexus-actors/serialization`](packages/nexus-serialization) | Valinor-based message serialization with type registry |
+| [`nexus-actors/app`](packages/nexus-app) | Application layer -- PSR-11 container integration for actor systems |
+| [`nexus-actors/psalm`](packages/nexus-psalm) | Psalm plugin for generic type inference on actors and behaviors |
+| [`nexus-actors/nexus`](packages/nexus) | Meta-package: core + Fiber runtime + serialization |
 
 ## Documentation
 
-Full documentation is available at [monadial.github.io/nexus](https://monadial.github.io/nexus/).
+Full documentation is available at [nexus-actors.github.io/nexus](https://nexus-actors.github.io/nexus/).
 
 ## Requirements
 

@@ -9,7 +9,7 @@ Core persistence abstractions for Nexus actors -- event sourcing, durable state,
 effects, and in-memory stores for testing. Defines the interfaces that backend
 packages (`nexus-persistence-dbal`, `nexus-persistence-doctrine`) implement.
 
-**Composer:** `monadial/nexus-persistence`
+**Composer:** `nexus-actors/persistence`
 
 ## Root namespace
 

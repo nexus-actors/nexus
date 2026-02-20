@@ -8,7 +8,7 @@ title: nexus-runtime-step
 Deterministic runtime for testing. Manual message stepping, virtual time, and
 guaranteed ordering.
 
-**Composer:** `monadial/nexus-runtime-step`
+**Composer:** `nexus-actors/runtime-step`
 
 **Namespace:** `Monadial\Nexus\Runtime\Step\`
 

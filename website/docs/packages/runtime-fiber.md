@@ -8,7 +8,7 @@ title: nexus-runtime-fiber
 Fiber-based runtime using PHP 8.1+ native Fibers for cooperative multitasking.
 No extensions required.
 
-**Composer:** `monadial/nexus-runtime-fiber`
+**Composer:** `nexus-actors/runtime-fiber`
 
 **Namespace:** `Monadial\Nexus\Runtime\Fiber\`
 

@@ -8,7 +8,7 @@ title: nexus-runtime-swoole
 Swoole-based runtime using Swoole 5.0+ coroutines and native channels.
 Requires the Swoole PHP extension.
 
-**Composer:** `monadial/nexus-runtime-swoole`
+**Composer:** `nexus-actors/runtime-swoole`
 
 **Namespace:** `Monadial\Nexus\Runtime\Swoole\`
 
