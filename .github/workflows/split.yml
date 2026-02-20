@@ -12,7 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - { local: 'nexus',                      remote: 'nexus' }
           - { local: 'nexus-core',                 remote: 'core' }
           - { local: 'nexus-serialization',        remote: 'serialization' }
           - { local: 'nexus-runtime-fiber',        remote: 'runtime-fiber' }
