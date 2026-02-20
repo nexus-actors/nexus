@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
@@ -12,8 +13,6 @@ use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 use Psalm\Type\Atomic\TNamedObject;
-use function strcasecmp;
-use function strtolower;
 
 final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysisInterface
 {
@@ -24,7 +23,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
 
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
-        $declaringId = strtolower($event->getDeclaringMethodId());
+        $declaringId = \strtolower($event->getDeclaringMethodId());
         $argIndex = self::CHECKED_METHODS[$declaringId] ?? null;
 
         if ($argIndex === null) {
@@ -80,7 +79,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
         }
 
         foreach ($callerType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && strcasecmp($atomic->value, RemoteActorRef::class) === 0) {
+            if ($atomic instanceof TNamedObject && \strcasecmp($atomic->value, RemoteActorRef::class) === 0) {
                 return true;
             }
         }
@@ -97,7 +96,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
         $storage = $codebase->classlike_storage_provider->get($className);
 
         foreach ($storage->attributes as $attribute) {
-            if (strcasecmp($attribute->fq_class_name, MessageType::class) === 0) {
+            if (\strcasecmp($attribute->fq_class_name, MessageType::class) === 0) {
                 return true;
             }
         }

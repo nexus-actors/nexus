@@ -13,5 +13,6 @@ final readonly class UserProfileUpdated
         public string $name,
         public ?string $email,
         public ?Address $address,
-    ) {}
+    ) {
+    }
 }

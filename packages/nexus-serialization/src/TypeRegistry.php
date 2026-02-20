@@ -23,7 +23,7 @@ final class TypeRegistry
     /**
      * Registers a bidirectional mapping between a class name and a type name.
      *
-     * @throws \LogicException If the type name is already registered
+     * @throws LogicException If the type name is already registered
      */
     public function register(string $className, string $typeName): void
     {
@@ -42,7 +42,7 @@ final class TypeRegistry
      *
      * @param class-string $className
      *
-     * @throws \LogicException If the class has no #[MessageType] attribute or the type name is already registered
+     * @throws LogicException If the class has no #[MessageType] attribute or the type name is already registered
      */
     public function registerFromAttribute(string $className): void
     {

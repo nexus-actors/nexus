@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Core\Actor\Cancellable;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
@@ -14,13 +15,15 @@ final class TestRuntime implements Runtime
     /** @var list<callable> */
     private array $spawned = [];
 
-    /** @var list<array{callable, \DateTimeImmutable, bool, Duration|null, TestCancellable}> */
+    /** @var list<array{callable, DateTimeImmutable, bool, Duration|null, TestCancellable}> */
     private array $timers = [];
 
     private bool $running = false;
     private int $spawnCounter = 0;
 
-    public function __construct(private readonly TestClock $clock = new TestClock(),) {}
+    public function __construct(private readonly TestClock $clock = new TestClock())
+    {
+    }
 
     public function name(): string
     {

@@ -11,8 +11,10 @@ use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
 use Override;
 use Swoole\Coroutine;
-use Swoole\Timer;
+
 use function Swoole\Coroutine\run;
+
+use Swoole\Timer;
 
 /**
  * Swoole coroutine-based runtime.
@@ -40,7 +42,9 @@ final class SwooleRuntime implements Runtime
     /** @var array<int, true> */
     private array $timerIds = [];
 
-    public function __construct(private readonly SwooleConfig $config = new SwooleConfig()) {}
+    public function __construct(private readonly SwooleConfig $config = new SwooleConfig())
+    {
+    }
 
     #[Override]
     public function name(): string
@@ -193,8 +197,7 @@ final class SwooleRuntime implements Runtime
         Duration $initialDelay,
         Duration $interval,
         callable $callback,
-    ): SwooleCancellable
-    {
+    ): SwooleCancellable {
         $intervalMs = max(1, $interval->toMillis());
         $initialMs = max(1, $initialDelay->toMillis());
 

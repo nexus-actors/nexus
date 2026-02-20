@@ -8,7 +8,8 @@ use Monadial\Nexus\Core\Actor\ActorState;
 /** @psalm-api */
 final class InvalidActorStateTransition extends NexusLogicException
 {
-    public function __construct(public readonly ActorState $from, public readonly ActorState $to,) {
+    public function __construct(public readonly ActorState $from, public readonly ActorState $to)
+    {
         parent::__construct("Invalid actor state transition: {$from->value} → {$to->value}");
     }
 }

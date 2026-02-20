@@ -100,5 +100,7 @@ final class ValinorMessageSerializerTest extends TestCase
 
 final readonly class ValinorTestMessage
 {
-    public function __construct(public string $text, public int $number,) {}
+    public function __construct(public string $text, public int $number)
+    {
+    }
 }

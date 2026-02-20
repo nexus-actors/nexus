@@ -1,8 +1,10 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Snapshot;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 readonly class SnapshotEnvelope
@@ -12,6 +14,7 @@ readonly class SnapshotEnvelope
         public int $sequenceNr,
         public object $state,
         public string $stateType,
-        public \DateTimeImmutable $timestamp,
-    ) {}
+        public DateTimeImmutable $timestamp,
+    ) {
+    }
 }

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
@@ -50,7 +51,7 @@ final class SnapshotStrategyTest extends TestCase
     public function predicateDelegatesToClosure(): void
     {
         $strategy = SnapshotStrategy::predicate(
-            fn(object $state, object $event, int $seqNr): bool => $seqNr > 50,
+            fn (object $state, object $event, int $seqNr): bool => $seqNr > 50,
         );
         $state = new stdClass();
         $event = new stdClass();

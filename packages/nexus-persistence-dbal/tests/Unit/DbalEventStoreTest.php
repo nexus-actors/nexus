@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Dbal\Tests\Unit;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Monadial\Nexus\Persistence\Dbal\DbalEventStore;
@@ -14,6 +15,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(DbalEventStore::class)]
 final class DbalEventStoreTest extends TestCase
@@ -30,14 +32,14 @@ final class DbalEventStoreTest extends TestCase
         $this->id = PersistenceId::of('order', 'order-1');
     }
 
-    private function makeEnvelope(int $sequenceNr, string $eventType = \stdClass::class): EventEnvelope
+    private function makeEnvelope(int $sequenceNr, string $eventType = stdClass::class): EventEnvelope
     {
         return new EventEnvelope(
             persistenceId: $this->id,
             sequenceNr: $sequenceNr,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: $eventType,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
     }
 
@@ -51,7 +53,7 @@ final class DbalEventStoreTest extends TestCase
         $loaded = iterator_to_array($this->store->load($this->id));
         self::assertCount(1, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
-        self::assertSame(\stdClass::class, $loaded[0]->eventType);
+        self::assertSame(stdClass::class, $loaded[0]->eventType);
     }
 
     #[Test]
@@ -66,11 +68,11 @@ final class DbalEventStoreTest extends TestCase
         $loaded = iterator_to_array($this->store->load($this->id));
         self::assertCount(3, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
-        self::assertSame(\stdClass::class, $loaded[0]->eventType);
+        self::assertSame(stdClass::class, $loaded[0]->eventType);
         self::assertSame(2, $loaded[1]->sequenceNr);
-        self::assertSame(\stdClass::class, $loaded[1]->eventType);
+        self::assertSame(stdClass::class, $loaded[1]->eventType);
         self::assertSame(3, $loaded[2]->sequenceNr);
-        self::assertSame(\stdClass::class, $loaded[2]->eventType);
+        self::assertSame(stdClass::class, $loaded[2]->eventType);
     }
 
     #[Test]
@@ -160,9 +162,9 @@ final class DbalEventStoreTest extends TestCase
         $envelope = new EventEnvelope(
             persistenceId: $this->id,
             sequenceNr: 1,
-            event: new \stdClass(),
-            eventType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            event: new stdClass(),
+            eventType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
             metadata: ['source' => 'api', 'user_id' => '123'],
         );
 
@@ -186,7 +188,7 @@ final class DbalEventStoreTest extends TestCase
     #[Test]
     public function eventIsSerializedAndDeserialized(): void
     {
-        $event = new \stdClass();
+        $event = new stdClass();
         $event->orderId = 'order-42';
         $event->amount = 99.95;
 
@@ -194,8 +196,8 @@ final class DbalEventStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: 1,
             event: $event,
-            eventType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            eventType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
 
         $this->store->persist($this->id, $envelope);

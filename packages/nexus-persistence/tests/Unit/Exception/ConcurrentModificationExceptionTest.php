@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Exception;
@@ -8,6 +9,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[CoversClass(ConcurrentModificationException::class)]
 final class ConcurrentModificationExceptionTest extends TestCase
@@ -30,7 +32,7 @@ final class ConcurrentModificationExceptionTest extends TestCase
     #[Test]
     public function previousExceptionIsPreserved(): void
     {
-        $previous = new \RuntimeException('underlying cause');
+        $previous = new RuntimeException('underlying cause');
         $exception = new ConcurrentModificationException(
             PersistenceId::of('Account', 'acc-1'),
             3,

@@ -8,5 +8,7 @@ use Monadial\Nexus\Serialization\MessageType;
 #[MessageType('invoice.created')]
 final readonly class InvoiceCreated
 {
-    public function __construct(public string $invoiceId, public Money $total,) {}
+    public function __construct(public string $invoiceId, public Money $total)
+    {
+    }
 }

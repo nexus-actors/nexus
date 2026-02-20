@@ -8,7 +8,8 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 /** @psalm-api */
 final class ActorNameExistsException extends NexusLogicException
 {
-    public function __construct(public readonly ActorPath $parent, public readonly string $duplicateName,) {
+    public function __construct(public readonly ActorPath $parent, public readonly string $duplicateName)
+    {
         parent::__construct("Actor name '{$duplicateName}' already exists under {$parent}");
     }
 }

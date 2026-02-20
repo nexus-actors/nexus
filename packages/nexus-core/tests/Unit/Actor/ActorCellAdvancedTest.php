@@ -489,7 +489,8 @@ final class ActorCellAdvancedTest extends TestCase
      * @param Behavior<T> $behavior
      * @return ActorCell<T>
      */
-    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null,): ActorCell {
+    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null): ActorCell
+    {
         $path ??= ActorPath::fromString('/user/test');
         $mailbox ??= TestMailbox::unbounded();
 
@@ -517,6 +518,6 @@ final class ActorCellAdvancedTest extends TestCase
             $target ?? ActorPath::fromString('/user/test'),
         );
     }// ======================================================================
-// Tiered Exception Handling
-// ======================================================================
+    // Tiered Exception Handling
+    // ======================================================================
 }

@@ -42,7 +42,8 @@ final class FiberRuntimeTest extends TestCase
     public function spawn_returns_task_id(): void
     {
         $runtime = new FiberRuntime();
-        $id = $runtime->spawn(static function (): void {});
+        $id = $runtime->spawn(static function (): void {
+        });
         self::assertNotEmpty($id);
         self::assertMatchesRegularExpression('/^fiber-\d+$/', $id);
     }
@@ -51,8 +52,10 @@ final class FiberRuntimeTest extends TestCase
     public function spawn_returns_unique_ids(): void
     {
         $runtime = new FiberRuntime();
-        $id1 = $runtime->spawn(static function (): void {});
-        $id2 = $runtime->spawn(static function (): void {});
+        $id1 = $runtime->spawn(static function (): void {
+        });
+        $id2 = $runtime->spawn(static function (): void {
+        });
         self::assertNotSame($id1, $id2);
     }
 
@@ -107,7 +110,8 @@ final class FiberRuntimeTest extends TestCase
     public function schedule_once_delegates_to_scheduler(): void
     {
         $runtime = new FiberRuntime();
-        $cancellable = $runtime->scheduleOnce(Duration::seconds(1), static function (): void {});
+        $cancellable = $runtime->scheduleOnce(Duration::seconds(1), static function (): void {
+        });
         self::assertInstanceOf(Cancellable::class, $cancellable);
         self::assertFalse($cancellable->isCancelled());
     }
@@ -119,7 +123,8 @@ final class FiberRuntimeTest extends TestCase
         $cancellable = $runtime->scheduleRepeatedly(
             Duration::seconds(1),
             Duration::seconds(2),
-            static function (): void {},
+            static function (): void {
+            },
         );
         self::assertInstanceOf(Cancellable::class, $cancellable);
         self::assertFalse($cancellable->isCancelled());

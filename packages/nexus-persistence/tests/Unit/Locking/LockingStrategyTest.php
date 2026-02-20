@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Locking;
 
+use Closure;
 use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\Locking\PessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -50,7 +51,7 @@ final class LockingStrategyTest extends TestCase
         $provider->expects(self::once())
             ->method('withLock')
             ->with($id, self::isType('callable'))
-            ->willReturnCallback(static fn (PersistenceId $id, \Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
 
         $strategy = LockingStrategy::pessimistic($provider);
 
@@ -65,7 +66,7 @@ final class LockingStrategyTest extends TestCase
         $id = PersistenceId::of('Test', 'test-1');
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(static fn (PersistenceId $id, \Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
 
         $strategy = LockingStrategy::pessimistic($provider);
 

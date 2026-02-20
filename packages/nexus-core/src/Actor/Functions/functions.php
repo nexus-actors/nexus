@@ -16,7 +16,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
  * Usage with pipe operator:
  *   $behavior |> Props::fromBehavior(...) |> withMailbox($config)
  *
- * @return \Closure(Props<object>): Props<object>
+ * @return Closure(Props<object>): Props<object>
  */
 function withMailbox(MailboxConfig $config): Closure
 {
@@ -31,7 +31,7 @@ function withMailbox(MailboxConfig $config): Closure
  * Usage with pipe operator:
  *   $behavior |> Props::fromBehavior(...) |> withSupervision($strategy)
  *
- * @return \Closure(Props<object>): Props<object>
+ * @return Closure(Props<object>): Props<object>
  */
 function withSupervision(SupervisionStrategy $strategy): Closure
 {

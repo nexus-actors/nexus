@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
@@ -9,8 +10,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine;
-use Swoole\Timer;
+
 use function Swoole\Coroutine\run;
+
+use Swoole\Timer;
 
 #[CoversClass(SwooleCancellable::class)]
 final class SwooleCancellableTest extends TestCase
@@ -19,7 +22,8 @@ final class SwooleCancellableTest extends TestCase
     public function it_implements_cancellable(): void
     {
         run(static function (): void {
-            $timerId = Timer::after(60_000, static function (): void {});
+            $timerId = Timer::after(60_000, static function (): void {
+            });
             $cancellable = new SwooleCancellable($timerId);
             self::assertInstanceOf(Cancellable::class, $cancellable);
             Timer::clear($timerId);
@@ -30,7 +34,8 @@ final class SwooleCancellableTest extends TestCase
     public function it_is_not_cancelled_initially(): void
     {
         run(static function (): void {
-            $timerId = Timer::after(60_000, static function (): void {});
+            $timerId = Timer::after(60_000, static function (): void {
+            });
             $cancellable = new SwooleCancellable($timerId);
             self::assertFalse($cancellable->isCancelled());
             Timer::clear($timerId);
@@ -58,7 +63,8 @@ final class SwooleCancellableTest extends TestCase
     public function double_cancel_is_idempotent(): void
     {
         run(static function (): void {
-            $timerId = Timer::after(60_000, static function (): void {});
+            $timerId = Timer::after(60_000, static function (): void {
+            });
             $cancellable = new SwooleCancellable($timerId);
             $cancellable->cancel();
             $cancellable->cancel();

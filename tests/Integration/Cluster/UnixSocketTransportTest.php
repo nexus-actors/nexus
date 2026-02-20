@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine;
+
 use function Swoole\Coroutine\run;
 
 #[CoversClass(UnixSocketTransport::class)]

@@ -32,7 +32,8 @@ final readonly class RemoteActorRef implements ActorRef
         private Transport $transport,
         private ClusterSerializer $serializer,
         private ActorDirectory $directory,
-    ) {}
+    ) {
+    }
 
     /** @param T $message */
     #[Override]

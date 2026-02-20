@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Step;
@@ -29,7 +30,7 @@ use SplQueue;
  */
 final class StepMailbox implements Mailbox
 {
-    /** @var \SplQueue<Envelope> */
+    /** @var SplQueue<Envelope> */
     private SplQueue $queue;
 
     private bool $closed = false;
@@ -37,8 +38,9 @@ final class StepMailbox implements Mailbox
     /** @var ?Fiber<mixed, mixed, mixed, mixed> */
     private ?Fiber $waitingFiber = null;
 
-    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor,) {
-        /** @var \SplQueue<Envelope> $queue */
+    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor)
+    {
+        /** @var SplQueue<Envelope> $queue */
         $queue = new SplQueue();
         $this->queue = $queue;
     }

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
@@ -16,8 +17,6 @@ use Psalm\Type\Atomic\TGenericObject;
 use Psalm\Type\Atomic\TLiteralClassString;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Union;
-use function count;
-use function strcasecmp;
 
 final class PropsReturnTypeProvider implements MethodReturnTypeProviderInterface
 {
@@ -42,7 +41,7 @@ final class PropsReturnTypeProvider implements MethodReturnTypeProviderInterface
     {
         $args = $event->getCallArgs();
 
-        if (count($args) < 2) {
+        if (\count($args) < 2) {
             return null;
         }
 
@@ -139,7 +138,7 @@ final class PropsReturnTypeProvider implements MethodReturnTypeProviderInterface
     private static function extractFromGenericObject(TGenericObject $type): ?Union
     {
         foreach (self::TARGET_INTERFACES as $interface) {
-            if (strcasecmp($type->value, $interface) === 0 && isset($type->type_params[0])) {
+            if (\strcasecmp($type->value, $interface) === 0 && isset($type->type_params[0])) {
                 return $type->type_params[0];
             }
         }

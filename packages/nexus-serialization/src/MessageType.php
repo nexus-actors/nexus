@@ -16,5 +16,7 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS)]
 final readonly class MessageType
 {
-    public function __construct(public string $name,) {}
+    public function __construct(public string $name)
+    {
+    }
 }

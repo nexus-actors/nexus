@@ -8,5 +8,7 @@ use Monadial\Nexus\Serialization\MessageType;
 #[MessageType('shipment.created')]
 final readonly class ShipmentCreated
 {
-    public function __construct(public string $shipmentId, public Address $address,) {}
+    public function __construct(public string $shipmentId, public Address $address)
+    {
+    }
 }

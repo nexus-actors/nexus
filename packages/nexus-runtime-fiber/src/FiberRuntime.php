@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
 
+use Closure;
 use DateTimeImmutable;
 use Fiber;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -63,7 +64,7 @@ final class FiberRuntime implements Runtime
     #[Override]
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable
     {
-        /** @var \Closure():void $closure */
+        /** @var Closure():void $closure */
         $closure = $callback(...);
 
         return $this->scheduler->scheduleOnce($delay, $closure, $this->now());
@@ -72,7 +73,7 @@ final class FiberRuntime implements Runtime
     #[Override]
     public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, callable $callback): Cancellable
     {
-        /** @var \Closure():void $closure */
+        /** @var Closure():void $closure */
         $closure = $callback(...);
 
         return $this->scheduler->scheduleRepeatedly($initialDelay, $interval, $closure, $this->now());

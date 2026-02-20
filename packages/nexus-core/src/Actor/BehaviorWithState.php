@@ -23,7 +23,9 @@ final readonly class BehaviorWithState
      * @param Option<Behavior<T>> $behavior
      * @param Option<S> $state
      */
-    private function __construct(private Option $behavior, private Option $state, private bool $stopped,) {}
+    private function __construct(private Option $behavior, private Option $state, private bool $stopped)
+    {
+    }
 
     /**
      * Same behavior, new state.

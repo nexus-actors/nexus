@@ -21,7 +21,9 @@ final readonly class Props
      * @param Behavior<T> $behavior
      * @param Option<object> $supervision  Will be typed as SupervisionStrategy in Task 5b
      */
-    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision,) {}
+    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision)
+    {
+    }
 
     /**
      * @template U of object

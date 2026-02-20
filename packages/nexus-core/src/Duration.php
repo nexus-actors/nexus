@@ -22,7 +22,9 @@ final readonly class Duration implements Stringable
     private const int NANOS_PER_MILLI  = 1_000_000;
     private const int NANOS_PER_SECOND = 1_000_000_000;
 
-    private function __construct(private int $nanos,) {}
+    private function __construct(private int $nanos)
+    {
+    }
 
     // -- Factory methods ------------------------------------------------------
 

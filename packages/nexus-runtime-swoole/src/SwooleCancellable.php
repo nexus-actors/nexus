@@ -12,7 +12,9 @@ final class SwooleCancellable implements Cancellable
 {
     private bool $cancelled = false;
 
-    public function __construct(private readonly int $timerId) {}
+    public function __construct(private readonly int $timerId)
+    {
+    }
 
     #[Override]
     public function cancel(): void

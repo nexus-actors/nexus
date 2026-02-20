@@ -26,12 +26,16 @@ use Psr\Log\NullLogger;
 
 final readonly class TestMessage
 {
-    public function __construct(public string $value,) {}
+    public function __construct(public string $value)
+    {
+    }
 }
 
 final readonly class TestReply
 {
-    public function __construct(public string $value,) {}
+    public function __construct(public string $value)
+    {
+    }
 }
 
 #[CoversClass(ActorCell::class)]
@@ -697,7 +701,8 @@ final class ActorCellTest extends TestCase
      * @param Behavior<T> $behavior
      * @return ActorCell<T>
      */
-    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null,): ActorCell {
+    private function createCell(Behavior $behavior, ?ActorPath $path = null, ?TestMailbox $mailbox = null): ActorCell
+    {
         $path ??= ActorPath::fromString('/user/test');
         $mailbox ??= TestMailbox::unbounded();
 
@@ -716,6 +721,6 @@ final class ActorCellTest extends TestCase
             $this->deadLetters,
         );
     }// ======================================================================
-// State Machine Tests
-// ======================================================================
+    // State Machine Tests
+    // ======================================================================
 }

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
@@ -9,7 +10,8 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Override;
 
-final readonly class CaptureFixtureMsg {
+final readonly class CaptureFixtureMsg
+{
 }
 
 /** @implements ActorHandler<CaptureFixtureMsg> */

@@ -7,6 +7,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use NoDiscard;
 use Override;
 use RuntimeException;
+
 use function serialize;
 use function unserialize;
 
@@ -22,7 +23,7 @@ final readonly class PhpNativeClusterSerializer implements ClusterSerializer
     #[NoDiscard]
     public function serialize(Envelope $envelope): string
     {
-        return serialize($envelope);
+        return \serialize($envelope);
     }
 
     #[Override]
@@ -30,7 +31,7 @@ final readonly class PhpNativeClusterSerializer implements ClusterSerializer
     public function deserialize(string $data): Envelope
     {
         /** @var mixed $result */
-        $result = @unserialize($data);
+        $result = @\unserialize($data);
 
         if (!$result instanceof Envelope) {
             throw new RuntimeException('Failed to deserialize cluster envelope');

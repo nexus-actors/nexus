@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
@@ -8,7 +9,8 @@ use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Override;
 
-final readonly class GoodMsg {
+final readonly class GoodMsg
+{
 }
 
 /**
@@ -18,7 +20,9 @@ final readonly class GoodMsg {
  */
 final readonly class GoodActorHandler implements ActorHandler
 {
-    public function __construct(private string $name) {}
+    public function __construct(private string $name)
+    {
+    }
 
     /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
@@ -73,7 +77,9 @@ final class PrivateMutableActorHandler implements ActorHandler
  */
 final class PublicReadonlyActorHandler implements ActorHandler
 {
-    public function __construct(public readonly string $name) {}
+    public function __construct(public readonly string $name)
+    {
+    }
 
     /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]

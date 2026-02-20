@@ -12,6 +12,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[CoversClass(DbalPessimisticLockProvider::class)]
 final class DbalPessimisticLockProviderTest extends TestCase
@@ -81,11 +82,11 @@ final class DbalPessimisticLockProviderTest extends TestCase
     {
         $id = PersistenceId::of('Account', 'acc-1');
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('test error');
 
         $this->provider->withLock($id, static function (): never {
-            throw new \RuntimeException('test error');
+            throw new RuntimeException('test error');
         });
     }
 }

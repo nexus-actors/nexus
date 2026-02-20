@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\State;
 
+use Closure;
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -19,7 +21,7 @@ use stdClass;
 final class DurableStateBehaviorTest extends TestCase
 {
     private PersistenceId $persistenceId;
-    private \Closure $commandHandler;
+    private Closure $commandHandler;
     private stdClass $emptyState;
 
     protected function setUp(): void
@@ -79,7 +81,7 @@ final class DurableStateBehaviorTest extends TestCase
             $this->commandHandler,
         );
 
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage('DurableStateStore is required');
 
         $builder->toBehavior();

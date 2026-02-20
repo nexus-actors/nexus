@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Dbal;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
@@ -18,7 +19,8 @@ final class DbalEventStore implements EventStore
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {}
+    ) {
+    }
 
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
@@ -69,7 +71,7 @@ final class DbalEventStore implements EventStore
                 sequenceNr: (int) $row['sequence_nr'],
                 event: $this->serializer->deserialize($row['event_data'], $row['event_type']),
                 eventType: $row['event_type'],
-                timestamp: new \DateTimeImmutable($row['timestamp']),
+                timestamp: new DateTimeImmutable($row['timestamp']),
                 metadata: $row['metadata'] !== null ? json_decode($row['metadata'], true) : [],
             );
         }

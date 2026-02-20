@@ -13,7 +13,8 @@ final readonly class SwooleConfig
         public int $defaultMailboxCapacity = 1000,
         public bool $enableCoroutineHook = true,
         public int $maxCoroutines = 100_000,
-    ) {}
+    ) {
+    }
 
     public function withDefaultMailboxCapacity(int $capacity): self
     {

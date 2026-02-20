@@ -15,5 +15,7 @@ final readonly class DeadLetter implements SystemMessage
      * @param ActorRef<object> $sender
      * @param ActorRef<object> $recipient
      */
-    public function __construct(public object $message, public ActorRef $sender, public ActorRef $recipient,) {}
+    public function __construct(public object $message, public ActorRef $sender, public ActorRef $recipient)
+    {
+    }
 }

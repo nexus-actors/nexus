@@ -8,5 +8,7 @@ final readonly class ItemsReply
     /**
      * @param list<string> $items
      */
-    public function __construct(public array $items) {}
+    public function __construct(public array $items)
+    {
+    }
 }

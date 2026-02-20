@@ -24,9 +24,11 @@ final readonly class LocalActorRef implements ActorRef
     /**
      * @param ActorPath $path The actor's path in the hierarchy
      * @param Mailbox $mailbox The actor's mailbox for message delivery
-     * @param \Closure(): bool $aliveChecker Closure that checks whether the actor is alive
+     * @param Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      */
-    public function __construct(private ActorPath $path, private Mailbox $mailbox, private Closure $aliveChecker,) {}
+    public function __construct(private ActorPath $path, private Mailbox $mailbox, private Closure $aliveChecker)
+    {
+    }
 
     /** @param T $message */
     #[Override]

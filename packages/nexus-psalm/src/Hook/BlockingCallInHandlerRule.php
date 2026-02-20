@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
@@ -8,8 +9,6 @@ use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterEveryFunctionCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterEveryFunctionCallAnalysisEvent;
-use function in_array;
-use function strtolower;
 
 final class BlockingCallInHandlerRule implements AfterEveryFunctionCallAnalysisInterface
 {
@@ -40,9 +39,9 @@ final class BlockingCallInHandlerRule implements AfterEveryFunctionCallAnalysisI
 
     public static function afterEveryFunctionCallAnalysis(AfterEveryFunctionCallAnalysisEvent $event): void
     {
-        $functionId = strtolower($event->getFunctionId());
+        $functionId = \strtolower($event->getFunctionId());
 
-        if (!in_array($functionId, self::BLOCKING_FUNCTIONS, true)) {
+        if (!\in_array($functionId, self::BLOCKING_FUNCTIONS, true)) {
             return;
         }
 

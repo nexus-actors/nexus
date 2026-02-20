@@ -23,7 +23,9 @@ final readonly class ActorPath implements Stringable
     /**
      * @param list<string> $elements Path segments (empty for root, e.g. ['user', 'orders'] for /user/orders)
      */
-    private function __construct(private array $elements,) {}
+    private function __construct(private array $elements)
+    {
+    }
 
     /**
      * Creates the root path `/`.

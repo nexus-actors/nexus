@@ -14,5 +14,7 @@ final readonly class Watch implements SystemMessage
     /**
      * @param ActorRef<object> $watcher
      */
-    public function __construct(public ActorRef $watcher,) {}
+    public function __construct(public ActorRef $watcher)
+    {
+    }
 }

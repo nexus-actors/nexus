@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
 
+use Closure;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
@@ -35,32 +36,44 @@ use Psr\Log\NullLogger;
 
 final readonly class AddItem
 {
-    public function __construct(public string $item) {}
+    public function __construct(public string $item)
+    {
+    }
 }
 
 final readonly class RemoveItem
 {
-    public function __construct(public string $item) {}
+    public function __construct(public string $item)
+    {
+    }
 }
 
 final readonly class ItemAdded
 {
-    public function __construct(public string $item) {}
+    public function __construct(public string $item)
+    {
+    }
 }
 
 final readonly class ItemRemoved
 {
-    public function __construct(public string $item) {}
+    public function __construct(public string $item)
+    {
+    }
 }
 
 final readonly class GetItems
 {
-    public function __construct(public ActorRef $replyTo) {}
+    public function __construct(public ActorRef $replyTo)
+    {
+    }
 }
 
 final readonly class ItemsReply
 {
-    public function __construct(public array $items) {}
+    public function __construct(public array $items)
+    {
+    }
 }
 
 final readonly class DoNothing
@@ -74,7 +87,9 @@ final readonly class StopCommand
 final readonly class ShoppingCart
 {
     /** @param list<string> $items */
-    public function __construct(public array $items = []) {}
+    public function __construct(public array $items = [])
+    {
+    }
 }
 
 #[CoversClass(PersistenceEngine::class)]
@@ -272,7 +287,8 @@ final class PersistenceEngineTest extends TestCase
         $eventStore = new InMemoryEventStore();
 
         // Pre-populate the event store
-        $eventStore->persist($this->persistenceId,
+        $eventStore->persist(
+            $this->persistenceId,
             new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
             new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
         );
@@ -314,7 +330,8 @@ final class PersistenceEngineTest extends TestCase
         $eventStore = new InMemoryEventStore();
 
         // Pre-populate with 2 events
-        $eventStore->persist($this->persistenceId,
+        $eventStore->persist(
+            $this->persistenceId,
             new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
             new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
         );
@@ -371,7 +388,8 @@ final class PersistenceEngineTest extends TestCase
         ));
 
         // Pre-populate events: 1, 2 (before snapshot), 3 (after snapshot)
-        $eventStore->persist($this->persistenceId,
+        $eventStore->persist(
+            $this->persistenceId,
             new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
             new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
             new EventEnvelope($this->persistenceId, 3, new ItemAdded('cherry'), ItemAdded::class, new DateTimeImmutable()),
@@ -1037,7 +1055,7 @@ final class PersistenceEngineTest extends TestCase
 
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(function (PersistenceId $id, \Closure $cb) use (&$lockCalled): mixed {
+            ->willReturnCallback(function (PersistenceId $id, Closure $cb) use (&$lockCalled): mixed {
                 $lockCalled = true;
 
                 return $cb();
@@ -1082,7 +1100,7 @@ final class PersistenceEngineTest extends TestCase
 
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(static fn (PersistenceId $id, \Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
 
         $commandStates = [];
 
@@ -1120,7 +1138,7 @@ final class PersistenceEngineTest extends TestCase
             sequenceNr: 2,
             event: new ItemAdded('banana-from-other-process'),
             eventType: ItemAdded::class,
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         ));
 
         // Next command should see the refreshed state (including banana)

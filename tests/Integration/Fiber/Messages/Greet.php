@@ -9,5 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 final readonly class Greet
 {
     /** @param ActorRef<object> $replyTo */
-    public function __construct(public string $name, public ActorRef $replyTo,) {}
+    public function __construct(public string $name, public ActorRef $replyTo)
+    {
+    }
 }

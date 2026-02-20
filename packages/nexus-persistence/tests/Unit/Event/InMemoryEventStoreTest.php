@@ -1,14 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Event;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(InMemoryEventStore::class)]
 final class InMemoryEventStoreTest extends TestCase
@@ -27,9 +30,9 @@ final class InMemoryEventStoreTest extends TestCase
         return new EventEnvelope(
             persistenceId: $this->id,
             sequenceNr: $sequenceNr,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: $eventType,
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         );
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Dbal;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -17,7 +18,8 @@ final class DbalDurableStateStore implements DurableStateStore
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {}
+    ) {
+    }
 
     public function get(PersistenceId $id): ?DurableStateEnvelope
     {
@@ -38,7 +40,7 @@ final class DbalDurableStateStore implements DurableStateStore
             version: (int) $row['version'],
             state: $this->serializer->deserialize($row['state_data'], $row['state_type']),
             stateType: $row['state_type'],
-            timestamp: new \DateTimeImmutable($row['timestamp']),
+            timestamp: new DateTimeImmutable($row['timestamp']),
         );
     }
 

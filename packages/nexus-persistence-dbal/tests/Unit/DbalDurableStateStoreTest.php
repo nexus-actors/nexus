@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Dbal\Tests\Unit;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Monadial\Nexus\Persistence\Dbal\DbalDurableStateStore;
@@ -14,6 +15,7 @@ use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(DbalDurableStateStore::class)]
 final class DbalDurableStateStoreTest extends TestCase
@@ -32,15 +34,15 @@ final class DbalDurableStateStoreTest extends TestCase
 
     private function makeState(int $version, int $value = 0): DurableStateEnvelope
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->value = $value;
 
         return new DurableStateEnvelope(
             persistenceId: $this->id,
             version: $version,
             state: $state,
-            stateType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
     }
 
@@ -54,7 +56,7 @@ final class DbalDurableStateStoreTest extends TestCase
         $loaded = $this->store->get($this->id);
         self::assertNotNull($loaded);
         self::assertSame(1, $loaded->version);
-        self::assertSame(\stdClass::class, $loaded->stateType);
+        self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(42, $loaded->state->value);
     }
 
@@ -110,7 +112,7 @@ final class DbalDurableStateStoreTest extends TestCase
     #[Test]
     public function stateIsSerializedAndDeserialized(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->items = ['a', 'b', 'c'];
         $state->count = 3;
 
@@ -118,8 +120,8 @@ final class DbalDurableStateStoreTest extends TestCase
             persistenceId: $this->id,
             version: 1,
             state: $state,
-            stateType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
 
         $this->store->upsert($this->id, $envelope);

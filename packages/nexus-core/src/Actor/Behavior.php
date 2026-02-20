@@ -19,8 +19,8 @@ use Monadial\Nexus\Core\Lifecycle\Signal;
 final readonly class Behavior
 {
     /**
-     * @param Option<\Closure> $handler
-     * @param Option<\Closure> $signalHandler
+     * @param Option<Closure> $handler
+     * @param Option<Closure> $signalHandler
      * @param Option<mixed> $initialState
      */
     private function __construct(
@@ -28,11 +28,12 @@ final readonly class Behavior
         private Option $handler,
         private Option $signalHandler,
         private Option $initialState,
-    ) {}
+    ) {
+    }
 
     /**
      * @template U of object
-     * @param \Closure(ActorContext<U>, U): Behavior<U> $handler
+     * @param Closure(ActorContext<U>, U): Behavior<U> $handler
      * @return Behavior<U>
      */
     public static function receive(Closure $handler): self
@@ -45,7 +46,7 @@ final readonly class Behavior
      * @template U of object
      * @template S
      * @param S $initialState
-     * @param \Closure(ActorContext<U>, U, S): BehaviorWithState<U, S> $handler
+     * @param Closure(ActorContext<U>, U, S): BehaviorWithState<U, S> $handler
      * @return Behavior<U>
      */
     public static function withState(mixed $initialState, Closure $handler): self
@@ -61,7 +62,7 @@ final readonly class Behavior
 
     /**
      * @template U of object
-     * @param \Closure(ActorContext<U>): Behavior<U> $factory
+     * @param Closure(ActorContext<U>): Behavior<U> $factory
      * @return Behavior<U>
      */
     public static function setup(Closure $factory): self
@@ -107,7 +108,7 @@ final readonly class Behavior
     }
 
     /**
-     * @param \Closure(ActorContext<T>, Signal): Behavior<T> $handler
+     * @param Closure(ActorContext<T>, Signal): Behavior<T> $handler
      * @return Behavior<T>
      * @psalm-suppress UnusedParam $handler is used in Option::some($handler)
      */
@@ -138,7 +139,7 @@ final readonly class Behavior
     }
 
     /**
-     * @return Option<\Closure>
+     * @return Option<Closure>
      */
     public function handler(): Option
     {
@@ -146,7 +147,7 @@ final readonly class Behavior
     }
 
     /**
-     * @return Option<\Closure>
+     * @return Option<Closure>
      */
     public function signalHandler(): Option
     {
@@ -162,20 +163,20 @@ final readonly class Behavior
     }
 
     /**
-     * @return Option<\Closure>
+     * @return Option<Closure>
      */
     private static function noHandler(): Option
     {
-        /** @var Option<\Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
+        /** @var Option<Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
         return Option::none();
     }
 
     /**
-     * @return Option<\Closure>
+     * @return Option<Closure>
      */
     private static function noSignalHandler(): Option
     {
-        /** @var Option<\Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
+        /** @var Option<Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
         return Option::none();
     }
 

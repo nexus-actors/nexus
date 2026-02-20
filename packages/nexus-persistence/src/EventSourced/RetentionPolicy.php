@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\EventSourced;
@@ -8,7 +9,8 @@ readonly class RetentionPolicy
     private function __construct(
         public int $keepSnapshots,
         public bool $deleteEventsToSnapshot,
-    ) {}
+    ) {
+    }
 
     public static function none(): self
     {

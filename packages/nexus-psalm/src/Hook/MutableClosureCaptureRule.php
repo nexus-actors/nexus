@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
@@ -9,8 +10,6 @@ use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
-use function in_array;
-use function strtolower;
 
 final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterface
 {
@@ -22,9 +21,9 @@ final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterfac
 
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
-        $declaringId = strtolower($event->getDeclaringMethodId());
+        $declaringId = \strtolower($event->getDeclaringMethodId());
 
-        if (!in_array($declaringId, self::FACTORY_METHODS, true)) {
+        if (!\in_array($declaringId, self::FACTORY_METHODS, true)) {
             return;
         }
 

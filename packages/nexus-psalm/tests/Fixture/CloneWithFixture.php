@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
@@ -11,7 +12,8 @@ final readonly class CloneWithFixture
     public function __construct(
         public string $name,
         public int $value,
-    ) {}
+    ) {
+    }
 
     public function withName(string $name): self
     {

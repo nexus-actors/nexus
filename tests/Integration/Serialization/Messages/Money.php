@@ -13,7 +13,9 @@ use JsonSerializable;
  */
 final readonly class Money implements JsonSerializable
 {
-    public function __construct(public string $currency, public float $amount,) {}
+    public function __construct(public string $currency, public float $amount)
+    {
+    }
 
     public static function fromString(string $value): self
     {

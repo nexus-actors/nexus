@@ -50,7 +50,11 @@ final class DurableStateEngine
     ): Behavior {
         $locking = $lockingStrategy ?? LockingStrategy::optimistic();
         return Behavior::setup(static function (ActorContext $ctx) use (
-            $persistenceId, $emptyState, $commandHandler, $stateStore, $locking,
+            $persistenceId,
+            $emptyState,
+            $commandHandler,
+            $stateStore,
+            $locking,
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
@@ -66,11 +70,20 @@ final class DurableStateEngine
             return Behavior::withState(
                 ['state' => $state, 'version' => $version],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
-                    $persistenceId, $commandHandler, $stateStore, $locking,
+                    $persistenceId,
+                    $commandHandler,
+                    $stateStore,
+                    $locking,
                 ): BehaviorWithState {
                     /** @var array{state: object, version: int} $data */
                     return $locking->withLock($persistenceId, static function () use (
-                        $data, $ctx, $msg, $persistenceId, $commandHandler, $stateStore, $locking,
+                        $data,
+                        $ctx,
+                        $msg,
+                        $persistenceId,
+                        $commandHandler,
+                        $stateStore,
+                        $locking,
                     ): BehaviorWithState {
                         $state = $data['state'];
                         $version = $data['version'];
@@ -88,7 +101,10 @@ final class DurableStateEngine
 
                         return match ($effect->type) {
                             DurableEffectType::Persist => self::handlePersist(
-                                $effect, $version, $persistenceId, $stateStore,
+                                $effect,
+                                $version,
+                                $persistenceId,
+                                $stateStore,
                             ),
                             DurableEffectType::None => BehaviorWithState::same(),
                             DurableEffectType::Unhandled => BehaviorWithState::same(),

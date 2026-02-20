@@ -15,7 +15,7 @@ use Monadial\Nexus\Core\Duration;
 final readonly class TimerEntry
 {
     /**
-     * @param \Closure(): void $callback
+     * @param Closure(): void $callback
      */
     public function __construct(
         public Closure $callback,
@@ -23,5 +23,6 @@ final readonly class TimerEntry
         public bool $repeating,
         public ?Duration $interval,
         public FiberCancellable $cancellable,
-    ) {}
+    ) {
+    }
 }

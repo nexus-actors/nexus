@@ -77,7 +77,9 @@ final class PhpNativeSerializerTest extends TestCase
 
 final readonly class SimpleMessage
 {
-    public function __construct(public string $text, public int $number,) {}
+    public function __construct(public string $text, public int $number)
+    {
+    }
 }
 
 final class NonSerializableMessage
@@ -85,7 +87,9 @@ final class NonSerializableMessage
     /**
      * @param resource|false $handle
      */
-    public function __construct(public mixed $handle,) {}
+    public function __construct(public mixed $handle)
+    {
+    }
 
     /**
      * @return array<string, mixed>

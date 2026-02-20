@@ -20,7 +20,9 @@ final class TestMailbox implements Mailbox
     private array $queue = [];
     private bool $closed = false;
 
-    public function __construct(private readonly MailboxConfig $config,) {}
+    public function __construct(private readonly MailboxConfig $config)
+    {
+    }
 
     public static function unbounded(): self
     {

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
@@ -7,10 +8,12 @@ use Monadial\Nexus\Cluster\RemoteActorRef;
 use Monadial\Nexus\Serialization\MessageType;
 
 #[MessageType('test.registered')]
-final readonly class RegisteredMessage {
+final readonly class RegisteredMessage
+{
 }
 
-final readonly class UnregisteredMessage {
+final readonly class UnregisteredMessage
+{
 }
 
 final class ClusterMessageFixture

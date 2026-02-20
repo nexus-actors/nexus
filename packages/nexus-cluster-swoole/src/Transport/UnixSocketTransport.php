@@ -41,7 +41,8 @@ final class UnixSocketTransport implements Transport
         private readonly int $workerId,
         private readonly int $workerCount,
         private readonly string $socketDir,
-    ) {}
+    ) {
+    }
 
     /**
      * Create and bind the server socket for this worker.

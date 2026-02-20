@@ -1,14 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\State;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use Monadial\Nexus\Persistence\State\InMemoryDurableStateStore;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(InMemoryDurableStateStore::class)]
 final class InMemoryDurableStateStoreTest extends TestCase
@@ -24,7 +27,7 @@ final class InMemoryDurableStateStoreTest extends TestCase
 
     private function makeState(int $version, int $value = 0): DurableStateEnvelope
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->value = $value;
 
         return new DurableStateEnvelope(
@@ -32,7 +35,7 @@ final class InMemoryDurableStateStoreTest extends TestCase
             version: $version,
             state: $state,
             stateType: 'CounterState',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         );
     }
 

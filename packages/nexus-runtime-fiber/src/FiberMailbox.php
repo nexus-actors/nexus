@@ -22,7 +22,7 @@ use SplQueue;
 /** @psalm-api */
 final class FiberMailbox implements Mailbox
 {
-    /** @var \SplQueue<Envelope> */
+    /** @var SplQueue<Envelope> */
     private SplQueue $queue;
 
     private bool $closed = false;
@@ -33,11 +33,11 @@ final class FiberMailbox implements Mailbox
     /** @var array<int, true> */
     private array $waiterSet = [];
 
-    /** @var ?\Closure():void */
+    /** @var ?Closure():void */
     private ?Closure $onEnqueue;
 
     /**
-     * @param ?\Closure():void $onEnqueue
+     * @param ?Closure():void $onEnqueue
      */
     public function __construct(
         private readonly MailboxConfig $config,
@@ -47,7 +47,7 @@ final class FiberMailbox implements Mailbox
         $this->onEnqueue = $onEnqueue !== null
             ? $onEnqueue(...)
             : null;
-        /** @var \SplQueue<Envelope> $queue */
+        /** @var SplQueue<Envelope> $queue */
         $queue = new SplQueue();
         $this->queue = $queue;
     }

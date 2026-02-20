@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
@@ -13,7 +14,6 @@ use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
-use function class_exists;
 
 final class Plugin implements PluginEntryPointInterface
 {
@@ -30,7 +30,7 @@ final class Plugin implements PluginEntryPointInterface
         ];
 
         foreach ($hooks as $hook) {
-            if (class_exists($hook)) {
+            if (\class_exists($hook)) {
                 $registration->registerHooksFromClass($hook);
             }
         }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\State;
 
 use Closure;
+use LogicException;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -25,7 +26,8 @@ final class DurableStateBehavior
         private readonly Closure $commandHandler,
         private readonly ?DurableStateStore $stateStore = null,
         private readonly ?LockingStrategy $lockingStrategy = null,
-    ) {}
+    ) {
+    }
 
     /**
      * Create a new DurableStateBehavior builder.
@@ -56,7 +58,7 @@ final class DurableStateBehavior
     /**
      * Build the final Behavior using DurableStateEngine.
      *
-     * @throws \LogicException if DurableStateStore has not been set
+     * @throws LogicException if DurableStateStore has not been set
      */
     public function toBehavior(): Behavior
     {
@@ -64,7 +66,7 @@ final class DurableStateBehavior
             $this->persistenceId,
             $this->emptyState,
             $this->commandHandler,
-            $this->stateStore ?? throw new \LogicException('DurableStateStore is required — call withStateStore() before toBehavior()'),
+            $this->stateStore ?? throw new LogicException('DurableStateStore is required — call withStateStore() before toBehavior()'),
             $this->lockingStrategy,
         );
     }

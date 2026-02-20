@@ -17,7 +17,7 @@ use Throwable;
 final readonly class SupervisionStrategy
 {
     /**
-     * @param \Closure(\Throwable): Directive $decider
+     * @param Closure(Throwable): Directive $decider
      */
     private function __construct(
         public StrategyType $type,
@@ -27,14 +27,16 @@ final readonly class SupervisionStrategy
         public Duration $initialBackoff,
         public Duration $maxBackoff,
         public float $multiplier,
-    ) {}
+    ) {
+    }
 
     /**
      * One-for-one strategy: only the failed child is acted upon.
      *
-     * @param (\Closure(\Throwable): Directive)|null $decider
+     * @param (Closure(Throwable): Directive)|null $decider
      */
-    public static function oneForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null,): self {
+    public static function oneForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null): self
+    {
         return new self(
             type: StrategyType::OneForOne,
             maxRetries: $maxRetries,
@@ -49,9 +51,10 @@ final readonly class SupervisionStrategy
     /**
      * All-for-one strategy: all children are acted upon when one fails.
      *
-     * @param (\Closure(\Throwable): Directive)|null $decider
+     * @param (Closure(Throwable): Directive)|null $decider
      */
-    public static function allForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null,): self {
+    public static function allForOne(int $maxRetries = 3, ?Duration $window = null, ?Closure $decider = null): self
+    {
         return new self(
             type: StrategyType::AllForOne,
             maxRetries: $maxRetries,
@@ -66,7 +69,7 @@ final readonly class SupervisionStrategy
     /**
      * Exponential backoff strategy: restarts with increasing delays.
      *
-     * @param (\Closure(\Throwable): Directive)|null $decider
+     * @param (Closure(Throwable): Directive)|null $decider
      */
     public static function exponentialBackoff(
         Duration $initialBackoff,
@@ -95,7 +98,7 @@ final readonly class SupervisionStrategy
     }
 
     /**
-     * @return \Closure(\Throwable): Directive
+     * @return Closure(Throwable): Directive
      */
     private static function defaultDecider(): Closure
     {

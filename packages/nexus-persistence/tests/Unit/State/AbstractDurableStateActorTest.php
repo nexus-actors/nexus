@@ -19,7 +19,6 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\AbstractDurableStateActor;
 use Monadial\Nexus\Persistence\State\DurableEffect;
-use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Persistence\State\InMemoryDurableStateStore;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -30,12 +29,16 @@ use Psr\Log\NullLogger;
 
 final readonly class WalletState
 {
-    public function __construct(public int $balance = 0) {}
+    public function __construct(public int $balance = 0)
+    {
+    }
 }
 
 final readonly class Deposit
 {
-    public function __construct(public int $amount) {}
+    public function __construct(public int $amount)
+    {
+    }
 }
 
 final readonly class InspectWallet
@@ -161,7 +164,7 @@ final class AbstractDurableStateActorTest extends TestCase
         $stateCapture = null;
 
         // Create a custom actor that captures state on InspectWallet command
-        $actor = new class($stateStore, $stateCapture) extends AbstractDurableStateActor {
+        $actor = new class ($stateStore, $stateCapture) extends AbstractDurableStateActor {
             /** @param mixed $stateCapture */
             public function __construct(
                 InMemoryDurableStateStore $stateStore,

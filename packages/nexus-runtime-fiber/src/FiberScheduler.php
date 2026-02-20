@@ -15,7 +15,7 @@ final class FiberScheduler
     private array $timers = [];
 
     /**
-     * @param \Closure(): void $callback
+     * @param Closure(): void $callback
      */
     public function scheduleOnce(Duration $delay, Closure $callback, DateTimeImmutable $now): Cancellable
     {
@@ -36,7 +36,7 @@ final class FiberScheduler
     }
 
     /**
-     * @param \Closure(): void $callback
+     * @param Closure(): void $callback
      */
     public function scheduleRepeatedly(
         Duration $initialDelay,

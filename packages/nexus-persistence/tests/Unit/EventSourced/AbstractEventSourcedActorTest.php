@@ -8,9 +8,9 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
-use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
@@ -32,7 +32,9 @@ use Psr\Log\NullLogger;
 
 final readonly class CounterState
 {
-    public function __construct(public int $count) {}
+    public function __construct(public int $count)
+    {
+    }
 }
 
 final readonly class Increment
@@ -207,7 +209,7 @@ final class AbstractEventSourcedActorTest extends TestCase
         $stateCapture = null;
 
         // Create a custom actor that captures state on InspectState command
-        $actor = new class($eventStore, $stateCapture) extends AbstractEventSourcedActor {
+        $actor = new class ($eventStore, $stateCapture) extends AbstractEventSourcedActor {
             /** @param mixed $stateCapture */
             public function __construct(
                 InMemoryEventStore $eventStore,

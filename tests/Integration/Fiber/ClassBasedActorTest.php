@@ -27,7 +27,9 @@ final class ClassBasedActorTest extends TestCase
 
         $handler = new class ($captured) implements ActorHandler {
             /** @param list<string> $captured */
-            public function __construct(private array &$captured) {}
+            public function __construct(private array &$captured)
+            {
+            }
 
             public function handle(ActorContext $ctx, object $message): Behavior
             {
@@ -78,7 +80,9 @@ final class ClassBasedActorTest extends TestCase
 
         $actor = new class ($events) extends AbstractActor {
             /** @param list<string> $events */
-            public function __construct(private array &$events) {}
+            public function __construct(private array &$events)
+            {
+            }
 
             public function onPreStart(ActorContext $ctx): void
             {

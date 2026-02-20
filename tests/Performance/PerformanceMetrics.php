@@ -15,7 +15,8 @@ final readonly class PerformanceMetrics
         public float $opsPerSecond,
         public int $peakMemoryBytes,
         public int $memoryDeltaBytes,
-    ) {}
+    ) {
+    }
 
     public function report(): string
     {

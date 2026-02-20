@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\State;
 
+use Closure;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
@@ -26,22 +27,29 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
+use stdClass;
 
 // --- Test message and state classes ---
 
 final readonly class SetBalance
 {
-    public function __construct(public int $amount) {}
+    public function __construct(public int $amount)
+    {
+    }
 }
 
 final readonly class GetBalance
 {
-    public function __construct(public ActorRef $replyTo) {}
+    public function __construct(public ActorRef $replyTo)
+    {
+    }
 }
 
 final readonly class BalanceReply
 {
-    public function __construct(public int $balance) {}
+    public function __construct(public int $balance)
+    {
+    }
 }
 
 final readonly class DurableDoNothing
@@ -54,7 +62,9 @@ final readonly class DurableStopCommand
 
 final readonly class AccountState
 {
-    public function __construct(public int $balance = 0) {}
+    public function __construct(public int $balance = 0)
+    {
+    }
 }
 
 #[CoversClass(DurableStateEngine::class)]
@@ -608,13 +618,15 @@ final class DurableStateEngineTest extends TestCase
     public function pessimistic_locking_calls_provider_withLock(): void
     {
         $stateStore = new InMemoryDurableStateStore();
-        $tracker = new \stdClass();
+        $tracker = new stdClass();
         $tracker->called = false;
 
         $lockProvider = new class ($tracker) implements PessimisticLockProvider {
-            public function __construct(private readonly \stdClass $tracker) {}
+            public function __construct(private readonly stdClass $tracker)
+            {
+            }
 
-            public function withLock(PersistenceId $id, \Closure $callback): mixed
+            public function withLock(PersistenceId $id, Closure $callback): mixed
             {
                 $this->tracker->called = true;
 
@@ -663,9 +675,10 @@ final class DurableStateEngineTest extends TestCase
             public function __construct(
                 private readonly InMemoryDurableStateStore $store,
                 private readonly PersistenceId $persistenceId,
-            ) {}
+            ) {
+            }
 
-            public function withLock(PersistenceId $id, \Closure $callback): mixed
+            public function withLock(PersistenceId $id, Closure $callback): mixed
             {
                 // Simulate another process writing to the store BEFORE callback executes
                 // This should be visible to the command handler via pessimistic re-read
@@ -674,7 +687,7 @@ final class DurableStateEngineTest extends TestCase
                     version: 10,
                     state: new AccountState(999),
                     stateType: AccountState::class,
-                    timestamp: new \DateTimeImmutable(),
+                    timestamp: new DateTimeImmutable(),
                 ));
 
                 return $callback();

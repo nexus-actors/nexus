@@ -5,5 +5,7 @@ namespace Monadial\Nexus\Tests\Integration\Persistence\Messages;
 
 final readonly class AddItem
 {
-    public function __construct(public string $item) {}
+    public function __construct(public string $item)
+    {
+    }
 }

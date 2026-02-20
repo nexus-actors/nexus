@@ -13,5 +13,6 @@ final readonly class PaymentProcessed
         public float $amount,
         public string $currency,
         public string $status,
-    ) {}
+    ) {
+    }
 }

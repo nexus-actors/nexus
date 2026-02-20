@@ -16,5 +16,7 @@ final readonly class ActorDefinition
     /**
      * @param Props<T> $props
      */
-    public function __construct(public string $name, public Props $props) {}
+    public function __construct(public string $name, public Props $props)
+    {
+    }
 }

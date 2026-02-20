@@ -151,7 +151,7 @@ final class PingPongTest extends TestCase
                 if ($msg instanceof Pong) {
                     $pongsCaptured[] = $msg;
                 }
-    
+
                 return Behavior::same();
             },
         );

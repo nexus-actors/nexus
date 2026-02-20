@@ -8,5 +8,7 @@ final readonly class ShoppingCart
     /**
      * @param list<string> $items
      */
-    public function __construct(public array $items = []) {}
+    public function __construct(public array $items = [])
+    {
+    }
 }

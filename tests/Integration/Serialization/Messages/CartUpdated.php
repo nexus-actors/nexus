@@ -14,5 +14,7 @@ final readonly class CartUpdated
     /**
      * @param list<CartItem> $items
      */
-    public function __construct(public string $cartId, public array $items,) {}
+    public function __construct(public string $cartId, public array $items)
+    {
+    }
 }

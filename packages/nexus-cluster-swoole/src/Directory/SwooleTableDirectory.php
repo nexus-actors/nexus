@@ -16,7 +16,9 @@ use Swoole\Table;
  */
 final readonly class SwooleTableDirectory implements ActorDirectory
 {
-    public function __construct(private Table $table) {}
+    public function __construct(private Table $table)
+    {
+    }
 
     #[Override]
     public function register(string $path, int $workerId): void

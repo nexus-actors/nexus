@@ -1,13 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Snapshot;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use stdClass;
 
 #[CoversClass(SnapshotEnvelope::class)]
 final class SnapshotEnvelopeTest extends TestCase
@@ -16,9 +20,9 @@ final class SnapshotEnvelopeTest extends TestCase
     public function constructsWithAllProperties(): void
     {
         $persistenceId = PersistenceId::of('order', 'order-123');
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->total = 500;
-        $timestamp = new \DateTimeImmutable('2026-01-15T10:30:00+00:00');
+        $timestamp = new DateTimeImmutable('2026-01-15T10:30:00+00:00');
 
         $envelope = new SnapshotEnvelope(
             persistenceId: $persistenceId,
@@ -41,12 +45,12 @@ final class SnapshotEnvelopeTest extends TestCase
         $envelope = new SnapshotEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
-            state: new \stdClass(),
+            state: new stdClass(),
             stateType: 'OrderState',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         );
 
-        $reflection = new \ReflectionClass($envelope);
+        $reflection = new ReflectionClass($envelope);
         self::assertTrue($reflection->isReadOnly());
     }
 }

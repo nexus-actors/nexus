@@ -15,5 +15,7 @@ final readonly class ChildFailed implements Signal
     /**
      * @param ActorRef<object> $child
      */
-    public function __construct(public ActorRef $child, public Throwable $cause,) {}
+    public function __construct(public ActorRef $child, public Throwable $cause)
+    {
+    }
 }

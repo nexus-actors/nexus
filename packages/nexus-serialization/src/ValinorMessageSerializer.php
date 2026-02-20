@@ -24,7 +24,8 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
 {
     private TreeMapper $mapper;
 
-    public function __construct(private TypeRegistry $registry, ?MapperBuilder $mapperBuilder = null,) {
+    public function __construct(private TypeRegistry $registry, ?MapperBuilder $mapperBuilder = null)
+    {
         $this->mapper = ($mapperBuilder ?? new MapperBuilder())
             ->allowPermissiveTypes()
             ->mapper();

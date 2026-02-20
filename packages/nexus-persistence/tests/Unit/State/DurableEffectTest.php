@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\State;
@@ -10,6 +11,7 @@ use Monadial\Nexus\Persistence\State\DurableEffectType;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(DurableEffect::class)]
 #[CoversClass(DurableEffectType::class)]
@@ -18,7 +20,7 @@ final class DurableEffectTest extends TestCase
     #[Test]
     public function persistStoresNewState(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->count = 42;
 
         $effect = DurableEffect::persist($state);
@@ -70,7 +72,7 @@ final class DurableEffectTest extends TestCase
     public function replyStoresRefAndMessage(): void
     {
         $ref = $this->createMock(ActorRef::class);
-        $msg = new \stdClass();
+        $msg = new stdClass();
         $msg->result = 'ok';
 
         $effect = DurableEffect::reply($ref, $msg);
@@ -86,7 +88,7 @@ final class DurableEffectTest extends TestCase
         $ref = $this->createMock(ActorRef::class);
         $fn = static fn (object $state): object => $state;
 
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->count = 1;
 
         $effect = DurableEffect::persist($state)
@@ -100,10 +102,10 @@ final class DurableEffectTest extends TestCase
     #[Test]
     public function thenReplyExecutesTellOnRef(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->value = 42;
 
-        $replyMsg = new \stdClass();
+        $replyMsg = new stdClass();
         $replyMsg->answer = 42;
 
         $ref = $this->createMock(ActorRef::class);
@@ -128,7 +130,7 @@ final class DurableEffectTest extends TestCase
             $called = true;
         };
 
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->count = 1;
 
         $effect = DurableEffect::persist($state)
@@ -139,7 +141,7 @@ final class DurableEffectTest extends TestCase
         self::assertInstanceOf(Closure::class, $effect->sideEffects[0]);
 
         // Execute the stored side effect
-        $effect->sideEffects[0](new \stdClass());
+        $effect->sideEffects[0](new stdClass());
         self::assertTrue($called);
     }
 
@@ -149,12 +151,13 @@ final class DurableEffectTest extends TestCase
         $ref1 = $this->createMock(ActorRef::class);
         $ref2 = $this->createMock(ActorRef::class);
 
-        $state = new \stdClass();
+        $state = new stdClass();
 
         $effect = DurableEffect::persist($state)
-            ->thenReply($ref1, static fn (object $s): object => new \stdClass())
-            ->thenRun(static function (object $s): void {})
-            ->thenReply($ref2, static fn (object $s): object => new \stdClass());
+            ->thenReply($ref1, static fn (object $s): object => new stdClass())
+            ->thenRun(static function (object $s): void {
+            })
+            ->thenReply($ref2, static fn (object $s): object => new stdClass());
 
         self::assertCount(3, $effect->sideEffects);
     }
@@ -162,9 +165,10 @@ final class DurableEffectTest extends TestCase
     #[Test]
     public function chainingReturnsNewInstance(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $original = DurableEffect::persist($state);
-        $chained = $original->thenRun(static function (object $s): void {});
+        $chained = $original->thenRun(static function (object $s): void {
+        });
 
         self::assertNotSame($original, $chained);
         self::assertCount(0, $original->sideEffects);

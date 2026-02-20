@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Dbal;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
@@ -16,7 +17,8 @@ final class DbalSnapshotStore implements SnapshotStore
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {}
+    ) {
+    }
 
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
@@ -50,7 +52,7 @@ final class DbalSnapshotStore implements SnapshotStore
             sequenceNr: (int) $row['sequence_nr'],
             state: $this->serializer->deserialize($row['state_data'], $row['state_type']),
             stateType: $row['state_type'],
-            timestamp: new \DateTimeImmutable($row['timestamp']),
+            timestamp: new DateTimeImmutable($row['timestamp']),
         );
     }
 

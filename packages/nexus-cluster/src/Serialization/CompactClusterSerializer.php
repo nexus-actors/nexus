@@ -8,9 +8,10 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use NoDiscard;
 use Override;
 use RuntimeException;
-use stdClass;
+
 use function serialize;
-use function unserialize;
+
+use stdClass;
 
 /**
  * @psalm-api
@@ -35,7 +36,7 @@ final readonly class CompactClusterSerializer implements ClusterSerializer
     {
         $target = (string) $envelope->target;
         $sender = (string) $envelope->sender;
-        $message = serialize($envelope->message);
+        $message = \serialize($envelope->message);
 
         return pack('n', strlen($target)) . $target
             . pack('n', strlen($sender)) . $sender
@@ -87,7 +88,7 @@ final readonly class CompactClusterSerializer implements ClusterSerializer
         $messageData = substr($data, $pos);
 
         /** @var mixed $message */
-        $message = @unserialize($messageData);
+        $message = @\unserialize($messageData);
 
         if (!$message instanceof stdClass && !is_object($message)) {
             throw new RuntimeException('Failed to deserialize compact envelope message');

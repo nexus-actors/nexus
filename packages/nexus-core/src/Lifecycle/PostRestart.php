@@ -11,5 +11,7 @@ use Throwable;
  */
 final readonly class PostRestart implements Signal
 {
-    public function __construct(public Throwable $cause,) {}
+    public function __construct(public Throwable $cause)
+    {
+    }
 }

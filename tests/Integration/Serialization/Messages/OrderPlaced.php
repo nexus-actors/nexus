@@ -8,5 +8,7 @@ use Monadial\Nexus\Serialization\MessageType;
 #[MessageType('order.placed')]
 final readonly class OrderPlaced
 {
-    public function __construct(public string $orderId, public float $amount,) {}
+    public function __construct(public string $orderId, public float $amount)
+    {
+    }
 }

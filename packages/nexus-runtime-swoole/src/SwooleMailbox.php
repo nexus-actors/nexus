@@ -44,7 +44,8 @@ final class SwooleMailbox implements Mailbox
     /** @var SplQueue<Envelope> */
     private SplQueue $drainQueue;
 
-    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor,) {
+    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor)
+    {
         $capacity = $this->config->bounded
             ? $this->config->capacity
             : self::UNBOUNDED_CAPACITY;

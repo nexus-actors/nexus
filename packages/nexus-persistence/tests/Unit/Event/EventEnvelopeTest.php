@@ -1,13 +1,16 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Event;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(EventEnvelope::class)]
 final class EventEnvelopeTest extends TestCase
@@ -16,9 +19,9 @@ final class EventEnvelopeTest extends TestCase
     public function constructsWithAllProperties(): void
     {
         $persistenceId = PersistenceId::of('order', 'order-123');
-        $event = new \stdClass();
+        $event = new stdClass();
         $event->amount = 100;
-        $timestamp = new \DateTimeImmutable('2026-01-15T10:30:00+00:00');
+        $timestamp = new DateTimeImmutable('2026-01-15T10:30:00+00:00');
 
         $envelope = new EventEnvelope(
             persistenceId: $persistenceId,
@@ -41,9 +44,9 @@ final class EventEnvelopeTest extends TestCase
         $envelope = new EventEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: 'OrderPlaced',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         );
 
         self::assertSame([], $envelope->metadata);
@@ -57,9 +60,9 @@ final class EventEnvelopeTest extends TestCase
         $envelope = new EventEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: 'OrderPlaced',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
             metadata: $metadata,
         );
 
@@ -72,9 +75,9 @@ final class EventEnvelopeTest extends TestCase
         $original = new EventEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: 'OrderPlaced',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
             metadata: ['correlationId' => 'abc-123'],
         );
 
@@ -91,9 +94,9 @@ final class EventEnvelopeTest extends TestCase
         $original = new EventEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
-            event: new \stdClass(),
+            event: new stdClass(),
             eventType: 'OrderPlaced',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
             metadata: ['key' => 'old-value'],
         );
 
@@ -107,8 +110,8 @@ final class EventEnvelopeTest extends TestCase
     public function withMetadataPreservesOtherProperties(): void
     {
         $persistenceId = PersistenceId::of('order', 'order-1');
-        $event = new \stdClass();
-        $timestamp = new \DateTimeImmutable();
+        $event = new stdClass();
+        $timestamp = new DateTimeImmutable();
 
         $original = new EventEnvelope(
             persistenceId: $persistenceId,

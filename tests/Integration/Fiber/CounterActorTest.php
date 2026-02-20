@@ -42,13 +42,13 @@ final class CounterActorTest extends TestCase
                 if ($msg instanceof Increment) {
                     return BehaviorWithState::next($count + 1);
                 }
-    
+
                 if ($msg instanceof GetCount) {
                     $msg->replyTo->tell(new CountReply($count));
-    
+
                     return BehaviorWithState::same();
                 }
-    
+
                 return BehaviorWithState::same();
             },
         );
@@ -104,13 +104,13 @@ final class CounterActorTest extends TestCase
                 if ($msg instanceof Increment) {
                     return BehaviorWithState::next($count + 1);
                 }
-    
+
                 if ($msg instanceof GetCount) {
                     $msg->replyTo->tell(new CountReply($count));
-    
+
                     return BehaviorWithState::same();
                 }
-    
+
                 return BehaviorWithState::same();
             },
         );
@@ -157,13 +157,13 @@ final class CounterActorTest extends TestCase
                 if ($msg instanceof Increment) {
                     return BehaviorWithState::next($count + 1);
                 }
-    
+
                 if ($msg instanceof GetCount) {
                     $msg->replyTo->tell(new CountReply($count));
-    
+
                     return BehaviorWithState::same();
                 }
-    
+
                 return BehaviorWithState::same();
             },
         );

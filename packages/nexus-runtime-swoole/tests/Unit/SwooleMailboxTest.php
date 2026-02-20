@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
@@ -18,8 +19,10 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Swoole\Coroutine;
-use Throwable;
+
 use function Swoole\Coroutine\run;
+
+use Throwable;
 
 #[CoversClass(SwooleMailbox::class)]
 final class SwooleMailboxTest extends TestCase

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
 
+use Closure;
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
@@ -22,16 +24,16 @@ use stdClass;
 final class EventSourcedBehaviorTest extends TestCase
 {
     private PersistenceId $persistenceId;
-    private \Closure $commandHandler;
-    private \Closure $eventHandler;
+    private Closure $commandHandler;
+    private Closure $eventHandler;
     private stdClass $emptyState;
 
     protected function setUp(): void
     {
         $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
         $this->emptyState = new stdClass();
-        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
-        $this->eventHandler = static fn(object $state, object $event): object => $state;
+        $this->commandHandler = static fn (object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
+        $this->eventHandler = static fn (object $state, object $event): object => $state;
     }
 
     #[Test]
@@ -136,7 +138,7 @@ final class EventSourcedBehaviorTest extends TestCase
             $this->eventHandler,
         );
 
-        $this->expectException(\LogicException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage('EventStore is required');
 
         $builder->toBehavior();

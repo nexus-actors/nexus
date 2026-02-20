@@ -1,8 +1,10 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\State;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 readonly class DurableStateEnvelope
@@ -12,6 +14,7 @@ readonly class DurableStateEnvelope
         public int $version,
         public object $state,
         public string $stateType,
-        public \DateTimeImmutable $timestamp,
-    ) {}
+        public DateTimeImmutable $timestamp,
+    ) {
+    }
 }

@@ -40,7 +40,7 @@ final class StashingTest extends TestCase
                 if ($msg instanceof WorkItem) {
                     $processedIds[] = $msg->id;
                 }
-    
+
                 return Behavior::same();
             },
         );
@@ -51,13 +51,13 @@ final class StashingTest extends TestCase
             static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
                 if ($msg instanceof Initialize) {
                     $ctx->unstashAll();
-    
+
                     return $readyBehavior;
                 }
-    
+
                 // Stash everything else
-            $ctx->stash();
-    
+                $ctx->stash();
+
                 return Behavior::same();
             },
         );
@@ -99,7 +99,7 @@ final class StashingTest extends TestCase
                 if ($msg instanceof WorkItem) {
                     $processedIds[] = $msg->id;
                 }
-    
+
                 return Behavior::same();
             },
         );
@@ -109,12 +109,12 @@ final class StashingTest extends TestCase
             static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
                 if ($msg instanceof Initialize) {
                     $ctx->unstashAll();
-    
+
                     return $readyBehavior;
                 }
-    
+
                 $ctx->stash();
-    
+
                 return Behavior::same();
             },
         );
@@ -154,7 +154,7 @@ final class StashingTest extends TestCase
                 if ($msg instanceof WorkItem) {
                     $processedIds[] = $msg->id;
                 }
-    
+
                 return Behavior::same();
             },
         );
@@ -164,12 +164,12 @@ final class StashingTest extends TestCase
             static function (ActorContext $ctx, object $msg) use ($readyBehavior): Behavior {
                 if ($msg instanceof Initialize) {
                     $ctx->unstashAll();
-    
+
                     return $readyBehavior;
                 }
-    
+
                 $ctx->stash();
-    
+
                 return Behavior::same();
             },
         );

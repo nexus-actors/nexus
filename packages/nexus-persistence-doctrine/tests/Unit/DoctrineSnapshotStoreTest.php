@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Doctrine\Tests\Unit;
 
+use DateTimeImmutable;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
@@ -15,6 +16,7 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(DoctrineSnapshotStore::class)]
 final class DoctrineSnapshotStoreTest extends TestCase
@@ -47,15 +49,15 @@ final class DoctrineSnapshotStoreTest extends TestCase
 
     private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->total = $sequenceNr * 100;
 
         return new SnapshotEnvelope(
             persistenceId: $this->id,
             sequenceNr: $sequenceNr,
             state: $state,
-            stateType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
     }
 
@@ -69,7 +71,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
         $loaded = $this->store->load($this->id);
         self::assertNotNull($loaded);
         self::assertSame(5, $loaded->sequenceNr);
-        self::assertSame(\stdClass::class, $loaded->stateType);
+        self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(500, $loaded->state->total);
     }
 
@@ -128,7 +130,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
     #[Test]
     public function stateIsSerializedAndDeserialized(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->items = ['item-1', 'item-2'];
         $state->status = 'confirmed';
 
@@ -136,8 +138,8 @@ final class DoctrineSnapshotStoreTest extends TestCase
             persistenceId: $this->id,
             sequenceNr: 5,
             state: $state,
-            stateType: \stdClass::class,
-            timestamp: new \DateTimeImmutable('2026-01-15 10:00:00'),
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
         );
 
         $this->store->save($this->id, $snapshot);

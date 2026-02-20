@@ -1,8 +1,10 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -48,21 +50,21 @@ final class PersistenceIdTest extends TestCase
     #[Test]
     public function rejectsEmptyEntityType(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         PersistenceId::of('', 'id');
     }
 
     #[Test]
     public function rejectsEmptyEntityId(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         PersistenceId::of('type', '');
     }
 
     #[Test]
     public function rejectsPipeInEntityType(): void
     {
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         PersistenceId::of('or|der', 'id');
     }
 }

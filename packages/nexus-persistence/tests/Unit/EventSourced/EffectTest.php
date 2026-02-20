@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
@@ -10,6 +11,7 @@ use Monadial\Nexus\Persistence\EventSourced\EffectType;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(Effect::class)]
 #[CoversClass(EffectType::class)]
@@ -18,9 +20,9 @@ final class EffectTest extends TestCase
     #[Test]
     public function persistStoresEvents(): void
     {
-        $event1 = new \stdClass();
+        $event1 = new stdClass();
         $event1->type = 'OrderPlaced';
-        $event2 = new \stdClass();
+        $event2 = new stdClass();
         $event2->type = 'OrderConfirmed';
 
         $effect = Effect::persist($event1, $event2);
@@ -34,7 +36,7 @@ final class EffectTest extends TestCase
     #[Test]
     public function persistWithSingleEvent(): void
     {
-        $event = new \stdClass();
+        $event = new stdClass();
         $event->type = 'OrderPlaced';
 
         $effect = Effect::persist($event);
@@ -87,7 +89,7 @@ final class EffectTest extends TestCase
     public function replyStoresRefAndMessage(): void
     {
         $ref = $this->createMock(ActorRef::class);
-        $msg = new \stdClass();
+        $msg = new stdClass();
         $msg->result = 'ok';
 
         $effect = Effect::reply($ref, $msg);
@@ -103,7 +105,7 @@ final class EffectTest extends TestCase
         $ref = $this->createMock(ActorRef::class);
         $fn = static fn (object $state): object => $state;
 
-        $effect = Effect::persist(new \stdClass())
+        $effect = Effect::persist(new stdClass())
             ->thenReply($ref, $fn);
 
         self::assertSame(EffectType::Persist, $effect->type);
@@ -114,10 +116,10 @@ final class EffectTest extends TestCase
     #[Test]
     public function thenReplyExecutesTellOnRef(): void
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->value = 42;
 
-        $replyMsg = new \stdClass();
+        $replyMsg = new stdClass();
         $replyMsg->answer = 42;
 
         $ref = $this->createMock(ActorRef::class);
@@ -127,7 +129,7 @@ final class EffectTest extends TestCase
 
         $fn = static fn (object $state): object => $replyMsg;
 
-        $effect = Effect::persist(new \stdClass())
+        $effect = Effect::persist(new stdClass())
             ->thenReply($ref, $fn);
 
         // Execute the stored side effect
@@ -142,7 +144,7 @@ final class EffectTest extends TestCase
             $called = true;
         };
 
-        $effect = Effect::persist(new \stdClass())
+        $effect = Effect::persist(new stdClass())
             ->thenRun($fn);
 
         self::assertSame(EffectType::Persist, $effect->type);
@@ -150,7 +152,7 @@ final class EffectTest extends TestCase
         self::assertInstanceOf(Closure::class, $effect->sideEffects[0]);
 
         // Execute the stored side effect
-        $effect->sideEffects[0](new \stdClass());
+        $effect->sideEffects[0](new stdClass());
         self::assertTrue($called);
     }
 
@@ -160,10 +162,11 @@ final class EffectTest extends TestCase
         $ref1 = $this->createMock(ActorRef::class);
         $ref2 = $this->createMock(ActorRef::class);
 
-        $effect = Effect::persist(new \stdClass())
-            ->thenReply($ref1, static fn (object $s): object => new \stdClass())
-            ->thenRun(static function (object $s): void {})
-            ->thenReply($ref2, static fn (object $s): object => new \stdClass());
+        $effect = Effect::persist(new stdClass())
+            ->thenReply($ref1, static fn (object $s): object => new stdClass())
+            ->thenRun(static function (object $s): void {
+            })
+            ->thenReply($ref2, static fn (object $s): object => new stdClass());
 
         self::assertCount(3, $effect->sideEffects);
     }
@@ -172,8 +175,9 @@ final class EffectTest extends TestCase
     public function chainingReturnsNewInstance(): void
     {
         $ref = $this->createMock(ActorRef::class);
-        $original = Effect::persist(new \stdClass());
-        $chained = $original->thenRun(static function (object $s): void {});
+        $original = Effect::persist(new stdClass());
+        $chained = $original->thenRun(static function (object $s): void {
+        });
 
         self::assertNotSame($original, $chained);
         self::assertCount(0, $original->sideEffects);
@@ -185,7 +189,7 @@ final class EffectTest extends TestCase
     {
         $events = [];
         for ($i = 0; $i < 5; $i++) {
-            $e = new \stdClass();
+            $e = new stdClass();
             $e->index = $i;
             $events[] = $e;
         }

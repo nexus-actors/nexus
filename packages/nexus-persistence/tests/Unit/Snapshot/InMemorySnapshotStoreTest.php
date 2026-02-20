@@ -1,14 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\Snapshot;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\InMemorySnapshotStore;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(InMemorySnapshotStore::class)]
 final class InMemorySnapshotStoreTest extends TestCase
@@ -24,7 +27,7 @@ final class InMemorySnapshotStoreTest extends TestCase
 
     private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
     {
-        $state = new \stdClass();
+        $state = new stdClass();
         $state->total = $sequenceNr * 100;
 
         return new SnapshotEnvelope(
@@ -32,7 +35,7 @@ final class InMemorySnapshotStoreTest extends TestCase
             sequenceNr: $sequenceNr,
             state: $state,
             stateType: 'OrderState',
-            timestamp: new \DateTimeImmutable(),
+            timestamp: new DateTimeImmutable(),
         );
     }
 

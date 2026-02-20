@@ -5,5 +5,7 @@ namespace Monadial\Nexus\Tests\Integration\Serialization\Messages;
 
 final readonly class Address
 {
-    public function __construct(public string $street, public string $city, public string $zip, public string $country,) {}
+    public function __construct(public string $street, public string $city, public string $zip, public string $country)
+    {
+    }
 }

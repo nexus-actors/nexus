@@ -21,7 +21,8 @@ final readonly class Envelope
         public ActorPath $sender,
         public ActorPath $target,
         public array $metadata = [],
-    ) {}
+    ) {
+    }
 
     /**
      * Creates an Envelope with empty metadata.

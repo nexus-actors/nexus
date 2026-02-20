@@ -8,7 +8,8 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 /** @psalm-api */
 final class MailboxClosedException extends MailboxException
 {
-    public function __construct(public readonly ActorPath $actor,) {
+    public function __construct(public readonly ActorPath $actor)
+    {
         parent::__construct("Mailbox for {$actor} is closed");
     }
 }

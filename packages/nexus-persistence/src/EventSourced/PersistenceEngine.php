@@ -65,8 +65,15 @@ final class PersistenceEngine
         $locking = $lockingStrategy ?? LockingStrategy::optimistic();
 
         return Behavior::setup(static function (ActorContext $ctx) use (
-            $persistenceId, $emptyState, $commandHandler, $eventHandler,
-            $eventStore, $snapshotStore, $strategy, $retention, $locking,
+            $persistenceId,
+            $emptyState,
+            $commandHandler,
+            $eventHandler,
+            $eventStore,
+            $snapshotStore,
+            $strategy,
+            $retention,
+            $locking,
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
@@ -92,13 +99,28 @@ final class PersistenceEngine
             return Behavior::withState(
                 ['state' => $state, 'sequenceNr' => $sequenceNr],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
-                    $persistenceId, $commandHandler, $eventHandler,
-                    $eventStore, $snapshotStore, $strategy, $retention, $locking,
+                    $persistenceId,
+                    $commandHandler,
+                    $eventHandler,
+                    $eventStore,
+                    $snapshotStore,
+                    $strategy,
+                    $retention,
+                    $locking,
                 ): BehaviorWithState {
                     /** @var array{state: object, sequenceNr: int} $data */
                     return $locking->withLock($persistenceId, static function () use (
-                        $data, $ctx, $msg, $persistenceId, $commandHandler, $eventHandler,
-                        $eventStore, $snapshotStore, $strategy, $retention, $locking,
+                        $data,
+                        $ctx,
+                        $msg,
+                        $persistenceId,
+                        $commandHandler,
+                        $eventHandler,
+                        $eventStore,
+                        $snapshotStore,
+                        $strategy,
+                        $retention,
+                        $locking,
                     ): BehaviorWithState {
                         $state = $data['state'];
                         $sequenceNr = $data['sequenceNr'];
@@ -116,8 +138,15 @@ final class PersistenceEngine
 
                         return match ($effect->type) {
                             EffectType::Persist => self::handlePersist(
-                                $effect, $state, $sequenceNr, $persistenceId,
-                                $eventHandler, $eventStore, $snapshotStore, $strategy, $retention,
+                                $effect,
+                                $state,
+                                $sequenceNr,
+                                $persistenceId,
+                                $eventHandler,
+                                $eventStore,
+                                $snapshotStore,
+                                $strategy,
+                                $retention,
                             ),
                             EffectType::None => BehaviorWithState::same(),
                             EffectType::Unhandled => BehaviorWithState::same(),

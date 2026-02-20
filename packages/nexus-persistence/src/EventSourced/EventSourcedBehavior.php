@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\EventSourced;
 
 use Closure;
+use LogicException;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\Locking\LockingStrategy;
@@ -32,7 +33,8 @@ final class EventSourcedBehavior
         private readonly ?SnapshotStrategy $snapshotStrategy = null,
         private readonly ?RetentionPolicy $retentionPolicy = null,
         private readonly ?LockingStrategy $lockingStrategy = null,
-    ) {}
+    ) {
+    }
 
     /**
      * Create a new EventSourcedBehavior builder.
@@ -80,7 +82,7 @@ final class EventSourcedBehavior
     /**
      * Build the final Behavior using PersistenceEngine.
      *
-     * @throws \LogicException if EventStore has not been set
+     * @throws LogicException if EventStore has not been set
      */
     public function toBehavior(): Behavior
     {
@@ -89,7 +91,7 @@ final class EventSourcedBehavior
             $this->emptyState,
             $this->commandHandler,
             $this->eventHandler,
-            $this->eventStore ?? throw new \LogicException('EventStore is required — call withEventStore() before toBehavior()'),
+            $this->eventStore ?? throw new LogicException('EventStore is required — call withEventStore() before toBehavior()'),
             $this->snapshotStore,
             $this->snapshotStrategy,
             $this->retentionPolicy,

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
@@ -7,10 +8,12 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Duration;
 
-final readonly class GoodMessage {
+final readonly class GoodMessage
+{
 }
 
-final class BadMessage {
+final class BadMessage
+{
 }
 
 final class ReadonlyMessageFixture

@@ -32,7 +32,8 @@ final class ClusterNode
         private readonly ConsistentHashRing $ring,
         private readonly ClusterSerializer $serializer,
         private readonly ActorDirectory $directory,
-    ) {}
+    ) {
+    }
 
     /**
      * Spawn an actor, routing to local or remote based on the hash ring.

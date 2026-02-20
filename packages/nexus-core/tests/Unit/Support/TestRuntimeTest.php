@@ -38,8 +38,10 @@ final class TestRuntimeTest extends TestCase
     {
         $runtime = new TestRuntime();
 
-        $id1 = $runtime->spawn(static function (): void {});
-        $id2 = $runtime->spawn(static function (): void {});
+        $id1 = $runtime->spawn(static function (): void {
+        });
+        $id2 = $runtime->spawn(static function (): void {
+        });
 
         self::assertSame('test-actor-0', $id1);
         self::assertSame('test-actor-1', $id2);
