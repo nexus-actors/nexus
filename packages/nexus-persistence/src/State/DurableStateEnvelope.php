@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\State;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 final readonly class DurableStateEnvelope
 {
     public function __construct(

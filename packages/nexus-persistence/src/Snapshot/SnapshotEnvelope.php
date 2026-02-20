@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\Snapshot;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 final readonly class SnapshotEnvelope
 {
     public function __construct(

@@ -9,11 +9,14 @@ use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Persistence\Dbal\DbalPessimisticLockProvider;
 use Monadial\Nexus\Persistence\Locking\PessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Override;
 
 /**
  * Doctrine ORM convenience wrapper for pessimistic locking.
  *
  * Delegates to DbalPessimisticLockProvider via the EntityManager's connection.
+ *
+ * @psalm-api
  */
 final class DoctrinePessimisticLockProvider implements PessimisticLockProvider
 {
@@ -24,6 +27,7 @@ final class DoctrinePessimisticLockProvider implements PessimisticLockProvider
         $this->inner = new DbalPessimisticLockProvider($em->getConnection());
     }
 
+    #[Override]
     public function withLock(PersistenceId $id, Closure $callback): mixed
     {
         return $this->inner->withLock($id, $callback);

@@ -7,6 +7,8 @@ namespace Monadial\Nexus\Psalm\Hook;
 use Monadial\Nexus\Cluster\RemoteActorRef;
 use Monadial\Nexus\Psalm\Issue\NonSerializableClusterMessage;
 use Monadial\Nexus\Serialization\MessageType;
+use Override;
+use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
@@ -21,6 +23,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
         'monadial\nexus\core\actor\actorref::tell' => 0,
     ];
 
+    #[Override]
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
         $declaringId = \strtolower($event->getDeclaringMethodId());
@@ -70,9 +73,13 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
 
     private static function callerIsRemoteRef(AfterMethodCallAnalysisEvent $event): bool
     {
-        $callerType = $event->getStatementsSource()->getNodeTypeProvider()->getType(
-            $event->getExpr()->var,
-        );
+        $expr = $event->getExpr();
+
+        if (!$expr instanceof MethodCall) {
+            return false;
+        }
+
+        $callerType = $event->getStatementsSource()->getNodeTypeProvider()->getType($expr->var);
 
         if ($callerType === null) {
             return false;

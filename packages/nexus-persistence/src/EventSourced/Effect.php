@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\EventSourced;
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorRef;
 
+/** @psalm-api */
 final class Effect
 {
     /**

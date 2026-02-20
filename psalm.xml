@@ -33,5 +33,17 @@
     <issueHandlers>
         <!-- fp4php Fiber generics use 4 template params which Psalm sees as excessive -->
         <TooManyTemplateParams errorLevel="suppress" />
+
+        <!-- nexus-psalm necessarily uses Psalm's internal APIs as a plugin -->
+        <InternalMethod>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-psalm/src" />
+            </errorLevel>
+        </InternalMethod>
+        <InternalClass>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-psalm/src" />
+            </errorLevel>
+        </InternalClass>
     </issueHandlers>
 </psalm>

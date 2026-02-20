@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Psalm\Hook;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
+use Override;
 use Psalm\Codebase;
 use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
@@ -23,11 +24,13 @@ final class PropsReturnTypeProvider implements MethodReturnTypeProviderInterface
     private const array TARGET_INTERFACES = [ActorHandler::class, StatefulActorHandler::class];
 
     /** @return array<string> */
+    #[Override]
     public static function getClassLikeNames(): array
     {
         return [Props::class];
     }
 
+    #[Override]
     public static function getMethodReturnType(MethodReturnTypeProviderEvent $event): ?Union
     {
         return match ($event->getMethodNameLowercase()) {

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence;
 
 use InvalidArgumentException;
+use Override;
 use Stringable;
 
+/** @psalm-api */
 final readonly class PersistenceId implements Stringable
 {
     private function __construct(public string $entityType, public string $entityId) {}
@@ -50,6 +52,7 @@ final readonly class PersistenceId implements Stringable
             && $this->entityId === $other->entityId;
     }
 
+    #[Override]
     public function __toString(): string
     {
         return $this->toString();

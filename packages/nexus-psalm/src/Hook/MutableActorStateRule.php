@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm\Hook;
 
 use Monadial\Nexus\Psalm\Issue\MutableActorState;
+use Override;
 use Psalm\Internal\Analyzer\ClassLikeAnalyzer;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface;
@@ -18,6 +19,7 @@ final class MutableActorStateRule implements AfterClassLikeAnalysisInterface
     ];
 
     /** @phpcsSuppress SlevomatCodingStandard.TypeHints.ReturnTypeHint */
+    #[Override]
     public static function afterStatementAnalysis(AfterClassLikeAnalysisEvent $event)
     {
         $storage = $event->getClasslikeStorage();

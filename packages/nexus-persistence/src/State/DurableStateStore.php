@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\State;
 
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 interface DurableStateStore
 {
     public function get(PersistenceId $id): ?DurableStateEnvelope;

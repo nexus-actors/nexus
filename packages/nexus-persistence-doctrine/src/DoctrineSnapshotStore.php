@@ -11,7 +11,9 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Override;
 
+/** @psalm-api */
 final class DoctrineSnapshotStore implements SnapshotStore
 {
     public function __construct(
@@ -19,6 +21,7 @@ final class DoctrineSnapshotStore implements SnapshotStore
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
+    #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
         $entry = new SnapshotEntry(
@@ -33,9 +36,10 @@ final class DoctrineSnapshotStore implements SnapshotStore
         $this->em->flush();
     }
 
+    #[Override]
     public function load(PersistenceId $id): ?SnapshotEnvelope
     {
-        $entry = $this->em->createQueryBuilder()
+        $result = $this->em->createQueryBuilder()
             ->select('s')
             ->from(SnapshotEntry::class, 's')
             ->where('s.persistenceId = :pid')
@@ -45,19 +49,22 @@ final class DoctrineSnapshotStore implements SnapshotStore
             ->getQuery()
             ->getOneOrNullResult();
 
-        if ($entry === null) {
+        if ($result === null) {
             return null;
         }
 
+        assert($result instanceof SnapshotEntry);
+
         return new SnapshotEnvelope(
             persistenceId: $id,
-            sequenceNr: (int) $entry->sequenceNr,
-            state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
-            stateType: $entry->stateType,
-            timestamp: $entry->timestamp,
+            sequenceNr: $result->sequenceNr,
+            state: $this->serializer->deserialize($result->stateData, $result->stateType),
+            stateType: $result->stateType,
+            timestamp: $result->timestamp,
         );
     }
 
+    #[Override]
     public function delete(PersistenceId $id, int $maxSequenceNr): void
     {
         $this->em->createQueryBuilder()

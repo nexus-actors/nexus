@@ -23,6 +23,8 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
  *
  * @template S of object  The state type
  * @template E of object  The event type
+ *
+ * @psalm-api
  */
 abstract class AbstractEventSourcedActor
 {

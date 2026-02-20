@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
 
+use Override;
 use Psalm\Plugin\EventHandler\Event\FunctionReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\FunctionReturnTypeProviderInterface;
 use Psalm\Type\Union;
@@ -18,11 +19,13 @@ use Psalm\Type\Union;
 final class CloneWithReturnTypeProvider implements FunctionReturnTypeProviderInterface
 {
     /** @return list<lowercase-string> */
+    #[Override]
     public static function getFunctionIds(): array
     {
         return ['clone'];
     }
 
+    #[Override]
     public static function getFunctionReturnType(FunctionReturnTypeProviderEvent $event): ?Union
     {
         $args = $event->getCallArgs();

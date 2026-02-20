@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm\Hook;
 
 use Monadial\Nexus\Psalm\Issue\BlockingCallInHandler;
+use Override;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterEveryFunctionCallAnalysisInterface;
@@ -37,6 +38,7 @@ final class BlockingCallInHandlerRule implements AfterEveryFunctionCallAnalysisI
         'popen',
     ];
 
+    #[Override]
     public static function afterEveryFunctionCallAnalysis(AfterEveryFunctionCallAnalysisEvent $event): void
     {
         $functionId = \strtolower($event->getFunctionId());

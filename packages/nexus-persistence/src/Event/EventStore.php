@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\Event;
 
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 interface EventStore
 {
     public function persist(PersistenceId $id, EventEnvelope ...$events): void;

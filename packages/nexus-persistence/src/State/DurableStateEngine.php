@@ -25,6 +25,8 @@ use Monadial\Nexus\Persistence\PersistenceId;
  *
  * On each message, the engine delegates to the user's commandHandler,
  * interprets the returned DurableEffect, and handles persistence + side effects.
+ *
+ * @psalm-api
  */
 final class DurableStateEngine
 {
@@ -50,7 +52,8 @@ final class DurableStateEngine
     ): Behavior {
         $locking = $lockingStrategy ?? LockingStrategy::optimistic();
 
-        return Behavior::setup(static function (ActorContext $ctx) use (
+        /** @psalm-suppress UnusedClosureParam, InvalidArgument */
+        return Behavior::setup(static function (ActorContext $_ctx) use (
             $persistenceId,
             $emptyState,
             $commandHandler,
@@ -69,6 +72,8 @@ final class DurableStateEngine
             }
 
             // === Command Processing Phase ===
+
+            /** @psalm-suppress InvalidArgument */
             return Behavior::withState(
                 ['state' => $state, 'version' => $version],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
@@ -100,6 +105,7 @@ final class DurableStateEngine
                             }
                         }
 
+                        /** @psalm-suppress InvalidArgument */
                         $effect = $commandHandler($state, $ctx, $msg);
 
                         return match ($effect->type) {
@@ -133,6 +139,7 @@ final class DurableStateEngine
     ): BehaviorWithState {
         $newVersion = $version + 1;
         $newState = $effect->state;
+        assert($newState !== null);
 
         $stateStore->upsert($persistenceId, new DurableStateEnvelope(
             persistenceId: $persistenceId,
@@ -165,6 +172,8 @@ final class DurableStateEngine
      */
     private static function handleReply(DurableEffect $effect): BehaviorWithState
     {
+        assert($effect->replyTo !== null);
+        assert(\is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
         return BehaviorWithState::same();

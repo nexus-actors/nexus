@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\Event;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 final readonly class EventEnvelope
 {
     /** @param array<string, mixed> $metadata */

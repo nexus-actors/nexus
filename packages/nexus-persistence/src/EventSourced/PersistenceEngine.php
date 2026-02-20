@@ -64,7 +64,8 @@ final class PersistenceEngine
         $retention = $retentionPolicy ?? RetentionPolicy::none();
         $locking = $lockingStrategy ?? LockingStrategy::optimistic();
 
-        return Behavior::setup(static function (ActorContext $ctx) use (
+        /** @psalm-suppress UnusedClosureParam, InvalidArgument */
+        return Behavior::setup(static function (ActorContext $_ctx) use (
             $persistenceId,
             $emptyState,
             $commandHandler,
@@ -93,11 +94,14 @@ final class PersistenceEngine
             $events = $eventStore->load($persistenceId, $sequenceNr + 1);
 
             foreach ($events as $envelope) {
+                /** @psalm-suppress InvalidArgument */
                 $state = $eventHandler($state, $envelope->event);
                 $sequenceNr = $envelope->sequenceNr;
             }
 
             // === Command Processing Phase ===
+
+            /** @psalm-suppress InvalidArgument */
             return Behavior::withState(
                 ['state' => $state, 'sequenceNr' => $sequenceNr],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
@@ -111,6 +115,8 @@ final class PersistenceEngine
                     $locking,
                 ): BehaviorWithState {
                     /** @var array{state: object, sequenceNr: int} $data */
+
+                    /** @psalm-suppress InvalidArgument */
                     return $locking->withLock($persistenceId, static function () use (
                         $data,
                         $ctx,
@@ -124,6 +130,7 @@ final class PersistenceEngine
                         $retention,
                         $locking,
                     ): BehaviorWithState {
+                        /** @var array{state: object, sequenceNr: int} $data */
                         $state = $data['state'];
                         $sequenceNr = $data['sequenceNr'];
 
@@ -132,14 +139,17 @@ final class PersistenceEngine
                             $newEvents = $eventStore->load($persistenceId, $sequenceNr + 1);
 
                             foreach ($newEvents as $envelope) {
+                                /** @psalm-suppress InvalidArgument */
                                 $state = $eventHandler($state, $envelope->event);
                                 $sequenceNr = $envelope->sequenceNr;
                             }
                         }
 
+                        /** @psalm-suppress InvalidArgument */
                         $effect = $commandHandler($state, $ctx, $msg);
 
                         return match ($effect->type) {
+                            /** @psalm-suppress MixedArgument State loses type through closure capture */
                             EffectType::Persist => self::handlePersist(
                                 $effect,
                                 $state,
@@ -201,11 +211,14 @@ final class PersistenceEngine
         $lastEvent = null;
 
         foreach ($effect->events as $event) {
+            /** @psalm-suppress MixedAssignment eventHandler returns generic S but Psalm sees mixed */
             $newState = $eventHandler($newState, $event);
             $lastEvent = $event;
         }
 
         // 4. Check snapshot strategy and save snapshot if triggered
+
+        /** @psalm-suppress MixedArgument $newState is object but Psalm loses type through closure */
         if (
             $lastEvent !== null
             && $snapshotStore !== null
@@ -249,6 +262,8 @@ final class PersistenceEngine
      */
     private static function handleReply(Effect $effect): BehaviorWithState
     {
+        assert($effect->replyTo !== null);
+        assert(\is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
         return BehaviorWithState::same();

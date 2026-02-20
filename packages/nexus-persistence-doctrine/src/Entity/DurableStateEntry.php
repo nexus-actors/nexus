@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\Doctrine\Entity;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
+/** @psalm-api */
 #[ORM\Entity]
 #[ORM\Table(name: 'nexus_durable_state')]
 final class DurableStateEntry

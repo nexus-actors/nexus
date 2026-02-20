@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\Locking;
 use Closure;
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 interface PessimisticLockProvider
 {
     /**

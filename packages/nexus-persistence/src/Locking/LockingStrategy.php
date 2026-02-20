@@ -14,6 +14,8 @@ use Monadial\Nexus\Persistence\PersistenceId;
  *   ConcurrentModificationException is thrown on conflict.
  * - **Pessimistic** — Acquires an exclusive database lock before command
  *   processing. Prevents conflicts entirely but introduces contention.
+ *
+ * @psalm-api
  */
 final readonly class LockingStrategy
 {

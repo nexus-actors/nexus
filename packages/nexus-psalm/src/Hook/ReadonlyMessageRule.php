@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm\Hook;
 
 use Monadial\Nexus\Psalm\Issue\NonReadonlyMessage;
+use Override;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
@@ -19,6 +20,7 @@ final class ReadonlyMessageRule implements AfterMethodCallAnalysisInterface
         'monadial\nexus\core\actor\actorref::tell' => 0,
     ];
 
+    #[Override]
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
         $messageArgIndex = self::messageArgIndex($event->getDeclaringMethodId());

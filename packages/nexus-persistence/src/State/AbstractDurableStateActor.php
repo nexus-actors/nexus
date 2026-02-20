@@ -18,6 +18,8 @@ use Monadial\Nexus\Persistence\PersistenceId;
  * recovery and persistence handling.
  *
  * @template S of object  The state type
+ *
+ * @psalm-api
  */
 abstract class AbstractDurableStateActor
 {

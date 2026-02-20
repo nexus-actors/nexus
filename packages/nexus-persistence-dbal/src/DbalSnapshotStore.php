@@ -11,7 +11,9 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Override;
 
+/** @psalm-api */
 final class DbalSnapshotStore implements SnapshotStore
 {
     public function __construct(
@@ -19,6 +21,7 @@ final class DbalSnapshotStore implements SnapshotStore
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
+    #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
         $this->connection->insert('nexus_snapshot_store', [
@@ -30,6 +33,7 @@ final class DbalSnapshotStore implements SnapshotStore
         ]);
     }
 
+    #[Override]
     public function load(PersistenceId $id): ?SnapshotEnvelope
     {
         $row = $this->connection->createQueryBuilder()
@@ -49,12 +53,13 @@ final class DbalSnapshotStore implements SnapshotStore
         return new SnapshotEnvelope(
             persistenceId: $id,
             sequenceNr: (int) $row['sequence_nr'],
-            state: $this->serializer->deserialize($row['state_data'], $row['state_type']),
-            stateType: $row['state_type'],
-            timestamp: new DateTimeImmutable($row['timestamp']),
+            state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
+            stateType: (string) $row['state_type'],
+            timestamp: new DateTimeImmutable((string) $row['timestamp']),
         );
     }
 
+    #[Override]
     public function delete(PersistenceId $id, int $maxSequenceNr): void
     {
         $this->connection->createQueryBuilder()

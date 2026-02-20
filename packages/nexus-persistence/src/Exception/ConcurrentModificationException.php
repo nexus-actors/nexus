@@ -8,6 +8,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use RuntimeException;
 use Throwable;
 
+/** @psalm-api */
 final class ConcurrentModificationException extends RuntimeException
 {
     public function __construct(

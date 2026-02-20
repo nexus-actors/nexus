@@ -13,7 +13,9 @@ use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Override;
 
+/** @psalm-api */
 final class DoctrineDurableStateStore implements DurableStateStore
 {
     public function __construct(
@@ -21,6 +23,7 @@ final class DoctrineDurableStateStore implements DurableStateStore
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
+    #[Override]
     public function get(PersistenceId $id): ?DurableStateEnvelope
     {
         $entry = $this->em->find(DurableStateEntry::class, $id->toString());
@@ -31,13 +34,14 @@ final class DoctrineDurableStateStore implements DurableStateStore
 
         return new DurableStateEnvelope(
             persistenceId: $id,
-            version: (int) $entry->version,
+            version: $entry->version,
             state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
             stateType: $entry->stateType,
             timestamp: $entry->timestamp,
         );
     }
 
+    #[Override]
     public function upsert(PersistenceId $id, DurableStateEnvelope $state): void
     {
         $entry = $this->em->find(DurableStateEntry::class, $id->toString());
@@ -67,6 +71,7 @@ final class DoctrineDurableStateStore implements DurableStateStore
         }
     }
 
+    #[Override]
     public function delete(PersistenceId $id): void
     {
         $entry = $this->em->find(DurableStateEntry::class, $id->toString());

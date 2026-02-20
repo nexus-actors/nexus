@@ -17,9 +17,12 @@ use Monadial\Nexus\Persistence\PersistenceId;
  * converting to a Behavior via toBehavior().
  *
  * @template S of object  The state type
+ *
+ * @psalm-api
  */
 final class DurableStateBehavior
 {
+    /** @psalm-suppress UnusedConstructor Called by create() */
     private function __construct(
         private readonly PersistenceId $persistenceId,
         private readonly object $emptyState,
@@ -32,8 +35,10 @@ final class DurableStateBehavior
      * Create a new DurableStateBehavior builder.
      *
      * @param PersistenceId $persistenceId Unique identity for this persistent entity
-     * @param S $emptyState Initial empty state before any persisted state
-     * @param Closure(S, \Monadial\Nexus\Core\Actor\ActorContext, object): DurableEffect $commandHandler Processes commands, returns DurableEffect
+     * @param object $emptyState Initial empty state before any persisted state
+     * @param Closure $commandHandler Processes commands, returns DurableEffect
+     *
+     * @psalm-suppress UnusedParam Parameters are stored via constructor for later use
      */
     public static function create(PersistenceId $persistenceId, object $emptyState, Closure $commandHandler): self
     {
@@ -54,6 +59,8 @@ final class DurableStateBehavior
      * Build the final Behavior using DurableStateEngine.
      *
      * @throws LogicException if DurableStateStore has not been set
+     *
+     * @psalm-suppress MixedArgumentTypeCoercion Stored closures lose generic type info
      */
     public function toBehavior(): Behavior
     {

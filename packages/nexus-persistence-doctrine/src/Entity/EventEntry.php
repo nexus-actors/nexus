@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Persistence\Doctrine\Entity;
 use DateTimeImmutable;
 use Doctrine\ORM\Mapping as ORM;
 
+/** @psalm-api */
 #[ORM\Entity]
 #[ORM\Table(name: 'nexus_event_journal')]
 #[ORM\Index(name: 'idx_event_journal_pid', columns: ['persistence_id'])]

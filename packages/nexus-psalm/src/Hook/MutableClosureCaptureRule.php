@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm\Hook;
 
 use Monadial\Nexus\Psalm\Issue\MutableClosureCapture;
+use Override;
 use PhpParser\Node\Expr\Closure;
 use Psalm\CodeLocation;
 use Psalm\IssueBuffer;
@@ -19,6 +20,7 @@ final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterfac
         'monadial\nexus\core\actor\props::fromcontainer',
     ];
 
+    #[Override]
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
         $declaringId = \strtolower($event->getDeclaringMethodId());
@@ -42,9 +44,15 @@ final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterfac
 
             foreach ($arg->value->uses as $use) {
                 if ($use->byRef) {
+                    $varName = $use->var->name;
+
+                    if (!\is_string($varName)) {
+                        continue;
+                    }
+
                     IssueBuffer::accepts(
                         new MutableClosureCapture(
-                            $use->var->name,
+                            $varName,
                             new CodeLocation($event->getStatementsSource(), $use),
                         ),
                         $event->getStatementsSource()->getSuppressedIssues(),

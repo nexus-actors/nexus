@@ -20,9 +20,12 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
  *
  * @template S of object  The state type
  * @template E of object  The event type
+ *
+ * @psalm-api
  */
 final class EventSourcedBehavior
 {
+    /** @psalm-suppress UnusedConstructor Called by create() */
     private function __construct(
         private readonly PersistenceId $persistenceId,
         private readonly object $emptyState,
@@ -39,9 +42,11 @@ final class EventSourcedBehavior
      * Create a new EventSourcedBehavior builder.
      *
      * @param PersistenceId $persistenceId Unique identity for this persistent entity
-     * @param S $emptyState Initial empty state before any events
-     * @param Closure(S, \Monadial\Nexus\Core\Actor\ActorContext, object): Effect $commandHandler Processes commands, returns Effect
-     * @param Closure(S, E): S $eventHandler Applies events to state (pure function)
+     * @param object $emptyState Initial empty state before any events
+     * @param Closure $commandHandler Processes commands, returns Effect
+     * @param Closure $eventHandler Applies events to state (pure function)
+     *
+     * @psalm-suppress UnusedParam Parameters are stored via constructor for later use
      */
     public static function create(
         PersistenceId $persistenceId,
@@ -81,6 +86,8 @@ final class EventSourcedBehavior
      * Build the final Behavior using PersistenceEngine.
      *
      * @throws LogicException if EventStore has not been set
+     *
+     * @psalm-suppress MixedArgumentTypeCoercion Stored closures lose generic type info
      */
     public function toBehavior(): Behavior
     {

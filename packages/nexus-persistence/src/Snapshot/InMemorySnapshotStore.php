@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\Snapshot;
 
 use Monadial\Nexus\Persistence\PersistenceId;
+use Override;
 
+/** @psalm-api */
 final class InMemorySnapshotStore implements SnapshotStore
 {
     /** @var array<string, list<SnapshotEnvelope>> */
     private array $snapshots = [];
 
+    #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
         $key = $id->toString();
@@ -22,6 +25,7 @@ final class InMemorySnapshotStore implements SnapshotStore
         $this->snapshots[$key][] = $snapshot;
     }
 
+    #[Override]
     public function load(PersistenceId $id): ?SnapshotEnvelope
     {
         $key = $id->toString();
@@ -34,6 +38,7 @@ final class InMemorySnapshotStore implements SnapshotStore
         return $this->snapshots[$key][array_key_last($this->snapshots[$key])];
     }
 
+    #[Override]
     public function delete(PersistenceId $id, int $maxSequenceNr): void
     {
         $key = $id->toString();

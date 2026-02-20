@@ -14,7 +14,9 @@ use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Override;
 
+/** @psalm-api */
 final class DoctrineEventStore implements EventStore
 {
     public function __construct(
@@ -22,6 +24,7 @@ final class DoctrineEventStore implements EventStore
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
+    #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
         try {
@@ -32,7 +35,7 @@ final class DoctrineEventStore implements EventStore
                     eventType: $envelope->eventType,
                     eventData: $this->serializer->serialize($envelope->event),
                     timestamp: $envelope->timestamp,
-                    metadata: $envelope->metadata !== [] ? json_encode($envelope->metadata) : null,
+                    metadata: $envelope->metadata !== [] ? json_encode($envelope->metadata, JSON_THROW_ON_ERROR) : null,
                 );
 
                 $this->em->persist($entry);
@@ -52,6 +55,7 @@ final class DoctrineEventStore implements EventStore
     }
 
     /** @return iterable<EventEnvelope> */
+    #[Override]
     public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
     {
         $qb = $this->em->createQueryBuilder()
@@ -66,17 +70,25 @@ final class DoctrineEventStore implements EventStore
             ->setParameter('to', $toSequenceNr);
 
         foreach ($qb->getQuery()->getResult() as $entry) {
+            assert($entry instanceof EventEntry);
+
+            /** @var array<string, mixed> $metadata */
+            $metadata = $entry->metadata !== null
+                ? json_decode($entry->metadata, true)
+                : [];
+
             yield new EventEnvelope(
                 persistenceId: $id,
-                sequenceNr: (int) $entry->sequenceNr,
+                sequenceNr: $entry->sequenceNr,
                 event: $this->serializer->deserialize($entry->eventData, $entry->eventType),
                 eventType: $entry->eventType,
                 timestamp: $entry->timestamp,
-                metadata: $entry->metadata !== null ? json_decode($entry->metadata, true) : [],
+                metadata: $metadata,
             );
         }
     }
 
+    #[Override]
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
         $this->em->createQueryBuilder()
@@ -89,6 +101,7 @@ final class DoctrineEventStore implements EventStore
             ->execute();
     }
 
+    #[Override]
     public function highestSequenceNr(PersistenceId $id): int
     {
         $result = $this->em->createQueryBuilder()

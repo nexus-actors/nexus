@@ -11,12 +11,15 @@ use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
+use Override;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 
+/** @psalm-api */
 final class Plugin implements PluginEntryPointInterface
 {
+    #[Override]
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
         $hooks = [

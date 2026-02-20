@@ -12,7 +12,9 @@ use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Override;
 
+/** @psalm-api */
 final class DbalDurableStateStore implements DurableStateStore
 {
     public function __construct(
@@ -20,6 +22,7 @@ final class DbalDurableStateStore implements DurableStateStore
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
+    #[Override]
     public function get(PersistenceId $id): ?DurableStateEnvelope
     {
         $row = $this->connection->createQueryBuilder()
@@ -37,12 +40,13 @@ final class DbalDurableStateStore implements DurableStateStore
         return new DurableStateEnvelope(
             persistenceId: $id,
             version: (int) $row['version'],
-            state: $this->serializer->deserialize($row['state_data'], $row['state_type']),
-            stateType: $row['state_type'],
-            timestamp: new DateTimeImmutable($row['timestamp']),
+            state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
+            stateType: (string) $row['state_type'],
+            timestamp: new DateTimeImmutable((string) $row['timestamp']),
         );
     }
 
+    #[Override]
     public function upsert(PersistenceId $id, DurableStateEnvelope $state): void
     {
         $expectedVersion = $state->version - 1;
@@ -91,6 +95,7 @@ final class DbalDurableStateStore implements DurableStateStore
         }
     }
 
+    #[Override]
     public function delete(PersistenceId $id): void
     {
         $this->connection->createQueryBuilder()

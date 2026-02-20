@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\Snapshot;
 
 use Monadial\Nexus\Persistence\PersistenceId;
 
+/** @psalm-api */
 interface SnapshotStore
 {
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void;

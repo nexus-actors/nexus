@@ -10,6 +10,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\DBAL\Platforms\SQLitePlatform;
 use Monadial\Nexus\Persistence\Locking\PessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Override;
 
 /**
  * DBAL-based pessimistic lock provider using SELECT ... FOR UPDATE.
@@ -19,11 +20,14 @@ use Monadial\Nexus\Persistence\PersistenceId;
  *
  * On SQLite, the transaction itself provides file-level locking,
  * so SELECT ... FOR UPDATE is skipped (not supported).
+ *
+ * @psalm-api
  */
 final class DbalPessimisticLockProvider implements PessimisticLockProvider
 {
     public function __construct(private readonly Connection $connection) {}
 
+    #[Override]
     public function withLock(PersistenceId $id, Closure $callback): mixed
     {
         return $this->connection->transactional(function () use ($id, $callback): mixed {

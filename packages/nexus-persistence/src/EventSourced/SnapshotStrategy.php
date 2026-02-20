@@ -6,8 +6,10 @@ namespace Monadial\Nexus\Persistence\EventSourced;
 
 use Closure;
 
+/** @psalm-api */
 final readonly class SnapshotStrategy
 {
+    /** @param Closure(object, object, int): bool $predicate */
     private function __construct(private Closure $predicate) {}
 
     public static function everyN(int $n): self
@@ -20,6 +22,7 @@ final readonly class SnapshotStrategy
         return new self(static fn(): bool => false);
     }
 
+    /** @param Closure(object, object, int): bool $fn */
     public static function predicate(Closure $fn): self
     {
         return new self($fn);
