@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
@@ -42,9 +43,7 @@ final class SwooleRuntime implements Runtime
     /** @var array<int, true> */
     private array $timerIds = [];
 
-    public function __construct(private readonly SwooleConfig $config = new SwooleConfig())
-    {
-    }
+    public function __construct(private readonly SwooleConfig $config = new SwooleConfig()) {}
 
     #[Override]
     public function name(): string

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -46,7 +47,7 @@ final class StatefulClassActorTest extends TestCase
         };
 
         $counterRef = $system->spawn(
-            Props::fromStatefulFactory(static fn () => $counter),
+            Props::fromStatefulFactory(static fn() => $counter),
             'counter',
         );
 

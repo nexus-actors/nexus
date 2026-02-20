@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -34,7 +35,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function fromBehaviorCreatesPropsWithDefaults(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
         $props = Props::fromBehavior($behavior);
@@ -47,7 +48,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function withMailboxReturnsNewPropsWithCustomMailbox(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $original = Props::fromBehavior($behavior);
 
@@ -70,7 +71,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function withSupervisionReturnsNewPropsWithStrategy(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $original = Props::fromBehavior($behavior);
 
@@ -92,7 +93,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function immutabilityChainedWithers(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
         $strategy = new stdClass();
@@ -119,7 +120,7 @@ final class PropsTest extends TestCase
             }
         };
 
-        $props = Props::fromFactory(static fn () => $handler);
+        $props = Props::fromFactory(static fn() => $handler);
 
         self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
         self::assertFalse($props->mailbox->bounded);
@@ -139,7 +140,7 @@ final class PropsTest extends TestCase
         $mailbox = MailboxConfig::bounded(50);
         $strategy = new stdClass();
 
-        $props = Props::fromFactory(static fn () => $handler)
+        $props = Props::fromFactory(static fn() => $handler)
             ->withMailbox($mailbox)
             ->withSupervision($strategy);
 
@@ -184,7 +185,7 @@ final class PropsTest extends TestCase
             }
         };
 
-        $props = Props::fromStatefulFactory(static fn () => $handler);
+        $props = Props::fromStatefulFactory(static fn() => $handler);
 
         self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
         self::assertFalse($props->mailbox->bounded);
@@ -194,7 +195,7 @@ final class PropsTest extends TestCase
     #[Test]
     public function fromFactoryThrowsActorInitializationExceptionOnBadFactory(): void
     {
-        $props = Props::fromFactory(static fn () => throw new RuntimeException('container exploded'));
+        $props = Props::fromFactory(static fn() => throw new RuntimeException('container exploded'));
 
         $runtime = new TestRuntime();
         $mailbox = $runtime->createMailbox($props->mailbox);

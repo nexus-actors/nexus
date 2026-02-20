@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Swoole;
@@ -26,9 +27,7 @@ final class SwooleClassBasedActorTest extends TestCase
 
         $handler = new class ($captured) implements ActorHandler {
             /** @param list<string> $captured */
-            public function __construct(private array &$captured)
-            {
-            }
+            public function __construct(private array &$captured) {}
 
             public function handle(ActorContext $ctx, object $message): Behavior
             {
@@ -42,7 +41,7 @@ final class SwooleClassBasedActorTest extends TestCase
         };
 
         $system = ActorSystem::create('handler-test', $runtime);
-        $greeterRef = $system->spawn(Props::fromFactory(static fn () => $handler), 'greeter');
+        $greeterRef = $system->spawn(Props::fromFactory(static fn() => $handler), 'greeter');
 
         // Probe to capture replies
         $replies = [];
@@ -82,9 +81,7 @@ final class SwooleClassBasedActorTest extends TestCase
 
         $actor = new class ($events) extends AbstractActor {
             /** @param list<string> $events */
-            public function __construct(private array &$events)
-            {
-            }
+            public function __construct(private array &$events) {}
 
             public function onPreStart(ActorContext $ctx): void
             {
@@ -105,7 +102,7 @@ final class SwooleClassBasedActorTest extends TestCase
         };
 
         $system = ActorSystem::create('lifecycle-test', $runtime);
-        $ref = $system->spawn(Props::fromFactory(static fn () => $actor), 'lifecycle-actor');
+        $ref = $system->spawn(Props::fromFactory(static fn() => $actor), 'lifecycle-actor');
 
         // Schedule message sending inside Co\run (Swoole Channel requires coroutine context)
         $runtime->scheduleOnce(Duration::millis(1), static function () use ($ref): void {

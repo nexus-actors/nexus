@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
@@ -18,9 +19,7 @@ use Override;
 final class DeferredCancellable implements Cancellable
 {
     /** @param bool $cancelled Shared reference to the cancelled flag */
-    public function __construct(private bool &$cancelled)
-    {
-    }
+    public function __construct(private bool &$cancelled) {}
 
     #[Override]
     public function cancel(): void

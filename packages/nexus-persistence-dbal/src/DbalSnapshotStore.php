@@ -17,8 +17,7 @@ final class DbalSnapshotStore implements SnapshotStore
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {
-    }
+    ) {}
 
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {

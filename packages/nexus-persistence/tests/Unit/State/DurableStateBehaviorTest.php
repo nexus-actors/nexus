@@ -28,7 +28,7 @@ final class DurableStateBehaviorTest extends TestCase
     {
         $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
         $this->emptyState = new stdClass();
-        $this->commandHandler = static fn (object $state, ActorContext $ctx, object $msg): DurableEffect => DurableEffect::none();
+        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): DurableEffect => DurableEffect::none();
     }
 
     #[Test]

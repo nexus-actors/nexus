@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Supervision;
@@ -27,8 +28,7 @@ final readonly class SupervisionStrategy
         public Duration $initialBackoff,
         public Duration $maxBackoff,
         public float $multiplier,
-    ) {
-    }
+    ) {}
 
     /**
      * One-for-one strategy: only the failed child is acted upon.
@@ -102,6 +102,6 @@ final readonly class SupervisionStrategy
      */
     private static function defaultDecider(): Closure
     {
-        return static fn (Throwable $_): Directive => Directive::Restart;
+        return static fn(Throwable $_): Directive => Directive::Restart;
     }
 }

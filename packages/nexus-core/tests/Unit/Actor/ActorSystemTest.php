@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -36,7 +37,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $system->spawn($props, 'orders');
@@ -49,7 +50,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn (ActorContext $ctx, Message $msg): Behavior => match (true) {
+            static fn(ActorContext $ctx, Message $msg): Behavior => match (true) {
                 $msg instanceof Increment => Behavior::same(),
                 $msg instanceof Decrement => Behavior::same(),
             },
@@ -70,7 +71,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref1 = $system->spawnAnonymous($props);
@@ -107,7 +108,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $system->spawn($props, 'to-stop');
@@ -172,7 +173,7 @@ final class ActorSystemTest extends TestCase
     {
         $system = ActorSystem::create('test', $this->runtime);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $system->spawn($props, 'unique');

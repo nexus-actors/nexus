@@ -25,8 +25,7 @@ class DurableStateEntry
         public private(set) string $stateData,
         #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
         public private(set) DateTimeImmutable $timestamp,
-    ) {
-    }
+    ) {}
 
     public function update(string $stateType, string $stateData, DateTimeImmutable $timestamp): void
     {

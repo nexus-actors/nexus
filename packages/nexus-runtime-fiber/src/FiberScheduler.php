@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
@@ -88,7 +89,7 @@ final class FiberScheduler
         }
 
         $this->timers = $remaining;
-        usort($this->timers, static fn (TimerEntry $a, TimerEntry $b): int => $a->fireAt <=> $b->fireAt);
+        usort($this->timers, static fn(TimerEntry $a, TimerEntry $b): int => $a->fireAt <=> $b->fireAt);
     }
 
     public function hasPendingTimers(): bool

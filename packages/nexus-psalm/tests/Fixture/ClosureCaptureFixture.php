@@ -10,9 +10,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Override;
 
-final readonly class CaptureFixtureMsg
-{
-}
+final readonly class CaptureFixtureMsg {}
 
 /** @implements ActorHandler<CaptureFixtureMsg> */
 final readonly class CaptureFixtureHandler implements ActorHandler
@@ -57,6 +55,6 @@ final class ClosureCaptureFixture
     public function factoryWithArrowFunction(): void
     {
         /** @psalm-suppress InvalidArgument, UnusedVariable */
-        $props = Props::fromFactory(static fn (): ActorHandler => new CaptureFixtureHandler());
+        $props = Props::fromFactory(static fn(): ActorHandler => new CaptureFixtureHandler());
     }
 }

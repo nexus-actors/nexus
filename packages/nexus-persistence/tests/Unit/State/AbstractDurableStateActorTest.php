@@ -29,21 +29,15 @@ use Psr\Log\NullLogger;
 
 final readonly class WalletState
 {
-    public function __construct(public int $balance = 0)
-    {
-    }
+    public function __construct(public int $balance = 0) {}
 }
 
 final readonly class Deposit
 {
-    public function __construct(public int $amount)
-    {
-    }
+    public function __construct(public int $amount) {}
 }
 
-final readonly class InspectWallet
-{
-}
+final readonly class InspectWallet {}
 
 // --- Concrete test actor ---
 

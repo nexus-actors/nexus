@@ -11,9 +11,7 @@ use Override;
 
 use function sleep;
 
-final readonly class BlockingFixtureMsg
-{
-}
+final readonly class BlockingFixtureMsg {}
 
 /**
  * Bad: calls sleep() inside actor handler.

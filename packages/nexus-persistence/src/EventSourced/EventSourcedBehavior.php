@@ -33,8 +33,7 @@ final class EventSourcedBehavior
         private readonly ?SnapshotStrategy $snapshotStrategy = null,
         private readonly ?RetentionPolicy $retentionPolicy = null,
         private readonly ?LockingStrategy $lockingStrategy = null,
-    ) {
-    }
+    ) {}
 
     /**
      * Create a new EventSourcedBehavior builder.

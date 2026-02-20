@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber\Messages;
@@ -10,7 +11,5 @@ final readonly class Ping
     /**
      * @param ActorRef<object> $replyTo
      */
-    public function __construct(public ActorRef $replyTo)
-    {
-    }
+    public function __construct(public ActorRef $replyTo) {}
 }

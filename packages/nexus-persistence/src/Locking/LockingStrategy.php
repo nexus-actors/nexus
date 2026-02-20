@@ -19,8 +19,7 @@ readonly class LockingStrategy
 {
     private function __construct(
         private ?PessimisticLockProvider $lockProvider,
-    ) {
-    }
+    ) {}
 
     public static function optimistic(): self
     {

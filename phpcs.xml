@@ -39,6 +39,8 @@
         <exclude name="SlevomatCodingStandard.Classes.ClassLength" />
         <!-- Public readonly properties are a core pattern -->
         <exclude name="SlevomatCodingStandard.Classes.ForbiddenPublicProperty" />
+        <!-- PER-CS2.0 uses single-line empty bodies {}; this rule conflicts -->
+        <exclude name="SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces" />
     </rule>
 
     <!-- Slevomat: Namespaces -->
@@ -71,6 +73,13 @@
         <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInDeclaration" />
         <!-- Not all closures need to be arrow functions -->
         <exclude name="SlevomatCodingStandard.Functions.RequireArrowFunction" />
+    </rule>
+
+    <!-- PER-CS2.0: no space after fn keyword -->
+    <rule ref="SlevomatCodingStandard.Functions.ArrowFunctionDeclaration">
+        <properties>
+            <property name="spacesCountAfterKeyword" value="0" />
+        </properties>
     </rule>
 
     <!-- Slevomat: Variables -->
@@ -120,20 +129,21 @@
         </properties>
     </rule>
 
-    <!-- Configure strict_types spacing: one blank line after declare -->
+    <!-- PER-CS2.0:risky uses \function() for native functions; allow FQN for global functions -->
+    <rule ref="SlevomatCodingStandard.Namespaces.ReferenceUsedNamesOnly">
+        <properties>
+            <property name="allowFullyQualifiedGlobalFunctions" value="true" />
+            <property name="allowFullyQualifiedGlobalConstants" value="true" />
+        </properties>
+    </rule>
+
+    <!-- Configure strict_types spacing: PER-CS2.0 puts blank line after <?php -->
     <rule ref="SlevomatCodingStandard.TypeHints.DeclareStrictTypes">
         <properties>
             <property name="spacesCountAroundEqualsSign" value="0" />
-            <property name="linesCountBeforeDeclare" value="0" />
+            <property name="linesCountBeforeDeclare" value="1" />
             <property name="linesCountAfterDeclare" value="1" />
         </properties>
     </rule>
 
-    <!-- Configure class brace spacing -->
-    <rule ref="SlevomatCodingStandard.Classes.EmptyLinesAroundClassBraces">
-        <properties>
-            <property name="linesCountAfterOpeningBrace" value="0" />
-            <property name="linesCountBeforeClosingBrace" value="0" />
-        </properties>
-    </rule>
 </ruleset>

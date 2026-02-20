@@ -10,17 +10,16 @@ readonly class SnapshotStrategy
 {
     private function __construct(
         private Closure $predicate,
-    ) {
-    }
+    ) {}
 
     public static function everyN(int $n): self
     {
-        return new self(fn (object $state, object $event, int $seqNr): bool => $seqNr % $n === 0);
+        return new self(fn(object $state, object $event, int $seqNr): bool => $seqNr % $n === 0);
     }
 
     public static function never(): self
     {
-        return new self(fn (): bool => false);
+        return new self(fn(): bool => false);
     }
 
     public static function predicate(Closure $fn): self

@@ -32,22 +32,14 @@ use Psr\Log\NullLogger;
 
 final readonly class CounterState
 {
-    public function __construct(public int $count)
-    {
-    }
+    public function __construct(public int $count) {}
 }
 
-final readonly class Increment
-{
-}
+final readonly class Increment {}
 
-final readonly class Incremented
-{
-}
+final readonly class Incremented {}
 
-final readonly class InspectState
-{
-}
+final readonly class InspectState {}
 
 // --- Concrete test actor ---
 

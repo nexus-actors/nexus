@@ -9,8 +9,7 @@ readonly class RetentionPolicy
     private function __construct(
         public int $keepSnapshots,
         public bool $deleteEventsToSnapshot,
-    ) {
-    }
+    ) {}
 
     public static function none(): self
     {

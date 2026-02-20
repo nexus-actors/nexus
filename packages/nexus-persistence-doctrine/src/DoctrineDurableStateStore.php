@@ -19,8 +19,7 @@ final class DoctrineDurableStateStore implements DurableStateStore
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {
-    }
+    ) {}
 
     public function get(PersistenceId $id): ?DurableStateEnvelope
     {

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor\Functions;
@@ -33,7 +34,7 @@ final class FunctionsTest extends TestCase
     #[Test]
     public function withMailboxAppliesConfig(): void
     {
-        $behavior = Behavior::receive(static fn ($ctx, $msg) => Behavior::same());
+        $behavior = Behavior::receive(static fn($ctx, $msg) => Behavior::same());
         $props = Props::fromBehavior($behavior);
         $config = MailboxConfig::bounded(100, OverflowStrategy::DropNewest);
 
@@ -54,7 +55,7 @@ final class FunctionsTest extends TestCase
     #[Test]
     public function withSupervisionAppliesStrategy(): void
     {
-        $behavior = Behavior::receive(static fn ($ctx, $msg) => Behavior::same());
+        $behavior = Behavior::receive(static fn($ctx, $msg) => Behavior::same());
         $props = Props::fromBehavior($behavior);
         $strategy = SupervisionStrategy::oneForOne();
 
@@ -67,7 +68,7 @@ final class FunctionsTest extends TestCase
     #[Test]
     public function pipeComposition(): void
     {
-        $behavior = Behavior::receive(static fn ($ctx, $msg) => Behavior::same());
+        $behavior = Behavior::receive(static fn($ctx, $msg) => Behavior::same());
         $config = MailboxConfig::bounded(500, OverflowStrategy::DropOldest);
         $strategy = SupervisionStrategy::allForOne();
 

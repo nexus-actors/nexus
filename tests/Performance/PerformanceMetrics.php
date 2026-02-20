@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Performance;
@@ -15,8 +16,7 @@ final readonly class PerformanceMetrics
         public float $opsPerSecond,
         public int $peakMemoryBytes,
         public int $memoryDeltaBytes,
-    ) {
-    }
+    ) {}
 
     public function report(): string
     {

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -79,7 +80,7 @@ final class ActorCell implements ActorContext
         $this->currentBehavior = $behavior;
 
         /** @var ActorRef<T> $ref */
-        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn (): bool => $this->isAlive());
+        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive());
         $this->selfRef = $ref;
     }
 
@@ -372,7 +373,7 @@ final class ActorCell implements ActorContext
         $senderRef = new LocalActorRef(
             $senderPath,
             $this->mailbox, // placeholder - in full system would resolve actual mailbox
-            static fn (): bool => true,
+            static fn(): bool => true,
         );
 
         return Option::some($senderRef);

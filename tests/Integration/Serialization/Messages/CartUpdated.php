@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Serialization\Messages;
@@ -14,7 +15,5 @@ final readonly class CartUpdated
     /**
      * @param list<CartItem> $items
      */
-    public function __construct(public string $cartId, public array $items)
-    {
-    }
+    public function __construct(public string $cartId, public array $items) {}
 }

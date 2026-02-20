@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Cluster;
@@ -178,7 +179,7 @@ final class ClusterE2ETest extends TestCase
             }
 
             // Spawn 20 actors from node 0 — hash ring determines local vs remote
-            $behavior = Behavior::receive(static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same());
+            $behavior = Behavior::receive(static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same());
             $localCount = 0;
             $remoteCount = 0;
 
@@ -309,7 +310,7 @@ final class ClusterE2ETest extends TestCase
             $nameForWorker0 = $this->findNameForWorker($ring, 0);
             $nameForWorker1 = $this->findNameForWorker($ring, 1);
 
-            $behavior = Behavior::receive(static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same());
+            $behavior = Behavior::receive(static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same());
 
             // Spawn local actor on node 0
             $node0->spawn(Props::fromBehavior($behavior), $nameForWorker0);

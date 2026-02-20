@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Lifecycle;
@@ -14,7 +15,5 @@ final readonly class Terminated implements Signal
     /**
      * @param ActorRef<object> $ref
      */
-    public function __construct(public ActorRef $ref)
-    {
-    }
+    public function __construct(public ActorRef $ref) {}
 }

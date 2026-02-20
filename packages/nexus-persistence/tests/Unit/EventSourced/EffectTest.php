@@ -103,7 +103,7 @@ final class EffectTest extends TestCase
     public function thenReplyChainingStoresSideEffect(): void
     {
         $ref = $this->createMock(ActorRef::class);
-        $fn = static fn (object $state): object => $state;
+        $fn = static fn(object $state): object => $state;
 
         $effect = Effect::persist(new stdClass())
             ->thenReply($ref, $fn);
@@ -127,7 +127,7 @@ final class EffectTest extends TestCase
             ->method('tell')
             ->with($replyMsg);
 
-        $fn = static fn (object $state): object => $replyMsg;
+        $fn = static fn(object $state): object => $replyMsg;
 
         $effect = Effect::persist(new stdClass())
             ->thenReply($ref, $fn);
@@ -163,10 +163,9 @@ final class EffectTest extends TestCase
         $ref2 = $this->createMock(ActorRef::class);
 
         $effect = Effect::persist(new stdClass())
-            ->thenReply($ref1, static fn (object $s): object => new stdClass())
-            ->thenRun(static function (object $s): void {
-            })
-            ->thenReply($ref2, static fn (object $s): object => new stdClass());
+            ->thenReply($ref1, static fn(object $s): object => new stdClass())
+            ->thenRun(static function (object $s): void {})
+            ->thenReply($ref2, static fn(object $s): object => new stdClass());
 
         self::assertCount(3, $effect->sideEffects);
     }
@@ -176,8 +175,7 @@ final class EffectTest extends TestCase
     {
         $ref = $this->createMock(ActorRef::class);
         $original = Effect::persist(new stdClass());
-        $chained = $original->thenRun(static function (object $s): void {
-        });
+        $chained = $original->thenRun(static function (object $s): void {});
 
         self::assertNotSame($original, $chained);
         self::assertCount(0, $original->sideEffects);

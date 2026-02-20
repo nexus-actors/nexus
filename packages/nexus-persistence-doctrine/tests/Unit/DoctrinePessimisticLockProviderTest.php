@@ -47,7 +47,7 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
     {
         $id = PersistenceId::of('Account', 'acc-1');
 
-        $result = $this->provider->withLock($id, static fn (): string => 'executed');
+        $result = $this->provider->withLock($id, static fn(): string => 'executed');
 
         self::assertSame('executed', $result);
     }
@@ -57,7 +57,7 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
     {
         $id = PersistenceId::of('Account', 'acc-1');
 
-        $this->provider->withLock($id, static fn (): null => null);
+        $this->provider->withLock($id, static fn(): null => null);
 
         $count = $this->em->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM nexus_persistence_lock WHERE persistence_id = ?',
@@ -71,8 +71,8 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
     {
         $id = PersistenceId::of('Account', 'acc-1');
 
-        $this->provider->withLock($id, static fn (): null => null);
-        $this->provider->withLock($id, static fn (): null => null);
+        $this->provider->withLock($id, static fn(): null => null);
+        $this->provider->withLock($id, static fn(): null => null);
 
         $count = $this->em->getConnection()->fetchOne(
             'SELECT COUNT(*) FROM nexus_persistence_lock WHERE persistence_id = ?',

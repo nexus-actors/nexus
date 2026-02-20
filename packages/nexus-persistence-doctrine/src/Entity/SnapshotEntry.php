@@ -24,6 +24,5 @@ class SnapshotEntry
         public private(set) string $stateData,
         #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
         public private(set) DateTimeImmutable $timestamp,
-    ) {
-    }
+    ) {}
 }

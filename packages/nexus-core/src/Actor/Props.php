@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -21,9 +22,7 @@ final readonly class Props
      * @param Behavior<T> $behavior
      * @param Option<object> $supervision  Will be typed as SupervisionStrategy in Task 5b
      */
-    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision)
-    {
-    }
+    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision) {}
 
     /**
      * @template U of object
@@ -66,7 +65,7 @@ final readonly class Props
 
             /** @psalm-suppress InvalidArgument template U is erased at runtime */
             $receive = Behavior::receive(
-                static fn (ActorContext $c, object $msg): Behavior => $actor->handle($c, $msg),
+                static fn(ActorContext $c, object $msg): Behavior => $actor->handle($c, $msg),
             );
 
             if ($actor instanceof AbstractActor) {
@@ -141,7 +140,7 @@ final readonly class Props
              */
             return Behavior::withState(
                 $actor->initialState(),
-                static fn (ActorContext $c, object $msg, mixed $state): BehaviorWithState => $actor->handle(
+                static fn(ActorContext $c, object $msg, mixed $state): BehaviorWithState => $actor->handle(
                     $c,
                     $msg,
                     $state,

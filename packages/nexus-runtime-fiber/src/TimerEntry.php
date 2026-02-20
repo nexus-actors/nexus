@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber;
@@ -23,6 +24,5 @@ final readonly class TimerEntry
         public bool $repeating,
         public ?Duration $interval,
         public FiberCancellable $cancellable,
-    ) {
-    }
+    ) {}
 }

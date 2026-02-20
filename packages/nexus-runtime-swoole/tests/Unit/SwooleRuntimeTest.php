@@ -57,8 +57,7 @@ final class SwooleRuntimeTest extends TestCase
     public function spawn_returns_task_id(): void
     {
         $runtime = new SwooleRuntime();
-        $id = $runtime->spawn(static function (): void {
-        });
+        $id = $runtime->spawn(static function (): void {});
         self::assertNotEmpty($id);
         self::assertMatchesRegularExpression('/^swoole-\d+$/', $id);
     }
@@ -67,10 +66,8 @@ final class SwooleRuntimeTest extends TestCase
     public function spawn_returns_unique_ids(): void
     {
         $runtime = new SwooleRuntime();
-        $id1 = $runtime->spawn(static function (): void {
-        });
-        $id2 = $runtime->spawn(static function (): void {
-        });
+        $id1 = $runtime->spawn(static function (): void {});
+        $id2 = $runtime->spawn(static function (): void {});
         self::assertNotSame($id1, $id2);
     }
 
@@ -124,8 +121,7 @@ final class SwooleRuntimeTest extends TestCase
     public function schedule_once_returns_cancellable(): void
     {
         $runtime = new SwooleRuntime();
-        $cancellable = $runtime->scheduleOnce(Duration::seconds(1), static function (): void {
-        });
+        $cancellable = $runtime->scheduleOnce(Duration::seconds(1), static function (): void {});
         self::assertInstanceOf(Cancellable::class, $cancellable);
         self::assertFalse($cancellable->isCancelled());
     }
@@ -137,8 +133,7 @@ final class SwooleRuntimeTest extends TestCase
         $cancellable = $runtime->scheduleRepeatedly(
             Duration::seconds(1),
             Duration::seconds(2),
-            static function (): void {
-            },
+            static function (): void {},
         );
         self::assertInstanceOf(Cancellable::class, $cancellable);
         self::assertFalse($cancellable->isCancelled());

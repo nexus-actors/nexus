@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\App\Tests\Unit;
@@ -27,7 +28,7 @@ final class NexusAppTest extends TestCase
     public function actorRegistrationIsChainable(): void
     {
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $app = NexusApp::create('test-app')
@@ -41,7 +42,7 @@ final class NexusAppTest extends TestCase
     public function runSpawnsAllRegisteredActors(): void
     {
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $runtime = new TestRuntime(new TestClock());
@@ -71,7 +72,7 @@ final class NexusAppTest extends TestCase
     public function actorDefinitionsAreAccessible(): void
     {
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $app = NexusApp::create('test-app')

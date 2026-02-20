@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Swoole\Transport;
@@ -41,8 +42,7 @@ final class UnixSocketTransport implements Transport
         private readonly int $workerId,
         private readonly int $workerCount,
         private readonly string $socketDir,
-    ) {
-    }
+    ) {}
 
     /**
      * Create and bind the server socket for this worker.

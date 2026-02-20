@@ -24,8 +24,7 @@ final class DbalPessimisticLockProvider implements PessimisticLockProvider
 {
     public function __construct(
         private readonly Connection $connection,
-    ) {
-    }
+    ) {}
 
     public function withLock(PersistenceId $id, Closure $callback): mixed
     {

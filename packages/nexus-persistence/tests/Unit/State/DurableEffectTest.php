@@ -86,7 +86,7 @@ final class DurableEffectTest extends TestCase
     public function thenReplyChainingStoresSideEffect(): void
     {
         $ref = $this->createMock(ActorRef::class);
-        $fn = static fn (object $state): object => $state;
+        $fn = static fn(object $state): object => $state;
 
         $state = new stdClass();
         $state->count = 1;
@@ -113,7 +113,7 @@ final class DurableEffectTest extends TestCase
             ->method('tell')
             ->with($replyMsg);
 
-        $fn = static fn (object $state): object => $replyMsg;
+        $fn = static fn(object $state): object => $replyMsg;
 
         $effect = DurableEffect::persist($state)
             ->thenReply($ref, $fn);
@@ -154,10 +154,9 @@ final class DurableEffectTest extends TestCase
         $state = new stdClass();
 
         $effect = DurableEffect::persist($state)
-            ->thenReply($ref1, static fn (object $s): object => new stdClass())
-            ->thenRun(static function (object $s): void {
-            })
-            ->thenReply($ref2, static fn (object $s): object => new stdClass());
+            ->thenReply($ref1, static fn(object $s): object => new stdClass())
+            ->thenRun(static function (object $s): void {})
+            ->thenReply($ref2, static fn(object $s): object => new stdClass());
 
         self::assertCount(3, $effect->sideEffects);
     }
@@ -167,8 +166,7 @@ final class DurableEffectTest extends TestCase
     {
         $state = new stdClass();
         $original = DurableEffect::persist($state);
-        $chained = $original->thenRun(static function (object $s): void {
-        });
+        $chained = $original->thenRun(static function (object $s): void {});
 
         self::assertNotSame($original, $chained);
         self::assertCount(0, $original->sideEffects);

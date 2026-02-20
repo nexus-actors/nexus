@@ -12,8 +12,7 @@ readonly class PersistenceId implements Stringable
     private function __construct(
         public string $entityType,
         public string $entityId,
-    ) {
-    }
+    ) {}
 
     public static function of(string $entityType, string $entityId): self
     {

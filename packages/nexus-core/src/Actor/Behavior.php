@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -28,8 +29,7 @@ final readonly class Behavior
         private Option $handler,
         private Option $signalHandler,
         private Option $initialState,
-    ) {
-    }
+    ) {}
 
     /**
      * @template U of object

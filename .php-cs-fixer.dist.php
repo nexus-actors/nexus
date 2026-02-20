@@ -37,11 +37,7 @@ return (new PhpCsFixer\Config())
     ->setRules([
         '@PER-CS2.0' => true,
         '@PER-CS2.0:risky' => true,
-        'blank_line_after_opening_tag' => false,
-        'single_line_empty_body' => false,
         'declare_strict_types' => true,
-        'function_declaration' => ['closure_fn_spacing' => 'one'],
-        'native_function_invocation' => false,
         'ordered_imports' => ['sort_algorithm' => 'alpha'],
         'no_unused_imports' => true,
         'trailing_comma_in_multiline' => ['elements' => ['arguments', 'arrays', 'match', 'parameters']],

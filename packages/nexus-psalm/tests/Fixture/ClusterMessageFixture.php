@@ -8,13 +8,9 @@ use Monadial\Nexus\Cluster\RemoteActorRef;
 use Monadial\Nexus\Serialization\MessageType;
 
 #[MessageType('test.registered')]
-final readonly class RegisteredMessage
-{
-}
+final readonly class RegisteredMessage {}
 
-final readonly class UnregisteredMessage
-{
-}
+final readonly class UnregisteredMessage {}
 
 final class ClusterMessageFixture
 {

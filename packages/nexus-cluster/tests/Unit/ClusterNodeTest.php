@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tests\Unit;
@@ -38,7 +39,7 @@ final class ClusterNodeTest extends TestCase
 
         $node = $this->createNode(workerId: 0, workerCount: 4);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $node->spawn($props, $localName);
@@ -57,7 +58,7 @@ final class ClusterNodeTest extends TestCase
 
         $node = $this->createNode(workerId: 0, workerCount: 4);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $node->spawn($props, $remoteName);
@@ -75,7 +76,7 @@ final class ClusterNodeTest extends TestCase
 
         $node = $this->createNode(workerId: 0, workerCount: 4);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $node->spawn($props, $remoteName);
@@ -92,7 +93,7 @@ final class ClusterNodeTest extends TestCase
 
         $node = $this->createNode(workerId: 0, workerCount: 4);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
 
         $ref = $node->spawn($props, $localName);
@@ -121,7 +122,7 @@ final class ClusterNodeTest extends TestCase
 
         $node = $this->createNode(workerId: 0, workerCount: 4);
         $props = Props::fromBehavior(Behavior::receive(
-            static fn ($ctx, $msg) => Behavior::same(),
+            static fn($ctx, $msg) => Behavior::same(),
         ));
         $node->spawn($props, $localName);
 

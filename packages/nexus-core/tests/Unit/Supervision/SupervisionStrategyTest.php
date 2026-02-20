@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Supervision;
@@ -239,7 +240,7 @@ final class SupervisionStrategyTest extends TestCase
     #[Test]
     public function exponentialBackoffWithCustomDecider(): void
     {
-        $decider = static fn (Throwable $_): Directive => Directive::Stop;
+        $decider = static fn(Throwable $_): Directive => Directive::Stop;
 
         $strategy = SupervisionStrategy::exponentialBackoff(
             initialBackoff: Duration::millis(100),
@@ -253,7 +254,7 @@ final class SupervisionStrategyTest extends TestCase
     #[Test]
     public function oneForOneWithCustomDecider(): void
     {
-        $decider = static fn (Throwable $_): Directive => Directive::Resume;
+        $decider = static fn(Throwable $_): Directive => Directive::Resume;
 
         $strategy = SupervisionStrategy::oneForOne(decider: $decider);
 
@@ -263,7 +264,7 @@ final class SupervisionStrategyTest extends TestCase
     #[Test]
     public function allForOneWithCustomDecider(): void
     {
-        $decider = static fn (Throwable $_): Directive => Directive::Escalate;
+        $decider = static fn(Throwable $_): Directive => Directive::Escalate;
 
         $strategy = SupervisionStrategy::allForOne(decider: $decider);
 

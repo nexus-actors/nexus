@@ -17,8 +17,7 @@ final class DoctrineSnapshotStore implements SnapshotStore
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {
-    }
+    ) {}
 
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {

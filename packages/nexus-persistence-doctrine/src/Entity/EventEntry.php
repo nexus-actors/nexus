@@ -27,6 +27,5 @@ class EventEntry
         public private(set) DateTimeImmutable $timestamp,
         #[ORM\Column(name: 'metadata', type: 'text', nullable: true)]
         public private(set) ?string $metadata = null,
-    ) {
-    }
+    ) {}
 }

@@ -26,8 +26,7 @@ final class DurableStateBehavior
         private readonly Closure $commandHandler,
         private readonly ?DurableStateStore $stateStore = null,
         private readonly ?LockingStrategy $lockingStrategy = null,
-    ) {
-    }
+    ) {}
 
     /**
      * Create a new DurableStateBehavior builder.

@@ -38,7 +38,7 @@ final class LockingStrategyTest extends TestCase
         $strategy = LockingStrategy::optimistic();
         $id = PersistenceId::of('Test', 'test-1');
 
-        $result = $strategy->withLock($id, static fn (): string => 'executed');
+        $result = $strategy->withLock($id, static fn(): string => 'executed');
 
         self::assertSame('executed', $result);
     }
@@ -51,11 +51,11 @@ final class LockingStrategyTest extends TestCase
         $provider->expects(self::once())
             ->method('withLock')
             ->with($id, self::isType('callable'))
-            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn(PersistenceId $id, Closure $cb): mixed => $cb());
 
         $strategy = LockingStrategy::pessimistic($provider);
 
-        $result = $strategy->withLock($id, static fn (): string => 'locked');
+        $result = $strategy->withLock($id, static fn(): string => 'locked');
 
         self::assertSame('locked', $result);
     }
@@ -66,11 +66,11 @@ final class LockingStrategyTest extends TestCase
         $id = PersistenceId::of('Test', 'test-1');
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn(PersistenceId $id, Closure $cb): mixed => $cb());
 
         $strategy = LockingStrategy::pessimistic($provider);
 
-        $result = $strategy->withLock($id, static fn (): int => 42);
+        $result = $strategy->withLock($id, static fn(): int => 42);
 
         self::assertSame(42, $result);
     }

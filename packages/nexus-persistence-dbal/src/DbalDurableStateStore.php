@@ -18,8 +18,7 @@ final class DbalDurableStateStore implements DurableStateStore
     public function __construct(
         private readonly Connection $connection,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {
-    }
+    ) {}
 
     public function get(PersistenceId $id): ?DurableStateEnvelope
     {

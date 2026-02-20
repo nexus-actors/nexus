@@ -18,8 +18,7 @@ final class DurableEffect
         public readonly ?ActorRef $replyTo = null,
         public readonly mixed $replyMsg = null,
         public readonly array $sideEffects = [],
-    ) {
-    }
+    ) {}
 
     public static function persist(object $newState): self
     {

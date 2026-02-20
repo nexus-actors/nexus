@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -27,9 +28,7 @@ final class ContainerActorTest extends TestCase
 
         $handler = new class ($captured) implements ActorHandler {
             /** @param list<string> $captured */
-            public function __construct(private array &$captured)
-            {
-            }
+            public function __construct(private array &$captured) {}
 
             public function handle(ActorContext $ctx, object $message): Behavior
             {
@@ -45,9 +44,7 @@ final class ContainerActorTest extends TestCase
         // Simple PSR-11 container stub
         $handlerClass = $handler::class;
         $container = new class ($handler, $handlerClass) implements ContainerInterface {
-            public function __construct(private readonly object $handler, private readonly string $handlerClass)
-            {
-            }
+            public function __construct(private readonly object $handler, private readonly string $handlerClass) {}
 
             public function get(string $id): object
             {

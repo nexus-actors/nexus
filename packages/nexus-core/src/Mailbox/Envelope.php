@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Mailbox;
@@ -21,8 +22,7 @@ final readonly class Envelope
         public ActorPath $sender,
         public ActorPath $target,
         public array $metadata = [],
-    ) {
-    }
+    ) {}
 
     /**
      * Creates an Envelope with empty metadata.

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Fiber;
@@ -27,9 +28,7 @@ final class ClassBasedActorTest extends TestCase
 
         $handler = new class ($captured) implements ActorHandler {
             /** @param list<string> $captured */
-            public function __construct(private array &$captured)
-            {
-            }
+            public function __construct(private array &$captured) {}
 
             public function handle(ActorContext $ctx, object $message): Behavior
             {
@@ -42,7 +41,7 @@ final class ClassBasedActorTest extends TestCase
             }
         };
 
-        $greeterRef = $system->spawn(Props::fromFactory(static fn () => $handler), 'greeter');
+        $greeterRef = $system->spawn(Props::fromFactory(static fn() => $handler), 'greeter');
 
         // Probe to capture replies
         $replies = [];
@@ -80,9 +79,7 @@ final class ClassBasedActorTest extends TestCase
 
         $actor = new class ($events) extends AbstractActor {
             /** @param list<string> $events */
-            public function __construct(private array &$events)
-            {
-            }
+            public function __construct(private array &$events) {}
 
             public function onPreStart(ActorContext $ctx): void
             {
@@ -102,7 +99,7 @@ final class ClassBasedActorTest extends TestCase
             }
         };
 
-        $ref = $system->spawn(Props::fromFactory(static fn () => $actor), 'lifecycle-actor');
+        $ref = $system->spawn(Props::fromFactory(static fn() => $actor), 'lifecycle-actor');
         $ref->tell(new stdClass());
 
         $runtime->scheduleOnce(Duration::millis(200), static function () use ($system): void {

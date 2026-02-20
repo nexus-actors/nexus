@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
@@ -169,8 +170,7 @@ final class FiberSchedulerTest extends TestCase
         self::assertFalse($scheduler->hasPendingTimers());
 
         $now = new DateTimeImmutable('2026-01-01 00:00:00');
-        $scheduler->scheduleOnce(Duration::seconds(1), static function (): void {
-        }, $now);
+        $scheduler->scheduleOnce(Duration::seconds(1), static function (): void {}, $now);
 
         self::assertTrue($scheduler->hasPendingTimers());
 

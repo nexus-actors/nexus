@@ -20,8 +20,7 @@ final class DoctrineEventStore implements EventStore
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {
-    }
+    ) {}
 
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {

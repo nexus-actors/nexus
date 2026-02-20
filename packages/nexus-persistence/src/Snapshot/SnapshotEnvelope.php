@@ -15,6 +15,5 @@ readonly class SnapshotEnvelope
         public object $state,
         public string $stateType,
         public DateTimeImmutable $timestamp,
-    ) {
-    }
+    ) {}
 }

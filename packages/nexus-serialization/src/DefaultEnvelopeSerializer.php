@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
@@ -22,9 +23,7 @@ use Throwable;
  */
 final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
 {
-    public function __construct(private MessageSerializer $messageSerializer)
-    {
-    }
+    public function __construct(private MessageSerializer $messageSerializer) {}
 
     /**
      * @throws MessageSerializationException

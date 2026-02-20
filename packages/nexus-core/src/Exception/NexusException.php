@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Exception;
@@ -12,6 +13,4 @@ use RuntimeException;
  * Psalm tracks this as a checked exception class.
  * Every subclass must be declared in @throws.
  */
-abstract class NexusException extends RuntimeException
-{
-}
+abstract class NexusException extends RuntimeException {}

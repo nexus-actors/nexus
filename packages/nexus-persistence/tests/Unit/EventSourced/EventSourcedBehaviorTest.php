@@ -32,8 +32,8 @@ final class EventSourcedBehaviorTest extends TestCase
     {
         $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
         $this->emptyState = new stdClass();
-        $this->commandHandler = static fn (object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
-        $this->eventHandler = static fn (object $state, object $event): object => $state;
+        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
+        $this->eventHandler = static fn(object $state, object $event): object => $state;
     }
 
     #[Test]

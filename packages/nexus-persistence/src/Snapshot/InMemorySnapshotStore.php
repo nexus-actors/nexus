@@ -45,7 +45,7 @@ final class InMemorySnapshotStore implements SnapshotStore
         $this->snapshots[$key] = array_values(
             array_filter(
                 $this->snapshots[$key],
-                static fn (SnapshotEnvelope $s): bool => $s->sequenceNr > $maxSequenceNr,
+                static fn(SnapshotEnvelope $s): bool => $s->sequenceNr > $maxSequenceNr,
             ),
         );
     }

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Message;
@@ -14,7 +15,5 @@ final readonly class Watch implements SystemMessage
     /**
      * @param ActorRef<object> $watcher
      */
-    public function __construct(public ActorRef $watcher)
-    {
-    }
+    public function __construct(public ActorRef $watcher) {}
 }

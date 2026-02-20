@@ -33,38 +33,26 @@ use stdClass;
 
 final readonly class SetBalance
 {
-    public function __construct(public int $amount)
-    {
-    }
+    public function __construct(public int $amount) {}
 }
 
 final readonly class GetBalance
 {
-    public function __construct(public ActorRef $replyTo)
-    {
-    }
+    public function __construct(public ActorRef $replyTo) {}
 }
 
 final readonly class BalanceReply
 {
-    public function __construct(public int $balance)
-    {
-    }
+    public function __construct(public int $balance) {}
 }
 
-final readonly class DurableDoNothing
-{
-}
+final readonly class DurableDoNothing {}
 
-final readonly class DurableStopCommand
-{
-}
+final readonly class DurableStopCommand {}
 
 final readonly class AccountState
 {
-    public function __construct(public int $balance = 0)
-    {
-    }
+    public function __construct(public int $balance = 0) {}
 }
 
 #[CoversClass(DurableStateEngine::class)]
@@ -622,9 +610,7 @@ final class DurableStateEngineTest extends TestCase
         $tracker->called = false;
 
         $lockProvider = new class ($tracker) implements PessimisticLockProvider {
-            public function __construct(private readonly stdClass $tracker)
-            {
-            }
+            public function __construct(private readonly stdClass $tracker) {}
 
             public function withLock(PersistenceId $id, Closure $callback): mixed
             {
@@ -675,8 +661,7 @@ final class DurableStateEngineTest extends TestCase
             public function __construct(
                 private readonly InMemoryDurableStateStore $store,
                 private readonly PersistenceId $persistenceId,
-            ) {
-            }
+            ) {}
 
             public function withLock(PersistenceId $id, Closure $callback): mixed
             {

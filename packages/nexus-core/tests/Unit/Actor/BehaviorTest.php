@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -18,7 +19,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function receiveCreatesBehaviorWithReceiveTag(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
         self::assertSame(BehaviorTag::Receive, $behavior->tag());
@@ -29,7 +30,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function withStateCreatesBehaviorWithStateTag(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
+        $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
         $behavior = Behavior::withState(42, $handler);
 
         self::assertSame(BehaviorTag::WithState, $behavior->tag());
@@ -42,7 +43,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function setupCreatesBehaviorWithSetupTag(): void
     {
-        $factory = static fn (ActorContext $ctx): Behavior => Behavior::same();
+        $factory = static fn(ActorContext $ctx): Behavior => Behavior::same();
         $behavior = Behavior::setup($factory);
 
         self::assertSame(BehaviorTag::Setup, $behavior->tag());
@@ -101,8 +102,8 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalReturnsNewBehaviorWithSignalHandler(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same();
-        $signalHandler = static fn (ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
+        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
         $original = Behavior::receive($handler);
         $withSignal = $original->onSignal($signalHandler);
@@ -122,8 +123,8 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalPreservesInitialState(): void
     {
-        $handler = static fn (ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
-        $signalHandler = static fn (ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
+        $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
+        $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
         $behavior = Behavior::withState(99, $handler)->onSignal($signalHandler);
 
@@ -136,11 +137,11 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function tagAccessorsReturnCorrectValues(): void
     {
-        self::assertSame(BehaviorTag::Receive, Behavior::receive(static fn () => Behavior::same())->tag());
+        self::assertSame(BehaviorTag::Receive, Behavior::receive(static fn() => Behavior::same())->tag());
         self::assertSame(BehaviorTag::Same, Behavior::same()->tag());
         self::assertSame(BehaviorTag::Stopped, Behavior::stopped()->tag());
         self::assertSame(BehaviorTag::Unhandled, Behavior::unhandled()->tag());
         self::assertSame(BehaviorTag::Empty, Behavior::empty()->tag());
-        self::assertSame(BehaviorTag::Setup, Behavior::setup(static fn () => Behavior::same())->tag());
+        self::assertSame(BehaviorTag::Setup, Behavior::setup(static fn() => Behavior::same())->tag());
     }
 }

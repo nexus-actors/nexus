@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\App;
@@ -28,9 +29,7 @@ final class NexusApp
     /** @var ?Closure(ActorSystem): void */
     private ?Closure $startCallback = null;
 
-    private function __construct(private readonly string $appName)
-    {
-    }
+    private function __construct(private readonly string $appName) {}
 
     public static function create(string $name): self
     {

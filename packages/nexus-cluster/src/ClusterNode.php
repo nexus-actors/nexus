@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster;
@@ -32,8 +33,7 @@ final class ClusterNode
         private readonly ConsistentHashRing $ring,
         private readonly ClusterSerializer $serializer,
         private readonly ActorDirectory $directory,
-    ) {
-    }
+    ) {}
 
     /**
      * Spawn an actor, routing to local or remote based on the hash ring.

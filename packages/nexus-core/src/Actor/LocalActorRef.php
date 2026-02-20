@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
@@ -26,9 +27,7 @@ final readonly class LocalActorRef implements ActorRef
      * @param Mailbox $mailbox The actor's mailbox for message delivery
      * @param Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      */
-    public function __construct(private ActorPath $path, private Mailbox $mailbox, private Closure $aliveChecker)
-    {
-    }
+    public function __construct(private ActorPath $path, private Mailbox $mailbox, private Closure $aliveChecker) {}
 
     /** @param T $message */
     #[Override]

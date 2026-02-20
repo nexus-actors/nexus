@@ -55,7 +55,7 @@ final class InMemoryEventStore implements EventStore
         $this->events[$key] = array_values(
             array_filter(
                 $this->events[$key],
-                static fn (EventEnvelope $e): bool => $e->sequenceNr > $toSequenceNr,
+                static fn(EventEnvelope $e): bool => $e->sequenceNr > $toSequenceNr,
             ),
         );
     }

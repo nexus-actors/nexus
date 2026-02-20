@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
@@ -12,9 +13,7 @@ final class SwooleCancellable implements Cancellable
 {
     private bool $cancelled = false;
 
-    public function __construct(private readonly int $timerId)
-    {
-    }
+    public function __construct(private readonly int $timerId) {}
 
     #[Override]
     public function cancel(): void

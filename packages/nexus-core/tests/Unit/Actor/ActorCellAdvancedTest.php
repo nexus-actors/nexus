@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -122,7 +123,7 @@ final class ActorCellAdvancedTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -140,7 +141,7 @@ final class ActorCellAdvancedTest extends TestCase
     {
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -169,7 +170,7 @@ final class ActorCellAdvancedTest extends TestCase
 
         /** @var Behavior<TestMessage> */
         $behavior = Behavior::receive(
-            static fn (ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
 
         $cell = $this->createCell($behavior);
@@ -231,7 +232,7 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn-twice') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
 
                     // First spawn should succeed
@@ -274,7 +275,7 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn-and-stop') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $childRef = $ctx->spawn(Props::fromBehavior($childBehavior), 'doomed');
 
@@ -314,7 +315,7 @@ final class ActorCellAdvancedTest extends TestCase
                 if ($msg instanceof TestMessage && $msg->value === 'spawn') {
                     /** @var Behavior<TestMessage> */
                     $childBehavior = Behavior::receive(
-                        static fn (ActorContext $c, object $m): Behavior => Behavior::same(),
+                        static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-a');
                     $ctx->spawn(Props::fromBehavior($childBehavior), 'child-b');

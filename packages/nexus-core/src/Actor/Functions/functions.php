@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor\Functions;
@@ -20,7 +21,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
  */
 function withMailbox(MailboxConfig $config): Closure
 {
-    return static fn (Props $props): Props => $props->withMailbox($config);
+    return static fn(Props $props): Props => $props->withMailbox($config);
 }
 
 /**
@@ -35,5 +36,5 @@ function withMailbox(MailboxConfig $config): Closure
  */
 function withSupervision(SupervisionStrategy $strategy): Closure
 {
-    return static fn (Props $props): Props => $props->withSupervision($strategy);
+    return static fn(Props $props): Props => $props->withSupervision($strategy);
 }

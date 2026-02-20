@@ -16,8 +16,7 @@ readonly class EventEnvelope
         public string $eventType,
         public DateTimeImmutable $timestamp,
         public array $metadata = [],
-    ) {
-    }
+    ) {}
 
     public function withMetadata(array $metadata): self
     {

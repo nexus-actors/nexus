@@ -36,60 +36,42 @@ use Psr\Log\NullLogger;
 
 final readonly class AddItem
 {
-    public function __construct(public string $item)
-    {
-    }
+    public function __construct(public string $item) {}
 }
 
 final readonly class RemoveItem
 {
-    public function __construct(public string $item)
-    {
-    }
+    public function __construct(public string $item) {}
 }
 
 final readonly class ItemAdded
 {
-    public function __construct(public string $item)
-    {
-    }
+    public function __construct(public string $item) {}
 }
 
 final readonly class ItemRemoved
 {
-    public function __construct(public string $item)
-    {
-    }
+    public function __construct(public string $item) {}
 }
 
 final readonly class GetItems
 {
-    public function __construct(public ActorRef $replyTo)
-    {
-    }
+    public function __construct(public ActorRef $replyTo) {}
 }
 
 final readonly class ItemsReply
 {
-    public function __construct(public array $items)
-    {
-    }
+    public function __construct(public array $items) {}
 }
 
-final readonly class DoNothing
-{
-}
+final readonly class DoNothing {}
 
-final readonly class StopCommand
-{
-}
+final readonly class StopCommand {}
 
 final readonly class ShoppingCart
 {
     /** @param list<string> $items */
-    public function __construct(public array $items = [])
-    {
-    }
+    public function __construct(public array $items = []) {}
 }
 
 #[CoversClass(PersistenceEngine::class)]
@@ -126,7 +108,7 @@ final class PersistenceEngineTest extends TestCase
 
                 return Effect::none();
             },
-            static fn (object $state, object $event): object => $state,
+            static fn(object $state, object $event): object => $state,
             $eventStore,
         );
 
@@ -655,7 +637,7 @@ final class PersistenceEngineTest extends TestCase
 
                 return Effect::none();
             },
-            static fn (object $state, object $event): object => $state,
+            static fn(object $state, object $event): object => $state,
             $eventStore,
         );
 
@@ -871,7 +853,7 @@ final class PersistenceEngineTest extends TestCase
 
                 return Effect::none();
             },
-            static fn (object $state, object $event): object => $state,
+            static fn(object $state, object $event): object => $state,
             $eventStore,
         );
 
@@ -1100,7 +1082,7 @@ final class PersistenceEngineTest extends TestCase
 
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(static fn (PersistenceId $id, Closure $cb): mixed => $cb());
+            ->willReturnCallback(static fn(PersistenceId $id, Closure $cb): mixed => $cb());
 
         $commandStates = [];
 

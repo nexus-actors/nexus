@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Mailbox;
@@ -11,9 +12,7 @@ namespace Monadial\Nexus\Core\Mailbox;
  */
 final readonly class MailboxConfig
 {
-    private function __construct(public int $capacity, public OverflowStrategy $strategy, public bool $bounded)
-    {
-    }
+    private function __construct(public int $capacity, public OverflowStrategy $strategy, public bool $bounded) {}
 
     public static function bounded(int $capacity, OverflowStrategy $strategy = OverflowStrategy::ThrowException): self
     {

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
@@ -105,9 +106,7 @@ final class DefaultEnvelopeSerializerTest extends TestCase
 
 final readonly class EnvelopeTestMessage
 {
-    public function __construct(public string $text, public int $number)
-    {
-    }
+    public function __construct(public string $text, public int $number) {}
 }
 
 /**

@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
@@ -66,7 +67,7 @@ final class DeadLetterRefTest extends TestCase
         $timeout = Duration::seconds(5);
 
         try {
-            (void) $ref->ask(static fn (ActorRef $replyTo): object => new stdClass(), $timeout);
+            (void) $ref->ask(static fn(ActorRef $replyTo): object => new stdClass(), $timeout);
             self::fail('Expected AskTimeoutException was not thrown');
         } catch (AskTimeoutException $e) {
             self::assertTrue($ref->path()->equals($e->target));

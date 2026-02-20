@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\Serialization\Messages;
@@ -13,6 +14,5 @@ final readonly class PaymentProcessed
         public float $amount,
         public string $currency,
         public string $status,
-    ) {
-    }
+    ) {}
 }

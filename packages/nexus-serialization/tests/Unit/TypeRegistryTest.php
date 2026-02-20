@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Tests\Unit;
@@ -92,22 +93,16 @@ final class TypeRegistryTest extends TestCase
 
 final readonly class TestMessage
 {
-    public function __construct(public string $content)
-    {
-    }
+    public function __construct(public string $content) {}
 }
 
 final readonly class AnotherTestMessage
 {
-    public function __construct(public string $content)
-    {
-    }
+    public function __construct(public string $content) {}
 }
 
 #[MessageType('annotated.message')]
 final readonly class AnnotatedMessage
 {
-    public function __construct(public string $content)
-    {
-    }
+    public function __construct(public string $content) {}
 }
