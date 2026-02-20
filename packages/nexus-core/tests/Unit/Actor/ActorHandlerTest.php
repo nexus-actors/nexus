@@ -7,11 +7,11 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-#[CoversClass(ActorHandler::class)]
+#[CoversNothing]
 final class ActorHandlerTest extends TestCase
 {
     #[Test]

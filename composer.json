@@ -21,7 +21,7 @@
         "friendsofphp/php-cs-fixer": "^3.0",
         "infection/infection": "^0.32",
         "phpro/grumphp": "^2.19",
-        "phpunit/phpunit": "^11.0",
+        "phpunit/phpunit": "^13.0",
         "shipmonk/coverage-guard": "^1.0",
         "slevomat/coding-standard": "^8.0",
         "squizlabs/php_codesniffer": "^4.0",

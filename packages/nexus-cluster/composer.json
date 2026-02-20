@@ -8,7 +8,7 @@
         "nexus-actors/core": "^1.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.0"
+        "phpunit/phpunit": "^13.0"
     },
     "autoload": {
         "psr-4": {

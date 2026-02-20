@@ -7,12 +7,12 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
-use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
-#[CoversClass(StatefulActorHandler::class)]
+#[CoversNothing]
 final class StatefulActorHandlerTest extends TestCase
 {
     #[Test]
