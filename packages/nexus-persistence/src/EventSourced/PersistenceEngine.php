@@ -16,6 +16,8 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 
+use function is_object;
+
 /**
  * Core engine that wraps user command+event handlers into a Behavior
  * with automatic recovery and event persistence.
@@ -263,7 +265,7 @@ final class PersistenceEngine
     private static function handleReply(Effect $effect): BehaviorWithState
     {
         assert($effect->replyTo !== null);
-        assert(\is_object($effect->replyMsg));
+        assert(is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
         return BehaviorWithState::same();

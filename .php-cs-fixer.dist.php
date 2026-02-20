@@ -43,8 +43,8 @@ return (new PhpCsFixer\Config())
         'trailing_comma_in_multiline' => ['elements' => ['arguments', 'arrays', 'match', 'parameters']],
         'global_namespace_import' => [
             'import_classes' => true,
-            'import_constants' => false,
-            'import_functions' => false,
+            'import_constants' => true,
+            'import_functions' => true,
         ],
     ])
     ->setFinder($finder);

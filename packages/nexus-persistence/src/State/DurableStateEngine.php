@@ -12,6 +12,8 @@ use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 
+use function is_object;
+
 /**
  * Core engine that wraps user command handlers into a Behavior
  * with automatic recovery and state persistence.
@@ -173,7 +175,7 @@ final class DurableStateEngine
     private static function handleReply(DurableEffect $effect): BehaviorWithState
     {
         assert($effect->replyTo !== null);
-        assert(\is_object($effect->replyMsg));
+        assert(is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
         return BehaviorWithState::same();

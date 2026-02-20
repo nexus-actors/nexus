@@ -10,15 +10,17 @@
         <testsuite name="unit">
             <directory>packages/nexus-core/tests/Unit</directory>
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
-            <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
-            <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
             <directory>packages/nexus-persistence/tests/Unit</directory>
             <directory>packages/nexus-persistence-dbal/tests/Unit</directory>
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="unit-swoole">
+            <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
+            <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>

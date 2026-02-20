@@ -31,6 +31,9 @@ use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function assert;
+use function is_callable;
+
 /**
  * @psalm-api
  *
@@ -108,7 +111,7 @@ final class ActorCell implements ActorContext
         // Resolve setup behavior
         if ($this->currentBehavior->tag() === BehaviorTag::Setup) {
             $factory = $this->currentBehavior->handler()->get();
-            \assert(\is_callable($factory));
+            assert(is_callable($factory));
 
             try {
                 /** @var Behavior<T> $resolved */

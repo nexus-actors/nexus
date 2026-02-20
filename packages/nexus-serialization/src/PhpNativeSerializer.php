@@ -10,6 +10,9 @@ use NoDiscard;
 use Override;
 use Throwable;
 
+use function serialize;
+use function unserialize;
+
 /**
  * @psalm-api
  *
@@ -25,7 +28,7 @@ final readonly class PhpNativeSerializer implements MessageSerializer
     public function serialize(object $message): string
     {
         try {
-            return \serialize($message);
+            return serialize($message);
         } catch (Throwable $e) {
             throw new MessageSerializationException($message::class, $e->getMessage(), $e);
         }
@@ -39,7 +42,7 @@ final readonly class PhpNativeSerializer implements MessageSerializer
     public function deserialize(string $data, string $type): object
     {
         try {
-            $result = @\unserialize($data);
+            $result = @unserialize($data);
         } catch (Throwable $e) {
             throw new MessageDeserializationException($type, $e->getMessage(), $e);
         }

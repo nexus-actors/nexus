@@ -7,6 +7,12 @@ namespace Monadial\Nexus\Psalm\Tests;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function escapeshellarg;
+use function exec;
+use function explode;
+use function implode;
+use function str_contains;
+
 final class PluginTest extends TestCase
 {
     private const string PSALM_BIN = 'vendor/bin/psalm';
@@ -37,11 +43,11 @@ final class PluginTest extends TestCase
         $output = $this->runPsalmOnFixture('ReadonlyMessageFixture.php');
         $lines = $this->filterIssueLines($output, 'NonReadonlyMessage');
 
-        // 3 issues: tell (line 27), scheduleOnce (line 39), scheduleRepeatedly (line 40)
+        // 3 issues: tell (line 26), scheduleOnce (line 38), scheduleRepeatedly (line 39)
         self::assertCount(3, $lines, 'Expected 3 NonReadonlyMessage issues');
-        self::assertStringContains(':27:', $lines[0], 'First issue should be tell() on line 27');
-        self::assertStringContains(':39:', $lines[1], 'Second issue should be scheduleOnce on line 39');
-        self::assertStringContains(':40:', $lines[2], 'Third issue should be scheduleRepeatedly on line 40');
+        self::assertStringContains(':26:', $lines[0], 'First issue should be tell() on line 26');
+        self::assertStringContains(':38:', $lines[1], 'Second issue should be scheduleOnce on line 38');
+        self::assertStringContains(':39:', $lines[2], 'Third issue should be scheduleRepeatedly on line 39');
     }
 
     #[Test]
@@ -153,8 +159,8 @@ final class PluginTest extends TestCase
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;
-        $projectRoot = \escapeshellarg(__DIR__ . '/../../..');
-        $fixturePath = \escapeshellarg($fixturePath);
+        $projectRoot = escapeshellarg(__DIR__ . '/../../..');
+        $fixturePath = escapeshellarg($fixturePath);
 
         $command = "cd {$projectRoot} && php " . self::PSALM_BIN
             . ' --no-progress --no-cache --output-format=text'
@@ -162,9 +168,9 @@ final class PluginTest extends TestCase
             . ' 2>&1';
 
         $output = [];
-        \exec($command, $output);
+        exec($command, $output);
 
-        return \implode("\n", $output);
+        return implode("\n", $output);
     }
 
     /** @return list<string> */
@@ -172,8 +178,8 @@ final class PluginTest extends TestCase
     {
         $lines = [];
 
-        foreach (\explode("\n", $output) as $line) {
-            if (\str_contains($line, $issueType)) {
+        foreach (explode("\n", $output) as $line) {
+            if (str_contains($line, $issueType)) {
                 $lines[] = $line;
             }
         }
@@ -184,7 +190,7 @@ final class PluginTest extends TestCase
     private static function assertStringContains(string $needle, string $haystack, string $message = ''): void
     {
         self::assertTrue(
-            \str_contains($haystack, $needle),
+            str_contains($haystack, $needle),
             $message !== '' ? $message : "Expected '{$needle}' in output:\n{$haystack}",
         );
     }
@@ -192,7 +198,7 @@ final class PluginTest extends TestCase
     private static function assertStringNotContains(string $needle, string $haystack, string $message = ''): void
     {
         self::assertFalse(
-            \str_contains($haystack, $needle),
+            str_contains($haystack, $needle),
             $message !== '' ? $message : "Did not expect '{$needle}' in output:\n{$haystack}",
         );
     }

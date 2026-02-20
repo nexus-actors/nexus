@@ -16,6 +16,8 @@ use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 
+use function class_exists;
+
 /** @psalm-api */
 final class Plugin implements PluginEntryPointInterface
 {
@@ -33,7 +35,7 @@ final class Plugin implements PluginEntryPointInterface
         ];
 
         foreach ($hooks as $hook) {
-            if (\class_exists($hook)) {
+            if (class_exists($hook)) {
                 $registration->registerHooksFromClass($hook);
             }
         }

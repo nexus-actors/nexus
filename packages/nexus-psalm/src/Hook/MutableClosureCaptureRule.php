@@ -12,6 +12,10 @@ use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterMethodCallAnalysisEvent;
 
+use function in_array;
+use function is_string;
+use function strtolower;
+
 final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterface
 {
     private const array FACTORY_METHODS = [
@@ -23,9 +27,9 @@ final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterfac
     #[Override]
     public static function afterMethodCallAnalysis(AfterMethodCallAnalysisEvent $event): void
     {
-        $declaringId = \strtolower($event->getDeclaringMethodId());
+        $declaringId = strtolower($event->getDeclaringMethodId());
 
-        if (!\in_array($declaringId, self::FACTORY_METHODS, true)) {
+        if (!in_array($declaringId, self::FACTORY_METHODS, true)) {
             return;
         }
 
@@ -46,7 +50,7 @@ final class MutableClosureCaptureRule implements AfterMethodCallAnalysisInterfac
                 if ($use->byRef) {
                     $varName = $use->var->name;
 
-                    if (!\is_string($varName)) {
+                    if (!is_string($varName)) {
                         continue;
                     }
 

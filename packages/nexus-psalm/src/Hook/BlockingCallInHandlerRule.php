@@ -11,6 +11,9 @@ use Psalm\IssueBuffer;
 use Psalm\Plugin\EventHandler\AfterEveryFunctionCallAnalysisInterface;
 use Psalm\Plugin\EventHandler\Event\AfterEveryFunctionCallAnalysisEvent;
 
+use function in_array;
+use function strtolower;
+
 final class BlockingCallInHandlerRule implements AfterEveryFunctionCallAnalysisInterface
 {
     private const array ACTOR_INTERFACES = [
@@ -41,9 +44,9 @@ final class BlockingCallInHandlerRule implements AfterEveryFunctionCallAnalysisI
     #[Override]
     public static function afterEveryFunctionCallAnalysis(AfterEveryFunctionCallAnalysisEvent $event): void
     {
-        $functionId = \strtolower($event->getFunctionId());
+        $functionId = strtolower($event->getFunctionId());
 
-        if (!\in_array($functionId, self::BLOCKING_FUNCTIONS, true)) {
+        if (!in_array($functionId, self::BLOCKING_FUNCTIONS, true)) {
             return;
         }
 

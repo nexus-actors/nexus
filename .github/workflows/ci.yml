@@ -102,7 +102,7 @@ jobs:
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci composer install --no-interaction --no-progress
 
       - name: Psalm
-        run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/psalm --no-progress
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/psalm --no-progress
 
   unit-tests:
     needs: build-images
@@ -124,6 +124,9 @@ jobs:
 
       - name: Unit tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=unit --colors=always
+
+      - name: Unit tests (Swoole)
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/phpunit --testsuite=unit-swoole --colors=always
 
       - name: Psalm plugin tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=psalm --colors=always

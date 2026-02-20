@@ -16,6 +16,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Throwable;
 
+use function serialize;
+use function unserialize;
+
 #[CoversClass(DefaultEnvelopeSerializer::class)]
 final class DefaultEnvelopeSerializerTest extends TestCase
 {
@@ -116,7 +119,7 @@ final readonly class FakeMessageSerializer implements MessageSerializer
     public function serialize(object $message): string
     {
         try {
-            return \serialize($message);
+            return serialize($message);
         } catch (Throwable $e) {
             throw new MessageSerializationException(
                 $message::class,
@@ -133,7 +136,7 @@ final readonly class FakeMessageSerializer implements MessageSerializer
     public function deserialize(string $data, string $type): object
     {
         try {
-            $result = \unserialize($data);
+            $result = unserialize($data);
         } catch (Throwable $e) {
             throw new MessageDeserializationException($type, $e->getMessage(), $e);
         }

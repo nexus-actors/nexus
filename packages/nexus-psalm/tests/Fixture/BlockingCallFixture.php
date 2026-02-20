@@ -9,6 +9,8 @@ use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Override;
 
+use function sleep;
+
 final readonly class BlockingFixtureMsg {}
 
 /**
@@ -22,7 +24,7 @@ final readonly class BlockingActorHandler implements ActorHandler
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
-        \sleep(1);
+        sleep(1);
 
         return Behavior::same();
     }
@@ -48,6 +50,6 @@ final class RegularClassWithSleep
 {
     public function doWork(): void
     {
-        \sleep(1);
+        sleep(1);
     }
 }
