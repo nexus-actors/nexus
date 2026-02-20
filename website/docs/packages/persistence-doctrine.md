@@ -13,6 +13,32 @@ Doctrine ORM adapter for Nexus persistence -- entity-based stores that use
 
 **Namespace:** `Monadial\Nexus\Persistence\Doctrine\`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class EventStore {
+        <<interface>>
+    }
+    class SnapshotStore {
+        <<interface>>
+    }
+    class DurableStateStore {
+        <<interface>>
+    }
+    class PessimisticLockProvider {
+        <<interface>>
+    }
+
+    DoctrineEventStore ..|> EventStore
+    DoctrineSnapshotStore ..|> SnapshotStore
+    DoctrineDurableStateStore ..|> DurableStateStore
+    DoctrinePessimisticLockProvider ..|> PessimisticLockProvider
+```
+
+</details>
+
 **Dependencies:** `doctrine/orm ^3.0`
 
 ## Store classes

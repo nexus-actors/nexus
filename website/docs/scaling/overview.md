@@ -21,68 +21,7 @@ distributed clustering across multiple servers. True multi-server clustering
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph pool["Swoole Process Pool"]
-        W0["Worker 0"]
-        W1["Worker 1"]
-        W2["Worker 2"]
-        WN["Worker N"]
-    end
-
-    W0 <-->|"Unix Socket"| W1
-    W1 <-->|"Unix Socket"| W2
-    W2 <-->|"Unix Socket"| WN
-
-    SD["Shared Directory"]
-
-    W0 --- SD
-    W1 --- SD
-    W2 --- SD
-    WN --- SD
-```
-
 ### Key components
-
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class ClusterNode {
-        +spawn(Props, name) ActorRef
-        +resolve(ActorPath) ActorRef
-    }
-
-    class Transport {
-        <<interface>>
-        +send(workerId, data) void
-        +listen(handler) void
-    }
-
-    class ActorDirectory {
-        <<interface>>
-        +register(path, workerId) void
-        +lookup(path) Option
-    }
-
-    class ClusterSerializer {
-        <<interface>>
-        +serialize(Envelope) string
-        +deserialize(string) Envelope
-    }
-
-    UnixSocketTransport ..|> Transport
-    SwooleTableDirectory ..|> ActorDirectory
-    CompactClusterSerializer ..|> ClusterSerializer
-    PhpNativeClusterSerializer ..|> ClusterSerializer
-
-    ClusterNode --> Transport
-    ClusterNode --> ActorDirectory
-    ClusterNode --> ClusterSerializer
-```
-
-</details>
 
 - **`ClusterNode`** -- Per-worker coordinator. Routes messages locally or via
   transport based on a consistent hash ring. Each worker has exactly one.
@@ -112,20 +51,6 @@ is returned and the actor runs locally. If it belongs to another worker, a
 sockets to the owning worker.
 
 ## Message flow
-
-```mermaid
-sequenceDiagram
-    participant A as Source Actor
-    participant Ref as RemoteActorRef
-    participant T as Transport
-    participant B as Target Actor
-
-    A->>Ref: tell(message)
-    Ref->>T: serialize + send
-    T-->>T: Unix socket transfer
-    T->>B: deserialize + enqueue
-    B->>B: processMessage()
-```
 
 1. Actor calls `$ref->tell($message)` on a `RemoteActorRef`.
 2. The message is wrapped in an `Envelope` and serialized by `ClusterSerializer`.

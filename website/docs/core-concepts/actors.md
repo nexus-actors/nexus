@@ -7,43 +7,6 @@ title: "Actors"
 
 Actors are the fundamental unit of computation in Nexus. Each actor encapsulates state, processes messages sequentially from its mailbox, and communicates with other actors exclusively through asynchronous message passing. This page covers the core types that make up the actor model: references, contexts, the actor system, paths, class-based actors, and dead letters.
 
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class ActorRef~T~ {
-        <<interface>>
-        +tell(T message) void
-        +ask(callable, Duration) R
-        +path() ActorPath
-    }
-
-    class Behavior~T~ {
-        +receive(callable)$ Behavior
-        +setup(callable)$ Behavior
-        +same()$ Behavior
-        +stopped()$ Behavior
-    }
-
-    class Props~T~ {
-        +fromBehavior(Behavior)$ Props
-        +withMailbox(MailboxConfig) Props
-        +withSupervision(Strategy) Props
-    }
-
-    class ActorSystem {
-        +create(name, Runtime)$ ActorSystem
-        +spawn(Props, name) ActorRef
-        +shutdown(Duration) void
-    }
-
-    ActorSystem --> Props : uses
-    Props --> Behavior : wraps
-```
-
-</details>
-
 ## ActorRef
 
 `ActorRef<T>` is the interface through which you interact with an actor. You never access an actor's internal state directly -- you send it messages through its reference.
@@ -118,31 +81,6 @@ If the actor does not respond within the timeout, an `AskTimeoutException` is th
 echo $ref->path();     // "/user/orders/order-123"
 echo $ref->isAlive();  // true
 ```
-
-## Actor hierarchy
-
-Actors form a supervised tree. The `ActorSystem` owns top-level actors under
-`/user`, each of which can spawn children, forming a hierarchy where parents
-supervise their children:
-
-```mermaid
-graph TD
-    Root["/"] --> User["/user"]
-    Root --> Sys["/system"]
-    Sys --> DL["/system/deadLetters"]
-    User --> Orders["/user/orders"]
-    User --> Payments["/user/payments"]
-    Orders --> O1["/user/orders/order-1"]
-    Orders --> O2["/user/orders/order-2"]
-    Payments --> P1["/user/payments/pay-1"]
-
-    style Root fill:#555,stroke:#333,color:#fff
-    style Sys fill:#666,stroke:#444,color:#fff
-    style DL fill:#666,stroke:#444,color:#fff
-```
-
-Each actor supervises its children. When a child fails, the parent's
-`SupervisionStrategy` decides the response (restart, stop, resume, or escalate).
 
 ## ActorContext
 

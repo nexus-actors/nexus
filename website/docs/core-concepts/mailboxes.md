@@ -10,46 +10,6 @@ is ready to process them. Nexus provides control over mailbox capacity and
 overflow behavior through `MailboxConfig`, and wraps every message in an
 `Envelope` that carries sender, target, and metadata alongside the payload.
 
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class Mailbox {
-        <<interface>>
-        +enqueue(Envelope) EnqueueResult
-        +dequeueBlocking(Duration) Envelope
-        +close() void
-    }
-
-    class Envelope {
-        +object message
-        +ActorPath sender
-        +ActorPath target
-        +array metadata
-    }
-
-    class OverflowStrategy {
-        <<enumeration>>
-        DropNewest
-        DropOldest
-        Backpressure
-        ThrowException
-    }
-
-    class EnqueueResult {
-        <<enumeration>>
-        Accepted
-        Dropped
-        Backpressured
-    }
-
-    Mailbox --> Envelope : processes
-    Mailbox --> EnqueueResult : returns
-```
-
-</details>
-
 ## MailboxConfig
 
 `MailboxConfig` is a `final readonly class` with a private constructor. Instances

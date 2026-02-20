@@ -28,22 +28,6 @@ a `LoggerInterface`, and a `DeadLetterRef`.
 
 ## Message processing flow
 
-When a message arrives at an actor, it follows this path:
-
-```mermaid
-flowchart TD
-    A["tell(message)"] --> B["Wrap in Envelope"]
-    B --> C["Mailbox.enqueue()"]
-    C --> D["Message loop dequeues"]
-    D --> E["processMessage()"]
-
-    E --> F{Message type?}
-
-    F -->|SystemMessage| G["Handle system message"]
-    F -->|Signal| H["Invoke signal handler"]
-    F -->|User message| I["Invoke behavior handler"]
-```
-
 ### Behavior application
 
 After a handler returns a `Behavior<T>`, `applyBehavior()` determines the
@@ -66,19 +50,6 @@ results:
 ## State machine
 
 Each actor progresses through a defined set of states:
-
-```mermaid
-stateDiagram-v2
-    [*] --> New
-    New --> Starting
-    Starting --> Running
-    Running --> Suspended
-    Suspended --> Running
-    Running --> Stopping
-    Suspended --> Stopping
-    Stopping --> Stopped
-    Stopped --> [*]
-```
 
 Valid transitions:
 

@@ -13,6 +13,26 @@ Unix domain socket transport, shared-memory actor directory, and the
 
 **Namespace:** `Monadial\Nexus\Cluster\Swoole\`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class Transport {
+        <<interface>>
+    }
+    class ActorDirectory {
+        <<interface>>
+    }
+
+    UnixSocketTransport ..|> Transport
+    SwooleTableDirectory ..|> ActorDirectory
+    ClusterBootstrap --> UnixSocketTransport
+    ClusterBootstrap --> SwooleTableDirectory
+```
+
+</details>
+
 **Requires:** Swoole PHP extension 6.0+
 
 ## Classes

@@ -14,6 +14,47 @@ runtime.
 
 **Namespace:** `Monadial\Nexus\Cluster\`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class Transport {
+        <<interface>>
+        +send(int workerId, string data) void
+        +listen(callable handler) void
+    }
+
+    class ActorDirectory {
+        <<interface>>
+        +register(ActorPath, int workerId) void
+        +lookup(ActorPath) int
+        +remove(ActorPath) void
+    }
+
+    class ClusterSerializer {
+        <<interface>>
+        +serialize(Envelope) string
+        +deserialize(string) Envelope
+    }
+
+    class ClusterNode {
+        +spawn(Props, string) ActorRef
+        +resolve(ActorPath) ActorRef
+    }
+
+    ClusterNode --> Transport
+    ClusterNode --> ActorDirectory
+    ClusterNode --> ClusterSerializer
+    ClusterNode --> ConsistentHashRing
+    InMemoryTransport ..|> Transport
+    InMemoryDirectory ..|> ActorDirectory
+    CompactClusterSerializer ..|> ClusterSerializer
+    PhpNativeClusterSerializer ..|> ClusterSerializer
+```
+
+</details>
+
 ## Classes
 
 ### ClusterConfig

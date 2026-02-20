@@ -13,6 +13,32 @@ PostgreSQL, MySQL, etc.).
 
 **Namespace:** `Monadial\Nexus\Persistence\Dbal\`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class EventStore {
+        <<interface>>
+    }
+    class SnapshotStore {
+        <<interface>>
+    }
+    class DurableStateStore {
+        <<interface>>
+    }
+    class PessimisticLockProvider {
+        <<interface>>
+    }
+
+    DbalEventStore ..|> EventStore
+    DbalSnapshotStore ..|> SnapshotStore
+    DbalDurableStateStore ..|> DurableStateStore
+    DbalPessimisticLockProvider ..|> PessimisticLockProvider
+```
+
+</details>
+
 **Dependencies:** `doctrine/dbal ^4.0`
 
 ## Classes

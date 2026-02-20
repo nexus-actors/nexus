@@ -13,6 +13,32 @@ wire-format identifiers.
 
 **Namespace:** `Monadial\Nexus\Serialization\`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class MessageSerializer {
+        <<interface>>
+        +serialize(object) string
+        +deserialize(string, string) object
+    }
+
+    class EnvelopeSerializer {
+        <<interface>>
+        +serialize(Envelope) string
+        +deserialize(string) Envelope
+    }
+
+    PhpNativeSerializer ..|> MessageSerializer
+    ValinorMessageSerializer ..|> MessageSerializer
+    DefaultEnvelopeSerializer ..|> EnvelopeSerializer
+    DefaultEnvelopeSerializer --> MessageSerializer
+    DefaultEnvelopeSerializer --> TypeRegistry
+```
+
+</details>
+
 ## Interfaces
 
 ### MessageSerializer

@@ -27,22 +27,6 @@ produces effects, effects persist events, and events are applied to the state.
 The actor's state is never persisted directly -- it is always derived by
 replaying the event log from the beginning (or from a snapshot).
 
-```mermaid
-sequenceDiagram
-    participant Sender
-    participant Actor as ES Actor
-    participant Handler as Cmd Handler
-    participant Store as Event Store
-
-    Sender->>Actor: tell(command)
-    Actor->>Handler: handleCommand()
-    Handler-->>Actor: Effect::persist(events)
-    Actor->>Store: persist(events)
-    Store-->>Actor: ok
-    Actor->>Actor: applyEvent() per event
-    Actor->>Actor: thenReply / thenRun
-```
-
 ```php
 use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
@@ -254,18 +238,6 @@ the oldest retained snapshot.
 When a persistent actor starts, it goes through a recovery phase before
 accepting commands:
 
-```mermaid
-flowchart TD
-    A["Actor starts"] --> B{"Snapshot exists?"}
-    B -->|Yes| C["Load snapshot"]
-    B -->|No| D["Start with empty state"]
-    C --> E["Replay events after snapshot"]
-    D --> F["Replay all events"]
-    E --> G["Recovery complete"]
-    F --> G
-    G --> H["Ready — process commands"]
-```
-
 1. **Load snapshot** -- if a snapshot store is configured and a snapshot exists,
    load it as the starting state.
 2. **Replay events** -- replay all events that occurred after the snapshot (or
@@ -278,44 +250,6 @@ order once recovery completes. This means senders do not need to know whether an
 actor has finished recovering -- they can start sending messages immediately.
 
 ## Storage Backends
-
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class EventStore {
-        <<interface>>
-        +persist(id, events, version) void
-        +load(id, fromSeq) list
-    }
-
-    class SnapshotStore {
-        <<interface>>
-        +save(id, state, seq) void
-        +load(id) Option
-    }
-
-    class DurableStateStore {
-        <<interface>>
-        +persist(id, state, version) void
-        +load(id) Option
-    }
-
-    InMemoryEventStore ..|> EventStore
-    DbalEventStore ..|> EventStore
-    DoctrineEventStore ..|> EventStore
-
-    InMemorySnapshotStore ..|> SnapshotStore
-    DbalSnapshotStore ..|> SnapshotStore
-    DoctrineSnapshotStore ..|> SnapshotStore
-
-    InMemoryDurableStateStore ..|> DurableStateStore
-    DbalDurableStateStore ..|> DurableStateStore
-    DoctrineDurableStateStore ..|> DurableStateStore
-```
-
-</details>
 
 Nexus ships with several storage backend implementations:
 

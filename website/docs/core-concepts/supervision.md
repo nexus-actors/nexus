@@ -10,59 +10,11 @@ exception, the parent's supervision strategy decides what happens next: restart
 the failed child, stop it, resume it as if nothing happened, or escalate the
 failure further up the hierarchy.
 
-## How supervision works
-
-When a child actor throws an exception, the following decision process occurs:
-
-```mermaid
-flowchart TD
-    A["Child throws exception"] --> B["Parent receives ChildFailed"]
-    B --> C{"Strategy type?"}
-
-    C -->|OneForOne| D["Failed child only"]
-    C -->|AllForOne| E["All children"]
-    C -->|ExponentialBackoff| F["With increasing delay"]
-
-    D --> G{"decider(exception)"}
-    E --> G
-    F --> G
-
-    G -->|Restart| H["Restart child"]
-    G -->|Stop| I["Stop child"]
-    G -->|Resume| J["Continue"]
-    G -->|Escalate| K["Escalate to parent"]
-```
-
 ## SupervisionStrategy
 
 `SupervisionStrategy` is a `final readonly class` that encapsulates the failure
 handling policy. Instances are created through named constructors -- the class
 constructor is private.
-
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class SupervisionStrategy {
-        +oneForOne()$ SupervisionStrategy
-        +allForOne()$ SupervisionStrategy
-        +exponentialBackoff()$ SupervisionStrategy
-        +decide(Throwable) Directive
-    }
-
-    class Directive {
-        <<enumeration>>
-        Restart
-        Stop
-        Resume
-        Escalate
-    }
-
-    SupervisionStrategy --> Directive : returns
-```
-
-</details>
 
 ### One-for-one
 

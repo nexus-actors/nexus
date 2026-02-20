@@ -10,24 +10,6 @@ underlying concurrency mechanism. All scheduling, mailbox creation, and
 fiber/coroutine management flow through this single interface, making actor
 behaviors completely portable between runtimes.
 
-```mermaid
-graph TB
-    subgraph "nexus-core"
-        RT["Runtime"]
-        MB["Mailbox"]
-    end
-
-    subgraph "Implementations"
-        FR["FiberRuntime"]
-        SR["SwooleRuntime"]
-        STR["StepRuntime"]
-    end
-
-    RT --> FR
-    RT --> SR
-    RT --> STR
-```
-
 ## The Runtime interface
 
 ```php
@@ -71,38 +53,6 @@ Each method serves a specific role in the actor lifecycle:
 - **`isRunning()`** -- Returns whether the event loop is currently active.
 
 ## Three implementations
-
-<details>
-<summary>View class diagram</summary>
-
-```mermaid
-classDiagram
-    class Runtime {
-        <<interface>>
-        +name() string
-        +spawn(callable) string
-        +run() void
-        +shutdown(Duration) void
-    }
-
-    class FiberRuntime {
-        +name() "fiber"
-    }
-
-    class SwooleRuntime {
-        +name() "swoole"
-    }
-
-    class StepRuntime {
-        +name() "step"
-    }
-
-    FiberRuntime ..|> Runtime
-    SwooleRuntime ..|> Runtime
-    StepRuntime ..|> Runtime
-```
-
-</details>
 
 Nexus ships with three runtime implementations:
 

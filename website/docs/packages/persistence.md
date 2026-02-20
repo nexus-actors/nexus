@@ -11,6 +11,53 @@ packages (`nexus-persistence-dbal`, `nexus-persistence-doctrine`) implement.
 
 **Composer:** `nexus-actors/persistence`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class EventStore {
+        <<interface>>
+        +persist(PersistenceId, EventEnvelope...) void
+        +load(PersistenceId, int, int) iterable
+        +highestSequenceNr(PersistenceId) int
+    }
+
+    class SnapshotStore {
+        <<interface>>
+        +save(PersistenceId, SnapshotEnvelope) void
+        +load(PersistenceId) SnapshotEnvelope
+    }
+
+    class DurableStateStore {
+        <<interface>>
+        +get(PersistenceId) DurableStateEnvelope
+        +upsert(PersistenceId, DurableStateEnvelope) void
+    }
+
+    class EventSourcedBehavior {
+        +create(PersistenceId, state, cmdHandler, eventHandler)$ EventSourcedBehavior
+        +withEventStore(EventStore) EventSourcedBehavior
+        +withSnapshotStore(SnapshotStore) EventSourcedBehavior
+        +toBehavior() Behavior
+    }
+
+    class DurableStateBehavior {
+        +create(PersistenceId, state, cmdHandler)$ DurableStateBehavior
+        +withStateStore(DurableStateStore) DurableStateBehavior
+        +toBehavior() Behavior
+    }
+
+    EventSourcedBehavior --> EventStore
+    EventSourcedBehavior --> SnapshotStore
+    DurableStateBehavior --> DurableStateStore
+    InMemoryEventStore ..|> EventStore
+    InMemorySnapshotStore ..|> SnapshotStore
+    InMemoryDurableStateStore ..|> DurableStateStore
+```
+
+</details>
+
 ## Root namespace
 
 `Monadial\Nexus\Persistence\`

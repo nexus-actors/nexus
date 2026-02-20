@@ -12,6 +12,63 @@ implementation is injected.
 
 **Composer:** `nexus-actors/core`
 
+<details>
+<summary>View class diagram</summary>
+
+```mermaid
+classDiagram
+    class ActorRef~T~ {
+        <<interface>>
+        +tell(T message) void
+        +ask(callable, Duration) R
+        +path() ActorPath
+        +isAlive() bool
+    }
+
+    class Behavior~T~ {
+        +receive(Closure)$ Behavior
+        +withState(S, Closure)$ Behavior
+        +setup(Closure)$ Behavior
+        +same()$ Behavior
+        +stopped()$ Behavior
+    }
+
+    class Props~T~ {
+        +fromBehavior(Behavior)$ Props
+        +fromFactory(callable)$ Props
+        +withMailbox(MailboxConfig) Props
+        +withSupervision(strategy) Props
+    }
+
+    class ActorSystem {
+        +create(string, Runtime)$ ActorSystem
+        +spawn(Props, string) ActorRef
+        +shutdown(Duration) void
+    }
+
+    class Mailbox {
+        <<interface>>
+        +enqueue(Envelope) EnqueueResult
+        +dequeueBlocking(Duration) Envelope
+        +close() void
+    }
+
+    class SupervisionStrategy {
+        +oneForOne()$ SupervisionStrategy
+        +allForOne()$ SupervisionStrategy
+        +exponentialBackoff()$ SupervisionStrategy
+        +decide(Throwable) Directive
+    }
+
+    ActorSystem --> Props
+    Props --> Behavior
+    LocalActorRef ..|> ActorRef
+    RemoteActorRef ..|> ActorRef
+    DeadLetterRef ..|> ActorRef
+```
+
+</details>
+
 ## Actor namespace
 
 `Monadial\Nexus\Core\Actor\`
