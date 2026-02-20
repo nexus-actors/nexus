@@ -69,6 +69,7 @@
             <directory>packages/nexus-persistence-dbal/src</directory>
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
+            <directory>packages/nexus-core/tests/Support</directory>
         </include>
     </source>
 </phpunit>

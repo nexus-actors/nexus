@@ -7,11 +7,11 @@ namespace Monadial\Nexus\Core\Tests\Unit\Support;
 use DateTimeImmutable;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
-use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-#[CoversNothing]
+#[CoversClass(TestClock::class)]
 final class TestClockTest extends TestCase
 {
     #[Test]

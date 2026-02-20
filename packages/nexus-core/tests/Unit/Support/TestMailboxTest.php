@@ -12,12 +12,12 @@ use Monadial\Nexus\Core\Mailbox\EnqueueResult;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
-use PHPUnit\Framework\Attributes\CoversNothing;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
-#[CoversNothing]
+#[CoversClass(TestMailbox::class)]
 final class TestMailboxTest extends TestCase
 {
     #[Test]
