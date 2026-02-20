@@ -9,7 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'nexus_snapshot_store')]
-class SnapshotEntry
+final class SnapshotEntry
 {
     public function __construct(
         #[ORM\Id]

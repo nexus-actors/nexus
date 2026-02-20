@@ -34,13 +34,9 @@ final class DurableStateBehavior
      * @param PersistenceId $persistenceId Unique identity for this persistent entity
      * @param S $emptyState Initial empty state before any persisted state
      * @param Closure(S, \Monadial\Nexus\Core\Actor\ActorContext, object): DurableEffect $commandHandler Processes commands, returns DurableEffect
-     * @return self
      */
-    public static function create(
-        PersistenceId $persistenceId,
-        object $emptyState,
-        Closure $commandHandler,
-    ): self {
+    public static function create(PersistenceId $persistenceId, object $emptyState, Closure $commandHandler): self
+    {
         return new self($persistenceId, $emptyState, $commandHandler);
     }
 
@@ -65,7 +61,9 @@ final class DurableStateBehavior
             $this->persistenceId,
             $this->emptyState,
             $this->commandHandler,
-            $this->stateStore ?? throw new LogicException('DurableStateStore is required — call withStateStore() before toBehavior()'),
+            $this->stateStore ?? throw new LogicException(
+                'DurableStateStore is required — call withStateStore() before toBehavior()',
+            ),
             $this->lockingStrategy,
         );
     }

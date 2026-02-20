@@ -12,10 +12,9 @@ use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
 use Override;
 use Swoole\Coroutine;
+use Swoole\Timer;
 
 use function Swoole\Coroutine\run;
-
-use Swoole\Timer;
 
 /**
  * Swoole coroutine-based runtime.

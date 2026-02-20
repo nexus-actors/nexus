@@ -69,16 +69,6 @@ final class AbstractDurableStateActorTest extends TestCase
     private InMemoryDurableStateStore $stateStore;
     private TestWalletActor $actor;
 
-    protected function setUp(): void
-    {
-        $this->stateStore = new InMemoryDurableStateStore();
-        $this->actor = new TestWalletActor($this->stateStore);
-    }
-
-    // ========================================================================
-    // Test 1: toBehavior() returns a Behavior instance
-    // ========================================================================
-
     #[Test]
     public function toBehaviorReturnsBehaviorInstance(): void
     {
@@ -159,11 +149,9 @@ final class AbstractDurableStateActorTest extends TestCase
 
         // Create a custom actor that captures state on InspectWallet command
         $actor = new class ($stateStore, $stateCapture) extends AbstractDurableStateActor {
-            /** @param mixed $stateCapture */
-            public function __construct(
-                InMemoryDurableStateStore $stateStore,
-                private mixed &$stateCapture,
-            ) {
+            /** */
+            public function __construct(InMemoryDurableStateStore $stateStore, private mixed &$stateCapture)
+            {
                 parent::__construct($stateStore);
             }
 
@@ -182,6 +170,7 @@ final class AbstractDurableStateActorTest extends TestCase
                 if ($command instanceof Deposit) {
                     return DurableEffect::persist(new WalletState($state->balance + $command->amount));
                 }
+
                 if ($command instanceof InspectWallet) {
                     $this->stateCapture = $state;
 
@@ -212,6 +201,15 @@ final class AbstractDurableStateActorTest extends TestCase
         self::assertInstanceOf(WalletState::class, $stateCapture);
         self::assertSame(60, $stateCapture->balance);
     }
+
+    protected function setUp(): void
+    {
+        $this->stateStore = new InMemoryDurableStateStore();
+        $this->actor = new TestWalletActor($this->stateStore);
+    }// ========================================================================
+    // Test 1: toBehavior() returns a Behavior instance
+    // ========================================================================
+
 
     // ========================================================================
     // Helpers

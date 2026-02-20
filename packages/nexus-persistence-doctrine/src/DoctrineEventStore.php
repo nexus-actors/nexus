@@ -32,7 +32,7 @@ final class DoctrineEventStore implements EventStore
                     eventType: $envelope->eventType,
                     eventData: $this->serializer->serialize($envelope->event),
                     timestamp: $envelope->timestamp,
-                    metadata: !empty($envelope->metadata) ? json_encode($envelope->metadata) : null,
+                    metadata: $envelope->metadata !== [] ? json_encode($envelope->metadata) : null,
                 );
 
                 $this->em->persist($entry);

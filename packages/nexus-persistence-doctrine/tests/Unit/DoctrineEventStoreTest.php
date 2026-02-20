@@ -26,39 +26,6 @@ final class DoctrineEventStoreTest extends TestCase
     private DoctrineEventStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $config = ORMSetup::createAttributeMetadataConfiguration(
-            [__DIR__ . '/../../src/Entity'],
-            isDevMode: true,
-        );
-        $config->enableNativeLazyObjects(true);
-
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ], $config);
-
-        $this->em = new EntityManager($connection, $config);
-
-        $schemaTool = new SchemaTool($this->em);
-        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
-
-        $this->store = new DoctrineEventStore($this->em);
-        $this->id = PersistenceId::of('order', 'order-1');
-    }
-
-    private function makeEnvelope(int $sequenceNr, string $eventType = stdClass::class): EventEnvelope
-    {
-        return new EventEnvelope(
-            persistenceId: $this->id,
-            sequenceNr: $sequenceNr,
-            event: new stdClass(),
-            eventType: $eventType,
-            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-        );
-    }
-
     #[Test]
     public function persistsSingleEvent(): void
     {
@@ -231,5 +198,38 @@ final class DoctrineEventStoreTest extends TestCase
         $this->expectException(ConcurrentModificationException::class);
 
         $this->store->persist($this->id, $this->makeEnvelope(1));
+    }
+
+    protected function setUp(): void
+    {
+        $config = ORMSetup::createAttributeMetadataConfiguration(
+            [__DIR__ . '/../../src/Entity'],
+            isDevMode: true,
+        );
+        $config->enableNativeLazyObjects(true);
+
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ], $config);
+
+        $this->em = new EntityManager($connection, $config);
+
+        $schemaTool = new SchemaTool($this->em);
+        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
+
+        $this->store = new DoctrineEventStore($this->em);
+        $this->id = PersistenceId::of('order', 'order-1');
+    }
+
+    private function makeEnvelope(int $sequenceNr, string $eventType = stdClass::class): EventEnvelope
+    {
+        return new EventEnvelope(
+            persistenceId: $this->id,
+            sequenceNr: $sequenceNr,
+            event: new stdClass(),
+            eventType: $eventType,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+        );
     }
 }

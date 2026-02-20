@@ -9,7 +9,7 @@ use Doctrine\ORM\Mapping as ORM;
 
 #[ORM\Entity]
 #[ORM\Table(name: 'nexus_durable_state')]
-class DurableStateEntry
+final class DurableStateEntry
 {
     #[ORM\Column(name: 'version', type: 'integer')]
     #[ORM\Version]

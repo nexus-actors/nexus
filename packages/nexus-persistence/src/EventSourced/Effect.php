@@ -23,10 +23,7 @@ final class Effect
 
     public static function persist(object ...$events): self
     {
-        return new self(
-            type: EffectType::Persist,
-            events: $events,
-        );
+        return new self(type: EffectType::Persist, events: $events);
     }
 
     public static function none(): self
@@ -51,11 +48,7 @@ final class Effect
 
     public static function reply(ActorRef $to, object $message): self
     {
-        return new self(
-            type: EffectType::Reply,
-            replyTo: $to,
-            replyMsg: $message,
-        );
+        return new self(type: EffectType::Reply, replyTo: $to, replyMsg: $message);
     }
 
     /**

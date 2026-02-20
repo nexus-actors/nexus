@@ -61,6 +61,7 @@ final readonly class GetItems
 
 final readonly class ItemsReply
 {
+    /** @param list<string> $items */
     public function __construct(public array $items) {}
 }
 
@@ -81,18 +82,6 @@ final class PersistenceEngineTest extends TestCase
     private DeadLetterRef $deadLetters;
     private NullLogger $logger;
     private PersistenceId $persistenceId;
-
-    protected function setUp(): void
-    {
-        $this->runtime = new TestRuntime();
-        $this->deadLetters = new DeadLetterRef();
-        $this->logger = new NullLogger();
-        $this->persistenceId = PersistenceId::of('ShoppingCart', 'cart-1');
-    }
-
-    // ========================================================================
-    // Test 1: Recovery from empty state
-    // ========================================================================
 
     #[Test]
     public function recovery_from_empty_state_uses_empty_state(): void
@@ -140,6 +129,7 @@ final class PersistenceEngineTest extends TestCase
                 if ($msg instanceof AddItem) {
                     return Effect::persist(new ItemAdded($msg->item));
                 }
+
                 if ($msg instanceof DoNothing) {
                     $stateAfterPersist = $state;
 
@@ -271,8 +261,20 @@ final class PersistenceEngineTest extends TestCase
         // Pre-populate the event store
         $eventStore->persist(
             $this->persistenceId,
-            new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
-            new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
+            new EventEnvelope(
+                $this->persistenceId,
+                1,
+                new ItemAdded('apple'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
+            new EventEnvelope(
+                $this->persistenceId,
+                2,
+                new ItemAdded('banana'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
         );
 
         $recoveredState = null;
@@ -314,8 +316,20 @@ final class PersistenceEngineTest extends TestCase
         // Pre-populate with 2 events
         $eventStore->persist(
             $this->persistenceId,
-            new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
-            new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
+            new EventEnvelope(
+                $this->persistenceId,
+                1,
+                new ItemAdded('apple'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
+            new EventEnvelope(
+                $this->persistenceId,
+                2,
+                new ItemAdded('banana'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
         );
 
         $behavior = PersistenceEngine::create(
@@ -372,9 +386,27 @@ final class PersistenceEngineTest extends TestCase
         // Pre-populate events: 1, 2 (before snapshot), 3 (after snapshot)
         $eventStore->persist(
             $this->persistenceId,
-            new EventEnvelope($this->persistenceId, 1, new ItemAdded('apple'), ItemAdded::class, new DateTimeImmutable()),
-            new EventEnvelope($this->persistenceId, 2, new ItemAdded('banana'), ItemAdded::class, new DateTimeImmutable()),
-            new EventEnvelope($this->persistenceId, 3, new ItemAdded('cherry'), ItemAdded::class, new DateTimeImmutable()),
+            new EventEnvelope(
+                $this->persistenceId,
+                1,
+                new ItemAdded('apple'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
+            new EventEnvelope(
+                $this->persistenceId,
+                2,
+                new ItemAdded('banana'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
+            new EventEnvelope(
+                $this->persistenceId,
+                3,
+                new ItemAdded('cherry'),
+                ItemAdded::class,
+                new DateTimeImmutable(),
+            ),
         );
 
         $recoveredState = null;
@@ -529,6 +561,7 @@ final class PersistenceEngineTest extends TestCase
             new ShoppingCart(),
             static function (object $state, ActorContext $ctx, object $msg) use (&$states): Effect {
                 $states[] = $state;
+
                 if ($msg instanceof AddItem) {
                     return Effect::persist(new ItemAdded($msg->item));
                 }
@@ -579,10 +612,11 @@ final class PersistenceEngineTest extends TestCase
         $behavior = PersistenceEngine::create(
             $this->persistenceId,
             new ShoppingCart(),
-            static function (object $state, ActorContext $ctx, object $msg) use ($replyCapture): Effect {
+            static function (object $state, ActorContext $ctx, object $msg): Effect {
                 if ($msg instanceof AddItem) {
                     return Effect::persist(new ItemAdded($msg->item));
                 }
+
                 if ($msg instanceof GetItems) {
                     return Effect::reply($msg->replyTo, new ItemsReply($state->items));
                 }
@@ -881,6 +915,7 @@ final class PersistenceEngineTest extends TestCase
             new ShoppingCart(),
             static function (object $state, ActorContext $ctx, object $msg) use (&$states): Effect {
                 $states[] = $state;
+
                 if ($msg instanceof AddItem) {
                     return Effect::persist(new ItemAdded($msg->item));
                 }
@@ -1037,7 +1072,7 @@ final class PersistenceEngineTest extends TestCase
 
         $provider = $this->createMock(PessimisticLockProvider::class);
         $provider->method('withLock')
-            ->willReturnCallback(function (PersistenceId $id, Closure $cb) use (&$lockCalled): mixed {
+            ->willReturnCallback(static function (PersistenceId $id, Closure $cb) use (&$lockCalled): mixed {
                 $lockCalled = true;
 
                 return $cb();
@@ -1091,6 +1126,7 @@ final class PersistenceEngineTest extends TestCase
             new ShoppingCart(),
             static function (object $state, ActorContext $ctx, object $msg) use (&$commandStates): Effect {
                 $commandStates[] = $state;
+
                 if ($msg instanceof AddItem) {
                     return Effect::persist(new ItemAdded($msg->item));
                 }
@@ -1130,6 +1166,17 @@ final class PersistenceEngineTest extends TestCase
         self::assertCount(2, $commandStates);
         self::assertContains('banana-from-other-process', $commandStates[1]->items);
     }
+
+    protected function setUp(): void
+    {
+        $this->runtime = new TestRuntime();
+        $this->deadLetters = new DeadLetterRef();
+        $this->logger = new NullLogger();
+        $this->persistenceId = PersistenceId::of('ShoppingCart', 'cart-1');
+    }// ========================================================================
+    // Test 1: Recovery from empty state
+    // ========================================================================
+
 
     // ========================================================================
     // Helpers

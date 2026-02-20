@@ -27,11 +27,11 @@ final class DbalEventStore implements EventStore
             $this->connection->transactional(function () use ($id, $events): void {
                 foreach ($events as $envelope) {
                     $this->connection->insert('nexus_event_journal', [
+                        'event_data' => $this->serializer->serialize($envelope->event),
+                        'event_type' => $envelope->eventType,
+                        'metadata' => $envelope->metadata !== [] ? json_encode($envelope->metadata) : null,
                         'persistence_id' => $id->toString(),
                         'sequence_nr' => $envelope->sequenceNr,
-                        'event_type' => $envelope->eventType,
-                        'event_data' => $this->serializer->serialize($envelope->event),
-                        'metadata' => !empty($envelope->metadata) ? json_encode($envelope->metadata) : null,
                         'timestamp' => $envelope->timestamp->format('Y-m-d H:i:s'),
                     ]);
                 }

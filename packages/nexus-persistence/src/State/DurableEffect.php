@@ -22,10 +22,7 @@ final class DurableEffect
 
     public static function persist(object $newState): self
     {
-        return new self(
-            type: DurableEffectType::Persist,
-            state: $newState,
-        );
+        return new self(type: DurableEffectType::Persist, state: $newState);
     }
 
     public static function none(): self
@@ -50,11 +47,7 @@ final class DurableEffect
 
     public static function reply(ActorRef $to, object $message): self
     {
-        return new self(
-            type: DurableEffectType::Reply,
-            replyTo: $to,
-            replyMsg: $message,
-        );
+        return new self(type: DurableEffectType::Reply, replyTo: $to, replyMsg: $message);
     }
 
     /**

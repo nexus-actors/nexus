@@ -186,6 +186,7 @@ final class EffectTest extends TestCase
     public function persistWithMultipleEvents(): void
     {
         $events = [];
+
         for ($i = 0; $i < 5; $i++) {
             $e = new stdClass();
             $e->index = $i;
@@ -196,6 +197,7 @@ final class EffectTest extends TestCase
 
         self::assertSame(EffectType::Persist, $effect->type);
         self::assertCount(5, $effect->events);
+
         for ($i = 0; $i < 5; $i++) {
             self::assertSame($i, $effect->events[$i]->index);
         }

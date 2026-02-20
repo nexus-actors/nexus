@@ -7,18 +7,29 @@
     <arg value="sp" />
 
     <file>packages/nexus-core/src</file>
-    <file>packages/nexus-runtime-fiber/src</file>
-    <file>packages/nexus-runtime-swoole/src</file>
-    <file>packages/nexus-serialization/src</file>
     <file>packages/nexus-core/tests</file>
+    <file>packages/nexus-runtime-fiber/src</file>
     <file>packages/nexus-runtime-fiber/tests</file>
+    <file>packages/nexus-runtime-step/src</file>
+    <file>packages/nexus-runtime-step/tests</file>
+    <file>packages/nexus-runtime-swoole/src</file>
+    <file>packages/nexus-runtime-swoole/tests</file>
+    <file>packages/nexus-serialization/src</file>
     <file>packages/nexus-serialization/tests</file>
+    <file>packages/nexus-psalm/src</file>
+    <file>packages/nexus-psalm/tests</file>
     <file>packages/nexus-cluster/src</file>
     <file>packages/nexus-cluster/tests</file>
     <file>packages/nexus-cluster-swoole/src</file>
     <file>packages/nexus-cluster-swoole/tests</file>
     <file>packages/nexus-app/src</file>
     <file>packages/nexus-app/tests</file>
+    <file>packages/nexus-persistence/src</file>
+    <file>packages/nexus-persistence/tests</file>
+    <file>packages/nexus-persistence-dbal/src</file>
+    <file>packages/nexus-persistence-dbal/tests</file>
+    <file>packages/nexus-persistence-doctrine/src</file>
+    <file>packages/nexus-persistence-doctrine/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->
@@ -35,6 +46,8 @@
         <exclude name="SlevomatCodingStandard.Classes.DisallowConstructorPropertyPromotion" />
         <!-- Exception naming convention is fine (e.g. MailboxClosedException) -->
         <exclude name="SlevomatCodingStandard.Classes.SuperfluousExceptionNaming" />
+        <!-- Abstract prefix is standard PHP convention (AbstractEventSourcedActor etc.) -->
+        <exclude name="SlevomatCodingStandard.Classes.SuperfluousAbstractClassNaming" />
         <!-- Long classes are fine for ActorCell etc. -->
         <exclude name="SlevomatCodingStandard.Classes.ClassLength" />
         <!-- Public readonly properties are a core pattern -->
@@ -71,6 +84,8 @@
         <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInCall" />
         <!-- Trailing commas in declarations are our style -->
         <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInDeclaration" />
+        <!-- Trailing commas in closure use are our style -->
+        <exclude name="SlevomatCodingStandard.Functions.DisallowTrailingCommaInClosureUse" />
         <!-- Not all closures need to be arrow functions -->
         <exclude name="SlevomatCodingStandard.Functions.RequireArrowFunction" />
     </rule>
@@ -120,6 +135,13 @@
         <exclude name="SlevomatCodingStandard.PHP.DisallowReference" />
         <!-- We use assert() for type narrowing, not explicit assertions -->
         <exclude name="SlevomatCodingStandard.PHP.RequireExplicitAssertion" />
+    </rule>
+
+    <!-- PER-CS2.0 separates class/function/const use groups with a blank line -->
+    <rule ref="SlevomatCodingStandard.Namespaces.UseSpacing">
+        <properties>
+            <property name="linesCountBetweenUseTypes" value="1" />
+        </properties>
     </rule>
 
     <!-- Treat types referenced only in @throws / @param / @return docblocks as used -->

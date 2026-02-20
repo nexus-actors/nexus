@@ -23,12 +23,6 @@ abstract class AbstractDurableStateActor
 {
     private LockingStrategy $lockingStrategy;
 
-    public function __construct(
-        private readonly DurableStateStore $stateStore,
-    ) {
-        $this->lockingStrategy = LockingStrategy::optimistic();
-    }
-
     /**
      * The unique persistence identity for this actor.
      */
@@ -45,11 +39,13 @@ abstract class AbstractDurableStateActor
      * Handle a command and return a DurableEffect describing what should happen.
      *
      * @param S $state
-     * @param ActorContext $ctx
-     * @param object $command
-     * @return DurableEffect
      */
     abstract public function handleCommand(object $state, ActorContext $ctx, object $command): DurableEffect;
+
+    public function __construct(private readonly DurableStateStore $stateStore)
+    {
+        $this->lockingStrategy = LockingStrategy::optimistic();
+    }
 
     /**
      * @return static

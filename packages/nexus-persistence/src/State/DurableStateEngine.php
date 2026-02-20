@@ -49,6 +49,7 @@ final class DurableStateEngine
         ?LockingStrategy $lockingStrategy = null,
     ): Behavior {
         $locking = $lockingStrategy ?? LockingStrategy::optimistic();
+
         return Behavior::setup(static function (ActorContext $ctx) use (
             $persistenceId,
             $emptyState,
@@ -61,6 +62,7 @@ final class DurableStateEngine
             $version = 0;
 
             $existing = $stateStore->get($persistenceId);
+
             if ($existing !== null) {
                 $state = $existing->state;
                 $version = $existing->version;
@@ -91,6 +93,7 @@ final class DurableStateEngine
                         // Pessimistic: re-read current state from store
                         if ($locking->isPessimistic()) {
                             $existing = $stateStore->get($persistenceId);
+
                             if ($existing !== null) {
                                 $state = $existing->state;
                                 $version = $existing->version;

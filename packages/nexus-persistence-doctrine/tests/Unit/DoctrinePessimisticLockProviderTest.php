@@ -21,27 +21,6 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
     private EntityManagerInterface $em;
     private DoctrinePessimisticLockProvider $provider;
 
-    protected function setUp(): void
-    {
-        $config = ORMSetup::createAttributeMetadataConfiguration(
-            [__DIR__ . '/../../src/Entity'],
-            isDevMode: true,
-        );
-        $config->enableNativeLazyObjects(true);
-
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ], $config);
-
-        $this->em = new EntityManager($connection, $config);
-
-        // Create the lock table via schema manager
-        (new PersistenceSchemaManager($connection))->createSchema();
-
-        $this->provider = new DoctrinePessimisticLockProvider($this->em);
-    }
-
     #[Test]
     public function withLock_executes_callback_and_returns_result(): void
     {
@@ -79,5 +58,26 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
             [$id->toString()],
         );
         self::assertSame(1, (int) $count);
+    }
+
+    protected function setUp(): void
+    {
+        $config = ORMSetup::createAttributeMetadataConfiguration(
+            [__DIR__ . '/../../src/Entity'],
+            isDevMode: true,
+        );
+        $config->enableNativeLazyObjects(true);
+
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ], $config);
+
+        $this->em = new EntityManager($connection, $config);
+
+        // Create the lock table via schema manager
+        (new PersistenceSchemaManager($connection))->createSchema();
+
+        $this->provider = new DoctrinePessimisticLockProvider($this->em);
     }
 }

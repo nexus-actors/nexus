@@ -7,8 +7,9 @@ namespace Monadial\Nexus\Persistence\Event;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
-readonly class EventEnvelope
+final readonly class EventEnvelope
 {
+    /** @param array<string, mixed> $metadata */
     public function __construct(
         public PersistenceId $persistenceId,
         public int $sequenceNr,
@@ -18,6 +19,7 @@ readonly class EventEnvelope
         public array $metadata = [],
     ) {}
 
+    /** @param array<string, mixed> $metadata */
     public function withMetadata(array $metadata): self
     {
         return clone($this, ['metadata' => array_merge($this->metadata, $metadata)]);

@@ -10,10 +10,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine;
+use Swoole\Timer;
 
 use function Swoole\Coroutine\run;
-
-use Swoole\Timer;
 
 #[CoversClass(SwooleCancellable::class)]
 final class SwooleCancellableTest extends TestCase

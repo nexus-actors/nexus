@@ -9,8 +9,6 @@ use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Override;
 
-use function sleep;
-
 final readonly class BlockingFixtureMsg {}
 
 /**

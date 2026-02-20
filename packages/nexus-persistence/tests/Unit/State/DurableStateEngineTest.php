@@ -63,18 +63,6 @@ final class DurableStateEngineTest extends TestCase
     private NullLogger $logger;
     private PersistenceId $persistenceId;
 
-    protected function setUp(): void
-    {
-        $this->runtime = new TestRuntime();
-        $this->deadLetters = new DeadLetterRef();
-        $this->logger = new NullLogger();
-        $this->persistenceId = PersistenceId::of('Account', 'acc-1');
-    }
-
-    // ========================================================================
-    // Test 1: Recovery from empty state
-    // ========================================================================
-
     #[Test]
     public function recovery_from_empty_state_uses_empty_state(): void
     {
@@ -120,6 +108,7 @@ final class DurableStateEngineTest extends TestCase
                 if ($msg instanceof SetBalance) {
                     return DurableEffect::persist(new AccountState($msg->amount));
                 }
+
                 if ($msg instanceof DurableDoNothing) {
                     $stateAfterPersist = $state;
 
@@ -248,6 +237,7 @@ final class DurableStateEngineTest extends TestCase
             new AccountState(),
             static function (object $state, ActorContext $ctx, object $msg) use (&$states): DurableEffect {
                 $states[] = $state;
+
                 if ($msg instanceof SetBalance) {
                     return DurableEffect::persist(new AccountState($msg->amount));
                 }
@@ -295,6 +285,7 @@ final class DurableStateEngineTest extends TestCase
                 if ($msg instanceof SetBalance) {
                     return DurableEffect::persist(new AccountState($msg->amount));
                 }
+
                 if ($msg instanceof GetBalance) {
                     return DurableEffect::reply($msg->replyTo, new BalanceReply($state->balance));
                 }
@@ -518,6 +509,7 @@ final class DurableStateEngineTest extends TestCase
             new AccountState(),
             static function (object $state, ActorContext $ctx, object $msg) use (&$states): DurableEffect {
                 $states[] = $state;
+
                 if ($msg instanceof SetBalance) {
                     return DurableEffect::persist(new AccountState($msg->amount));
                 }
@@ -701,6 +693,17 @@ final class DurableStateEngineTest extends TestCase
         self::assertInstanceOf(AccountState::class, $observedStates[0]);
         self::assertSame(999, $observedStates[0]->balance);
     }
+
+    protected function setUp(): void
+    {
+        $this->runtime = new TestRuntime();
+        $this->deadLetters = new DeadLetterRef();
+        $this->logger = new NullLogger();
+        $this->persistenceId = PersistenceId::of('Account', 'acc-1');
+    }// ========================================================================
+    // Test 1: Recovery from empty state
+    // ========================================================================
+
 
     // ========================================================================
     // Helpers

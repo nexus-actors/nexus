@@ -6,10 +6,6 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor\Functions;
 
 use Closure;
 use Monadial\Nexus\Core\Actor\Behavior;
-
-use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
-use function Monadial\Nexus\Core\Actor\Functions\withSupervision;
-
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
@@ -17,6 +13,9 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use PHPUnit\Framework\Attributes\CoversFunction;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+
+use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
+use function Monadial\Nexus\Core\Actor\Functions\withSupervision;
 
 #[CoversFunction('Monadial\Nexus\Core\Actor\Functions\withMailbox')]
 #[CoversFunction('Monadial\Nexus\Core\Actor\Functions\withSupervision')]

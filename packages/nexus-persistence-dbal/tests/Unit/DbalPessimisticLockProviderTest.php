@@ -20,13 +20,6 @@ final class DbalPessimisticLockProviderTest extends TestCase
     private Connection $connection;
     private DbalPessimisticLockProvider $provider;
 
-    protected function setUp(): void
-    {
-        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->provider = new DbalPessimisticLockProvider($this->connection);
-    }
-
     #[Test]
     public function withLock_executes_callback_and_returns_result(): void
     {
@@ -88,5 +81,12 @@ final class DbalPessimisticLockProviderTest extends TestCase
         $this->provider->withLock($id, static function (): never {
             throw new RuntimeException('test error');
         });
+    }
+
+    protected function setUp(): void
+    {
+        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        (new PersistenceSchemaManager($this->connection))->createSchema();
+        $this->provider = new DbalPessimisticLockProvider($this->connection);
     }
 }

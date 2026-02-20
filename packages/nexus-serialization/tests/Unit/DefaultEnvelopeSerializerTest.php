@@ -14,12 +14,7 @@ use NoDiscard;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-
-use function serialize;
-
 use Throwable;
-
-use function unserialize;
 
 #[CoversClass(DefaultEnvelopeSerializer::class)]
 final class DefaultEnvelopeSerializerTest extends TestCase

@@ -19,26 +19,6 @@ final class InMemoryDurableStateStoreTest extends TestCase
     private InMemoryDurableStateStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $this->store = new InMemoryDurableStateStore();
-        $this->id = PersistenceId::of('counter', 'counter-1');
-    }
-
-    private function makeState(int $version, int $value = 0): DurableStateEnvelope
-    {
-        $state = new stdClass();
-        $state->value = $value;
-
-        return new DurableStateEnvelope(
-            persistenceId: $this->id,
-            version: $version,
-            state: $state,
-            stateType: 'CounterState',
-            timestamp: new DateTimeImmutable(),
-        );
-    }
-
     #[Test]
     public function upsertAndGet(): void
     {
@@ -96,5 +76,25 @@ final class InMemoryDurableStateStoreTest extends TestCase
         $this->store->delete($this->id);
 
         self::assertNull($this->store->get($this->id));
+    }
+
+    protected function setUp(): void
+    {
+        $this->store = new InMemoryDurableStateStore();
+        $this->id = PersistenceId::of('counter', 'counter-1');
+    }
+
+    private function makeState(int $version, int $value = 0): DurableStateEnvelope
+    {
+        $state = new stdClass();
+        $state->value = $value;
+
+        return new DurableStateEnvelope(
+            persistenceId: $this->id,
+            version: $version,
+            state: $state,
+            stateType: 'CounterState',
+            timestamp: new DateTimeImmutable(),
+        );
     }
 }

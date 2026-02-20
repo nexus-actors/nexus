@@ -19,23 +19,6 @@ final class InMemoryEventStoreTest extends TestCase
     private InMemoryEventStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $this->store = new InMemoryEventStore();
-        $this->id = PersistenceId::of('order', 'order-1');
-    }
-
-    private function makeEnvelope(int $sequenceNr, string $eventType = 'OrderPlaced'): EventEnvelope
-    {
-        return new EventEnvelope(
-            persistenceId: $this->id,
-            sequenceNr: $sequenceNr,
-            event: new stdClass(),
-            eventType: $eventType,
-            timestamp: new DateTimeImmutable(),
-        );
-    }
-
     #[Test]
     public function persistsSingleEvent(): void
     {
@@ -142,5 +125,22 @@ final class InMemoryEventStoreTest extends TestCase
         self::assertCount(2, $loaded);
         self::assertSame($e1, $loaded[0]);
         self::assertSame($e2, $loaded[1]);
+    }
+
+    protected function setUp(): void
+    {
+        $this->store = new InMemoryEventStore();
+        $this->id = PersistenceId::of('order', 'order-1');
+    }
+
+    private function makeEnvelope(int $sequenceNr, string $eventType = 'OrderPlaced'): EventEnvelope
+    {
+        return new EventEnvelope(
+            persistenceId: $this->id,
+            sequenceNr: $sequenceNr,
+            event: new stdClass(),
+            eventType: $eventType,
+            timestamp: new DateTimeImmutable(),
+        );
     }
 }

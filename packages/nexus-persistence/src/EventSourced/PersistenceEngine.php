@@ -82,6 +82,7 @@ final class PersistenceEngine
             // 1. Load snapshot (if available)
             if ($snapshotStore !== null) {
                 $snapshot = $snapshotStore->load($persistenceId);
+
                 if ($snapshot !== null) {
                     $state = $snapshot->state;
                     $sequenceNr = $snapshot->sequenceNr;
@@ -90,6 +91,7 @@ final class PersistenceEngine
 
             // 2. Replay events from snapshot's sequenceNr + 1
             $events = $eventStore->load($persistenceId, $sequenceNr + 1);
+
             foreach ($events as $envelope) {
                 $state = $eventHandler($state, $envelope->event);
                 $sequenceNr = $envelope->sequenceNr;
@@ -128,6 +130,7 @@ final class PersistenceEngine
                         // Pessimistic: replay events since last known position
                         if ($locking->isPessimistic()) {
                             $newEvents = $eventStore->load($persistenceId, $sequenceNr + 1);
+
                             foreach ($newEvents as $envelope) {
                                 $state = $eventHandler($state, $envelope->event);
                                 $sequenceNr = $envelope->sequenceNr;
@@ -178,6 +181,7 @@ final class PersistenceEngine
         // 1. Build EventEnvelopes with incrementing sequenceNr
         $envelopes = [];
         $newSeqNr = $sequenceNr;
+
         foreach ($effect->events as $event) {
             $newSeqNr++;
             $envelopes[] = new EventEnvelope(
@@ -195,13 +199,18 @@ final class PersistenceEngine
         // 3. Apply events to state via eventHandler
         $newState = $state;
         $lastEvent = null;
+
         foreach ($effect->events as $event) {
             $newState = $eventHandler($newState, $event);
             $lastEvent = $event;
         }
 
         // 4. Check snapshot strategy and save snapshot if triggered
-        if ($lastEvent !== null && $snapshotStore !== null && $strategy->shouldSnapshot($newState, $lastEvent, $newSeqNr)) {
+        if (
+            $lastEvent !== null
+            && $snapshotStore !== null
+            && $strategy->shouldSnapshot($newState, $lastEvent, $newSeqNr)
+        ) {
             $snapshotStore->save($persistenceId, new SnapshotEnvelope(
                 persistenceId: $persistenceId,
                 sequenceNr: $newSeqNr,

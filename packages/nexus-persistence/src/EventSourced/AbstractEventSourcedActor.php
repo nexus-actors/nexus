@@ -31,14 +31,6 @@ abstract class AbstractEventSourcedActor
     private RetentionPolicy $retentionPolicy;
     private LockingStrategy $lockingStrategy;
 
-    public function __construct(
-        private readonly EventStore $eventStore,
-    ) {
-        $this->snapshotStrategy = SnapshotStrategy::never();
-        $this->retentionPolicy = RetentionPolicy::none();
-        $this->lockingStrategy = LockingStrategy::optimistic();
-    }
-
     /**
      * The unique persistence identity for this actor.
      */
@@ -55,9 +47,6 @@ abstract class AbstractEventSourcedActor
      * Handle a command and return an Effect describing what should happen.
      *
      * @param S $state
-     * @param ActorContext $ctx
-     * @param object $command
-     * @return Effect
      */
     abstract public function handleCommand(object $state, ActorContext $ctx, object $command): Effect;
 
@@ -69,6 +58,13 @@ abstract class AbstractEventSourcedActor
      * @return S
      */
     abstract public function applyEvent(object $state, object $event): object;
+
+    public function __construct(private readonly EventStore $eventStore)
+    {
+        $this->snapshotStrategy = SnapshotStrategy::never();
+        $this->retentionPolicy = RetentionPolicy::none();
+        $this->lockingStrategy = LockingStrategy::optimistic();
+    }
 
     /**
      * @return static

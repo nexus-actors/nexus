@@ -24,21 +24,10 @@ final class DurableStateBehaviorTest extends TestCase
     private Closure $commandHandler;
     private stdClass $emptyState;
 
-    protected function setUp(): void
-    {
-        $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
-        $this->emptyState = new stdClass();
-        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): DurableEffect => DurableEffect::none();
-    }
-
     #[Test]
     public function createReturnsDurableStateBehaviorInstance(): void
     {
-        $builder = DurableStateBehavior::create(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-        );
+        $builder = DurableStateBehavior::create($this->persistenceId, $this->emptyState, $this->commandHandler);
 
         self::assertInstanceOf(DurableStateBehavior::class, $builder);
     }
@@ -46,11 +35,7 @@ final class DurableStateBehaviorTest extends TestCase
     #[Test]
     public function withStateStoreReturnsNewImmutableInstance(): void
     {
-        $original = DurableStateBehavior::create(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-        );
+        $original = DurableStateBehavior::create($this->persistenceId, $this->emptyState, $this->commandHandler);
 
         $withStore = $original->withStateStore(new InMemoryDurableStateStore());
 
@@ -61,11 +46,7 @@ final class DurableStateBehaviorTest extends TestCase
     #[Test]
     public function toBehaviorReturnsBehaviorWhenStoreIsSet(): void
     {
-        $behavior = DurableStateBehavior::create(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-        )
+        $behavior = DurableStateBehavior::create($this->persistenceId, $this->emptyState, $this->commandHandler)
             ->withStateStore(new InMemoryDurableStateStore())
             ->toBehavior();
 
@@ -75,11 +56,7 @@ final class DurableStateBehaviorTest extends TestCase
     #[Test]
     public function toBehaviorThrowsLogicExceptionWhenStoreIsNotSet(): void
     {
-        $builder = DurableStateBehavior::create(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-        );
+        $builder = DurableStateBehavior::create($this->persistenceId, $this->emptyState, $this->commandHandler);
 
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('DurableStateStore is required');
@@ -90,14 +67,17 @@ final class DurableStateBehaviorTest extends TestCase
     #[Test]
     public function fullBuilderChainReturnsBehavior(): void
     {
-        $behavior = DurableStateBehavior::create(
-            $this->persistenceId,
-            $this->emptyState,
-            $this->commandHandler,
-        )
+        $behavior = DurableStateBehavior::create($this->persistenceId, $this->emptyState, $this->commandHandler)
             ->withStateStore(new InMemoryDurableStateStore())
             ->toBehavior();
 
         self::assertInstanceOf(Behavior::class, $behavior);
+    }
+
+    protected function setUp(): void
+    {
+        $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
+        $this->emptyState = new stdClass();
+        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): DurableEffect => DurableEffect::none();
     }
 }

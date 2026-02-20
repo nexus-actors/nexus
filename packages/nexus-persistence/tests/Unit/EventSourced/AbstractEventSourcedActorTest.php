@@ -80,16 +80,6 @@ final class AbstractEventSourcedActorTest extends TestCase
     private InMemoryEventStore $eventStore;
     private TestCounterActor $actor;
 
-    protected function setUp(): void
-    {
-        $this->eventStore = new InMemoryEventStore();
-        $this->actor = new TestCounterActor($this->eventStore);
-    }
-
-    // ========================================================================
-    // Test 1: toBehavior() returns a Behavior instance
-    // ========================================================================
-
     #[Test]
     public function toBehaviorReturnsBehaviorInstance(): void
     {
@@ -202,11 +192,9 @@ final class AbstractEventSourcedActorTest extends TestCase
 
         // Create a custom actor that captures state on InspectState command
         $actor = new class ($eventStore, $stateCapture) extends AbstractEventSourcedActor {
-            /** @param mixed $stateCapture */
-            public function __construct(
-                InMemoryEventStore $eventStore,
-                private mixed &$stateCapture,
-            ) {
+            /** */
+            public function __construct(InMemoryEventStore $eventStore, private mixed &$stateCapture)
+            {
                 parent::__construct($eventStore);
             }
 
@@ -225,6 +213,7 @@ final class AbstractEventSourcedActorTest extends TestCase
                 if ($command instanceof Increment) {
                     return Effect::persist(new Incremented());
                 }
+
                 if ($command instanceof InspectState) {
                     $this->stateCapture = $state;
 
@@ -293,6 +282,15 @@ final class AbstractEventSourcedActorTest extends TestCase
         self::assertInstanceOf(Props::class, $props);
         self::assertInstanceOf(Behavior::class, $props->behavior);
     }
+
+    protected function setUp(): void
+    {
+        $this->eventStore = new InMemoryEventStore();
+        $this->actor = new TestCounterActor($this->eventStore);
+    }// ========================================================================
+    // Test 1: toBehavior() returns a Behavior instance
+    // ========================================================================
+
 
     // ========================================================================
     // Helpers

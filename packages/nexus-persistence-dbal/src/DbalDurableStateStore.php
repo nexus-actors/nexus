@@ -83,10 +83,10 @@ final class DbalDurableStateStore implements DurableStateStore
 
             $this->connection->insert('nexus_durable_state', [
                 'persistence_id' => $id->toString(),
-                'version' => $state->version,
-                'state_type' => $state->stateType,
                 'state_data' => $this->serializer->serialize($state->state),
+                'state_type' => $state->stateType,
                 'timestamp' => $state->timestamp->format('Y-m-d H:i:s'),
+                'version' => $state->version,
             ]);
         }
     }

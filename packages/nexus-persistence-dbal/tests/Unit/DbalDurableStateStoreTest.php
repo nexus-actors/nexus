@@ -24,28 +24,6 @@ final class DbalDurableStateStoreTest extends TestCase
     private DbalDurableStateStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->store = new DbalDurableStateStore($this->connection);
-        $this->id = PersistenceId::of('counter', 'counter-1');
-    }
-
-    private function makeState(int $version, int $value = 0): DurableStateEnvelope
-    {
-        $state = new stdClass();
-        $state->value = $value;
-
-        return new DurableStateEnvelope(
-            persistenceId: $this->id,
-            version: $version,
-            state: $state,
-            stateType: stdClass::class,
-            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-        );
-    }
-
     #[Test]
     public function upsertAndGet(): void
     {
@@ -146,5 +124,27 @@ final class DbalDurableStateStoreTest extends TestCase
         $this->expectException(ConcurrentModificationException::class);
 
         $this->store->upsert($this->id, $this->makeState(2, 30));
+    }
+
+    protected function setUp(): void
+    {
+        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        (new PersistenceSchemaManager($this->connection))->createSchema();
+        $this->store = new DbalDurableStateStore($this->connection);
+        $this->id = PersistenceId::of('counter', 'counter-1');
+    }
+
+    private function makeState(int $version, int $value = 0): DurableStateEnvelope
+    {
+        $state = new stdClass();
+        $state->value = $value;
+
+        return new DurableStateEnvelope(
+            persistenceId: $this->id,
+            version: $version,
+            state: $state,
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+        );
     }
 }

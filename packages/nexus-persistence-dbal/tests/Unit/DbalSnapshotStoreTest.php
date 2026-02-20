@@ -23,28 +23,6 @@ final class DbalSnapshotStoreTest extends TestCase
     private DbalSnapshotStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->store = new DbalSnapshotStore($this->connection);
-        $this->id = PersistenceId::of('order', 'order-1');
-    }
-
-    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
-    {
-        $state = new stdClass();
-        $state->total = $sequenceNr * 100;
-
-        return new SnapshotEnvelope(
-            persistenceId: $this->id,
-            sequenceNr: $sequenceNr,
-            state: $state,
-            stateType: stdClass::class,
-            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-        );
-    }
-
     #[Test]
     public function saveAndLoad(): void
     {
@@ -132,5 +110,27 @@ final class DbalSnapshotStoreTest extends TestCase
         self::assertNotNull($loaded);
         self::assertEquals(['item-1', 'item-2'], $loaded->state->items);
         self::assertSame('confirmed', $loaded->state->status);
+    }
+
+    protected function setUp(): void
+    {
+        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        (new PersistenceSchemaManager($this->connection))->createSchema();
+        $this->store = new DbalSnapshotStore($this->connection);
+        $this->id = PersistenceId::of('order', 'order-1');
+    }
+
+    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
+    {
+        $state = new stdClass();
+        $state->total = $sequenceNr * 100;
+
+        return new SnapshotEnvelope(
+            persistenceId: $this->id,
+            sequenceNr: $sequenceNr,
+            state: $state,
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+        );
     }
 }

@@ -8,12 +8,7 @@ use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use NoDiscard;
 use Override;
-
-use function serialize;
-
 use Throwable;
-
-use function unserialize;
 
 /**
  * @psalm-api

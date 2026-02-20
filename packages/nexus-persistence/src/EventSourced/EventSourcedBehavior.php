@@ -42,7 +42,6 @@ final class EventSourcedBehavior
      * @param S $emptyState Initial empty state before any events
      * @param Closure(S, \Monadial\Nexus\Core\Actor\ActorContext, object): Effect $commandHandler Processes commands, returns Effect
      * @param Closure(S, E): S $eventHandler Applies events to state (pure function)
-     * @return self
      */
     public static function create(
         PersistenceId $persistenceId,
@@ -90,7 +89,9 @@ final class EventSourcedBehavior
             $this->emptyState,
             $this->commandHandler,
             $this->eventHandler,
-            $this->eventStore ?? throw new LogicException('EventStore is required — call withEventStore() before toBehavior()'),
+            $this->eventStore ?? throw new LogicException(
+                'EventStore is required — call withEventStore() before toBehavior()',
+            ),
             $this->snapshotStore,
             $this->snapshotStrategy,
             $this->retentionPolicy,

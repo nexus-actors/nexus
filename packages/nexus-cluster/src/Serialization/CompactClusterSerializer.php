@@ -9,9 +9,6 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use NoDiscard;
 use Override;
 use RuntimeException;
-
-use function serialize;
-
 use stdClass;
 
 /**

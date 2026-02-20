@@ -24,8 +24,8 @@ final class DbalSnapshotStore implements SnapshotStore
         $this->connection->insert('nexus_snapshot_store', [
             'persistence_id' => $id->toString(),
             'sequence_nr' => $snapshot->sequenceNr,
-            'state_type' => $snapshot->stateType,
             'state_data' => $this->serializer->serialize($snapshot->state),
+            'state_type' => $snapshot->stateType,
             'timestamp' => $snapshot->timestamp->format('Y-m-d H:i:s'),
         ]);
     }

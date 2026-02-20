@@ -10,9 +10,7 @@ use Doctrine\DBAL\Schema\Table;
 
 final class PersistenceSchemaManager
 {
-    public function __construct(
-        private readonly Connection $connection,
-    ) {}
+    public function __construct(private readonly Connection $connection) {}
 
     public function createSchema(): void
     {

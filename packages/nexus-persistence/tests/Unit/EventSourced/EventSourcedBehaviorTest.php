@@ -28,14 +28,6 @@ final class EventSourcedBehaviorTest extends TestCase
     private Closure $eventHandler;
     private stdClass $emptyState;
 
-    protected function setUp(): void
-    {
-        $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
-        $this->emptyState = new stdClass();
-        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
-        $this->eventHandler = static fn(object $state, object $event): object => $state;
-    }
-
     #[Test]
     public function createReturnsEventSourcedBehaviorInstance(): void
     {
@@ -160,5 +152,13 @@ final class EventSourcedBehaviorTest extends TestCase
             ->toBehavior();
 
         self::assertInstanceOf(Behavior::class, $behavior);
+    }
+
+    protected function setUp(): void
+    {
+        $this->persistenceId = PersistenceId::of('TestEntity', 'test-1');
+        $this->emptyState = new stdClass();
+        $this->commandHandler = static fn(object $state, ActorContext $ctx, object $msg): Effect => Effect::none();
+        $this->eventHandler = static fn(object $state, object $event): object => $state;
     }
 }

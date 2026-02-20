@@ -18,11 +18,7 @@ final class ConcurrentModificationExceptionTest extends TestCase
     public function constructorSetsAllProperties(): void
     {
         $persistenceId = PersistenceId::of('Account', 'acc-1');
-        $exception = new ConcurrentModificationException(
-            $persistenceId,
-            5,
-            'Entity was modified concurrently',
-        );
+        $exception = new ConcurrentModificationException($persistenceId, 5, 'Entity was modified concurrently');
 
         self::assertSame($persistenceId, $exception->persistenceId);
         self::assertSame(5, $exception->expectedVersion);

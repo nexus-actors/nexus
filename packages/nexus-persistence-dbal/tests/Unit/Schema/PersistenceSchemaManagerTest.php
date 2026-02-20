@@ -17,12 +17,6 @@ final class PersistenceSchemaManagerTest extends TestCase
     private Connection $connection;
     private PersistenceSchemaManager $schemaManager;
 
-    protected function setUp(): void
-    {
-        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        $this->schemaManager = new PersistenceSchemaManager($this->connection);
-    }
-
     #[Test]
     public function createSchemaCreatesAllTables(): void
     {
@@ -143,5 +137,11 @@ final class PersistenceSchemaManagerTest extends TestCase
 
         $sm = $this->connection->createSchemaManager();
         self::assertFalse($sm->tablesExist(['nexus_event_journal']));
+    }
+
+    protected function setUp(): void
+    {
+        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
+        $this->schemaManager = new PersistenceSchemaManager($this->connection);
     }
 }

@@ -9,9 +9,6 @@ use NoDiscard;
 use Override;
 use RuntimeException;
 
-use function serialize;
-use function unserialize;
-
 /**
  * @psalm-api
  *

@@ -26,42 +26,6 @@ final class DoctrineDurableStateStoreTest extends TestCase
     private DoctrineDurableStateStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $config = ORMSetup::createAttributeMetadataConfiguration(
-            [__DIR__ . '/../../src/Entity'],
-            isDevMode: true,
-        );
-        $config->enableNativeLazyObjects(true);
-
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ], $config);
-
-        $this->em = new EntityManager($connection, $config);
-
-        $schemaTool = new SchemaTool($this->em);
-        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
-
-        $this->store = new DoctrineDurableStateStore($this->em);
-        $this->id = PersistenceId::of('counter', 'counter-1');
-    }
-
-    private function makeState(int $version, int $value = 0): DurableStateEnvelope
-    {
-        $state = new stdClass();
-        $state->value = $value;
-
-        return new DurableStateEnvelope(
-            persistenceId: $this->id,
-            version: $version,
-            state: $state,
-            stateType: stdClass::class,
-            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-        );
-    }
-
     #[Test]
     public function upsertAndGet(): void
     {
@@ -164,5 +128,41 @@ final class DoctrineDurableStateStoreTest extends TestCase
         $this->expectException(ConcurrentModificationException::class);
 
         $this->store->upsert($this->id, $this->makeState(2, 20));
+    }
+
+    protected function setUp(): void
+    {
+        $config = ORMSetup::createAttributeMetadataConfiguration(
+            [__DIR__ . '/../../src/Entity'],
+            isDevMode: true,
+        );
+        $config->enableNativeLazyObjects(true);
+
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ], $config);
+
+        $this->em = new EntityManager($connection, $config);
+
+        $schemaTool = new SchemaTool($this->em);
+        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
+
+        $this->store = new DoctrineDurableStateStore($this->em);
+        $this->id = PersistenceId::of('counter', 'counter-1');
+    }
+
+    private function makeState(int $version, int $value = 0): DurableStateEnvelope
+    {
+        $state = new stdClass();
+        $state->value = $value;
+
+        return new DurableStateEnvelope(
+            persistenceId: $this->id,
+            version: $version,
+            state: $state,
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+        );
     }
 }

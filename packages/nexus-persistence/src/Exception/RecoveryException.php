@@ -8,7 +8,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use RuntimeException;
 use Throwable;
 
-class RecoveryException extends RuntimeException
+final class RecoveryException extends RuntimeException
 {
     public function __construct(
         public readonly PersistenceId $persistenceId,

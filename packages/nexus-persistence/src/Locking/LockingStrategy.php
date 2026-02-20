@@ -15,11 +15,9 @@ use Monadial\Nexus\Persistence\PersistenceId;
  * - **Pessimistic** — Acquires an exclusive database lock before command
  *   processing. Prevents conflicts entirely but introduces contention.
  */
-readonly class LockingStrategy
+final readonly class LockingStrategy
 {
-    private function __construct(
-        private ?PessimisticLockProvider $lockProvider,
-    ) {}
+    private function __construct(private ?PessimisticLockProvider $lockProvider) {}
 
     public static function optimistic(): self
     {

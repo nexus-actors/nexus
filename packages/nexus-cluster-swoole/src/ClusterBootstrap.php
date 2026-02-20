@@ -15,11 +15,10 @@ use Monadial\Nexus\Cluster\Swoole\Transport\UnixSocketTransport;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Swoole\Coroutine;
-
-use function Swoole\Coroutine\run;
-
 use Swoole\Process\Pool;
 use Swoole\Table;
+
+use function Swoole\Coroutine\run;
 
 /**
  * @psalm-api

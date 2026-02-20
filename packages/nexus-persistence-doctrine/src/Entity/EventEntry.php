@@ -10,7 +10,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Entity]
 #[ORM\Table(name: 'nexus_event_journal')]
 #[ORM\Index(name: 'idx_event_journal_pid', columns: ['persistence_id'])]
-class EventEntry
+final class EventEntry
 {
     public function __construct(
         #[ORM\Id]

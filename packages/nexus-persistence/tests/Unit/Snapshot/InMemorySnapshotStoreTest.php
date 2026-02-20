@@ -19,26 +19,6 @@ final class InMemorySnapshotStoreTest extends TestCase
     private InMemorySnapshotStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $this->store = new InMemorySnapshotStore();
-        $this->id = PersistenceId::of('order', 'order-1');
-    }
-
-    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
-    {
-        $state = new stdClass();
-        $state->total = $sequenceNr * 100;
-
-        return new SnapshotEnvelope(
-            persistenceId: $this->id,
-            sequenceNr: $sequenceNr,
-            state: $state,
-            stateType: 'OrderState',
-            timestamp: new DateTimeImmutable(),
-        );
-    }
-
     #[Test]
     public function saveAndLoad(): void
     {
@@ -109,5 +89,25 @@ final class InMemorySnapshotStoreTest extends TestCase
         $unknownId = PersistenceId::of('order', 'unknown');
 
         self::assertNull($this->store->load($unknownId));
+    }
+
+    protected function setUp(): void
+    {
+        $this->store = new InMemorySnapshotStore();
+        $this->id = PersistenceId::of('order', 'order-1');
+    }
+
+    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
+    {
+        $state = new stdClass();
+        $state->total = $sequenceNr * 100;
+
+        return new SnapshotEnvelope(
+            persistenceId: $this->id,
+            sequenceNr: $sequenceNr,
+            state: $state,
+            stateType: 'OrderState',
+            timestamp: new DateTimeImmutable(),
+        );
     }
 }

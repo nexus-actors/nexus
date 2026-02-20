@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Persistence\Snapshot;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
-readonly class SnapshotEnvelope
+final readonly class SnapshotEnvelope
 {
     public function __construct(
         public PersistenceId $persistenceId,

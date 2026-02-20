@@ -25,42 +25,6 @@ final class DoctrineSnapshotStoreTest extends TestCase
     private DoctrineSnapshotStore $store;
     private PersistenceId $id;
 
-    protected function setUp(): void
-    {
-        $config = ORMSetup::createAttributeMetadataConfiguration(
-            [__DIR__ . '/../../src/Entity'],
-            isDevMode: true,
-        );
-        $config->enableNativeLazyObjects(true);
-
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ], $config);
-
-        $this->em = new EntityManager($connection, $config);
-
-        $schemaTool = new SchemaTool($this->em);
-        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
-
-        $this->store = new DoctrineSnapshotStore($this->em);
-        $this->id = PersistenceId::of('order', 'order-1');
-    }
-
-    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
-    {
-        $state = new stdClass();
-        $state->total = $sequenceNr * 100;
-
-        return new SnapshotEnvelope(
-            persistenceId: $this->id,
-            sequenceNr: $sequenceNr,
-            state: $state,
-            stateType: stdClass::class,
-            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-        );
-    }
-
     #[Test]
     public function saveAndLoad(): void
     {
@@ -148,5 +112,41 @@ final class DoctrineSnapshotStoreTest extends TestCase
         self::assertNotNull($loaded);
         self::assertEquals(['item-1', 'item-2'], $loaded->state->items);
         self::assertSame('confirmed', $loaded->state->status);
+    }
+
+    protected function setUp(): void
+    {
+        $config = ORMSetup::createAttributeMetadataConfiguration(
+            [__DIR__ . '/../../src/Entity'],
+            isDevMode: true,
+        );
+        $config->enableNativeLazyObjects(true);
+
+        $connection = DriverManager::getConnection([
+            'driver' => 'pdo_sqlite',
+            'memory' => true,
+        ], $config);
+
+        $this->em = new EntityManager($connection, $config);
+
+        $schemaTool = new SchemaTool($this->em);
+        $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
+
+        $this->store = new DoctrineSnapshotStore($this->em);
+        $this->id = PersistenceId::of('order', 'order-1');
+    }
+
+    private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
+    {
+        $state = new stdClass();
+        $state->total = $sequenceNr * 100;
+
+        return new SnapshotEnvelope(
+            persistenceId: $this->id,
+            sequenceNr: $sequenceNr,
+            state: $state,
+            stateType: stdClass::class,
+            timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+        );
     }
 }

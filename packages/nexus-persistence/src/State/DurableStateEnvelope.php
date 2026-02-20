@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Persistence\State;
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
 
-readonly class DurableStateEnvelope
+final readonly class DurableStateEnvelope
 {
     public function __construct(
         public PersistenceId $persistenceId,
