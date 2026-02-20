@@ -36,7 +36,7 @@ final class EventSourcedActorTest extends TestCase
         $behavior = EventSourcedBehavior::create(
             $persistenceId,
             new ShoppingCart(),
-            static function (ShoppingCart $state, ActorContext $ctx, object $command) use ($persistenceId): Effect {
+            static function (ShoppingCart $state, ActorContext $ctx, object $command): Effect {
                 if ($command instanceof AddItem) {
                     return Effect::persist(new ItemAdded($command->item));
                 }

@@ -1,0 +1,12 @@
+#!/bin/bash
+
+export PATH="/usr/local/bin:$PATH"
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(cd "$DIR/../.." && pwd)"
+
+cd "$PROJECT_ROOT" || exit 1
+
+if [[ -z $(docker compose ps -q php 2>/dev/null) ]] || [[ -z $(docker ps -q --no-trunc | grep "$(docker compose ps -q php 2>/dev/null)") ]]; then
+    docker compose up -d php
+fi

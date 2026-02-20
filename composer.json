@@ -19,6 +19,7 @@
         "fp4php/functional-psalm-plugin": "^1.0",
         "friendsofphp/php-cs-fixer": "^3.0",
         "infection/infection": "^0.32",
+        "phpro/grumphp": "^2.19",
         "phpunit/phpunit": "^11.0",
         "slevomat/coding-standard": "^8.0",
         "squizlabs/php_codesniffer": "^4.0",
@@ -67,7 +68,8 @@
         "sort-packages": true,
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true,
-            "infection/extension-installer": true
+            "infection/extension-installer": true,
+            "phpro/grumphp": true
         }
     },
     "minimum-stability": "stable",
