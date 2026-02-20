@@ -3,8 +3,6 @@ sidebar_position: 3
 title: Performance
 ---
 
-import BenchmarkCharts from '@site/src/components/BenchmarkCharts';
-
 # Performance
 
 :::caution Work in Progress
@@ -15,15 +13,6 @@ of the codebase and may change as optimizations are added.
 All benchmarks run inside Docker on an Apple M4 Max (16 cores, 128 GB RAM),
 PHP 8.5.3, Swoole 6.0. Numbers are from the automated PHPUnit performance
 test suite (`tests/Performance/`).
-
-## Benchmark trends
-
-Performance is tracked automatically on every push to `main`. The charts below
-show how key metrics evolve over time.
-
-<BenchmarkCharts />
-
-## Latest snapshot
 
 ### Message throughput
 
@@ -117,9 +106,6 @@ docker compose exec php vendor/bin/phpunit --testsuite=performance --filter=Fibe
 
 # Cluster benchmarks only
 docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filter=Cluster
-
-# Export results as JSON (for CI or local analysis)
-BENCHMARK_JSON=results.jsonl docker compose exec php vendor/bin/phpunit --testsuite=performance --filter=Fiber
 ```
 
 ## Interpreting the numbers

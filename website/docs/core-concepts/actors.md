@@ -7,73 +7,42 @@ title: "Actors"
 
 Actors are the fundamental unit of computation in Nexus. Each actor encapsulates state, processes messages sequentially from its mailbox, and communicates with other actors exclusively through asynchronous message passing. This page covers the core types that make up the actor model: references, contexts, the actor system, paths, class-based actors, and dead letters.
 
+<details>
+<summary>View class diagram</summary>
+
 ```mermaid
 classDiagram
     class ActorRef~T~ {
         <<interface>>
         +tell(T message) void
-        +ask(callable messageFactory, Duration timeout) R
+        +ask(callable, Duration) R
         +path() ActorPath
-        +isAlive() bool
-    }
-
-    class ActorContext~T~ {
-        <<interface>>
-        +self() ActorRef~T~
-        +parent() Option
-        +spawn(Props~C~ props, string name) ActorRef~C~
-        +stop(ActorRef child) void
-        +watch(ActorRef target) void
-        +stash() void
-        +unstashAll() void
-        +sender() Option
     }
 
     class Behavior~T~ {
-        +receive(callable handler)$ Behavior
-        +setup(callable factory)$ Behavior
-        +withState(S state, callable handler)$ Behavior
+        +receive(callable)$ Behavior
+        +setup(callable)$ Behavior
         +same()$ Behavior
         +stopped()$ Behavior
-        +unhandled()$ Behavior
-        +onSignal(callable handler) Behavior
     }
 
     class Props~T~ {
-        +fromBehavior(Behavior behavior)$ Props
-        +fromFactory(callable factory)$ Props
-        +fromContainer(container, class)$ Props
-        +withMailbox(MailboxConfig config) Props
-        +withSupervision(SupervisionStrategy s) Props
+        +fromBehavior(Behavior)$ Props
+        +withMailbox(MailboxConfig) Props
+        +withSupervision(Strategy) Props
     }
 
     class ActorSystem {
-        +create(string name, Runtime runtime)$ ActorSystem
-        +spawn(Props props, string name) ActorRef
-        +stop(ActorRef ref) void
-        +run() void
-        +shutdown(Duration timeout) void
-        +deadLetters() DeadLetterRef
+        +create(name, Runtime)$ ActorSystem
+        +spawn(Props, name) ActorRef
+        +shutdown(Duration) void
     }
 
-    class ActorCell~T~ {
-        -Behavior behavior
-        -ActorState state
-        -array children
-        -list stash
-        +start() void
-        +processMessage(Envelope e) void
-    }
-
-    ActorSystem --> ActorRef : spawns
     ActorSystem --> Props : uses
-    ActorCell ..|> ActorContext : implements
-    ActorCell --> Behavior : manages
     Props --> Behavior : wraps
-    LocalActorRef ..|> ActorRef : implements
-    RemoteActorRef ..|> ActorRef : implements
-    DeadLetterRef ..|> ActorRef : implements
 ```
+
+</details>
 
 ## ActorRef
 

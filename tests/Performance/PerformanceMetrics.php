@@ -31,21 +31,6 @@ final readonly class PerformanceMetrics
         );
     }
 
-    /**
-     * @return array{elapsedMs: float, memoryDeltaBytes: int, name: string, operations: int, opsPerSecond: float, peakMemoryBytes: int}
-     */
-    public function toArray(): array
-    {
-        return [
-            'elapsedMs' => $this->elapsedMs,
-            'memoryDeltaBytes' => $this->memoryDeltaBytes,
-            'name' => $this->name,
-            'operations' => $this->operations,
-            'opsPerSecond' => $this->opsPerSecond,
-            'peakMemoryBytes' => $this->peakMemoryBytes,
-        ];
-    }
-
     public static function formatBytes(int $bytes): string
     {
         $abs = abs($bytes);

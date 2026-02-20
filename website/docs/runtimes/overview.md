@@ -12,35 +12,20 @@ behaviors completely portable between runtimes.
 
 ```mermaid
 graph TB
-    subgraph "Actor Code (portable)"
-        B["Behavior&lt;T&gt;"]
-        P["Props&lt;T&gt;"]
-        S["SupervisionStrategy"]
-        MC["MailboxConfig"]
+    subgraph "nexus-core"
+        RT["Runtime"]
+        MB["Mailbox"]
     end
 
-    subgraph "nexus-core (pure interfaces)"
-        RT["Runtime interface"]
-        MB["Mailbox interface"]
-        CAN["Cancellable interface"]
+    subgraph "Implementations"
+        FR["FiberRuntime"]
+        SR["SwooleRuntime"]
+        STR["StepRuntime"]
     end
-
-    subgraph "Runtime Implementations"
-        FR["FiberRuntime<br/><i>PHP 8.1+ Fibers</i>"]
-        SR["SwooleRuntime<br/><i>Swoole coroutines</i>"]
-        STR["StepRuntime<br/><i>Manual stepping</i>"]
-    end
-
-    B --> RT
-    P --> RT
-    MC --> MB
 
     RT --> FR
     RT --> SR
     RT --> STR
-    MB --> FM["FiberMailbox"]
-    MB --> SM["SwooleMailbox"]
-    MB --> STM["StepMailbox"]
 ```
 
 ## The Runtime interface
@@ -87,44 +72,37 @@ Each method serves a specific role in the actor lifecycle:
 
 ## Three implementations
 
+<details>
+<summary>View class diagram</summary>
+
 ```mermaid
 classDiagram
     class Runtime {
         <<interface>>
         +name() string
-        +createMailbox(MailboxConfig config) Mailbox
-        +spawn(callable actorLoop) string
-        +scheduleOnce(Duration delay, callable cb) Cancellable
-        +scheduleRepeatedly(Duration initial, Duration interval, callable cb) Cancellable
-        +yield() void
-        +sleep(Duration duration) void
+        +spawn(callable) string
         +run() void
-        +shutdown(Duration timeout) void
-        +isRunning() bool
+        +shutdown(Duration) void
     }
 
     class FiberRuntime {
-        -array fibers
-        -SplPriorityQueue timers
-        +name() string → "fiber"
+        +name() "fiber"
     }
 
     class SwooleRuntime {
-        -SwooleConfig config
-        +name() string → "swoole"
+        +name() "swoole"
     }
 
     class StepRuntime {
-        -VirtualClock clock
-        +name() string → "step"
-        +step() void
-        +clock() VirtualClock
+        +name() "step"
     }
 
     FiberRuntime ..|> Runtime
     SwooleRuntime ..|> Runtime
     StepRuntime ..|> Runtime
 ```
+
+</details>
 
 Nexus ships with three runtime implementations:
 

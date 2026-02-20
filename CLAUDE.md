@@ -54,9 +54,6 @@ docker compose exec php vendor/bin/phpunit --filter=testMethodName packages/nexu
 # Performance benchmarks
 docker compose exec php vendor/bin/phpunit --testsuite=performance --filter=Fiber
 docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filter="Swoole|Cluster"
-
-# Export benchmark results as JSON
-docker compose exec -e BENCHMARK_JSON=/app/results.jsonl php vendor/bin/phpunit --testsuite=performance
 ```
 
 ### Linting & Static Analysis
@@ -402,11 +399,9 @@ Swoole tests differ: messages must be sent inside `scheduleOnce()` callbacks (Sw
 6. `integration-swoole` — Swoole + Cluster integration tests
 7. `mutation-testing` — Infection on PRs only (`continue-on-error: true` for PHPUnit 13 compat)
 
-**benchmark.yml** — Runs on push to main, collects JSON results, commits to `website/static/benchmarks/history.json`
+**split.yml** — Splits each package to its own GitHub repo via splitsh-lite (gated on CI success)
 
-**split.yml** — Splits each package to its own GitHub repo via splitsh-lite
-
-**deploy-docs.yml** — Docusaurus deployment to GitHub Pages
+**deploy-docs.yml** — Docusaurus deployment to GitHub Pages (gated on CI success)
 
 ## Monorepo Package Updates
 

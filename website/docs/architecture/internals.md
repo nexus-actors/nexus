@@ -32,31 +32,16 @@ When a message arrives at an actor, it follows this path:
 
 ```mermaid
 flowchart TD
-    A["sender.tell(message)"] --> B["LocalActorRef.tell()"]
-    B --> C["Envelope.of(message, sender, target)"]
-    C --> D["Mailbox.enqueue(envelope)"]
-    D --> E["message loop<br/>fiber / coroutine"]
-    E --> F["Mailbox.dequeueBlocking()"]
-    F --> G["ActorCell.processMessage(envelope)"]
+    A["tell(message)"] --> B["Wrap in Envelope"]
+    B --> C["Mailbox.enqueue()"]
+    C --> D["Message loop dequeues"]
+    D --> E["processMessage()"]
 
-    G --> H{Message type?}
+    E --> F{Message type?}
 
-    H -->|SystemMessage| I["handleSystemMessage()"]
-    I --> I1["PoisonPill → initiateStop()"]
-    I --> I2["Suspend → transitionTo(Suspended)"]
-    I --> I3["Resume → transitionTo(Running)"]
-    I --> I4["Watch / Unwatch → update watchers"]
-
-    H -->|Signal| J["handleSignal()"]
-    J --> J1["invoke signalHandler closure"]
-    J1 --> J2["applyBehavior(result)"]
-
-    H -->|User message| K{Behavior type?}
-    K -->|WithState| L["handleStatefulMessage()"]
-    L --> L1["invoke handler(ctx, msg, state)"]
-    L1 --> L2["applyStatefulBehavior(result)"]
-    K -->|Receive| M["invoke handler(ctx, msg)"]
-    M --> M1["applyBehavior(result)"]
+    F -->|SystemMessage| G["Handle system message"]
+    F -->|Signal| H["Invoke signal handler"]
+    F -->|User message| I["Invoke behavior handler"]
 ```
 
 ### Behavior application

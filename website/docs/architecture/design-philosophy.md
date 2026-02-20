@@ -136,7 +136,7 @@ enforced by Deptrac:
 
 ```mermaid
 graph TD
-    Core["nexus-core<br/><i>Actor model primitives</i>"]
+    Core["nexus-core"]
 
     App["nexus-app"] --> Core
     Ser["nexus-serialization"] --> Core

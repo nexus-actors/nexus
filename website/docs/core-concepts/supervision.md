@@ -16,29 +16,21 @@ When a child actor throws an exception, the following decision process occurs:
 
 ```mermaid
 flowchart TD
-    A["Child throws exception"] --> B["Parent receives ChildFailed signal"]
+    A["Child throws exception"] --> B["Parent receives ChildFailed"]
     B --> C{"Strategy type?"}
 
-    C -->|OneForOne| D["Apply directive to failed child only"]
-    C -->|AllForOne| E["Apply directive to all children"]
-    C -->|ExponentialBackoff| F["Apply directive with increasing delay"]
+    C -->|OneForOne| D["Failed child only"]
+    C -->|AllForOne| E["All children"]
+    C -->|ExponentialBackoff| F["With increasing delay"]
 
     D --> G{"decider(exception)"}
     E --> G
     F --> G
 
-    G -->|Restart| H{"Retries < maxRetries<br/>within window?"}
-    G -->|Stop| I["Stop child permanently"]
-    G -->|Resume| J["Ignore failure, continue"]
-    G -->|Escalate| K["Pass to parent's supervisor"]
-
-    H -->|Yes| L["Restart child with fresh state"]
-    H -->|No| I
-
-    L --> M["PreRestart signal → child"]
-    M --> N["Stop old instance"]
-    N --> O["Create new instance with same Props"]
-    O --> P["PostRestart signal → new child"]
+    G -->|Restart| H["Restart child"]
+    G -->|Stop| I["Stop child"]
+    G -->|Resume| J["Continue"]
+    G -->|Escalate| K["Escalate to parent"]
 ```
 
 ## SupervisionStrategy
@@ -47,27 +39,16 @@ flowchart TD
 handling policy. Instances are created through named constructors -- the class
 constructor is private.
 
+<details>
+<summary>View class diagram</summary>
+
 ```mermaid
 classDiagram
     class SupervisionStrategy {
-        +StrategyType type
-        +int maxRetries
-        +Duration window
-        +Closure decider
-        +Duration initialBackoff
-        +Duration maxBackoff
-        +float multiplier
-        +oneForOne(int maxRetries, Duration window, Closure decider)$ SupervisionStrategy
-        +allForOne(int maxRetries, Duration window, Closure decider)$ SupervisionStrategy
-        +exponentialBackoff(Duration initial, Duration max, int retries)$ SupervisionStrategy
-        +decide(Throwable e) Directive
-    }
-
-    class StrategyType {
-        <<enumeration>>
-        OneForOne
-        AllForOne
-        ExponentialBackoff
+        +oneForOne()$ SupervisionStrategy
+        +allForOne()$ SupervisionStrategy
+        +exponentialBackoff()$ SupervisionStrategy
+        +decide(Throwable) Directive
     }
 
     class Directive {
@@ -78,9 +59,10 @@ classDiagram
         Escalate
     }
 
-    SupervisionStrategy --> StrategyType
     SupervisionStrategy --> Directive : returns
 ```
+
+</details>
 
 ### One-for-one
 

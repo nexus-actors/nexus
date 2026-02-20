@@ -26,7 +26,7 @@ final class Benchmark
         $peakMem = memory_get_peak_usage(true);
         $memAfter = memory_get_usage(true);
 
-        $metrics = new PerformanceMetrics(
+        return new PerformanceMetrics(
             name: $name,
             elapsedMs: $elapsed,
             operations: $operations,
@@ -34,17 +34,5 @@ final class Benchmark
             peakMemoryBytes: $peakMem,
             memoryDeltaBytes: $memAfter - $memBefore,
         );
-
-        $jsonPath = getenv('BENCHMARK_JSON');
-
-        if ($jsonPath !== false) {
-            file_put_contents(
-                $jsonPath,
-                json_encode($metrics->toArray(), JSON_THROW_ON_ERROR) . "\n",
-                FILE_APPEND,
-            );
-        }
-
-        return $metrics;
     }
 }

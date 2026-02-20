@@ -2,7 +2,7 @@ name: Deploy Documentation
 
 on:
   workflow_run:
-    workflows: [Benchmarks]
+    workflows: [CI]
     types: [completed]
     branches: [main]
   push:
@@ -33,8 +33,6 @@ jobs:
         working-directory: website
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:

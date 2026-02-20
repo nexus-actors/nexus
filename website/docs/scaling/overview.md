@@ -23,71 +23,53 @@ distributed clustering across multiple servers. True multi-server clustering
 
 ```mermaid
 graph TB
-    subgraph pool["Swoole Process\Pool"]
-        subgraph w0["Worker 0"]
-            AS0["ActorSystem"]
-            CN0["ClusterNode"]
-        end
-        subgraph w1["Worker 1"]
-            AS1["ActorSystem"]
-            CN1["ClusterNode"]
-        end
-        subgraph w2["Worker 2"]
-            AS2["ActorSystem"]
-            CN2["ClusterNode"]
-        end
-        subgraph w3["Worker N..."]
-            AS3["ActorSystem"]
-            CN3["ClusterNode"]
-        end
+    subgraph pool["Swoole Process Pool"]
+        W0["Worker 0"]
+        W1["Worker 1"]
+        W2["Worker 2"]
+        WN["Worker N"]
     end
 
-    CN0 <-->|"Unix Socket IPC<br/>(AF_UNIX)"| CN1
-    CN1 <-->|"Unix Socket IPC"| CN2
-    CN2 <-->|"Unix Socket IPC"| CN3
-    CN0 <-->|"Unix Socket IPC"| CN2
+    W0 <-->|"Unix Socket"| W1
+    W1 <-->|"Unix Socket"| W2
+    W2 <-->|"Unix Socket"| WN
 
-    subgraph shared["Shared Memory"]
-        ST["Swoole\Table<br/>Actor Directory"]
-    end
+    SD["Shared Directory"]
 
-    w0 --- ST
-    w1 --- ST
-    w2 --- ST
-    w3 --- ST
+    W0 --- SD
+    W1 --- SD
+    W2 --- SD
+    WN --- SD
 ```
 
 ### Key components
 
+<details>
+<summary>View class diagram</summary>
+
 ```mermaid
 classDiagram
     class ClusterNode {
-        +spawn(Props props, string name) ActorRef
-        +resolve(ActorPath path) ActorRef
-    }
-
-    class ConsistentHashRing {
-        +addNode(int workerId) void
-        +getNode(string key) int
+        +spawn(Props, name) ActorRef
+        +resolve(ActorPath) ActorRef
     }
 
     class Transport {
         <<interface>>
-        +send(int workerId, bytes data) void
-        +listen(callable handler) void
+        +send(workerId, data) void
+        +listen(handler) void
     }
 
     class ActorDirectory {
         <<interface>>
-        +register(ActorPath path, int workerId) void
-        +lookup(ActorPath path) Option~int~
-        +remove(ActorPath path) void
+        +register(path, workerId) void
+        +lookup(path) Option
     }
 
     class ClusterSerializer {
         <<interface>>
-        +serialize(Envelope e) string
-        +deserialize(string data) Envelope
+        +serialize(Envelope) string
+        +deserialize(string) Envelope
     }
 
     UnixSocketTransport ..|> Transport
@@ -95,13 +77,12 @@ classDiagram
     CompactClusterSerializer ..|> ClusterSerializer
     PhpNativeClusterSerializer ..|> ClusterSerializer
 
-    ClusterNode --> ConsistentHashRing
     ClusterNode --> Transport
     ClusterNode --> ActorDirectory
     ClusterNode --> ClusterSerializer
-    RemoteActorRef --> ClusterSerializer
-    RemoteActorRef --> Transport
 ```
+
+</details>
 
 - **`ClusterNode`** -- Per-worker coordinator. Routes messages locally or via
   transport based on a consistent hash ring. Each worker has exactly one.
@@ -134,23 +115,16 @@ sockets to the owning worker.
 
 ```mermaid
 sequenceDiagram
-    participant A as Actor (Worker 0)
-    participant RR as RemoteActorRef
-    participant CS as ClusterSerializer
-    participant UT as UnixSocketTransport
-    participant TL as Transport Listener (Worker 1)
-    participant MB as Target Mailbox
-    participant B as Target Actor (Worker 1)
+    participant A as Source Actor
+    participant Ref as RemoteActorRef
+    participant T as Transport
+    participant B as Target Actor
 
-    A->>RR: tell(message)
-    RR->>CS: serialize(envelope)
-    CS-->>RR: binary payload
-    RR->>UT: send(targetWorker, payload)
-    UT-->>TL: AF_UNIX (length-prefixed)
-    TL->>CS: deserialize(payload)
-    CS-->>TL: envelope
-    TL->>MB: enqueueEnvelope(envelope)
-    MB-->>B: processMessage(envelope)
+    A->>Ref: tell(message)
+    Ref->>T: serialize + send
+    T-->>T: Unix socket transfer
+    T->>B: deserialize + enqueue
+    B->>B: processMessage()
 ```
 
 1. Actor calls `$ref->tell($message)` on a `RemoteActorRef`.
@@ -162,7 +136,7 @@ sequenceDiagram
 
 ## Performance
 
-See the [full performance benchmarks](../architecture/performance.mdx) for
+See the [full performance benchmarks](../architecture/performance.md) for
 detailed numbers across all runtimes. Highlights for multi-process scaling:
 
 | Metric | Result |
