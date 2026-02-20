@@ -10,11 +10,77 @@ exception, the parent's supervision strategy decides what happens next: restart
 the failed child, stop it, resume it as if nothing happened, or escalate the
 failure further up the hierarchy.
 
+## How supervision works
+
+When a child actor throws an exception, the following decision process occurs:
+
+```mermaid
+flowchart TD
+    A["Child throws exception"] --> B["Parent receives ChildFailed signal"]
+    B --> C{"Strategy type?"}
+
+    C -->|OneForOne| D["Apply directive to failed child only"]
+    C -->|AllForOne| E["Apply directive to all children"]
+    C -->|ExponentialBackoff| F["Apply directive with increasing delay"]
+
+    D --> G{"decider(exception)"}
+    E --> G
+    F --> G
+
+    G -->|Restart| H{"Retries < maxRetries<br/>within window?"}
+    G -->|Stop| I["Stop child permanently"]
+    G -->|Resume| J["Ignore failure, continue"]
+    G -->|Escalate| K["Pass to parent's supervisor"]
+
+    H -->|Yes| L["Restart child with fresh state"]
+    H -->|No| I
+
+    L --> M["PreRestart signal → child"]
+    M --> N["Stop old instance"]
+    N --> O["Create new instance with same Props"]
+    O --> P["PostRestart signal → new child"]
+```
+
 ## SupervisionStrategy
 
 `SupervisionStrategy` is a `final readonly class` that encapsulates the failure
 handling policy. Instances are created through named constructors -- the class
 constructor is private.
+
+```mermaid
+classDiagram
+    class SupervisionStrategy {
+        +StrategyType type
+        +int maxRetries
+        +Duration window
+        +Closure decider
+        +Duration initialBackoff
+        +Duration maxBackoff
+        +float multiplier
+        +oneForOne(int maxRetries, Duration window, Closure decider)$ SupervisionStrategy
+        +allForOne(int maxRetries, Duration window, Closure decider)$ SupervisionStrategy
+        +exponentialBackoff(Duration initial, Duration max, int retries)$ SupervisionStrategy
+        +decide(Throwable e) Directive
+    }
+
+    class StrategyType {
+        <<enumeration>>
+        OneForOne
+        AllForOne
+        ExponentialBackoff
+    }
+
+    class Directive {
+        <<enumeration>>
+        Restart
+        Stop
+        Resume
+        Escalate
+    }
+
+    SupervisionStrategy --> StrategyType
+    SupervisionStrategy --> Directive : returns
+```
 
 ### One-for-one
 

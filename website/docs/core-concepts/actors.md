@@ -7,6 +7,74 @@ title: "Actors"
 
 Actors are the fundamental unit of computation in Nexus. Each actor encapsulates state, processes messages sequentially from its mailbox, and communicates with other actors exclusively through asynchronous message passing. This page covers the core types that make up the actor model: references, contexts, the actor system, paths, class-based actors, and dead letters.
 
+```mermaid
+classDiagram
+    class ActorRef~T~ {
+        <<interface>>
+        +tell(T message) void
+        +ask(callable messageFactory, Duration timeout) R
+        +path() ActorPath
+        +isAlive() bool
+    }
+
+    class ActorContext~T~ {
+        <<interface>>
+        +self() ActorRef~T~
+        +parent() Option
+        +spawn(Props~C~ props, string name) ActorRef~C~
+        +stop(ActorRef child) void
+        +watch(ActorRef target) void
+        +stash() void
+        +unstashAll() void
+        +sender() Option
+    }
+
+    class Behavior~T~ {
+        +receive(callable handler)$ Behavior
+        +setup(callable factory)$ Behavior
+        +withState(S state, callable handler)$ Behavior
+        +same()$ Behavior
+        +stopped()$ Behavior
+        +unhandled()$ Behavior
+        +onSignal(callable handler) Behavior
+    }
+
+    class Props~T~ {
+        +fromBehavior(Behavior behavior)$ Props
+        +fromFactory(callable factory)$ Props
+        +fromContainer(container, class)$ Props
+        +withMailbox(MailboxConfig config) Props
+        +withSupervision(SupervisionStrategy s) Props
+    }
+
+    class ActorSystem {
+        +create(string name, Runtime runtime)$ ActorSystem
+        +spawn(Props props, string name) ActorRef
+        +stop(ActorRef ref) void
+        +run() void
+        +shutdown(Duration timeout) void
+        +deadLetters() DeadLetterRef
+    }
+
+    class ActorCell~T~ {
+        -Behavior behavior
+        -ActorState state
+        -array children
+        -list stash
+        +start() void
+        +processMessage(Envelope e) void
+    }
+
+    ActorSystem --> ActorRef : spawns
+    ActorSystem --> Props : uses
+    ActorCell ..|> ActorContext : implements
+    ActorCell --> Behavior : manages
+    Props --> Behavior : wraps
+    LocalActorRef ..|> ActorRef : implements
+    RemoteActorRef ..|> ActorRef : implements
+    DeadLetterRef ..|> ActorRef : implements
+```
+
 ## ActorRef
 
 `ActorRef<T>` is the interface through which you interact with an actor. You never access an actor's internal state directly -- you send it messages through its reference.
@@ -81,6 +149,31 @@ If the actor does not respond within the timeout, an `AskTimeoutException` is th
 echo $ref->path();     // "/user/orders/order-123"
 echo $ref->isAlive();  // true
 ```
+
+## Actor hierarchy
+
+Actors form a supervised tree. The `ActorSystem` owns top-level actors under
+`/user`, each of which can spawn children, forming a hierarchy where parents
+supervise their children:
+
+```mermaid
+graph TD
+    Root["/"] --> User["/user"]
+    Root --> Sys["/system"]
+    Sys --> DL["/system/deadLetters"]
+    User --> Orders["/user/orders"]
+    User --> Payments["/user/payments"]
+    Orders --> O1["/user/orders/order-1"]
+    Orders --> O2["/user/orders/order-2"]
+    Payments --> P1["/user/payments/pay-1"]
+
+    style Root fill:#555,stroke:#333,color:#fff
+    style Sys fill:#666,stroke:#444,color:#fff
+    style DL fill:#666,stroke:#444,color:#fff
+```
+
+Each actor supervises its children. When a child fails, the parent's
+`SupervisionStrategy` decides the response (restart, stop, resume, or escalate).
 
 ## ActorContext
 

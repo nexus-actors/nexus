@@ -30,45 +30,33 @@ a `LoggerInterface`, and a `DeadLetterRef`.
 
 When a message arrives at an actor, it follows this path:
 
-```
-sender.tell(message)
-    |
-    v
-LocalActorRef.tell()
-    |
-    v
-Envelope.of(message, sender, target)
-    |
-    v
-Mailbox.enqueue(envelope)
-    |
-    v
-[message loop fiber/coroutine]
-    |
-    v
-Mailbox.dequeueBlocking()
-    |
-    v
-ActorCell.processMessage(envelope)
-    |
-    +---> SystemMessage?  --> handleSystemMessage()
-    |         PoisonPill  --> initiateStop()
-    |         Suspend     --> transitionTo(Suspended)
-    |         Resume      --> transitionTo(Running)
-    |         Watch       --> register watcher
-    |         Unwatch     --> remove watcher
-    |
-    +---> Signal?         --> handleSignal()
-    |         invoke signalHandler closure
-    |         applyBehavior(result)
-    |
-    +---> User message    --> handleUserMessage()
-              WithState?  --> handleStatefulMessage()
-              |               invoke handler(ctx, msg, state)
-              |               applyStatefulBehavior(result)
-              |
-              Receive?    --> invoke handler(ctx, msg)
-                              applyBehavior(result)
+```mermaid
+flowchart TD
+    A["sender.tell(message)"] --> B["LocalActorRef.tell()"]
+    B --> C["Envelope.of(message, sender, target)"]
+    C --> D["Mailbox.enqueue(envelope)"]
+    D --> E["message loop<br/>fiber / coroutine"]
+    E --> F["Mailbox.dequeueBlocking()"]
+    F --> G["ActorCell.processMessage(envelope)"]
+
+    G --> H{Message type?}
+
+    H -->|SystemMessage| I["handleSystemMessage()"]
+    I --> I1["PoisonPill → initiateStop()"]
+    I --> I2["Suspend → transitionTo(Suspended)"]
+    I --> I3["Resume → transitionTo(Running)"]
+    I --> I4["Watch / Unwatch → update watchers"]
+
+    H -->|Signal| J["handleSignal()"]
+    J --> J1["invoke signalHandler closure"]
+    J1 --> J2["applyBehavior(result)"]
+
+    H -->|User message| K{Behavior type?}
+    K -->|WithState| L["handleStatefulMessage()"]
+    L --> L1["invoke handler(ctx, msg, state)"]
+    L1 --> L2["applyStatefulBehavior(result)"]
+    K -->|Receive| M["invoke handler(ctx, msg)"]
+    M --> M1["applyBehavior(result)"]
 ```
 
 ### Behavior application
@@ -94,11 +82,17 @@ results:
 
 Each actor progresses through a defined set of states:
 
-```
-New --> Starting --> Running --> Stopping --> Stopped
-                       ^  |
-                       |  v
-                    Suspended
+```mermaid
+stateDiagram-v2
+    [*] --> New
+    New --> Starting
+    Starting --> Running
+    Running --> Suspended
+    Suspended --> Running
+    Running --> Stopping
+    Suspended --> Stopping
+    Stopping --> Stopped
+    Stopped --> [*]
 ```
 
 Valid transitions:

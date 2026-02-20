@@ -21,28 +21,87 @@ distributed clustering across multiple servers. True multi-server clustering
 
 ## Architecture
 
-```
-                    ┌─────────────────────────────────┐
-                    │        Swoole Process\Pool       │
-                    ├────────┬────────┬────────┬───────┤
-                    │Worker 0│Worker 1│Worker 2│  ...  │
-                    │        │        │        │       │
-                    │ Actor  │ Actor  │ Actor  │ Actor │
-                    │ System │ System │ System │ System│
-                    │        │        │        │       │
-                    │Cluster │Cluster │Cluster │Cluster│
-                    │ Node   │ Node   │ Node   │ Node  │
-                    └───┬────┴───┬────┴───┬────┴───┬───┘
-                        │        │        │        │
-                    Unix Socket IPC (AF_UNIX)
-                        │        │        │        │
-                    ┌───┴────────┴────────┴────────┴───┐
-                    │     Swoole\Table (shared memory)  │
-                    │         Actor Directory            │
-                    └──────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph pool["Swoole Process\Pool"]
+        subgraph w0["Worker 0"]
+            AS0["ActorSystem"]
+            CN0["ClusterNode"]
+        end
+        subgraph w1["Worker 1"]
+            AS1["ActorSystem"]
+            CN1["ClusterNode"]
+        end
+        subgraph w2["Worker 2"]
+            AS2["ActorSystem"]
+            CN2["ClusterNode"]
+        end
+        subgraph w3["Worker N..."]
+            AS3["ActorSystem"]
+            CN3["ClusterNode"]
+        end
+    end
+
+    CN0 <-->|"Unix Socket IPC<br/>(AF_UNIX)"| CN1
+    CN1 <-->|"Unix Socket IPC"| CN2
+    CN2 <-->|"Unix Socket IPC"| CN3
+    CN0 <-->|"Unix Socket IPC"| CN2
+
+    subgraph shared["Shared Memory"]
+        ST["Swoole\Table<br/>Actor Directory"]
+    end
+
+    w0 --- ST
+    w1 --- ST
+    w2 --- ST
+    w3 --- ST
 ```
 
 ### Key components
+
+```mermaid
+classDiagram
+    class ClusterNode {
+        +spawn(Props props, string name) ActorRef
+        +resolve(ActorPath path) ActorRef
+    }
+
+    class ConsistentHashRing {
+        +addNode(int workerId) void
+        +getNode(string key) int
+    }
+
+    class Transport {
+        <<interface>>
+        +send(int workerId, bytes data) void
+        +listen(callable handler) void
+    }
+
+    class ActorDirectory {
+        <<interface>>
+        +register(ActorPath path, int workerId) void
+        +lookup(ActorPath path) Option~int~
+        +remove(ActorPath path) void
+    }
+
+    class ClusterSerializer {
+        <<interface>>
+        +serialize(Envelope e) string
+        +deserialize(string data) Envelope
+    }
+
+    UnixSocketTransport ..|> Transport
+    SwooleTableDirectory ..|> ActorDirectory
+    CompactClusterSerializer ..|> ClusterSerializer
+    PhpNativeClusterSerializer ..|> ClusterSerializer
+
+    ClusterNode --> ConsistentHashRing
+    ClusterNode --> Transport
+    ClusterNode --> ActorDirectory
+    ClusterNode --> ClusterSerializer
+    RemoteActorRef --> ClusterSerializer
+    RemoteActorRef --> Transport
+```
 
 - **`ClusterNode`** -- Per-worker coordinator. Routes messages locally or via
   transport based on a consistent hash ring. Each worker has exactly one.
@@ -72,6 +131,27 @@ is returned and the actor runs locally. If it belongs to another worker, a
 sockets to the owning worker.
 
 ## Message flow
+
+```mermaid
+sequenceDiagram
+    participant A as Actor (Worker 0)
+    participant RR as RemoteActorRef
+    participant CS as ClusterSerializer
+    participant UT as UnixSocketTransport
+    participant TL as Transport Listener (Worker 1)
+    participant MB as Target Mailbox
+    participant B as Target Actor (Worker 1)
+
+    A->>RR: tell(message)
+    RR->>CS: serialize(envelope)
+    CS-->>RR: binary payload
+    RR->>UT: send(targetWorker, payload)
+    UT-->>TL: AF_UNIX (length-prefixed)
+    TL->>CS: deserialize(payload)
+    CS-->>TL: envelope
+    TL->>MB: enqueueEnvelope(envelope)
+    MB-->>B: processMessage(envelope)
+```
 
 1. Actor calls `$ref->tell($message)` on a `RemoteActorRef`.
 2. The message is wrapped in an `Envelope` and serialized by `ClusterSerializer`.

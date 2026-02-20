@@ -27,6 +27,27 @@ produces effects, effects persist events, and events are applied to the state.
 The actor's state is never persisted directly -- it is always derived by
 replaying the event log from the beginning (or from a snapshot).
 
+```mermaid
+sequenceDiagram
+    participant Sender
+    participant Actor as EventSourcedActor
+    participant CH as Command Handler
+    participant ES as Event Store
+    participant EH as Event Handler
+    participant State
+
+    Sender->>Actor: tell(command)
+    Actor->>CH: handleCommand(state, ctx, command)
+    CH-->>Actor: Effect::persist(event1, event2)
+    Actor->>ES: persist(events)
+    ES-->>Actor: ok
+    loop For each event
+        Actor->>EH: applyEvent(state, event)
+        EH-->>State: new state
+    end
+    Actor->>Actor: thenReply / thenRun callbacks
+```
+
 ```php
 use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
@@ -238,6 +259,26 @@ the oldest retained snapshot.
 When a persistent actor starts, it goes through a recovery phase before
 accepting commands:
 
+```mermaid
+flowchart TD
+    A["Actor starts"] --> B{"Snapshot store<br/>configured?"}
+    B -->|Yes| C["Load latest snapshot"]
+    B -->|No| D["Start with emptyState()"]
+    C --> E{"Snapshot found?"}
+    E -->|Yes| F["State = snapshot"]
+    E -->|No| D
+    F --> G["Replay events after snapshot"]
+    D --> H["Replay all events from beginning"]
+    G --> I["Apply each event via eventHandler"]
+    H --> I
+    I --> J["Recovery complete"]
+    J --> K["Unstash buffered commands"]
+    K --> L["Ready — process commands"]
+
+    style J fill:#2d6,stroke:#1a4,color:#fff
+    style L fill:#2d6,stroke:#1a4,color:#fff
+```
+
 1. **Load snapshot** -- if a snapshot store is configured and a snapshot exists,
    load it as the starting state.
 2. **Replay events** -- replay all events that occurred after the snapshot (or
@@ -250,6 +291,43 @@ order once recovery completes. This means senders do not need to know whether an
 actor has finished recovering -- they can start sending messages immediately.
 
 ## Storage Backends
+
+```mermaid
+classDiagram
+    class EventStore {
+        <<interface>>
+        +persist(PersistenceId id, list events, int version) void
+        +load(PersistenceId id, int fromSeq) list
+        +highestSequenceNr(PersistenceId id) int
+        +delete(PersistenceId id, int toSeq) void
+    }
+
+    class SnapshotStore {
+        <<interface>>
+        +save(PersistenceId id, object state, int seq) void
+        +load(PersistenceId id) Option
+        +delete(PersistenceId id, int maxSeq) void
+    }
+
+    class DurableStateStore {
+        <<interface>>
+        +persist(PersistenceId id, object state, int version) void
+        +load(PersistenceId id) Option
+        +delete(PersistenceId id) void
+    }
+
+    InMemoryEventStore ..|> EventStore
+    DbalEventStore ..|> EventStore
+    DoctrineEventStore ..|> EventStore
+
+    InMemorySnapshotStore ..|> SnapshotStore
+    DbalSnapshotStore ..|> SnapshotStore
+    DoctrineSnapshotStore ..|> SnapshotStore
+
+    InMemoryDurableStateStore ..|> DurableStateStore
+    DbalDurableStateStore ..|> DurableStateStore
+    DoctrineDurableStateStore ..|> DurableStateStore
+```
 
 Nexus ships with several storage backend implementations:
 

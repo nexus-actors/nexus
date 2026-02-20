@@ -11,11 +11,17 @@ transitions throw `InvalidActorStateTransition`.
 
 ## Actor states
 
-```
-New --> Starting --> Running --> Stopping --> Stopped
-                       |  ^
-                       v  |
-                    Suspended
+```mermaid
+stateDiagram-v2
+    [*] --> New
+    New --> Starting
+    Starting --> Running
+    Running --> Suspended
+    Suspended --> Running
+    Running --> Stopping
+    Suspended --> Stopping
+    Stopping --> Stopped
+    Stopped --> [*]
 ```
 
 | State | Description |

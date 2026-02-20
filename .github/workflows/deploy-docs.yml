@@ -1,6 +1,10 @@
 name: Deploy Documentation
 
 on:
+  workflow_run:
+    workflows: [Benchmarks]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:
@@ -19,12 +23,18 @@ concurrency:
 
 jobs:
   build:
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: website
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
         with:

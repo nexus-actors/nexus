@@ -129,6 +129,45 @@ All three implement the same `ActorRef<T>` interface. Actor code that calls
 `$ref->tell($message)` works identically regardless of which implementation
 backs the reference.
 
+## Package architecture
+
+Nexus is a monorepo of focused packages with strict dependency boundaries
+enforced by Deptrac:
+
+```mermaid
+graph TD
+    Core["nexus-core<br/><i>Actor model primitives</i>"]
+
+    App["nexus-app"] --> Core
+    Ser["nexus-serialization"] --> Core
+
+    RF["nexus-runtime-fiber"] --> Core
+    RS["nexus-runtime-swoole"] --> Core
+    RSt["nexus-runtime-step"] --> Core
+
+    CL["nexus-cluster"] --> Core
+    CLS["nexus-cluster-swoole"] --> CL
+    CLS --> Core
+    CLS --> RS
+
+    P["nexus-persistence"] --> Core
+    P --> Ser
+    PD["nexus-persistence-dbal"] --> P
+    PD --> Core
+    PD --> Ser
+    PDo["nexus-persistence-doctrine"] --> PD
+    PDo --> P
+    PDo --> Core
+    PDo --> Ser
+
+    PS["nexus-psalm"] --> Core
+    PS --> CL
+    PS --> Ser
+```
+
+Every arrow is an allowed dependency. Core depends on nothing -- all other
+packages build on top of it. Dependency violations are caught in CI.
+
 ## PSR compatibility
 
 Nexus integrates with standard PHP interfaces rather than inventing its own:

@@ -10,6 +10,39 @@ underlying concurrency mechanism. All scheduling, mailbox creation, and
 fiber/coroutine management flow through this single interface, making actor
 behaviors completely portable between runtimes.
 
+```mermaid
+graph TB
+    subgraph "Actor Code (portable)"
+        B["Behavior&lt;T&gt;"]
+        P["Props&lt;T&gt;"]
+        S["SupervisionStrategy"]
+        MC["MailboxConfig"]
+    end
+
+    subgraph "nexus-core (pure interfaces)"
+        RT["Runtime interface"]
+        MB["Mailbox interface"]
+        CAN["Cancellable interface"]
+    end
+
+    subgraph "Runtime Implementations"
+        FR["FiberRuntime<br/><i>PHP 8.1+ Fibers</i>"]
+        SR["SwooleRuntime<br/><i>Swoole coroutines</i>"]
+        STR["StepRuntime<br/><i>Manual stepping</i>"]
+    end
+
+    B --> RT
+    P --> RT
+    MC --> MB
+
+    RT --> FR
+    RT --> SR
+    RT --> STR
+    MB --> FM["FiberMailbox"]
+    MB --> SM["SwooleMailbox"]
+    MB --> STM["StepMailbox"]
+```
+
 ## The Runtime interface
 
 ```php
@@ -53,6 +86,45 @@ Each method serves a specific role in the actor lifecycle:
 - **`isRunning()`** -- Returns whether the event loop is currently active.
 
 ## Three implementations
+
+```mermaid
+classDiagram
+    class Runtime {
+        <<interface>>
+        +name() string
+        +createMailbox(MailboxConfig config) Mailbox
+        +spawn(callable actorLoop) string
+        +scheduleOnce(Duration delay, callable cb) Cancellable
+        +scheduleRepeatedly(Duration initial, Duration interval, callable cb) Cancellable
+        +yield() void
+        +sleep(Duration duration) void
+        +run() void
+        +shutdown(Duration timeout) void
+        +isRunning() bool
+    }
+
+    class FiberRuntime {
+        -array fibers
+        -SplPriorityQueue timers
+        +name() string → "fiber"
+    }
+
+    class SwooleRuntime {
+        -SwooleConfig config
+        +name() string → "swoole"
+    }
+
+    class StepRuntime {
+        -VirtualClock clock
+        +name() string → "step"
+        +step() void
+        +clock() VirtualClock
+    }
+
+    FiberRuntime ..|> Runtime
+    SwooleRuntime ..|> Runtime
+    StepRuntime ..|> Runtime
+```
 
 Nexus ships with three runtime implementations:
 
