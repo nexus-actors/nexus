@@ -11,6 +11,8 @@ final class Benchmark
 {
     /**
      * @param callable(): void $fn
+     *
+     * @psalm-suppress InvalidOperand
      */
     public static function measure(string $name, int $operations, callable $fn): PerformanceMetrics
     {
@@ -24,7 +26,7 @@ final class Benchmark
         $peakMem = memory_get_peak_usage(true);
         $memAfter = memory_get_usage(true);
 
-        return new PerformanceMetrics(
+        $metrics = new PerformanceMetrics(
             name: $name,
             elapsedMs: $elapsed,
             operations: $operations,
@@ -32,5 +34,17 @@ final class Benchmark
             peakMemoryBytes: $peakMem,
             memoryDeltaBytes: $memAfter - $memBefore,
         );
+
+        $jsonPath = getenv('BENCHMARK_JSON');
+
+        if ($jsonPath !== false) {
+            file_put_contents(
+                $jsonPath,
+                json_encode($metrics->toArray(), JSON_THROW_ON_ERROR) . "\n",
+                FILE_APPEND,
+            );
+        }
+
+        return $metrics;
     }
 }
