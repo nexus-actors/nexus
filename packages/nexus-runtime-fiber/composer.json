@@ -1,11 +1,11 @@
 {
-    "name": "monadial/nexus-runtime-fiber",
+    "name": "nexus-actors/runtime-fiber",
     "description": "Nexus Fiber runtime — actors as PHP fibers with cooperative scheduling.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "monadial/nexus-core": "^1.0"
+        "nexus-actors/core": "^1.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^11.0"

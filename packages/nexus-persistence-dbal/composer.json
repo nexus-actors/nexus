@@ -1,11 +1,11 @@
 {
-    "name": "monadial/nexus-persistence-dbal",
+    "name": "nexus-actors/persistence-dbal",
     "description": "Nexus persistence DBAL adapter — Doctrine DBAL-backed event store, snapshot store, and durable state store.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "monadial/nexus-persistence": "^1.0",
+        "nexus-actors/persistence": "^1.0",
         "doctrine/dbal": "^4.0"
     },
     "require-dev": {

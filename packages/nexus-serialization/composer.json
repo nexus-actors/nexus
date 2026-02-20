@@ -1,11 +1,11 @@
 {
-    "name": "monadial/nexus-serialization",
+    "name": "nexus-actors/serialization",
     "description": "Nexus serialization — Valinor-based message serialization with type registry.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "monadial/nexus-core": "^1.0",
+        "nexus-actors/core": "^1.0",
         "cuyz/valinor": "^1.0"
     },
     "require-dev": {

@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/cluster-swoole",
+    "description": "Nexus cluster Swoole adapter — Swoole-based transport and directory for distributed actors.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": "*",
+        "nexus-actors/cluster": "^1.0",
+        "nexus-actors/core": "^1.0",
+        "nexus-actors/runtime-swoole": "^1.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Cluster\\Swoole\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Cluster\\Swoole\\Tests\\": "tests/"
+        }
+    }
+}

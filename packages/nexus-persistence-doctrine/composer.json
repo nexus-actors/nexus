@@ -1,11 +1,11 @@
 {
-    "name": "monadial/nexus-persistence-doctrine",
+    "name": "nexus-actors/persistence-doctrine",
     "description": "Nexus persistence Doctrine ORM adapter — entity-based event store, snapshot store, and durable state store.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "monadial/nexus-persistence": "^1.0",
+        "nexus-actors/persistence": "^1.0",
         "doctrine/orm": "^3.0"
     },
     "require-dev": {

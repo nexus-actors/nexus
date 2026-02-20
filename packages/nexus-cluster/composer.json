@@ -1,11 +1,10 @@
 {
-    "name": "nexus-actors/runtime-swoole",
-    "description": "Nexus Swoole runtime — actors as Swoole coroutines with native channels.",
+    "name": "nexus-actors/cluster",
+    "description": "Nexus cluster — distributed actors with consistent hashing, transport, and actor directory.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "ext-swoole": "*",
         "nexus-actors/core": "^1.0"
     },
     "require-dev": {
@@ -13,12 +12,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Monadial\\Nexus\\Runtime\\Swoole\\": "src/"
+            "Monadial\\Nexus\\Cluster\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Monadial\\Nexus\\Runtime\\Swoole\\Tests\\": "tests/"
+            "Monadial\\Nexus\\Cluster\\Tests\\": "tests/"
         }
     }
 }

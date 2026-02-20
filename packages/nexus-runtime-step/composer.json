@@ -1,11 +1,11 @@
 {
-    "name": "monadial/nexus-runtime-step",
+    "name": "nexus-actors/runtime-step",
     "description": "Nexus Step runtime — deterministic actor execution for testing with manual stepping and virtual time.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "monadial/nexus-core": "^1.0",
+        "nexus-actors/core": "^1.0",
         "psr/clock": "^1.0"
     },
     "require-dev": {

@@ -1,5 +1,5 @@
 {
-    "name": "monadial/nexus-psalm",
+    "name": "nexus-actors/psalm",
     "description": "Psalm plugin for Nexus actor system",
     "type": "psalm-plugin",
     "license": "MIT",
