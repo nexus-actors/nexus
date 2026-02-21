@@ -52,6 +52,11 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster-swoole/src/.*
 
+    - name: ClusterSwooleThread
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-swoole-thread/src/.*
+
     - name: Persistence
       collectors:
         - type: directory
@@ -86,6 +91,10 @@ deptrac:
     Cluster:
       - Core
     ClusterSwoole:
+      - Cluster
+      - Core
+      - RuntimeSwoole
+    ClusterSwooleThread:
       - Cluster
       - Core
       - RuntimeSwoole

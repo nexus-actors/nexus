@@ -21,6 +21,7 @@
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
+            <directory>packages/nexus-cluster-swoole-thread/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -64,6 +65,7 @@
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
             <directory>packages/nexus-cluster-swoole/src</directory>
+            <directory>packages/nexus-cluster-swoole-thread/src</directory>
             <directory>packages/nexus-app/src</directory>
             <directory>packages/nexus-persistence/src</directory>
             <directory>packages/nexus-persistence-dbal/src</directory>
