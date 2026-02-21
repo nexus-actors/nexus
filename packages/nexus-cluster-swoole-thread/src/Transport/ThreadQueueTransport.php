@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Override;
 use RuntimeException;
 use Swoole\Coroutine;
+use Swoole\Event;
 use Swoole\Thread\Queue;
 
 /**
@@ -24,6 +25,19 @@ use Swoole\Thread\Queue;
  */
 final class ThreadQueueTransport implements EnvelopeTransport
 {
+    private const int BATCH_SIZE = 128;
+
+    private const int SPIN_COUNT = 8;
+
+    private const int IDLE_THRESHOLD = 1000;
+
+    /** @var list<Envelope> */
+    private array $buffer = [];
+
+    private int $bufferPos = 0;
+
+    private int $bufferLen = 0;
+
     private bool $closed = false;
 
     /**
@@ -46,49 +60,16 @@ final class ThreadQueueTransport implements EnvelopeTransport
     }
 
     /**
-     * Receive the next envelope using adaptive polling.
-     *
-     * Uses non-blocking pop(0) in a loop with Coroutine::sleep()
-     * to yield to other coroutines. Backoff adapts to load:
-     * - Under load: tight loop with coroutine yield (~0 latency)
-     * - Light load: 100us-1ms sleep
-     * - Idle: 10ms sleep
-     *
-     * @throws RuntimeException If transport is closed with no pending envelopes
-     *
      * @psalm-suppress MixedMethodCall, MixedAssignment
      */
     #[Override]
     public function receive(): Envelope
     {
-        $emptyCount = 0;
-        $queue = $this->queues[$this->workerId];
-
-        while (!$this->closed) {
-            /** @var Envelope|null $envelope */
-            $envelope = $queue->pop(0);
-
-            if ($envelope !== null) {
-                return $envelope;
-            }
-
-            $emptyCount++;
-
-            $sleep = match (true) {
-                $emptyCount < 10 => 0.0,
-                $emptyCount < 100 => 0.0001,
-                $emptyCount < 1000 => 0.001,
-                default => 0.01,
-            };
-
-            if ($sleep > 0.0) {
-                Coroutine::sleep($sleep);
-            } else {
-                Coroutine::sleep(0);
-            }
+        if ($this->bufferPos < $this->bufferLen) {
+            return $this->buffer[$this->bufferPos++];
         }
 
-        throw new RuntimeException('ThreadQueueTransport is closed');
+        return $this->awaitEnvelope();
     }
 
     /**
@@ -98,6 +79,105 @@ final class ThreadQueueTransport implements EnvelopeTransport
     public function close(): void
     {
         $this->closed = true;
+        $this->buffer = [];
+        $this->bufferPos = 0;
+        $this->bufferLen = 0;
         $this->queues[$this->workerId]->clean();
+    }
+
+    /**
+     * Block until at least one envelope is available, then return the first.
+     *
+     * Three phases per iteration:
+     * 1. Batch drain — pop up to BATCH_SIZE items to amortize method call overhead
+     * 2. Spin-wait — SPIN_COUNT individual pops to catch inter-burst arrivals
+     * 3. Adaptive yield — defer+yield (~0.86us) for active traffic, sleep(1ms) when idle
+     *
+     * @throws RuntimeException If transport is closed with no pending envelopes
+     *
+     * @psalm-suppress MixedMethodCall, MixedAssignment
+     */
+    private function awaitEnvelope(): Envelope
+    {
+        $queue = $this->queues[$this->workerId];
+        $idlePolls = 0;
+
+        while (!$this->closed) {
+            // Phase 1: Batch drain
+            $this->resetBuffer();
+            $this->drainQueue($queue, self::BATCH_SIZE);
+
+            if ($this->bufferLen > 0) {
+                return $this->buffer[$this->bufferPos++];
+            }
+
+            // Phase 2: Spin-wait — tight individual pops before yielding
+            for ($spin = 0; $spin < self::SPIN_COUNT; $spin++) {
+                /** @var Envelope|null $envelope */
+                $envelope = $queue->pop(0);
+
+                if ($envelope !== null) {
+                    $this->buffer[] = $envelope;
+                    $this->bufferLen = 1;
+                    $this->drainQueue($queue, self::BATCH_SIZE - 1);
+
+                    return $this->buffer[$this->bufferPos++];
+                }
+            }
+
+            // Phase 3: Adaptive yield
+            $idlePolls++;
+
+            if ($idlePolls < self::IDLE_THRESHOLD) {
+                $this->yieldToEventLoop();
+            } else {
+                Coroutine::sleep(0.001);
+                $idlePolls = 0;
+            }
+        }
+
+        throw new RuntimeException('ThreadQueueTransport is closed');
+    }
+
+    /**
+     * Pop up to $limit envelopes from the queue into the buffer.
+     *
+     * @psalm-suppress UndefinedClass, MixedMethodCall, MixedAssignment
+     */
+    private function drainQueue(Queue $queue, int $limit): void
+    {
+        for ($i = 0; $i < $limit; $i++) {
+            /** @var Envelope|null $envelope */
+            $envelope = $queue->pop(0);
+
+            if ($envelope === null) {
+                return;
+            }
+
+            $this->buffer[] = $envelope;
+            $this->bufferLen++;
+        }
+    }
+
+    /**
+     * Yield to the Swoole event loop via defer+resume (~0.86us per context switch).
+     *
+     * @psalm-suppress MixedMethodCall, MixedArgument
+     */
+    private function yieldToEventLoop(): void
+    {
+        /** @var int $cid */
+        $cid = Coroutine::getCid();
+        Event::defer(static function () use ($cid): void {
+            Coroutine::resume($cid);
+        });
+        Coroutine::yield();
+    }
+
+    private function resetBuffer(): void
+    {
+        $this->buffer = [];
+        $this->bufferPos = 0;
+        $this->bufferLen = 0;
     }
 }

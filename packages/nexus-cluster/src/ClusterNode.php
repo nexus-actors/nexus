@@ -26,6 +26,9 @@ final class ClusterNode
     /** @var array<string, LocalActorRef<object>> */
     private array $localRefs = [];
 
+    /** @var array<string, ActorRef<object>> */
+    private array $remoteRefs = [];
+
     /**
      * @param callable(ActorPath, int): ActorRef<object> $remoteRefFactory
      */
@@ -87,13 +90,20 @@ final class ClusterNode
             return $this->localRefs[$path];
         }
 
+        if (isset($this->remoteRefs[$path])) {
+            return $this->remoteRefs[$path];
+        }
+
         $workerId = $this->directory->lookup($path);
 
         if ($workerId === null) {
             return null;
         }
 
-        return ($this->remoteRefFactory)(ActorPath::fromString($path), $workerId);
+        $ref = ($this->remoteRefFactory)(ActorPath::fromString($path), $workerId);
+        $this->remoteRefs[$path] = $ref;
+
+        return $ref;
     }
 
     /**

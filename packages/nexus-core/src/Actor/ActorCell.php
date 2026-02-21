@@ -553,9 +553,11 @@ final class ActorCell implements ActorContext
     private function spawnMessageLoop(self $cell, Mailbox $mailbox): void
     {
         $this->runtime->spawn(static function () use ($cell, $mailbox): void {
+            $pollTimeout = Duration::seconds(1);
+
             while ($cell->isAlive()) {
                 try {
-                    $envelope = $mailbox->dequeueBlocking(Duration::seconds(1));
+                    $envelope = $mailbox->dequeueBlocking($pollTimeout);
                     $cell->processMessage($envelope);
                 } catch (MailboxClosedException) {
                     break;
