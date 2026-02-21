@@ -14,18 +14,20 @@ A single PHP process, even with Swoole coroutines, is limited to one CPU core. F
 
 ## Decision
 
-Implement multi-process clustering using Swoole's IPC primitives:
+Implement multi-thread clustering using Swoole's thread primitives:
 
-- **`Swoole\Process\Pool`**: Manages worker processes with automatic restart on crash.
-- **Unix socket transport**: Each worker binds a Unix domain socket. Messages are length-prefixed binary frames.
-- **`SwooleTableDirectory`**: Shared-memory actor directory using `Swoole\Table`. All workers can read/write actor locations.
+- **`Swoole\Thread`**: Manages worker threads within a single process.
+- **Thread queue transport**: Each worker has a `Swoole\Thread\Queue` for receiving messages. Lock-free, zero-copy.
+- **`ThreadMapDirectory`**: Thread-shared actor directory using `Swoole\Thread\Map`. All workers can read/write actor locations.
 - **`ConsistentHashRing`**: Deterministic actor placement using CRC32 hashing with virtual nodes for even distribution.
 - **`RemoteActorRef`**: Implements `ActorRef` — serializes the message and sends it via transport. Callers cannot distinguish local from remote refs.
-- **`ClusterBootstrap`**: Orchestrates startup — creates process pool, initializes transport and directory, runs the actor system on each worker.
+- **`ThreadClusterBootstrap`**: Orchestrates startup — creates threads, initializes transport and directory, runs the actor system on each worker.
 
 The cluster layer is split into two packages:
 - `nexus-cluster`: Pure PHP interfaces and abstractions (no Swoole dependency).
-- `nexus-cluster-swoole`: Swoole-specific implementations.
+- `nexus-cluster-swoole-thread`: Swoole thread-specific implementations.
+
+**Note:** The original implementation used `Swoole\Process\Pool` with Unix socket transport and `SwooleTableDirectory` (`nexus-cluster-swoole`). This was superseded by the thread-based approach for better performance and simpler architecture.
 
 ## Consequences
 

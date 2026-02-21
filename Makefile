@@ -34,9 +34,6 @@ test-swoole: ## Swoole integration tests
 test-serialization: ## Serialization integration tests
 	$(DC) vendor/bin/phpunit --testsuite=integration-serialization
 
-test-cluster: ## Cluster integration tests
-	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
-
 test-thread-cluster: ## Thread cluster integration tests
 	docker compose exec php-swoole-thread vendor/bin/phpunit --testsuite=integration-thread-cluster
 
@@ -61,4 +58,4 @@ cs: ## Code style check
 cs-fix: ## Fix code style
 	$(DC) vendor/bin/php-cs-fixer fix
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-thread-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-thread-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix

@@ -40,7 +40,7 @@ make test                # All test suites
 make test-unit           # Unit tests only (all packages)
 make test-fiber          # Fiber integration tests
 make test-swoole         # Swoole integration tests (uses php-swoole container)
-make test-cluster        # Cluster integration tests (uses php-swoole container)
+make test-thread-cluster # Thread cluster integration tests (uses php-swoole-thread container)
 make test-persistence    # Persistence unit + integration tests
 make test-serialization  # Serialization integration tests
 make mutation            # Infection mutation testing (min 80% MSI, 90% covered)
@@ -112,7 +112,7 @@ nexus-core (no dependencies — foundational)
 │       ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │       └── nexus-persistence-doctrine → Persistence, Core, Serialization
 ├── nexus-cluster          → Core only
-│   └── nexus-cluster-swoole → Cluster, Core, RuntimeSwoole
+│   └── nexus-cluster-swoole-thread → Cluster, Core, RuntimeSwoole
 └── nexus-psalm            → (standalone Psalm plugin)
 ```
 

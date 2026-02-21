@@ -52,7 +52,7 @@ $config->addRule(new FilteredCoverageRule(
         '#nexus-runtime-swoole/#',
         '#nexus-runtime-fiber/#',
         '#nexus-runtime-step/#',
-        '#nexus-cluster-swoole/#',
+        '#nexus-cluster-swoole-thread/#',
         // Test support classes are helpers, not production code
         '#/tests/Support/#',
         '#/tests/Fixture/#',

@@ -166,7 +166,7 @@ $ref->tell(new DatabaseReady($connection));`;
 const scalingCode = `// One machine, all CPU cores. Actors span processes transparently.
 // Same ActorRef API -- senders don't know if it's local or remote.
 
-$cluster = ClusterBootstrap::create(
+$cluster = ThreadClusterBootstrap::create(
     ClusterConfig::withWorkers(16),
 )
 ->onWorkerStart(function (ClusterNode $node): void {
@@ -179,8 +179,8 @@ $cluster = ClusterBootstrap::create(
 })
 ->run();
 
-// Cross-worker messaging uses Unix domain sockets.
-// 255K msgs/sec per worker pair. Zero config.`;
+// Cross-worker messaging uses Swoole thread queues.
+// Lock-free, zero-copy. Zero config.`;
 
 /* ------------------------------------------------------------------ */
 /* Data                                                                */
@@ -249,7 +249,7 @@ const features = [
   },
   {
     title: 'Multi-Process Scaling',
-    description: 'Scale across all CPU cores with ClusterBootstrap and Swoole Process\\Pool. Consistent hash ring for actor placement. Unix socket transport at 255K msgs/sec.',
+    description: 'Scale across all CPU cores with ThreadClusterBootstrap and Swoole threads. Consistent hash ring for actor placement. Lock-free thread queue transport.',
     icon: '\u2B21',
   },
   {
@@ -447,7 +447,7 @@ function Showcases() {
 
       <ShowcaseSection
         title="Scale across all CPU cores"
-        description="ClusterBootstrap starts a Swoole Process\Pool where each worker runs an independent ActorSystem. A consistent hash ring decides actor placement. Cross-worker messaging uses Unix domain sockets at 255K msgs/sec. Your actor code stays exactly the same -- only the deployment topology changes."
+        description="ThreadClusterBootstrap starts Swoole threads where each worker runs an independent ActorSystem. A consistent hash ring decides actor placement. Cross-worker messaging uses lock-free thread queues. Your actor code stays exactly the same -- only the deployment topology changes."
         code={scalingCode}
         codeTitle="cluster.php"
         reversed
@@ -712,13 +712,6 @@ function Architecture() {
             <p className={styles.archDesc}>
               Pure PHP abstractions for scaling: consistent hash ring, remote
               actor refs, pluggable transport and directory interfaces.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/cluster-swoole</code>
-            <p className={styles.archDesc}>
-              Swoole multi-process scaling. ClusterBootstrap, Unix socket
-              transport, shared-memory actor directory via Swoole\Table.
             </p>
           </div>
           <div className={styles.archCard}>

@@ -19,7 +19,7 @@ PHP has mature tools for HTTP request handling, but nothing serious for building
 - **Supervision that actually works.** Actors form a hierarchy. Parents supervise children. When something fails, the supervision strategy decides what happens -- restart, stop, escalate, or back off exponentially. No more try/catch pyramids.
 - **PHP 8.5+ native.** Nexus uses `readonly class`, pipe operator support, `#[NoDiscard]`, and generic templates throughout. It's built for modern PHP, not retrofitted onto it.
 - **PSR everywhere.** PSR-11 containers for dependency injection. PSR-3 logging. PSR-14 event dispatching. PSR-20 clocks. Nexus plugs into your existing stack.
-- **Multi-process scaling.** Scale actors across all CPU cores on a single machine via Swoole's `Process\Pool`. The `ActorRef` interface is the same whether the actor is local or on another worker. Location transparency is baked into the architecture, not bolted on.
+- **Multi-thread scaling.** Scale actors across all CPU cores on a single machine via Swoole threads. The `ActorRef` interface is the same whether the actor is local or on another worker. Location transparency is baked into the architecture, not bolted on.
 
 ## Quick Example
 
@@ -77,7 +77,7 @@ $system->run();
 - **Ask pattern** -- request-response with timeout: `$ref->ask($factory, Duration::millis(200))`
 - **Dead letters** -- undeliverable messages routed to the dead-letter endpoint
 - **Persistence & event sourcing** -- event-sourced actors and durable state actors with pluggable storage backends (in-memory, DBAL, Doctrine ORM)
-- **Multi-process scaling** -- transparent cross-worker messaging via Unix sockets and shared-memory directory
+- **Multi-thread scaling** -- transparent cross-worker messaging via Swoole thread queues
 
 ## Installation
 
@@ -111,7 +111,6 @@ composer require nexus-actors/persistence-doctrine
 | [`nexus-actors/runtime-fiber`](packages/nexus-runtime-fiber) | Fiber runtime -- actors as PHP fibers with cooperative scheduling |
 | [`nexus-actors/runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
 | [`nexus-actors/cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
-| [`nexus-actors/cluster-swoole`](packages/nexus-cluster-swoole) | Swoole scaling -- Unix socket transport, shared-memory directory, cluster bootstrap |
 | [`nexus-actors/persistence`](packages/nexus-persistence) | Persistence core -- event sourcing, durable state, snapshot strategies, in-memory stores |
 | [`nexus-actors/persistence-dbal`](packages/nexus-persistence-dbal) | DBAL persistence adapter -- Doctrine DBAL-backed event, snapshot, and state stores |
 | [`nexus-actors/persistence-doctrine`](packages/nexus-persistence-doctrine) | Doctrine ORM persistence adapter -- entity-based event, snapshot, and state stores |

@@ -8,26 +8,27 @@ title: Roadmap
 This page outlines planned features for Nexus. Items are listed roughly in
 order of priority.
 
-## Multi-process scaling
+## Multi-thread scaling
 
 **Status:** Implemented.
 
-Multi-process scaling is available via the `nexus-cluster` and
-`nexus-cluster-swoole` packages. See the [Scaling documentation](../scaling/overview.md)
+Multi-thread scaling is available via the `nexus-cluster` and
+`nexus-cluster-swoole-thread` packages. See the [Scaling documentation](../scaling/overview.md)
 for full details.
 
-This is single-machine scaling via Swoole's `Process\Pool` -- utilizing all CPU
+This is single-machine scaling via Swoole's thread system -- utilizing all CPU
 cores on one server. Not to be confused with multi-server clustering (see below).
 
 Key features:
 
-- **`ClusterBootstrap`** starts a `Swoole\Process\Pool` with N workers, each
-  running an independent `ActorSystem`.
+- **`ThreadClusterBootstrap`** starts Swoole threads, each running an
+  independent `ActorSystem`.
 - **`ConsistentHashRing`** determines actor placement without coordination.
 - **`RemoteActorRef`** provides location-transparent cross-worker messaging.
-- **`UnixSocketTransport`** uses AF_UNIX domain sockets with length-prefixed
-  framing. Benchmarked at 255K msgs/sec per worker pair.
-- **`SwooleTableDirectory`** provides O(1) shared-memory actor lookups.
+- **`ThreadQueueTransport`** uses `Swoole\Thread\Queue` for lock-free
+  inter-thread messaging.
+- **`ThreadMapDirectory`** provides thread-shared actor lookups via
+  `Swoole\Thread\Map`.
 - Pure PHP abstractions in `nexus-cluster` are designed to support future
   multi-server clustering without changes to actor code.
 

@@ -54,7 +54,6 @@ const sidebars = {
         'packages/runtime-swoole',
         'packages/runtime-step',
         'packages/cluster',
-        'packages/cluster-swoole',
         'packages/serialization',
         'packages/persistence',
         'packages/persistence-dbal',

@@ -29,7 +29,6 @@ jobs:
           - { local: 'nexus-persistence-doctrine', remote: 'persistence-doctrine' }
           - { local: 'nexus-app',                  remote: 'app' }
           - { local: 'nexus-cluster',              remote: 'cluster' }
-          - { local: 'nexus-cluster-swoole',       remote: 'cluster-swoole' }
     steps:
       - uses: actions/checkout@v4
         with:

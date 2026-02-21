@@ -155,8 +155,8 @@ interface Transport
 }
 ```
 
-Implementations: `InMemoryTransport` (testing), `UnixSocketTransport`
-(production, in `nexus-cluster-swoole`).
+Implementations: `InMemoryTransport` (testing), `ThreadQueueTransport`
+(production, in `nexus-cluster-swoole-thread`).
 
 ### ActorDirectory
 
@@ -172,8 +172,8 @@ interface ActorDirectory
 }
 ```
 
-Implementations: `InMemoryDirectory` (testing), `SwooleTableDirectory`
-(production, in `nexus-cluster-swoole`).
+Implementations: `InMemoryDirectory` (testing), `ThreadMapDirectory`
+(production, in `nexus-cluster-swoole-thread`).
 
 ### ClusterSerializer
 

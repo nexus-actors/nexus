@@ -73,38 +73,84 @@ final readonly class Behavior
 
     /**
      * @return Behavior<T>
+     *
+     * @psalm-suppress InvalidReturnType, InvalidReturnStatement — singleton is safe for stateless sentinel
      */
     public static function same(): self
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Same, self::noHandler(), self::noSignalHandler(), self::noState());
+        /**
+         * @psalm-suppress ImpureStaticVariable
+         * @psalm-suppress MixedAssignment
+         * @psalm-suppress MixedReturnStatement
+         * @var ?self $instance
+         */
+        static $instance = null;
+
+        return $instance ??= new self(BehaviorTag::Same, self::noHandler(), self::noSignalHandler(), self::noState());
     }
 
     /**
      * @return Behavior<T>
+     *
+     * @psalm-suppress InvalidReturnType, InvalidReturnStatement — singleton is safe for stateless sentinel
      */
     public static function stopped(): self
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Stopped, self::noHandler(), self::noSignalHandler(), self::noState());
+        /**
+         * @psalm-suppress ImpureStaticVariable
+         * @psalm-suppress MixedAssignment
+         * @psalm-suppress MixedReturnStatement
+         * @var ?self $instance
+         */
+        static $instance = null;
+
+        return $instance ??= new self(
+            BehaviorTag::Stopped,
+            self::noHandler(),
+            self::noSignalHandler(),
+            self::noState(),
+        );
     }
 
     /**
      * @return Behavior<T>
+     *
+     * @psalm-suppress InvalidReturnType, InvalidReturnStatement — singleton is safe for stateless sentinel
      */
     public static function unhandled(): self
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Unhandled, self::noHandler(), self::noSignalHandler(), self::noState());
+        /**
+         * @psalm-suppress ImpureStaticVariable
+         * @psalm-suppress MixedAssignment
+         * @psalm-suppress MixedReturnStatement
+         * @var ?self $instance
+         */
+        static $instance = null;
+
+        return $instance ??= new self(
+            BehaviorTag::Unhandled,
+            self::noHandler(),
+            self::noSignalHandler(),
+            self::noState(),
+        );
     }
 
     /**
      * @return Behavior<T>
+     *
+     * @psalm-suppress InvalidReturnType, InvalidReturnStatement — singleton is safe for stateless sentinel
      */
     public static function empty(): self
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Empty, self::noHandler(), self::noSignalHandler(), self::noState());
+        /**
+         * @psalm-suppress ImpureStaticVariable
+         * @psalm-suppress MixedAssignment
+         * @psalm-suppress MixedReturnStatement
+         * @var ?self $instance
+         */
+        static $instance = null;
+
+        return $instance ??= new self(BehaviorTag::Empty, self::noHandler(), self::noSignalHandler(), self::noState());
     }
 
     /**

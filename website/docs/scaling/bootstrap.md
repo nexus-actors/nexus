@@ -5,20 +5,20 @@ title: Running Multi-Process
 
 # Running Multi-Process
 
-## ClusterBootstrap
+## ThreadClusterBootstrap
 
-`ClusterBootstrap` is the entry point for multi-process scaling. It creates a
-`Swoole\Process\Pool`, sets up transport and directory infrastructure, and
-starts each worker with a `ClusterNode`.
+`ThreadClusterBootstrap` is the entry point for multi-thread scaling. It creates
+Swoole threads, sets up transport and directory infrastructure, and starts each
+worker with a `ClusterNode`.
 
 ```php
 use Monadial\Nexus\Cluster\ClusterConfig;
 use Monadial\Nexus\Cluster\ClusterNode;
-use Monadial\Nexus\Cluster\Swoole\ClusterBootstrap;
+use Monadial\Nexus\Cluster\SwooleThread\ThreadClusterBootstrap;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 
-ClusterBootstrap::create(ClusterConfig::withWorkers(8))
+ThreadClusterBootstrap::create(ClusterConfig::withWorkers(8))
     ->onWorkerStart(function (ClusterNode $node): void {
         // Spawn actors -- hash ring determines local vs remote
         $node->spawn(Props::fromBehavior($orderBehavior), 'orders');
@@ -30,14 +30,13 @@ ClusterBootstrap::create(ClusterConfig::withWorkers(8))
 
 ### What happens on `run()`
 
-1. A `Swoole\Table` is created for the shared actor directory.
-2. The socket directory is created if it doesn't exist.
-3. A `Swoole\Process\Pool` is created with `workerCount` workers.
-4. Each worker process starts independently and:
+1. A `Swoole\Thread\Map` is created for the shared actor directory.
+2. A `Swoole\Thread\Queue` is created for each worker.
+3. Worker threads are spawned.
+4. Each worker thread starts independently and:
    - Creates a `SwooleRuntime` and `ActorSystem`.
-   - Creates a `SwooleTableDirectory` backed by the shared table.
-   - Creates a `UnixSocketTransport` and binds its server socket.
-   - Waits briefly for all workers to bind, then connects to peers.
+   - Creates a `ThreadMapDirectory` backed by the shared map.
+   - Creates a `ThreadQueueTransport` with the worker's queue.
    - Creates a `ClusterNode` and starts its transport listener.
    - Calls your `onWorkerStart` callback with the node.
    - Runs the actor system event loop.
@@ -82,7 +81,7 @@ registered in the directory.
 Replace the default PHP native serializer:
 
 ```php
-ClusterBootstrap::create($config)
+ThreadClusterBootstrap::create($config)
     ->withSerializer(new MyCustomSerializer())
     ->onWorkerStart(function (ClusterNode $node): void {
         // ...
@@ -118,7 +117,7 @@ make up
 docker compose exec php-swoole php your-script.php
 
 # Run integration tests
-make test-cluster
+make test-thread-cluster
 ```
 
 ## Example: distributed counter
@@ -128,7 +127,7 @@ A complete example with actors distributed across workers:
 ```php
 use Monadial\Nexus\Cluster\ClusterConfig;
 use Monadial\Nexus\Cluster\ClusterNode;
-use Monadial\Nexus\Cluster\Swoole\ClusterBootstrap;
+use Monadial\Nexus\Cluster\SwooleThread\ThreadClusterBootstrap;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
@@ -145,7 +144,7 @@ $counterBehavior = Behavior::withState(
 );
 
 // Run with 4 workers
-ClusterBootstrap::create(ClusterConfig::withWorkers(4))
+ThreadClusterBootstrap::create(ClusterConfig::withWorkers(4))
     ->onWorkerStart(function (ClusterNode $node) use ($counterBehavior): void {
         // Each worker spawns all actors, but only the owner creates them locally
         for ($i = 0; $i < 100; $i++) {
@@ -162,4 +161,4 @@ ClusterBootstrap::create(ClusterConfig::withWorkers(4))
 ```
 
 With 4 workers, roughly 25 of the 100 counters will be local to each worker.
-Messages to remote counters are transparently routed via Unix sockets.
+Messages to remote counters are transparently routed via thread queues.

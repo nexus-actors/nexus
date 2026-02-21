@@ -15,7 +15,6 @@
         <directory name="packages/nexus-serialization/src" />
         <directory name="packages/nexus-psalm/src" />
         <directory name="packages/nexus-cluster/src" />
-        <directory name="packages/nexus-cluster-swoole/src" />
         <directory name="packages/nexus-cluster-swoole-thread/src" />
         <directory name="packages/nexus-app/src" />
         <directory name="packages/nexus-persistence/src" />

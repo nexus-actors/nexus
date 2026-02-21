@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-$finder = PhpCsFixer\Finder::create()
+use PhpCsFixer\Config;
+use PhpCsFixer\Finder;
+
+$finder = Finder::create()
     ->in([
         __DIR__ . '/packages/nexus-core/src',
         __DIR__ . '/packages/nexus-core/tests',
@@ -18,8 +21,6 @@ $finder = PhpCsFixer\Finder::create()
         __DIR__ . '/packages/nexus-psalm/tests',
         __DIR__ . '/packages/nexus-cluster/src',
         __DIR__ . '/packages/nexus-cluster/tests',
-        __DIR__ . '/packages/nexus-cluster-swoole/src',
-        __DIR__ . '/packages/nexus-cluster-swoole/tests',
         __DIR__ . '/packages/nexus-app/src',
         __DIR__ . '/packages/nexus-app/tests',
         __DIR__ . '/packages/nexus-persistence/src',
@@ -32,19 +33,19 @@ $finder = PhpCsFixer\Finder::create()
     ])
     ->name('*.php');
 
-return (new PhpCsFixer\Config())
+return (new Config())
     ->setRiskyAllowed(true)
     ->setRules([
         '@PER-CS2.0' => true,
         '@PER-CS2.0:risky' => true,
         'declare_strict_types' => true,
-        'ordered_imports' => ['sort_algorithm' => 'alpha', 'imports_order' => ['class', 'function', 'const']],
-        'no_unused_imports' => true,
-        'trailing_comma_in_multiline' => ['elements' => ['arguments', 'arrays', 'match', 'parameters']],
         'global_namespace_import' => [
             'import_classes' => true,
             'import_constants' => true,
             'import_functions' => true,
         ],
+        'no_unused_imports' => true,
+        'ordered_imports' => ['sort_algorithm' => 'alpha', 'imports_order' => ['class', 'function', 'const']],
+        'trailing_comma_in_multiline' => ['elements' => ['arguments', 'arrays', 'match', 'parameters']],
     ])
     ->setFinder($finder);

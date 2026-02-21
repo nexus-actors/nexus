@@ -23,8 +23,9 @@ final readonly class ActorPath implements Stringable
 
     /**
      * @param list<string> $elements Path segments (empty for root, e.g. ['user', 'orders'] for /user/orders)
+     * @param string $stringForm Precomputed string representation (avoids implode on every __toString)
      */
-    private function __construct(private array $elements) {}
+    private function __construct(private array $elements, private string $stringForm) {}
 
     /**
      * Creates the root path `/`.
@@ -39,7 +40,7 @@ final readonly class ActorPath implements Stringable
          */
         static $instance = null;
 
-        return $instance ??= new self([]);
+        return $instance ??= new self([], '/');
     }
 
     /**
@@ -59,7 +60,7 @@ final readonly class ActorPath implements Stringable
 
         $segments = explode('/', substr($path, 1));
 
-        return new self($segments);
+        return new self($segments, $path);
     }
 
     /**
@@ -73,7 +74,11 @@ final readonly class ActorPath implements Stringable
             throw new InvalidActorPathException((string) $this . '/' . $name);
         }
 
-        return new self([...$this->elements, $name]);
+        $childStringForm = $this->elements === []
+            ? '/' . $name
+            : $this->stringForm . '/' . $name;
+
+        return new self([...$this->elements, $name], $childStringForm);
     }
 
     /**
@@ -103,8 +108,11 @@ final readonly class ActorPath implements Stringable
         }
 
         $parentElements = array_slice($this->elements, 0, -1);
+        $parentStringForm = $parentElements === []
+            ? '/'
+            : '/' . implode('/', $parentElements);
 
-        return Option::some(new self($parentElements));
+        return Option::some(new self($parentElements, $parentStringForm));
     }
 
     /**
@@ -157,10 +165,6 @@ final readonly class ActorPath implements Stringable
     #[Override]
     public function __toString(): string
     {
-        if ($this->elements === []) {
-            return '/';
-        }
-
-        return '/' . implode('/', $this->elements);
+        return $this->stringForm;
     }
 }

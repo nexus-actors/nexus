@@ -8,7 +8,6 @@
             "packages/nexus-runtime-swoole/src",
             "packages/nexus-serialization/src",
             "packages/nexus-cluster/src",
-            "packages/nexus-cluster-swoole/src",
             "packages/nexus-app/src",
             "packages/nexus-persistence/src",
             "packages/nexus-persistence-dbal/src",

@@ -194,8 +194,6 @@ jobs:
       - name: Swoole integration tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/phpunit --testsuite=integration-swoole --colors=always
 
-      - name: Cluster integration tests
-        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/phpunit --testsuite=integration-cluster --colors=always
 
   mutation-testing:
     if: github.event_name == 'pull_request'

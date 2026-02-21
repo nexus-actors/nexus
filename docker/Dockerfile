@@ -65,7 +65,7 @@ RUN docker-php-ext-enable swoole
 CMD ["tail", "-f", "/dev/null"]
 
 # ── ZTS base (Thread Safe) ──
-FROM php:8.5-zts-cli AS zts-base
+FROM php:8.5-zts AS zts-base
 
 WORKDIR /app
 

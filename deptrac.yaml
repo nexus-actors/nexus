@@ -47,11 +47,6 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster/src/.*
 
-    - name: ClusterSwoole
-      collectors:
-        - type: directory
-          value: packages/nexus-cluster-swoole/src/.*
-
     - name: ClusterSwooleThread
       collectors:
         - type: directory
@@ -90,10 +85,6 @@ deptrac:
       - Serialization
     Cluster:
       - Core
-    ClusterSwoole:
-      - Cluster
-      - Core
-      - RuntimeSwoole
     ClusterSwooleThread:
       - Cluster
       - Core

@@ -62,7 +62,6 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-runtime-fiber** | `nexus-actors/runtime-fiber` | Fiber-based runtime using PHP 8.1+ native fibers with cooperative scheduling. Ideal for development and testing. |
 | **nexus-runtime-swoole** | `nexus-actors/runtime-swoole` | Swoole-based runtime using coroutines and native channels. Designed for production workloads with true parallelism. |
 | **nexus-cluster** | `nexus-actors/cluster` | Pure PHP abstractions for multi-process scaling and future clustering: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
-| **nexus-cluster-swoole** | `nexus-actors/cluster-swoole` | Swoole multi-process scaling: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap` with `Process\Pool`. |
 | **nexus-persistence** | `nexus-actors/persistence` | Event sourcing and durable state abstractions. Effects, snapshots, retention policies, concurrency control, and in-memory stores for testing. |
 | **nexus-persistence-dbal** | `nexus-actors/persistence-dbal` | Doctrine DBAL storage backends for persistence. SQL-backed event, snapshot, and durable state stores. |
 | **nexus-persistence-doctrine** | `nexus-actors/persistence-doctrine` | Doctrine ORM adapter for persistence. Entity-based stores using `EntityManagerInterface`. |
