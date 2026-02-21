@@ -15,6 +15,8 @@ grumphp:
             triggered_by: ['php']
         psalm:
             config: psalm.xml
+            ignore_patterns:
+                - '/tests/'
             triggered_by: ['php']
         phpunit:
             testsuite: unit

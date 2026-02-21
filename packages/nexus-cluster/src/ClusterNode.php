@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster;
 
 use Monadial\Nexus\Cluster\Directory\ActorDirectory;
-use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
-use Monadial\Nexus\Cluster\Transport\Transport;
+use Monadial\Nexus\Cluster\Router\MessageRouter;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 
 /**
  * @psalm-api
@@ -26,13 +26,16 @@ final class ClusterNode
     /** @var array<string, LocalActorRef<object>> */
     private array $localRefs = [];
 
+    /**
+     * @param callable(ActorPath, int): ActorRef<object> $remoteRefFactory
+     */
     public function __construct(
         private readonly int $workerId,
         private readonly ActorSystem $system,
-        private readonly Transport $transport,
+        private readonly MessageRouter $router,
         private readonly ConsistentHashRing $ring,
-        private readonly ClusterSerializer $serializer,
         private readonly ActorDirectory $directory,
+        private readonly mixed $remoteRefFactory,
     ) {}
 
     /**
@@ -65,8 +68,8 @@ final class ClusterNode
 
         $this->directory->register($pathStr, $ownerWorker);
 
-        /** @var RemoteActorRef<T> $remoteRef */
-        $remoteRef = new RemoteActorRef($path, $ownerWorker, $this->transport, $this->serializer, $this->directory);
+        /** @var ActorRef<T> $remoteRef */
+        $remoteRef = ($this->remoteRefFactory)($path, $ownerWorker);
 
         return $remoteRef;
     }
@@ -90,13 +93,7 @@ final class ClusterNode
             return null;
         }
 
-        return new RemoteActorRef(
-            ActorPath::fromString($path),
-            $workerId,
-            $this->transport,
-            $this->serializer,
-            $this->directory,
-        );
+        return ($this->remoteRefFactory)(ActorPath::fromString($path), $workerId);
     }
 
     /**
@@ -107,8 +104,7 @@ final class ClusterNode
      */
     public function start(): void
     {
-        $this->transport->listen(function (string $data): void {
-            $envelope = $this->serializer->deserialize($data);
+        $this->router->startReceiving(function (Envelope $envelope): void {
             $targetPath = (string) $envelope->target;
 
             $ref = $this->localRefs[$targetPath] ?? null;

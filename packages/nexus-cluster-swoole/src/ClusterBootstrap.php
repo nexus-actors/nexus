@@ -8,10 +8,14 @@ use Closure;
 use Monadial\Nexus\Cluster\ClusterConfig;
 use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
+use Monadial\Nexus\Cluster\RemoteActorRef;
+use Monadial\Nexus\Cluster\Router\SerializingRouter;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Serialization\CompactClusterSerializer;
 use Monadial\Nexus\Cluster\Swoole\Directory\SwooleTableDirectory;
 use Monadial\Nexus\Cluster\Swoole\Transport\UnixSocketTransport;
+use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Swoole\Coroutine;
@@ -115,13 +119,25 @@ final class ClusterBootstrap
                 $socketDir,
             );
 
+            $router = new SerializingRouter($transport, $this->serializer);
+            $serializer = $this->serializer;
+
+            /** @var callable(ActorPath, int): ActorRef<object> $remoteRefFactory */
+            $remoteRefFactory = static fn(ActorPath $path, int $targetWorker): ActorRef => new RemoteActorRef(
+                $path,
+                $targetWorker,
+                $transport,
+                $serializer,
+                $directory,
+            );
+
             $node = new ClusterNode(
                 $workerId,
                 $system,
-                $transport,
+                $router,
                 $ring,
-                $this->serializer,
                 $directory,
+                $remoteRefFactory,
             );
 
             $transport->bind();

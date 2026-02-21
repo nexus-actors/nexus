@@ -6,11 +6,18 @@ namespace Monadial\Nexus\Tests\Integration\Cluster;
 
 use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
+use Monadial\Nexus\Cluster\Directory\ActorDirectory;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
 use Monadial\Nexus\Cluster\RemoteActorRef;
+use Monadial\Nexus\Cluster\Router\MessageRouter;
+use Monadial\Nexus\Cluster\Router\SerializingRouter;
+use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
 use Monadial\Nexus\Cluster\Swoole\Transport\UnixSocketTransport;
+use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
@@ -67,9 +74,11 @@ final class ClusterE2ETest extends TestCase
             $system0 = ActorSystem::create('worker-0', $runtime0);
             $system1 = ActorSystem::create('worker-1', $runtime1);
 
-            // Create cluster nodes
-            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
-            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+            // Create routers and cluster nodes
+            $router0 = new SerializingRouter($transport0, $serializer);
+            $router1 = new SerializingRouter($transport1, $serializer);
+            $node0 = $this->createClusterNode(0, $system0, $router0, $ring, $directory, $transport0, $serializer);
+            $node1 = $this->createClusterNode(1, $system1, $router1, $ring, $directory, $transport1, $serializer);
 
             // Bind server sockets and allow them to start accepting
             $transport0->bind();
@@ -163,7 +172,16 @@ final class ClusterE2ETest extends TestCase
                 $transports[$i] = new UnixSocketTransport($i, $workerCount, $this->socketDir);
                 $runtimes[$i] = $this->createActiveRuntime();
                 $systems[$i] = ActorSystem::create("worker-{$i}", $runtimes[$i]);
-                $nodes[$i] = new ClusterNode($i, $systems[$i], $transports[$i], $ring, $serializer, $directory);
+                $router = new SerializingRouter($transports[$i], $serializer);
+                $nodes[$i] = $this->createClusterNode(
+                    $i,
+                    $systems[$i],
+                    $router,
+                    $ring,
+                    $directory,
+                    $transports[$i],
+                    $serializer,
+                );
             }
 
             // Bind all server sockets
@@ -227,8 +245,10 @@ final class ClusterE2ETest extends TestCase
             $system0 = ActorSystem::create('worker-0', $runtime0);
             $system1 = ActorSystem::create('worker-1', $runtime1);
 
-            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
-            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+            $router0 = new SerializingRouter($transport0, $serializer);
+            $router1 = new SerializingRouter($transport1, $serializer);
+            $node0 = $this->createClusterNode(0, $system0, $router0, $ring, $directory, $transport0, $serializer);
+            $node1 = $this->createClusterNode(1, $system1, $router1, $ring, $directory, $transport1, $serializer);
 
             $transport0->bind();
             $transport1->bind();
@@ -298,8 +318,10 @@ final class ClusterE2ETest extends TestCase
             $system0 = ActorSystem::create('worker-0', $runtime0);
             $system1 = ActorSystem::create('worker-1', $runtime1);
 
-            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
-            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+            $router0 = new SerializingRouter($transport0, $serializer);
+            $router1 = new SerializingRouter($transport1, $serializer);
+            $node0 = $this->createClusterNode(0, $system0, $router0, $ring, $directory, $transport0, $serializer);
+            $node1 = $this->createClusterNode(1, $system1, $router1, $ring, $directory, $transport1, $serializer);
 
             $transport0->bind();
             $transport1->bind();
@@ -362,8 +384,10 @@ final class ClusterE2ETest extends TestCase
             $system0 = ActorSystem::create('worker-0', $runtime0);
             $system1 = ActorSystem::create('worker-1', $runtime1);
 
-            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
-            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+            $router0 = new SerializingRouter($transport0, $serializer);
+            $router1 = new SerializingRouter($transport1, $serializer);
+            $node0 = $this->createClusterNode(0, $system0, $router0, $ring, $directory, $transport0, $serializer);
+            $node1 = $this->createClusterNode(1, $system1, $router1, $ring, $directory, $transport1, $serializer);
 
             $transport0->bind();
             $transport1->bind();
@@ -463,6 +487,27 @@ final class ClusterE2ETest extends TestCase
         $prop->setValue($runtime, true);
 
         return $runtime;
+    }
+
+    private function createClusterNode(
+        int $workerId,
+        ActorSystem $system,
+        MessageRouter $router,
+        ConsistentHashRing $ring,
+        ActorDirectory $directory,
+        Transport $transport,
+        ClusterSerializer $serializer,
+    ): ClusterNode {
+        /** @var callable(ActorPath, int): ActorRef<object> $remoteRefFactory */
+        $remoteRefFactory = static fn(ActorPath $path, int $targetWorker): ActorRef => new RemoteActorRef(
+            $path,
+            $targetWorker,
+            $transport,
+            $serializer,
+            $directory,
+        );
+
+        return new ClusterNode($workerId, $system, $router, $ring, $directory, $remoteRefFactory);
     }
 
     /**

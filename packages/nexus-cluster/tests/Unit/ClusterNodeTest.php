@@ -8,10 +8,12 @@ use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
 use Monadial\Nexus\Cluster\RemoteActorRef;
+use Monadial\Nexus\Cluster\Router\SerializingRouter;
 use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
 use Monadial\Nexus\Cluster\Tests\Unit\Support\Ping;
 use Monadial\Nexus\Cluster\Transport\InMemoryTransport;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
@@ -30,6 +32,7 @@ final class ClusterNodeTest extends TestCase
     private InMemoryTransport $transport;
     private InMemoryDirectory $directory;
     private PhpNativeClusterSerializer $serializer;
+    private SerializingRouter $router;
 
     #[Test]
     public function spawnLocalActorWhenHashMatchesCurrentWorker(): void
@@ -161,19 +164,32 @@ final class ClusterNodeTest extends TestCase
         $this->transport = new InMemoryTransport();
         $this->directory = new InMemoryDirectory();
         $this->serializer = new PhpNativeClusterSerializer();
+        $this->router = new SerializingRouter($this->transport, $this->serializer);
     }
 
     private function createNode(int $workerId, int $workerCount): ClusterNode
     {
         $system = ActorSystem::create("worker-{$workerId}", $this->runtime);
+        $directory = $this->directory;
+        $transport = $this->transport;
+        $serializer = $this->serializer;
+
+        /** @var callable(ActorPath, int): ActorRef<object> $remoteRefFactory */
+        $remoteRefFactory = static fn(ActorPath $path, int $targetWorker): ActorRef => new RemoteActorRef(
+            $path,
+            $targetWorker,
+            $transport,
+            $serializer,
+            $directory,
+        );
 
         return new ClusterNode(
             $workerId,
             $system,
-            $this->transport,
+            $this->router,
             new ConsistentHashRing($workerCount),
-            $this->serializer,
-            $this->directory,
+            $directory,
+            $remoteRefFactory,
         );
     }
 
