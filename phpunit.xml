@@ -38,6 +38,9 @@
         <testsuite name="integration-cluster">
             <directory>tests/Integration/Cluster</directory>
         </testsuite>
+        <testsuite name="integration-thread-cluster">
+            <directory>tests/Integration/ThreadCluster</directory>
+        </testsuite>
         <testsuite name="unit-persistence">
             <directory>packages/nexus-persistence/tests/Unit</directory>
         </testsuite>

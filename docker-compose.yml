@@ -29,3 +29,12 @@ services:
     volumes:
       - .:/app
     working_dir: /app
+
+  php-swoole-thread:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-swoole-thread
+    volumes:
+      - .:/app
+    working_dir: /app

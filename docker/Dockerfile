@@ -63,3 +63,39 @@ COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/exten
 RUN docker-php-ext-enable swoole
 
 CMD ["tail", "-f", "/dev/null"]
+
+# ── ZTS base (Thread Safe) ──
+FROM php:8.5-zts-cli AS zts-base
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    unzip \
+    git \
+    curl \
+    libssl-dev \
+    libicu-dev \
+    && docker-php-ext-install bcmath intl \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# ── Swoole with threads (ZTS) ──
+FROM zts-base AS swoole-thread-build
+
+RUN cd /tmp \
+    && git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git \
+    && cd swoole-src \
+    && phpize \
+    && ./configure --enable-swoole --enable-swoole-thread \
+    && make -j$(nproc) \
+    && make install \
+    && rm -rf /tmp/swoole-src
+
+# ── Target: php-swoole-thread (ZTS + Swoole threads) ──
+FROM zts-base AS php-swoole-thread
+
+COPY --from=swoole-thread-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
+RUN docker-php-ext-enable swoole
+
+CMD ["tail", "-f", "/dev/null"]
