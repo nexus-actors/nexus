@@ -1,48 +1,177 @@
 :root {
-  --ifm-color-primary: #6366f1;
-  --ifm-color-primary-dark: #4f46e5;
-  --ifm-color-primary-darker: #4338ca;
-  --ifm-color-primary-darkest: #3730a3;
-  --ifm-color-primary-light: #818cf8;
-  --ifm-color-primary-lighter: #a5b4fc;
-  --ifm-color-primary-lightest: #c7d2fe;
+  --ifm-color-primary: #10B981;
+  --ifm-color-primary-dark: #059669;
+  --ifm-color-primary-darker: #047857;
+  --ifm-color-primary-darkest: #065f46;
+  --ifm-color-primary-light: #34D399;
+  --ifm-color-primary-lighter: #6EE7B7;
+  --ifm-color-primary-lightest: #A7F3D0;
   --ifm-code-font-size: 95%;
 }
 
 [data-theme='dark'] {
-  --ifm-color-primary: #818cf8;
-  --ifm-color-primary-dark: #6366f1;
-  --ifm-color-primary-darker: #4f46e5;
-  --ifm-color-primary-darkest: #4338ca;
-  --ifm-color-primary-light: #a5b4fc;
-  --ifm-color-primary-lighter: #c7d2fe;
-  --ifm-color-primary-lightest: #e0e7ff;
+  --ifm-color-primary: #34D399;
+  --ifm-color-primary-dark: #10B981;
+  --ifm-color-primary-darker: #059669;
+  --ifm-color-primary-darkest: #047857;
+  --ifm-color-primary-light: #6EE7B7;
+  --ifm-color-primary-lighter: #A7F3D0;
+  --ifm-color-primary-lightest: #D1FAE5;
+  --ifm-background-color: #080D19;
+  --ifm-background-surface-color: #0c1222;
+  --ifm-toc-border-color: #1a2332;
+  --ifm-color-emphasis-300: #1a2332;
+  --ifm-color-emphasis-200: #1a2332;
+  --ifm-color-emphasis-100: #0c1222;
+  --ifm-menu-color-background-active: rgba(52, 211, 153, 0.08);
+  --ifm-menu-color-background-hover: rgba(52, 211, 153, 0.05);
+  --docusaurus-highlighted-code-line-bg: rgba(52, 211, 153, 0.1);
 }
 
-/* Dark navbar on landing page */
+/* Navbar — adaptive light/dark */
 .navbar {
-  background: #0a0a0f;
-  border-bottom: 1px solid #1e1e2e;
+  border-bottom: 1px solid var(--ifm-toc-border-color);
   box-shadow: none;
+  height: 4.5rem;
+}
+
+.navbar__inner {
+  align-items: center;
+}
+
+.navbar__logo {
+  display: flex;
+  align-items: center;
+}
+
+.navbar__logo img {
+  height: 48px !important;
+  width: 48px !important;
+}
+
+[data-theme='dark'] .navbar {
+  background: #080D19;
+  border-bottom-color: #1a2332;
 }
 
 .navbar__title {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
   font-weight: 700;
+  font-size: 1.35rem;
   letter-spacing: 0.08em;
 }
 
-.navbar__link {
-  color: #8888a0;
+[data-theme='dark'] .navbar__link {
+  color: #8b9bb4;
 }
 
-.navbar__link:hover,
-.navbar__link--active {
-  color: #e2e2e8;
+[data-theme='dark'] .navbar__link:hover,
+[data-theme='dark'] .navbar__link--active {
+  color: #e2e8f0;
 }
 
-/* Dark footer */
-.footer--dark {
-  background: #0a0a0f;
-  border-top: 1px solid #1e1e2e;
+/* Footer — adaptive light/dark */
+[data-theme='dark'] .footer--dark {
+  background: #080D19;
+  border-top: 1px solid #1a2332;
+}
+
+/* ---- Docs pages — emerald accents -------------------------------- */
+
+/* Sidebar active item */
+.menu__link--active:not(.menu__link--sublist) {
+  border-left: 3px solid #10B981;
+}
+
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  border-left-color: #34D399;
+}
+
+/* TOC highlight */
+.table-of-contents__link--active {
+  color: #10B981;
+}
+
+[data-theme='dark'] .table-of-contents__link--active {
+  color: #6EE7B7;
+}
+
+/* Inline code in docs */
+:not(pre) > code {
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+[data-theme='dark'] :not(pre) > code {
+  border-color: rgba(52, 211, 153, 0.2);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+/* Code block border glow */
+[data-theme='dark'] .codeBlockContainer_node_modules-\@docusaurus-theme-classic-lib-theme-CodeBlock-Container-styles-module,
+[data-theme='dark'] [class*='codeBlockContainer'] {
+  border: 1px solid #1a2332;
+}
+
+/* Admonition/callout accents */
+.alert--info {
+  --ifm-alert-background-color: rgba(16, 185, 129, 0.08);
+  --ifm-alert-border-color: #10B981;
+}
+
+[data-theme='dark'] .alert--info {
+  --ifm-alert-background-color: rgba(52, 211, 153, 0.06);
+  --ifm-alert-border-color: #34D399;
+}
+
+/* Blockquotes */
+blockquote {
+  border-left-color: #10B981;
+}
+
+[data-theme='dark'] blockquote {
+  border-left-color: #34D399;
+}
+
+/* Tables in dark mode */
+[data-theme='dark'] table {
+  border-color: #1a2332;
+}
+
+[data-theme='dark'] table th {
+  background: #0c1222;
+}
+
+[data-theme='dark'] table td,
+[data-theme='dark'] table th {
+  border-color: #1a2332;
+}
+
+/* Doc headings — subtle emerald accent on hover */
+.markdown h2:hover,
+.markdown h3:hover {
+  border-bottom-color: rgba(16, 185, 129, 0.2);
+}
+
+[data-theme='dark'] .markdown h2:hover,
+[data-theme='dark'] .markdown h3:hover {
+  border-bottom-color: rgba(52, 211, 153, 0.15);
+}
+
+/* Pagination nav at bottom of docs */
+.pagination-nav__link:hover {
+  border-color: #10B981;
+}
+
+[data-theme='dark'] .pagination-nav__link:hover {
+  border-color: #34D399;
+}
+
+/* Breadcrumbs */
+.breadcrumbs__link {
+  transition: color 0.15s;
+}
+
+[data-theme='dark'] .breadcrumbs__link:hover {
+  color: #6EE7B7;
 }

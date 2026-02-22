@@ -1,25 +1,42 @@
 /* ------------------------------------------------------------------ */
-/* Landing page — dark & technical theme                               */
+/* Landing page — adaptive dark/light theme with emerald accent        */
 /* ------------------------------------------------------------------ */
 
 .landing {
-  --nx-bg: #0a0a0f;
-  --nx-bg-raised: #111118;
-  --nx-bg-card: #15151e;
-  --nx-border: #1e1e2e;
-  --nx-border-glow: #6366f1;
-  --nx-text: #e2e2e8;
-  --nx-text-muted: #8888a0;
-  --nx-text-dim: #555568;
-  --nx-accent: #818cf8;
-  --nx-accent-bright: #a5b4fc;
+  /* Light mode defaults */
+  --nx-bg: #ffffff;
+  --nx-bg-raised: #f8fafb;
+  --nx-bg-card: #f1f5f4;
+  --nx-border: #e2e8f0;
+  --nx-border-glow: #10B981;
+  --nx-text: #1a202c;
+  --nx-text-muted: #64748b;
+  --nx-text-dim: #94a3b8;
+  --nx-accent: #10B981;
+  --nx-accent-bright: #059669;
   --nx-green: #34d399;
-  --nx-red: #f87171;
+  --nx-red: #ef4444;
   --nx-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
 
   background: var(--nx-bg);
   color: var(--nx-text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Dark mode overrides */
+[data-theme='dark'] .landing {
+  --nx-bg: #080D19;
+  --nx-bg-raised: #0c1222;
+  --nx-bg-card: #111a2e;
+  --nx-border: #1a2332;
+  --nx-border-glow: #10B981;
+  --nx-text: #e2e8f0;
+  --nx-text-muted: #8b9bb4;
+  --nx-text-dim: #4a5e78;
+  --nx-accent: #34D399;
+  --nx-accent-bright: #6EE7B7;
+  --nx-green: #34d399;
+  --nx-red: #f87171;
 }
 
 /* ---- Shared section styles --------------------------------------- */
@@ -64,7 +81,7 @@
 .heroGrid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(circle, #1e1e2e 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--nx-border) 1px, transparent 1px);
   background-size: 32px 32px;
   opacity: 0.4;
   pointer-events: none;
@@ -113,7 +130,7 @@
 }
 
 .heroAccent {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+  background: linear-gradient(135deg, #34D399 0%, #10B981 40%, #6EE7B7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -153,8 +170,8 @@
   overflow: hidden;
   border: 1px solid var(--nx-border);
   box-shadow:
-    0 0 60px rgba(99, 102, 241, 0.07),
-    0 0 120px rgba(99, 102, 241, 0.03);
+    0 0 60px rgba(16, 185, 129, 0.07),
+    0 0 120px rgba(16, 185, 129, 0.03);
   text-align: left;
 }
 
@@ -174,16 +191,16 @@
   font-weight: 600;
   font-family: var(--nx-font-mono);
   color: #fff;
-  background: var(--nx-border-glow);
+  background: #10B981;
   border-radius: 8px;
   text-decoration: none;
   transition: all 0.2s;
-  box-shadow: 0 0 24px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
 }
 
 .ctaPrimary:hover {
-  background: #4f46e5;
-  box-shadow: 0 0 40px rgba(99, 102, 241, 0.5);
+  background: #059669;
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
   color: #fff;
   text-decoration: none;
   transform: translateY(-1px);
@@ -374,7 +391,7 @@
 
 .featureCard:hover {
   border-color: var(--nx-border-glow);
-  box-shadow: 0 0 30px rgba(99, 102, 241, 0.08);
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.08);
   transform: translateY(-2px);
 }
 
@@ -388,8 +405,8 @@
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--nx-accent);
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.15);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
   border-radius: 8px;
   margin-bottom: 1rem;
 }
@@ -440,7 +457,7 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--nx-accent);
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(16, 185, 129, 0.08);
   padding: 0.2rem 0.6rem;
   border-radius: 4px;
   display: inline-block;
@@ -533,8 +550,8 @@
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--nx-accent);
-  background: rgba(99, 102, 241, 0.1);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 6px;
   padding: 0.25rem 0.6rem;
 }
@@ -612,7 +629,7 @@
 
 .useCaseCard:hover {
   border-color: var(--nx-border-glow);
-  box-shadow: 0 0 24px rgba(99, 102, 241, 0.06);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.06);
 }
 
 .useCaseTitle {
@@ -703,11 +720,12 @@
 @media (max-width: 996px) {
   .hero {
     min-height: auto;
+    padding: 3.5rem 1.5rem 3rem;
   }
 
   .heroSplit {
     grid-template-columns: 1fr;
-    gap: 3rem;
+    gap: 2.5rem;
   }
 
   .heroLeft {
@@ -724,7 +742,21 @@
   }
 
   .heroTitle {
-    font-size: 3.25rem;
+    font-size: 2.75rem;
+  }
+
+  .sectionInner {
+    padding: 0 1.5rem;
+  }
+
+  .problem,
+  .pillars,
+  .features,
+  .howItWorks,
+  .useCases,
+  .philosophy,
+  .architecture {
+    padding: 4rem 0;
   }
 
   .problemGrid {
@@ -739,6 +771,7 @@
   .showcaseInner,
   .showcaseReversed .showcaseInner {
     grid-template-columns: 1fr;
+    gap: 2rem;
   }
 
   .showcaseReversed .showcaseText {
@@ -747,6 +780,14 @@
 
   .showcaseReversed .showcaseCode {
     order: 0;
+  }
+
+  .showcase {
+    padding: 2rem 1.5rem 3rem;
+  }
+
+  .showcasesDivider {
+    padding: 3.5rem 1.5rem 1rem;
   }
 
   .stepsGrid {
@@ -759,28 +800,58 @@
 
   .philoGrid {
     grid-template-columns: 1fr;
+    gap: 2.5rem;
   }
 
   .archGrid {
     grid-template-columns: 1fr;
   }
+
+  .bottomCta {
+    padding: 4rem 1.5rem;
+  }
 }
 
 @media (max-width: 640px) {
   .hero {
-    padding: 3rem 1rem 2rem;
+    padding: 2.5rem 1rem 2rem;
   }
 
   .heroTitle {
-    font-size: 2.25rem;
+    font-size: 2rem;
   }
 
   .heroTagline {
-    font-size: 1rem;
+    font-size: 0.95rem;
+  }
+
+  .heroBadge {
+    font-size: 0.72rem;
+    padding: 0.35rem 1rem;
+    margin-bottom: 1.5rem;
   }
 
   .sectionTitle {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
+  }
+
+  .sectionSub {
+    font-size: 0.95rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .sectionInner {
+    padding: 0 1rem;
+  }
+
+  .problem,
+  .pillars,
+  .features,
+  .howItWorks,
+  .useCases,
+  .philosophy,
+  .architecture {
+    padding: 3rem 0;
   }
 
   .featuresGrid {
@@ -800,18 +871,76 @@
   .ctaGhost {
     width: 100%;
     text-align: center;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9rem;
   }
 
-  .bottomCtaTitle {
-    font-size: 1.75rem;
-  }
-
-  .bottomCtaCode {
-    font-size: 0.8rem;
+  .heroInstall {
+    font-size: 0.78rem;
+    padding: 0.5rem 1rem;
+    margin-top: 1.5rem;
     word-break: break-all;
   }
 
+  .heroCodeWrap {
+    border-radius: 8px;
+  }
+
+  .heroCodeWrap pre {
+    font-size: 0.78rem !important;
+  }
+
   .showcaseTitle {
-    font-size: 1.25rem;
+    font-size: 1.2rem;
+  }
+
+  .showcaseDesc {
+    font-size: 0.9rem;
+  }
+
+  .showcase {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .showcasesDivider {
+    padding: 2.5rem 1rem 0.5rem;
+  }
+
+  .showcaseCode pre {
+    font-size: 0.78rem !important;
+  }
+
+  .problemCard,
+  .stepCard,
+  .featureCard,
+  .useCaseCard,
+  .archCard {
+    padding: 1.5rem;
+  }
+
+  .pillarNumber {
+    font-size: 2.25rem;
+  }
+
+  .philoTitle {
+    font-size: 1.35rem;
+  }
+
+  .bottomCtaTitle {
+    font-size: 1.5rem;
+  }
+
+  .bottomCtaSub {
+    font-size: 0.95rem;
+  }
+
+  .bottomCtaCode {
+    font-size: 0.75rem;
+    word-break: break-all;
+    padding: 0.65rem 1rem;
+  }
+
+  .bottomCta {
+    padding: 3rem 1rem;
   }
 }
