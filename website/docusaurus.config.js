@@ -48,8 +48,18 @@ const config = {
   themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
     ({
+      colorMode: {
+        defaultMode: 'dark',
+        respectPrefersColorScheme: true,
+      },
       navbar: {
         title: 'Nexus',
+        logo: {
+          alt: 'Nexus Logo',
+          src: 'img/logo.svg',
+          width: 48,
+          height: 48,
+        },
         items: [
           {
             type: 'docSidebar',
