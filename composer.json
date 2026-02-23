@@ -1,5 +1,5 @@
 {
-    "name": "monadial/nexus-monorepo",
+    "name": "nexus-actors/nexus",
     "description": "Nexus — A production-grade actor system for PHP 8.5+",
     "type": "project",
     "license": "MIT",
