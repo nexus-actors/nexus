@@ -3,8 +3,8 @@ const { themes } = require('prism-react-renderer');
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
-  title: 'Nexus',
-  tagline: 'An actor system for PHP 8.5+ (work in progress)',
+  title: 'Nexus — Actor System for PHP',
+  tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
   favicon: 'img/favicon.ico',
 
   url: 'https://nexusactors.com',
@@ -29,6 +29,59 @@ const config = {
     locales: ['en'],
   },
 
+  headTags: [
+    {
+      tagName: 'script',
+      attributes: { type: 'application/ld+json' },
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'SoftwareSourceCode',
+        'name': 'Nexus',
+        'description': 'A production-grade typed actor system for PHP 8.5+ inspired by Akka and Erlang/OTP. Type-safe actors, supervision trees, event sourcing, and pluggable runtimes.',
+        'url': 'https://nexusactors.com',
+        'codeRepository': 'https://github.com/nexus-actors/nexus',
+        'programmingLanguage': {
+          '@type': 'ComputerLanguage',
+          'name': 'PHP',
+        },
+        'license': 'https://opensource.org/licenses/MIT',
+        'author': {
+          '@type': 'Organization',
+          'name': 'Monadial',
+          'url': 'https://monadial.com',
+        },
+        'keywords': [
+          'actor model',
+          'PHP',
+          'concurrency',
+          'supervision trees',
+          'event sourcing',
+          'Akka',
+          'Erlang OTP',
+          'Swoole',
+          'PHP Fibers',
+          'typed actors',
+        ],
+      }),
+    },
+    {
+      tagName: 'script',
+      attributes: { type: 'application/ld+json' },
+      innerHTML: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        'name': 'Nexus',
+        'url': 'https://nexusactors.com',
+        'description': 'Documentation for Nexus, a typed actor system for PHP 8.5+',
+        'publisher': {
+          '@type': 'Organization',
+          'name': 'Monadial',
+          'url': 'https://monadial.com',
+        },
+      }),
+    },
+  ],
+
   presets: [
     [
       'classic',
@@ -38,8 +91,15 @@ const config = {
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/nexus-actors/nexus/tree/main/website/',
         },
+        blog: false,
         theme: {
           customCss: './src/css/custom.css',
+        },
+        sitemap: {
+          lastmod: 'date',
+          changefreq: 'weekly',
+          priority: 0.5,
+          filename: 'sitemap.xml',
         },
       }),
     ],
@@ -52,6 +112,17 @@ const config = {
         defaultMode: 'dark',
         respectPrefersColorScheme: true,
       },
+      image: 'img/og-image.png',
+      metadata: [
+        { name: 'keywords', content: 'actor model, PHP, concurrency, supervision trees, event sourcing, Akka, Erlang OTP, Swoole, PHP Fibers, typed actors, PHP framework' },
+        { name: 'author', content: 'Monadial' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:site_name', content: 'Nexus' },
+        { property: 'og:locale', content: 'en_US' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:title', content: 'Nexus — Actor System for PHP' },
+        { name: 'twitter:description', content: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+. Akka/OTP patterns brought to PHP.' },
+      ],
       navbar: {
         title: 'Nexus',
         logo: {

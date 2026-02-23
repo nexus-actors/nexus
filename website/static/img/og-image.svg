@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0a0f"/>
+      <stop offset="100%" stop-color="#0f1b2d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#6EE7B7"/>
+    </linearGradient>
+    <linearGradient id="p1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.3"/>
+      <stop offset="45%" stop-color="#34D399" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0.3"/>
+    </linearGradient>
+    <linearGradient id="p2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#34D399" stop-opacity="0.25"/>
+      <stop offset="50%" stop-color="#6EE7B7" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#34D399" stop-opacity="0.25"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.04" stroke="#34D399">
+    <line x1="0" y1="0" x2="0" y2="630" stroke-width="1"/>
+    <line x1="100" y1="0" x2="100" y2="630" stroke-width="1"/>
+    <line x1="200" y1="0" x2="200" y2="630" stroke-width="1"/>
+    <line x1="300" y1="0" x2="300" y2="630" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="630" stroke-width="1"/>
+    <line x1="500" y1="0" x2="500" y2="630" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="630" stroke-width="1"/>
+    <line x1="700" y1="0" x2="700" y2="630" stroke-width="1"/>
+    <line x1="800" y1="0" x2="800" y2="630" stroke-width="1"/>
+    <line x1="900" y1="0" x2="900" y2="630" stroke-width="1"/>
+    <line x1="1000" y1="0" x2="1000" y2="630" stroke-width="1"/>
+    <line x1="1100" y1="0" x2="1100" y2="630" stroke-width="1"/>
+    <line x1="1200" y1="0" x2="1200" y2="630" stroke-width="1"/>
+    <line x1="0" y1="100" x2="1200" y2="100" stroke-width="1"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke-width="1"/>
+    <line x1="0" y1="400" x2="1200" y2="400" stroke-width="1"/>
+    <line x1="0" y1="500" x2="1200" y2="500" stroke-width="1"/>
+    <line x1="0" y1="600" x2="1200" y2="600" stroke-width="1"/>
+  </g>
+
+  <!-- Logo hexagon (scaled, positioned right) -->
+  <g transform="translate(920, 315) scale(2.2)">
+    <polygon points="0,-74 64,-37 64,37 0,74 -64,37 -64,-37"
+             fill="none" stroke="#34D399" stroke-width="1.2" stroke-opacity="0.25"/>
+    <line x1="0" y1="-24" x2="0" y2="-68" stroke="url(#p1)" stroke-width="2.8"/>
+    <line x1="20.8" y1="-12" x2="59.4" y2="-34.3" stroke="url(#p2)" stroke-width="2.8"/>
+    <line x1="20.8" y1="12" x2="59.4" y2="34.3" stroke="url(#p1)" stroke-width="2.8"/>
+    <line x1="0" y1="24" x2="0" y2="68" stroke="url(#p2)" stroke-width="2.8"/>
+    <line x1="-20.8" y1="12" x2="-59.4" y2="34.3" stroke="url(#p1)" stroke-width="2.8"/>
+    <line x1="-20.8" y1="-12" x2="-59.4" y2="-34.3" stroke="url(#p2)" stroke-width="2.8"/>
+    <circle cx="0" cy="-74" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="0" cy="-74" r="3.5" fill="#6EE7B7"/>
+    <circle cx="64" cy="-37" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="64" cy="-37" r="3.5" fill="#6EE7B7"/>
+    <circle cx="64" cy="37" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="64" cy="37" r="3.5" fill="#6EE7B7"/>
+    <circle cx="0" cy="74" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="0" cy="74" r="3.5" fill="#6EE7B7"/>
+    <circle cx="-64" cy="37" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="-64" cy="37" r="3.5" fill="#6EE7B7"/>
+    <circle cx="-64" cy="-37" r="8" fill="#0f1b2d" stroke="#34D399" stroke-width="2.4"/>
+    <circle cx="-64" cy="-37" r="3.5" fill="#6EE7B7"/>
+    <circle cx="0" cy="0" r="24" fill="none" stroke="#10B981" stroke-width="1.8" stroke-opacity="0.35" stroke-dasharray="4 5"/>
+    <circle cx="0" cy="0" r="16" fill="#0B1121" stroke="#6EE7B7" stroke-width="3"/>
+    <circle cx="0" cy="0" r="7" fill="#6EE7B7" filter="url(#glow)"/>
+  </g>
+
+  <!-- Text content (left side) -->
+  <text x="80" y="220" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="72" font-weight="800" fill="#f0fdf4" letter-spacing="-2">Nexus</text>
+
+  <!-- Accent line -->
+  <rect x="80" y="245" width="120" height="4" rx="2" fill="url(#accent)"/>
+
+  <!-- Tagline -->
+  <text x="80" y="305" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif" font-size="32" font-weight="400" fill="#d1d5db">Actor System for PHP 8.5+</text>
+
+  <!-- Features -->
+  <text x="80" y="380" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="20" fill="#6EE7B7" opacity="0.9">Type-safe actors</text>
+  <text x="80" y="412" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="20" fill="#6EE7B7" opacity="0.7">Supervision trees</text>
+  <text x="80" y="444" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="20" fill="#6EE7B7" opacity="0.5">Event sourcing &amp; persistence</text>
+  <text x="80" y="476" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="20" fill="#6EE7B7" opacity="0.4">Pluggable runtimes (Fiber / Swoole)</text>
+
+  <!-- Domain -->
+  <text x="80" y="560" font-family="'SF Mono', 'JetBrains Mono', 'Fira Code', monospace" font-size="18" fill="#9ca3af">nexusactors.com</text>
+
+  <!-- Border accent -->
+  <rect x="0" y="0" width="1200" height="4" fill="url(#accent)"/>
+  <rect x="0" y="626" width="1200" height="4" fill="url(#accent)"/>
+</svg>

@@ -769,7 +769,7 @@ export default function Home() {
   return (
     <Layout
       title="Concurrent PHP, done right"
-      description="Nexus is an actor system for PHP 8.5+ with type-safe actors, supervision trees, event sourcing, and pluggable runtimes. Work in progress."
+      description="Nexus is a typed actor system for PHP 8.5+ bringing Akka/OTP patterns to PHP. Type-safe actors, supervision trees, event sourcing, multi-process scaling, and pluggable runtimes (Fiber and Swoole)."
     >
       <main className={styles.landing}>
         <Hero />
