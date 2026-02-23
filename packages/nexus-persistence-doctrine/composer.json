@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "nexus-actors/persistence": "^1.0",
+        "nexus-actors/persistence": "dev-main",
         "doctrine/orm": "^3.0"
     },
     "require-dev": {
