@@ -7,8 +7,8 @@ const config = {
   tagline: 'An actor system for PHP 8.5+ (work in progress)',
   favicon: 'img/favicon.ico',
 
-  url: 'https://nexus-actors.github.io',
-  baseUrl: '/nexus/',
+  url: 'https://nexusactors.com',
+  baseUrl: '/',
 
   organizationName: 'nexus-actors',
   projectName: 'nexus',
@@ -108,7 +108,7 @@ const config = {
             ],
           },
         ],
-        copyright: `Copyright ${new Date().getFullYear()} Monadial. Built with Docusaurus.`,
+        copyright: `Copyright ${new Date().getFullYear()} Monadial. Built with ❤️ at <a href="https://monadial.com" target="_blank" rel="noopener noreferrer">Monadial</a>.`,
       },
       prism: {
         theme: themes.github,
