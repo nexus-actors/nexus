@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Closure;
 use Error;
 use Fp\Functional\Option\Option;
 use LogicException;
@@ -64,6 +65,9 @@ final class ActorCell implements ActorContext
     private array $stashBuffer = [];
 
     private ?Envelope $currentEnvelope = null;
+
+    /** @var list<TaskContext> */
+    private array $taskHandles = [];
 
     /**
      * @param Behavior<T> $behavior
@@ -166,6 +170,11 @@ final class ActorCell implements ActorContext
         }
 
         $this->transitionTo(ActorState::Stopping);
+
+        // Cancel all spawned tasks
+        foreach ($this->taskHandles as $handle) {
+            $handle->cancel();
+        }
 
         // Stop all children
         foreach ($this->childrenMap as $child) {
@@ -380,6 +389,24 @@ final class ActorCell implements ActorContext
         );
 
         return Option::some($senderRef);
+    }
+
+    /** @param Closure(TaskContext): void $task */
+    #[Override]
+    public function spawnTask(Closure $task): Cancellable
+    {
+        $taskContext = new TaskContext($this->selfRef, $this->logger);
+        $this->taskHandles[] = $taskContext;
+
+        $this->runtime->spawn(static function () use ($task, $taskContext): void {
+            try {
+                $task($taskContext);
+            } catch (Throwable $e) {
+                $taskContext->log()->error('Spawned task threw exception: ' . $e->getMessage());
+            }
+        });
+
+        return $taskContext;
     }
 
     // ---- Internal message handling ----

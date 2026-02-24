@@ -8,6 +8,7 @@ use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Runtime\Runtime;
+use Psr\Log\LoggerInterface;
 
 /**
  * @psalm-api
@@ -77,11 +78,14 @@ final class NexusApp
     }
 
     /**
-     * Run in single-process mode with the given runtime.
+     * Spawn all registered actors and invoke the start callback, but do not
+     * start the runtime event loop. Returns the ActorSystem so the caller
+     * can wire signal handling or other infrastructure before calling
+     * {@see ActorSystem::run()}.
      */
-    public function run(Runtime $runtime): void
+    public function start(Runtime $runtime, ?LoggerInterface $logger = null): ActorSystem
     {
-        $system = ActorSystem::create($this->appName, $runtime);
+        $system = ActorSystem::create($this->appName, $runtime, logger: $logger);
 
         foreach ($this->definitions as $definition) {
             $system->spawn($definition->props, $definition->name);
@@ -91,6 +95,15 @@ final class NexusApp
             ($this->startCallback)($system);
         }
 
+        return $system;
+    }
+
+    /**
+     * Run in single-process mode with the given runtime.
+     */
+    public function run(Runtime $runtime, ?LoggerInterface $logger = null): void
+    {
+        $system = $this->start($runtime, $logger);
         $system->run();
     }
 }

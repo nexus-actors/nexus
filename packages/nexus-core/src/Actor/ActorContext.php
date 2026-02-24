@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
@@ -61,4 +62,15 @@ interface ActorContext
 
     /** @return Option<ActorRef<object>> */
     public function sender(): Option;
+
+    /**
+     * Spawn a background task bound to this actor's lifecycle.
+     *
+     * The task closure receives a {@see TaskContext} for cooperative cancellation
+     * and sending messages back to the parent actor. All spawned tasks are
+     * automatically cancelled when the actor stops.
+     *
+     * @param Closure(TaskContext): void $task
+     */
+    public function spawnTask(Closure $task): Cancellable;
 }
