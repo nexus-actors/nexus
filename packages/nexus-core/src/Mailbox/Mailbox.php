@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Mailbox;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
+use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use NoDiscard;
 
 /** @psalm-api */
@@ -23,6 +24,7 @@ interface Mailbox
 
     /**
      * @throws MailboxClosedException
+     * @throws MailboxTimeoutException
      */
     public function dequeueBlocking(Duration $timeout): Envelope;
 

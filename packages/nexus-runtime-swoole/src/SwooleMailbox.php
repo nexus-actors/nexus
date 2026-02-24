@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
+use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
@@ -116,6 +117,7 @@ final class SwooleMailbox implements Mailbox
 
     /**
      * @throws MailboxClosedException
+     * @throws MailboxTimeoutException
      */
     #[Override]
     public function dequeueBlocking(Duration $timeout): Envelope
@@ -135,7 +137,14 @@ final class SwooleMailbox implements Mailbox
         $result = $this->channel->pop($timeoutSeconds);
 
         if ($result === false) {
-            throw new MailboxClosedException($this->actor);
+            /** @var int $errCode */
+            $errCode = $this->channel->errCode;
+
+            if ($errCode === SWOOLE_CHANNEL_CLOSED) {
+                throw new MailboxClosedException($this->actor);
+            }
+
+            throw new MailboxTimeoutException($this->actor, $timeout);
         }
 
         return $result;

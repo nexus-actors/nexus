@@ -13,6 +13,7 @@ use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
+use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
@@ -584,6 +585,8 @@ final class ActorCell implements ActorContext
                 try {
                     $envelope = $mailbox->dequeueBlocking(Duration::seconds(1));
                     $cell->processMessage($envelope);
+                } catch (MailboxTimeoutException) {
+                    continue;
                 } catch (MailboxClosedException) {
                     break;
                 }
