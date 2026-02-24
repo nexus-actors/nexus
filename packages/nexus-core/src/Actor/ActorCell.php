@@ -446,7 +446,7 @@ final class ActorCell implements ActorContext
             $this->applyBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Signal handler threw NexusException: ' . $e->getMessage());
-        } catch (LogicException|Error $e) {
+        } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in signal handler: ' . $e->getMessage());
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in signal handler: ' . $e->getMessage());
@@ -479,7 +479,7 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Handler threw NexusException: ' . $e->getMessage());
             $this->supervision->decide($e);
-        } catch (LogicException|Error $e) {
+        } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in handler: ' . $e->getMessage());
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in handler: ' . $e->getMessage());
@@ -505,7 +505,7 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Stateful handler threw NexusException: ' . $e->getMessage());
             $this->supervision->decide($e);
-        } catch (LogicException|Error $e) {
+        } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in stateful handler: ' . $e->getMessage());
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in stateful handler: ' . $e->getMessage());
