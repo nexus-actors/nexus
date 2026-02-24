@@ -53,7 +53,10 @@ abstract class ActorCommand extends Command implements SignalableCommandInterfac
             $this->system->shutdown($this->shutdownTimeout());
         }
 
-        return Command::SUCCESS;
+        // Return false to prevent Symfony from calling exit(), which throws
+        // Swoole\ExitException inside coroutines. The system will shut down
+        // gracefully and run() will return normally.
+        return false;
     }
 
     #[Override]
