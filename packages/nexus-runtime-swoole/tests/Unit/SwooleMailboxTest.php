@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxOverflowException;
+use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Core\Mailbox\EnqueueResult;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
@@ -300,12 +301,31 @@ final class SwooleMailboxTest extends TestCase
     }
 
     #[Test]
-    public function dequeue_blocking_throws_on_timeout(): void
+    public function dequeue_blocking_throws_timeout_exception_on_timeout(): void
     {
         $thrown = null;
 
         run(static function () use (&$thrown): void {
             $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+
+            try {
+                $mailbox->dequeueBlocking(Duration::millis(10));
+            } catch (Throwable $e) {
+                $thrown = $e;
+            }
+        });
+
+        self::assertInstanceOf(MailboxTimeoutException::class, $thrown);
+    }
+
+    #[Test]
+    public function dequeue_blocking_throws_closed_exception_when_closed(): void
+    {
+        $thrown = null;
+
+        run(static function () use (&$thrown): void {
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox->close();
 
             try {
                 $mailbox->dequeueBlocking(Duration::millis(10));
