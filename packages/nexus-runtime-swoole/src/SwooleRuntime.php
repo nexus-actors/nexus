@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Swoole\Admin\AdminServer;
 use Override;
 use Swoole\Coroutine;
 use Swoole\Timer;
@@ -38,6 +39,8 @@ final class SwooleRuntime implements Runtime
 
     /** @var list<callable(): void> */
     private array $pendingTimers = [];
+
+    private ?AdminServer $adminServer = null;
 
     /** @var array<int, true> */
     private array $timerIds = [];
@@ -139,6 +142,20 @@ final class SwooleRuntime implements Runtime
         run(function (): void {
             $this->insideCoRun = true;
 
+            // Start admin server if configured
+            if ($this->config->adminPort > 0) {
+                $this->adminServer = new AdminServer(
+                    $this->config->adminHost,
+                    $this->config->adminPort,
+                );
+
+                $adminServer = $this->adminServer;
+
+                Coroutine::create(static function () use ($adminServer): void {
+                    $adminServer->start();
+                });
+            }
+
             // Execute all pending timers
             foreach ($this->pendingTimers as $action) {
                 $action();
@@ -163,6 +180,12 @@ final class SwooleRuntime implements Runtime
     #[Override]
     public function shutdown(Duration $timeout): void
     {
+        // Shut down admin server first
+        if ($this->adminServer !== null) {
+            $this->adminServer->shutdown();
+            $this->adminServer = null;
+        }
+
         // Clear all tracked timers so Co\run() can exit
         foreach ($this->timerIds as $id => $_) {
             Timer::clear($id);
