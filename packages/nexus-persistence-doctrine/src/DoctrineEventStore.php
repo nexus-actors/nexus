@@ -42,7 +42,7 @@ final class DoctrineEventStore implements EventStore
             }
 
             $this->em->flush();
-        } catch (UniqueConstraintViolationException | EntityIdentityCollisionException $e) {
+        } catch (EntityIdentityCollisionException | UniqueConstraintViolationException $e) {
             $sequenceNr = $events[0]->sequenceNr ?? 0;
 
             throw new ConcurrentModificationException(

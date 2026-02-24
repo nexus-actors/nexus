@@ -13,6 +13,7 @@ use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
@@ -24,6 +25,7 @@ use const SIGINT;
 use const SIGTERM;
 
 #[CoversClass(ActorCommand::class)]
+#[RequiresPhpExtension('pcntl')]
 final class ActorCommandTest extends TestCase
 {
     #[Test]
