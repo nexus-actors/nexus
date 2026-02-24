@@ -36,7 +36,6 @@ jobs:
           - { local: 'nexus-app',                  remote: 'app' }
           - { local: 'nexus-cluster',              remote: 'cluster' }
           - { local: 'nexus-cluster-swoole',       remote: 'cluster-swoole' }
-          - { local: 'nexus',                      remote: 'nexus' }
     steps:
       - uses: actions/checkout@v4
         with:
