@@ -34,6 +34,7 @@ const sidebars = {
         'runtimes/overview',
         'runtimes/bootstrap',
         'runtimes/runtime-standalone',
+        'runtimes/runtime-without-actors',
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',
