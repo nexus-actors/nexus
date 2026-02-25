@@ -193,17 +193,17 @@ restart it or switch to a degraded mode.
 ## Stashing
 
 Stashing lets an actor defer messages it cannot handle in its current state. When
-the actor is ready, it re-enqueues all stashed messages for processing.
+the actor is ready, stashed messages are replayed for processing. Nexus provides
+two approaches.
+
+### Context-level stashing
+
+The simplest approach. Call methods directly on the actor context:
 
 - `$ctx->stash()` -- saves the message currently being processed into an
   internal buffer.
 - `$ctx->unstashAll()` -- re-enqueues all stashed messages back into the actor's
   mailbox, in the order they were stashed.
-
-### Stashing example
-
-An actor that must complete initialization before handling work. During init,
-incoming work messages are stashed and replayed once initialization is complete:
 
 ```php
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -218,13 +218,11 @@ final readonly class WorkItem {
 function initializingWorker(): Behavior
 {
     return Behavior::setup(function (ActorContext $ctx): Behavior {
-        // Kick off async initialization
         $ctx->scheduleOnce(
             Duration::seconds(1),
             new InitComplete(),
         );
 
-        // While initializing, stash everything except InitComplete
         return Behavior::receive(
             function (ActorContext $ctx, object $msg): Behavior {
                 if ($msg instanceof InitComplete) {
@@ -233,7 +231,6 @@ function initializingWorker(): Behavior
                     return ready();
                 }
 
-                // Not ready yet -- stash the message
                 $ctx->stash();
                 return Behavior::same();
             },
@@ -255,10 +252,38 @@ function ready(): Behavior
 }
 ```
 
-In this example, if three `WorkItem` messages arrive before `InitComplete`, all
-three are stashed. When `InitComplete` arrives, `unstashAll()` re-enqueues them
-into the mailbox and the behavior swaps to `ready()`, which processes them in
-order.
+### Composable StashBuffer
+
+For more control, use `Behavior::withStash()` which provides a bounded
+`StashBuffer` with explicit capacity and inline replay. Unlike context-level
+stashing, `unstashAll()` processes stashed messages through the target behavior
+immediately -- before any new messages from the mailbox.
+
+```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\StashBuffer;
+use Monadial\Nexus\Core\Mailbox\Envelope;
+
+$behavior = Behavior::withStash(
+    100,
+    static function (StashBuffer $stash): Behavior {
+        return Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($stash): Behavior {
+                if ($msg instanceof InitComplete) {
+                    return $stash->unstashAll(ready());
+                }
+
+                $stash->stash(Envelope::of($msg, ActorPath::root(), $ctx->path()));
+                return Behavior::same();
+            },
+        );
+    },
+);
+```
+
+The buffer throws `StashOverflowException` when full. See
+[Behaviors -- Composable behavior wrappers](./behaviors.md#composable-behavior-wrappers)
+for the full `StashBuffer` API.
 
 ## System messages
 
