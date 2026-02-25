@@ -8,7 +8,6 @@ use Closure;
 use LogicException;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\Event\EventStore;
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 
@@ -35,7 +34,6 @@ final class EventSourcedBehavior
         private readonly ?SnapshotStore $snapshotStore = null,
         private readonly ?SnapshotStrategy $snapshotStrategy = null,
         private readonly ?RetentionPolicy $retentionPolicy = null,
-        private readonly ?LockingStrategy $lockingStrategy = null,
     ) {}
 
     /**
@@ -77,11 +75,6 @@ final class EventSourcedBehavior
         return clone($this, ['retentionPolicy' => $policy]);
     }
 
-    public function withLockingStrategy(LockingStrategy $strategy): self
-    {
-        return clone($this, ['lockingStrategy' => $strategy]);
-    }
-
     /**
      * Build the final Behavior using PersistenceEngine.
      *
@@ -102,7 +95,6 @@ final class EventSourcedBehavior
             $this->snapshotStore,
             $this->snapshotStrategy,
             $this->retentionPolicy,
-            $this->lockingStrategy,
         );
     }
 }

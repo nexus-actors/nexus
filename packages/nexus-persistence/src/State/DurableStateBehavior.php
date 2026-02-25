@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Persistence\State;
 use Closure;
 use LogicException;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 /**
@@ -28,7 +27,6 @@ final class DurableStateBehavior
         private readonly object $emptyState,
         private readonly Closure $commandHandler,
         private readonly ?DurableStateStore $stateStore = null,
-        private readonly ?LockingStrategy $lockingStrategy = null,
     ) {}
 
     /**
@@ -50,11 +48,6 @@ final class DurableStateBehavior
         return clone($this, ['stateStore' => $store]);
     }
 
-    public function withLockingStrategy(LockingStrategy $strategy): self
-    {
-        return clone($this, ['lockingStrategy' => $strategy]);
-    }
-
     /**
      * Build the final Behavior using DurableStateEngine.
      *
@@ -71,7 +64,6 @@ final class DurableStateBehavior
             $this->stateStore ?? throw new LogicException(
                 'DurableStateStore is required — call withStateStore() before toBehavior()',
             ),
-            $this->lockingStrategy,
         );
     }
 }
