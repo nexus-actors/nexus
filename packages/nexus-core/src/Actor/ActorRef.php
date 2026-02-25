@@ -24,8 +24,9 @@ interface ActorRef
      * The message is sent immediately (eager). The reply is received
      * via a lightweight FutureSlot. The handler replies with ctx->reply().
      *
+     * @template R of object
      * @param T $message
-     * @return Future<object>
+     * @return Future<R>
      * @throws AskTimeoutException
      */
     #[NoDiscard]

@@ -63,8 +63,9 @@ final readonly class LocalActorRef implements ActorRef
     }
 
     /**
+     * @template R of object
      * @param T $message
-     * @return Future<object>
+     * @return Future<R>
      * @throws AskTimeoutException
      */
     #[Override]
@@ -83,6 +84,7 @@ final readonly class LocalActorRef implements ActorRef
             $slot->fail(new AskTimeoutException($this->path, $timeout));
         }
 
+        /** @var Future<R> */
         return new Future($slot);
     }
 

@@ -46,7 +46,8 @@ final readonly class RemoteActorRef implements ActorRef
     }
 
     /**
-     * @return Future<object>
+     * @template R of object
+     * @return Future<R>
      * @throws RuntimeException Always -- ask() is not supported for remote actors in v1
      */
     #[Override]
