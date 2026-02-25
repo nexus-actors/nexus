@@ -21,10 +21,9 @@ abstract class AbstractActor implements ActorHandler
     /**
      * Called after the actor starts. Override for initialization logic.
      *
-     * @param ActorContext<T> $ctx
-     * @psalm-suppress PossiblyUnusedParam $ctx is available for subclass overrides
+     * @param ActorContext<T> $_ctx
      */
-    public function onPreStart(ActorContext $ctx): void
+    public function onPreStart(ActorContext $_ctx): void
     {
         // Default no-op; override in subclass for initialization logic.
     }
@@ -32,10 +31,9 @@ abstract class AbstractActor implements ActorHandler
     /**
      * Called before the actor stops. Override for cleanup logic.
      *
-     * @param ActorContext<T> $ctx
-     * @psalm-suppress PossiblyUnusedParam $ctx is available for subclass overrides
+     * @param ActorContext<T> $_ctx
      */
-    public function onPostStop(ActorContext $ctx): void
+    public function onPostStop(ActorContext $_ctx): void
     {
         // Default no-op; override in subclass for cleanup logic.
     }

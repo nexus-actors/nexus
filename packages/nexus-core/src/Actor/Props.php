@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Closure;
 use Fp\Functional\Option\Option;
-use InvalidArgumentException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
@@ -52,33 +52,31 @@ final readonly class Props
     {
         $behavior = Behavior::setup(static function (ActorContext $ctx) use ($factory): Behavior {
             $actor = $factory();
+            assert($actor instanceof ActorHandler, 'Factory must return an ActorHandler');
 
-            /**
-             * @psalm-suppress DocblockTypeContradiction runtime guard for untyped callables
-             * @psalm-suppress MixedOperand $actor::class is safe for string concatenation
-             */
-            if (!$actor instanceof ActorHandler) {
-                throw new InvalidArgumentException(
-                    'Factory must return an instance of ' . ActorHandler::class . ', got ' . $actor::class,
-                );
-            }
-
-            /** @psalm-suppress InvalidArgument template U is erased at runtime */
             $receive = Behavior::receive(
-                static fn(ActorContext $c, object $msg): Behavior => $actor->handle($c, $msg),
+                /** @param ActorContext<U> $c @param U $msg @return Behavior<U> */
+                static function (ActorContext $c, object $msg) use ($actor): Behavior {
+                    /** @var ActorContext<U> $c */
+                    /** @var U $msg */
+
+                    return $actor->handle($c, $msg);
+                },
             );
 
             if ($actor instanceof AbstractActor) {
                 $actor->onPreStart($ctx);
 
-                /** @psalm-suppress InvalidArgument template variance on signal closure */
-                return $receive->onSignal(static function (ActorContext $c, Signal $signal) use ($actor): Behavior {
+                /** @var Closure(ActorContext<U>, Signal): Behavior<U> $signalHandler */
+                $signalHandler = static function (ActorContext $c, Signal $signal) use ($actor): Behavior {
                     if ($signal instanceof PostStop) {
                         $actor->onPostStop($c);
                     }
 
                     return Behavior::same();
-                });
+                };
+
+                return $receive->onSignal($signalHandler);
             }
 
             return $receive;
@@ -95,11 +93,10 @@ final readonly class Props
      * @template U of object
      * @param class-string<ActorHandler<U>> $actorClass
      * @return Props<U>
-     *
-     * @psalm-suppress InvalidReturnType, InvalidReturnStatement template U erased through closure into fromFactory
      */
     public static function fromContainer(ContainerInterface $container, string $actorClass): self
     {
+        /** @var Props<U> */
         return self::fromFactory(static function () use ($container, $actorClass): ActorHandler {
             $handler = $container->get($actorClass);
             assert($handler instanceof ActorHandler);
@@ -120,31 +117,22 @@ final readonly class Props
      */
     public static function fromStatefulFactory(callable $factory): self
     {
-        /** @psalm-suppress UnusedClosureParam $ctx required by setup() signature */
-        $behavior = Behavior::setup(static function (ActorContext $ctx) use ($factory): Behavior {
+        $behavior = Behavior::setup(static function (ActorContext $_ctx) use ($factory): Behavior {
             $actor = $factory();
+            assert($actor instanceof StatefulActorHandler, 'Factory must return a StatefulActorHandler');
 
-            /**
-             * @psalm-suppress DocblockTypeContradiction runtime guard for untyped callables
-             * @psalm-suppress MixedOperand $actor::class is safe for string concatenation
-             */
-            if (!$actor instanceof StatefulActorHandler) {
-                throw new InvalidArgumentException(
-                    'Factory must return an instance of ' . StatefulActorHandler::class . ', got ' . $actor::class,
-                );
-            }
-
-            /**
-             * @psalm-suppress InvalidArgument template U is erased at runtime
-             * @psalm-suppress MixedArgument $state is mixed at runtime; template S erased
-             */
             return Behavior::withState(
                 $actor->initialState(),
-                static fn(ActorContext $c, object $msg, mixed $state): BehaviorWithState => $actor->handle(
-                    $c,
-                    $msg,
-                    $state,
-                ),
+                static function (ActorContext $c, object $msg, mixed $state) use ($actor): BehaviorWithState {
+                    /** @var ActorContext<U> $typedCtx */
+                    $typedCtx = $c;
+                    /** @var U $typedMsg */
+                    $typedMsg = $msg;
+                    /** @var S $typedState */
+                    $typedState = $state;
+
+                    return $actor->handle($typedCtx, $typedMsg, $typedState);
+                },
             );
         });
 

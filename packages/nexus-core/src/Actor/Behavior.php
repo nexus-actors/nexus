@@ -179,7 +179,6 @@ final readonly class Behavior
     /**
      * @param Closure(ActorContext<T>, Signal): Behavior<T> $handler
      * @return Behavior<T>
-     * @psalm-suppress UnusedParam $handler is used in Option::some($handler)
      */
     public function onSignal(Closure $handler): self
     {
