@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 
 /**
@@ -30,6 +31,8 @@ abstract class AbstractEventSourcedActor
     private ?SnapshotStore $snapshotStore = null;
     private SnapshotStrategy $snapshotStrategy;
     private RetentionPolicy $retentionPolicy;
+    private string $writerId = '';
+    private ?ReplayFilter $replayFilter = null;
 
     /**
      * The unique persistence identity for this actor.
@@ -90,6 +93,22 @@ abstract class AbstractEventSourcedActor
     }
 
     /**
+     * @return static
+     */
+    public function withWriterId(string $writerId): static
+    {
+        return clone($this, ['writerId' => $writerId]);
+    }
+
+    /**
+     * @return static
+     */
+    public function withReplayFilter(ReplayFilter $filter): static
+    {
+        return clone($this, ['replayFilter' => $filter]);
+    }
+
+    /**
      * Build a Behavior by delegating to PersistenceEngine::create().
      */
     public function toBehavior(): Behavior
@@ -103,6 +122,8 @@ abstract class AbstractEventSourcedActor
             $this->snapshotStore,
             $this->snapshotStrategy,
             $this->retentionPolicy,
+            $this->writerId,
+            $this->replayFilter,
         );
     }
 

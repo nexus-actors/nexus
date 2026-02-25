@@ -22,6 +22,8 @@ use Monadial\Nexus\Persistence\PersistenceId;
  */
 abstract class AbstractDurableStateActor
 {
+    private string $writerId = '';
+
     /**
      * The unique persistence identity for this actor.
      */
@@ -44,6 +46,14 @@ abstract class AbstractDurableStateActor
     public function __construct(private readonly DurableStateStore $stateStore) {}
 
     /**
+     * @return static
+     */
+    public function withWriterId(string $writerId): static
+    {
+        return clone($this, ['writerId' => $writerId]);
+    }
+
+    /**
      * Build a Behavior by delegating to DurableStateEngine::create().
      */
     public function toBehavior(): Behavior
@@ -53,6 +63,7 @@ abstract class AbstractDurableStateActor
             $this->emptyState(),
             $this->handleCommand(...),
             $this->stateStore,
+            $this->writerId,
         );
     }
 
