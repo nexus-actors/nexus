@@ -90,7 +90,7 @@ final class SignalTest extends TestCase
     private function createActorRef(string $path): ActorRef
     {
         $actorPath = ActorPath::fromString($path);
-        $ref = $this->createMock(ActorRef::class);
+        $ref = $this->createStub(ActorRef::class);
         $ref->method('path')->willReturn($actorPath);
 
         return $ref;

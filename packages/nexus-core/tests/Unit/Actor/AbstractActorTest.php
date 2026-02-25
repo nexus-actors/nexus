@@ -39,7 +39,7 @@ final class AbstractActorTest extends TestCase
             }
         };
 
-        $ctx = $this->createMock(ActorContext::class);
+        $ctx = $this->createStub(ActorContext::class);
         $actor->onPreStart($ctx);
         $actor->onPostStop($ctx);
 
@@ -70,7 +70,7 @@ final class AbstractActorTest extends TestCase
             }
         };
 
-        $ctx = $this->createMock(ActorContext::class);
+        $ctx = $this->createStub(ActorContext::class);
         self::assertFalse($actor->preStartCalled);
         self::assertFalse($actor->postStopCalled);
 
