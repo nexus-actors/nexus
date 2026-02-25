@@ -16,5 +16,6 @@ final readonly class DurableStateEnvelope
         public object $state,
         public string $stateType,
         public DateTimeImmutable $timestamp,
+        public string $writerUuid = '',
     ) {}
 }

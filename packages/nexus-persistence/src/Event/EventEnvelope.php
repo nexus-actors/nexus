@@ -17,6 +17,7 @@ final readonly class EventEnvelope
         public object $event,
         public string $eventType,
         public DateTimeImmutable $timestamp,
+        public string $writerUuid = '',
         public array $metadata = [],
     ) {}
 
