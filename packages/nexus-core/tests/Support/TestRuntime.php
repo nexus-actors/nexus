@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Core\Tests\Support;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Core\Actor\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
@@ -32,6 +33,11 @@ final class TestRuntime implements Runtime
     public function createMailbox(MailboxConfig $config): Mailbox
     {
         return new TestMailbox($config);
+    }
+
+    public function createFutureSlot(Duration $timeout): FutureSlot
+    {
+        return new TestFutureSlot();
     }
 
     public function spawn(callable $actorLoop): string

@@ -9,7 +9,9 @@ use DateTimeImmutable;
 use Fiber;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Core\Actor\FutureSlot;
 use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
@@ -48,6 +50,20 @@ final class FiberRuntime implements Runtime
         return new FiberMailbox($config, ActorPath::root(), function (): void {
             $this->wakeupPending = true;
         });
+    }
+
+    #[Override]
+    public function createFutureSlot(Duration $timeout): FutureSlot
+    {
+        $slot = new FiberFutureSlot(function (): void {
+            $this->wakeupPending = true;
+        });
+
+        $this->scheduleOnce($timeout, static function () use ($slot, $timeout): void {
+            $slot->fail(new AskTimeoutException(ActorPath::fromString('/temp/ask'), $timeout));
+        });
+
+        return $slot;
     }
 
     #[Override]

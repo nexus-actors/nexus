@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Runtime\Swoole;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Core\Actor\FutureSlot;
 use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
@@ -54,6 +56,18 @@ final class SwooleRuntime implements Runtime
     public function createMailbox(MailboxConfig $config): Mailbox
     {
         return new SwooleMailbox($config, ActorPath::root());
+    }
+
+    #[Override]
+    public function createFutureSlot(Duration $timeout): FutureSlot
+    {
+        $slot = new SwooleFutureSlot($timeout);
+
+        $this->scheduleOnce($timeout, static function () use ($slot, $timeout): void {
+            $slot->fail(new AskTimeoutException(ActorPath::fromString('/temp/ask'), $timeout));
+        });
+
+        return $slot;
     }
 
     #[Override]
