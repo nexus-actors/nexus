@@ -54,6 +54,7 @@ final class RecoveryTest extends TestCase
                 event: new ItemAdded('apple'),
                 eventType: ItemAdded::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: 'test-writer',
             ),
             new EventEnvelope(
                 persistenceId: $persistenceId,
@@ -61,6 +62,7 @@ final class RecoveryTest extends TestCase
                 event: new ItemAdded('banana'),
                 eventType: ItemAdded::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: 'test-writer',
             ),
             new EventEnvelope(
                 persistenceId: $persistenceId,
@@ -68,6 +70,7 @@ final class RecoveryTest extends TestCase
                 event: new ItemAdded('cherry'),
                 eventType: ItemAdded::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: 'test-writer',
             ),
         );
 
@@ -143,6 +146,7 @@ final class RecoveryTest extends TestCase
             state: new ShoppingCart(['apple', 'banana']),
             stateType: ShoppingCart::class,
             timestamp: new DateTimeImmutable(),
+            writerId: 'test-writer',
         ));
 
         // Pre-populate events after the snapshot (sequenceNr 3 onward)
@@ -154,6 +158,7 @@ final class RecoveryTest extends TestCase
                 event: new ItemAdded('cherry'),
                 eventType: ItemAdded::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: 'test-writer',
             ),
             new EventEnvelope(
                 persistenceId: $persistenceId,
@@ -161,6 +166,7 @@ final class RecoveryTest extends TestCase
                 event: new ItemAdded('date'),
                 eventType: ItemAdded::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: 'test-writer',
             ),
         );
 
@@ -236,6 +242,7 @@ final class RecoveryTest extends TestCase
             state: new ValueState('recovered-value'),
             stateType: ValueState::class,
             timestamp: new DateTimeImmutable(),
+            writerId: 'test-writer',
         ));
 
         // Spawn actor — should recover from pre-populated state
