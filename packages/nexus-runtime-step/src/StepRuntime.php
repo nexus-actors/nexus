@@ -10,7 +10,6 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Cancellable;
 use Monadial\Nexus\Core\Actor\FutureSlot;
 use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Runtime\Runtime;
@@ -68,15 +67,9 @@ final class StepRuntime implements Runtime
     }
 
     #[Override]
-    public function createFutureSlot(Duration $timeout): FutureSlot
+    public function createFutureSlot(): FutureSlot
     {
-        $slot = new StepFutureSlot();
-
-        $this->scheduleOnce($timeout, static function () use ($slot, $timeout): void {
-            $slot->fail(new AskTimeoutException(ActorPath::fromString('/temp/ask'), $timeout));
-        });
-
-        return $slot;
+        return new StepFutureSlot();
     }
 
     #[Override]

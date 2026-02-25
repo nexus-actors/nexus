@@ -35,7 +35,7 @@ final class TestRuntime implements Runtime
         return new TestMailbox($config);
     }
 
-    public function createFutureSlot(Duration $timeout): FutureSlot
+    public function createFutureSlot(): FutureSlot
     {
         return new TestFutureSlot();
     }
