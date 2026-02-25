@@ -43,6 +43,7 @@ final class DbalDurableStateStore implements DurableStateStore
             state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
             stateType: (string) $row['state_type'],
             timestamp: new DateTimeImmutable((string) $row['timestamp']),
+            writerUuid: (string) $row['writer_uuid'],
         );
     }
 
@@ -57,6 +58,7 @@ final class DbalDurableStateStore implements DurableStateStore
             ->set('state_type', ':state_type')
             ->set('state_data', ':state_data')
             ->set('timestamp', ':timestamp')
+            ->set('writer_uuid', ':writer_uuid')
             ->where('persistence_id = :pid')
             ->andWhere('version = :expected_version')
             ->setParameter('pid', $id->toString())
@@ -65,6 +67,7 @@ final class DbalDurableStateStore implements DurableStateStore
             ->setParameter('state_type', $state->stateType)
             ->setParameter('state_data', $this->serializer->serialize($state->state))
             ->setParameter('timestamp', $state->timestamp->format('Y-m-d H:i:s'))
+            ->setParameter('writer_uuid', $state->writerUuid)
             ->executeStatement();
 
         if ($affected === 0) {
@@ -91,6 +94,7 @@ final class DbalDurableStateStore implements DurableStateStore
                 'state_type' => $state->stateType,
                 'timestamp' => $state->timestamp->format('Y-m-d H:i:s'),
                 'version' => $state->version,
+                'writer_uuid' => $state->writerUuid,
             ]);
         }
     }

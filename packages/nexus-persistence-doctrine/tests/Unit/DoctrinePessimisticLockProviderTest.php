@@ -4,11 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Doctrine\Tests\Unit;
 
-use Doctrine\DBAL\DriverManager;
-use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\EntityManagerInterface;
-use Doctrine\ORM\ORMSetup;
-use Monadial\Nexus\Persistence\Dbal\Schema\PersistenceSchemaManager;
 use Monadial\Nexus\Persistence\Doctrine\DoctrinePessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -62,22 +58,6 @@ final class DoctrinePessimisticLockProviderTest extends TestCase
 
     protected function setUp(): void
     {
-        $config = ORMSetup::createAttributeMetadataConfiguration(
-            [__DIR__ . '/../../src/Entity'],
-            isDevMode: true,
-        );
-        $config->enableNativeLazyObjects(true);
-
-        $connection = DriverManager::getConnection([
-            'driver' => 'pdo_sqlite',
-            'memory' => true,
-        ], $config);
-
-        $this->em = new EntityManager($connection, $config);
-
-        // Create the lock table via schema manager
-        (new PersistenceSchemaManager($connection))->createSchema();
-
-        $this->provider = new DoctrinePessimisticLockProvider($this->em);
+        self::markTestSkipped('Lock table removed from schema — will be deleted in Task 7');
     }
 }

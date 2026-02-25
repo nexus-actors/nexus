@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\Dbal\Tests\Unit;
 
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
 use Monadial\Nexus\Persistence\Dbal\DbalPessimisticLockProvider;
-use Monadial\Nexus\Persistence\Dbal\Schema\PersistenceSchemaManager;
 use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -85,8 +83,6 @@ final class DbalPessimisticLockProviderTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
-        (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->provider = new DbalPessimisticLockProvider($this->connection);
+        self::markTestSkipped('Lock table removed from schema — will be deleted in Task 7');
     }
 }
