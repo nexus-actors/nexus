@@ -13,6 +13,8 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Actor\StashBuffer;
+use Monadial\Nexus\Core\Actor\TimerScheduler;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
@@ -20,6 +22,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -35,6 +38,9 @@ final readonly class TestReply
     public function __construct(public string $value) {}
 }
 
+/**
+ * @psalm-suppress InvalidArgument, PropertyNotSetInConstructor, UnusedClosureParam, PossiblyNullArgument, UnnecessaryVarAnnotation, MixedArgumentTypeCoercion
+ */
 #[CoversClass(ActorCell::class)]
 final class ActorCellTest extends TestCase
 {
@@ -344,18 +350,6 @@ final class ActorCellTest extends TestCase
                 ActorPath::fromString('/user/test'),
             ));
         }
-
-        // Send a 4th message to verify state is 3
-        $finalState = -1;
-        /** @var Behavior<TestMessage> */
-        $checkBehavior = Behavior::withState(
-            0,
-            static function (ActorContext $ctx, object $msg, int $state) use (&$finalState): BehaviorWithState {
-                $finalState = $state;
-
-                return BehaviorWithState::same();
-            },
-        );
 
         // We can't easily inspect internal state directly, so we verify via a behavior
         // that tracks state. The cell should have state = 3 after 3 increments.
@@ -684,6 +678,231 @@ final class ActorCellTest extends TestCase
         self::assertSame(ActorState::Running, $cell->actorState());
     }
 
+    // ======================================================================
+    // Composable Wrapper Resolution Tests
+    // ======================================================================
+
+    #[Test]
+    public function withTimers_resolves_timer_scheduler_on_start(): void
+    {
+        $timerSchedulerReceived = null;
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::withTimers(
+            static function (TimerScheduler $timers) use (&$timerSchedulerReceived): Behavior {
+                $timerSchedulerReceived = $timers;
+
+                return Behavior::receive(
+                    static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+                );
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        self::assertNotNull($timerSchedulerReceived);
+        self::assertInstanceOf(TimerScheduler::class, $timerSchedulerReceived);
+        self::assertSame(ActorState::Running, $cell->actorState());
+    }
+
+    #[Test]
+    public function withStash_resolves_stash_buffer_on_start(): void
+    {
+        $stashBufferReceived = null;
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::withStash(
+            50,
+            static function (StashBuffer $stash) use (&$stashBufferReceived): Behavior {
+                $stashBufferReceived = $stash;
+
+                return Behavior::receive(
+                    static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+                );
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        self::assertNotNull($stashBufferReceived);
+        self::assertInstanceOf(StashBuffer::class, $stashBufferReceived);
+        self::assertSame(50, $stashBufferReceived->capacity());
+        self::assertSame(ActorState::Running, $cell->actorState());
+    }
+
+    #[Test]
+    public function supervised_resolves_inner_behavior_on_start(): void
+    {
+        $received = '';
+
+        /** @var Behavior<TestMessage> */
+        $inner = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$received): Behavior {
+                if ($msg instanceof TestMessage) {
+                    $received = $msg->value;
+                }
+
+                return Behavior::same();
+            },
+        );
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::supervise($inner, SupervisionStrategy::oneForOne());
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage(Envelope::of(
+            new TestMessage('supervised-msg'),
+            ActorPath::root(),
+            ActorPath::fromString('/user/test'),
+        ));
+
+        self::assertSame('supervised-msg', $received);
+    }
+
+    #[Test]
+    public function nested_setup_with_timers_resolves(): void
+    {
+        $contextReceived = null;
+        $timersReceived = null;
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::setup(
+            static function (ActorContext $ctx) use (&$contextReceived, &$timersReceived): Behavior {
+                $contextReceived = $ctx;
+
+                return Behavior::withTimers(
+                    static function (TimerScheduler $timers) use (&$timersReceived): Behavior {
+                        $timersReceived = $timers;
+
+                        return Behavior::receive(
+                            static fn(ActorContext $c, object $msg): Behavior => Behavior::same(),
+                        );
+                    },
+                );
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        self::assertNotNull($contextReceived);
+        self::assertNotNull($timersReceived);
+        self::assertSame(ActorState::Running, $cell->actorState());
+    }
+
+    #[Test]
+    public function full_composition_setup_timers_stash_supervise(): void
+    {
+        $allResolved = false;
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::setup(
+            static function (ActorContext $ctx) use (&$allResolved): Behavior {
+                return Behavior::withTimers(
+                    static function (TimerScheduler $timers) use (&$allResolved): Behavior {
+                        return Behavior::withStash(
+                            100,
+                            static function (StashBuffer $stash) use (&$allResolved): Behavior {
+                                $allResolved = true;
+
+                                return Behavior::supervise(
+                                    Behavior::receive(
+                                        static fn(ActorContext $c, object $msg): Behavior => Behavior::same(),
+                                    ),
+                                    SupervisionStrategy::oneForOne(),
+                                );
+                            },
+                        );
+                    },
+                );
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        self::assertTrue($allResolved);
+        self::assertSame(ActorState::Running, $cell->actorState());
+    }
+
+    // ======================================================================
+    // Inline Stash Replay Tests
+    // ======================================================================
+
+    #[Test]
+    public function unstash_all_replays_messages_inline(): void
+    {
+        $processOrder = [];
+
+        /** @var Behavior<TestMessage> $readyBehavior */
+        $readyBehavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$processOrder): Behavior {
+                if ($msg instanceof TestMessage) {
+                    $processOrder[] = $msg->value;
+                }
+
+                return Behavior::same();
+            },
+        );
+
+        $stashBuffer = null;
+
+        /** @var Behavior<TestMessage> */
+        $behavior = Behavior::withStash(
+            100,
+            static function (StashBuffer $stash) use (&$stashBuffer, $readyBehavior): Behavior {
+                $stashBuffer = $stash;
+
+                return Behavior::receive(
+                    static function (ActorContext $ctx, object $msg) use ($stash, $readyBehavior): Behavior {
+                        if ($msg instanceof TestMessage && $msg->value === 'go') {
+                            return $stash->unstashAll($readyBehavior);
+                        }
+
+                        $stash->stash(Envelope::of(
+                            $msg,
+                            ActorPath::root(),
+                            $ctx->path(),
+                        ));
+
+                        return Behavior::same();
+                    },
+                );
+            },
+        );
+
+        $mailbox = TestMailbox::unbounded();
+        $cell = $this->createCell($behavior, mailbox: $mailbox);
+        $cell->start();
+
+        // Stash two messages
+        $cell->processMessage(Envelope::of(
+            new TestMessage('first'),
+            ActorPath::root(),
+            ActorPath::fromString('/user/test'),
+        ));
+        $cell->processMessage(Envelope::of(
+            new TestMessage('second'),
+            ActorPath::root(),
+            ActorPath::fromString('/user/test'),
+        ));
+
+        // Trigger unstash — should replay 'first' and 'second' inline
+        $cell->processMessage(Envelope::of(
+            new TestMessage('go'),
+            ActorPath::root(),
+            ActorPath::fromString('/user/test'),
+        ));
+
+        // Both stashed messages should have been replayed inline
+        self::assertSame(['first', 'second'], $processOrder);
+    }
+
+    #[Override]
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();
@@ -717,7 +936,5 @@ final class ActorCellTest extends TestCase
             $this->logger,
             $this->deadLetters,
         );
-    }// ======================================================================
-    // State Machine Tests
-    // ======================================================================
+    }
 }
