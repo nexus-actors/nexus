@@ -31,7 +31,8 @@ final readonly class FutureRef implements ActorRef
     }
 
     /**
-     * @return Future<object>
+     * @template R of object
+     * @return Future<R>
      */
     #[Override]
     #[NoDiscard]
