@@ -167,6 +167,7 @@ final class TimerSchedulerTest extends TestCase
             ActorPath::fromString('/user/test'),
             $this->mailbox,
             static fn(): bool => true,
+            $this->runtime,
         );
 
         return new DefaultTimerScheduler($selfRef, $this->runtime);
