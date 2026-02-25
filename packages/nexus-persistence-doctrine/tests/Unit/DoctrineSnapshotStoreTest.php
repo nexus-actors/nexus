@@ -37,6 +37,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
         self::assertSame(5, $loaded->sequenceNr);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(500, $loaded->state->total);
+        self::assertSame('test-writer', $loaded->writerId);
     }
 
     #[Test]
@@ -104,6 +105,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
 
         $this->store->save($this->id, $snapshot);
@@ -147,6 +149,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
     }
 }

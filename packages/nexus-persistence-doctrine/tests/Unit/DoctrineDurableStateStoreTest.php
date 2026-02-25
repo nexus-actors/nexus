@@ -38,6 +38,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
         self::assertSame(1, $loaded->version);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(42, $loaded->state->value);
+        self::assertSame('test-writer', $loaded->writerId);
     }
 
     #[Test]
@@ -102,6 +103,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
 
         $this->store->upsert($this->id, $envelope);
@@ -163,6 +165,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
     }
 }
