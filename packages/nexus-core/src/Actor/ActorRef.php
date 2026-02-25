@@ -19,13 +19,17 @@ interface ActorRef
     public function tell(object $message): void;
 
     /**
-     * @template R of object
-     * @param callable(ActorRef<R>): T $messageFactory
-     * @return R
+     * Send a message and get a Future for the reply.
+     *
+     * The message is sent immediately (eager). The reply is received
+     * via a lightweight FutureSlot. The handler replies with ctx->reply().
+     *
+     * @param T $message
+     * @return Future<object>
      * @throws AskTimeoutException
      */
     #[NoDiscard]
-    public function ask(callable $messageFactory, Duration $timeout): object;
+    public function ask(object $message, Duration $timeout): Future;
 
     public function path(): ActorPath;
 

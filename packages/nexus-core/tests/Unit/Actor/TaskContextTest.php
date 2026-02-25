@@ -22,8 +22,6 @@ final readonly class TaskMessage
 #[CoversClass(TaskContext::class)]
 final class TaskContextTest extends TestCase
 {
-    private TestRuntime $runtime;
-
     #[Test]
     public function tell_forwards_to_parent_ref(): void
     {
@@ -32,7 +30,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
-            $this->runtime,
+            new TestRuntime(),
         );
         $logger = new TestLogger();
 
@@ -54,7 +52,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
-            $this->runtime,
+            new TestRuntime(),
         );
         $logger = new TestLogger();
 
@@ -73,7 +71,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
-            $this->runtime,
+            new TestRuntime(),
         );
         $logger = new TestLogger();
 
@@ -92,17 +90,12 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
-            $this->runtime,
+            new TestRuntime(),
         );
         $logger = new TestLogger();
 
         $taskCtx = new TaskContext($parentRef, $logger);
 
         self::assertSame($logger, $taskCtx->log());
-    }
-
-    protected function setUp(): void
-    {
-        $this->runtime = new TestRuntime();
     }
 }
