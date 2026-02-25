@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorTag;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +20,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function receiveCreatesBehaviorWithReceiveTag(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
@@ -30,7 +32,9 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function withStateCreatesBehaviorWithStateTag(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
+        /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(42, $handler);
 
         self::assertSame(BehaviorTag::WithState, $behavior->tag());
@@ -43,6 +47,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function setupCreatesBehaviorWithSetupTag(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $factory = static fn(ActorContext $ctx): Behavior => Behavior::same();
         $behavior = Behavior::setup($factory);
 
@@ -102,7 +107,9 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalReturnsNewBehaviorWithSignalHandler(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        /** @psalm-suppress UnusedClosureParam */
         $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
         $original = Behavior::receive($handler);
@@ -123,9 +130,12 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalPreservesInitialState(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
+        /** @psalm-suppress UnusedClosureParam */
         $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
+        /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(99, $handler)->onSignal($signalHandler);
 
         self::assertSame(BehaviorTag::WithState, $behavior->tag());
@@ -143,5 +153,58 @@ final class BehaviorTest extends TestCase
         self::assertSame(BehaviorTag::Unhandled, Behavior::unhandled()->tag());
         self::assertSame(BehaviorTag::Empty, Behavior::empty()->tag());
         self::assertSame(BehaviorTag::Setup, Behavior::setup(static fn() => Behavior::same())->tag());
+    }
+
+    #[Test]
+    public function withTimersCreatesBehaviorWithTimersTag(): void
+    {
+        /** @psalm-suppress UnusedClosureParam */
+        $factory = static fn(object $timers): Behavior => Behavior::same();
+        $behavior = Behavior::withTimers($factory);
+
+        self::assertSame(BehaviorTag::WithTimers, $behavior->tag());
+        self::assertTrue($behavior->handler()->isSome());
+        self::assertSame($factory, $behavior->handler()->get());
+        self::assertTrue($behavior->initialState()->isNone());
+    }
+
+    #[Test]
+    public function withStashCreatesBehaviorWithStashTag(): void
+    {
+        /** @psalm-suppress UnusedClosureParam */
+        $factory = static fn(object $stash): Behavior => Behavior::same();
+        $behavior = Behavior::withStash(100, $factory);
+
+        self::assertSame(BehaviorTag::WithStash, $behavior->tag());
+        self::assertTrue($behavior->handler()->isSome());
+        self::assertSame($factory, $behavior->handler()->get());
+        self::assertTrue($behavior->initialState()->isSome());
+        self::assertSame(100, $behavior->initialState()->get());
+    }
+
+    #[Test]
+    public function superviseCreatesBehaviorWithSupervisedTag(): void
+    {
+        $inner = Behavior::receive(static fn() => Behavior::same());
+        $strategy = SupervisionStrategy::oneForOne();
+        $behavior = Behavior::supervise($inner, $strategy);
+
+        self::assertSame(BehaviorTag::Supervised, $behavior->tag());
+        self::assertTrue($behavior->handler()->isSome());
+        self::assertTrue($behavior->initialState()->isSome());
+        self::assertSame($strategy, $behavior->initialState()->get());
+    }
+
+    #[Test]
+    public function superviseHandlerReturnsInnerBehavior(): void
+    {
+        $inner = Behavior::receive(static fn() => Behavior::same());
+        $strategy = SupervisionStrategy::oneForOne();
+        $behavior = Behavior::supervise($inner, $strategy);
+
+        $provider = $behavior->handler()->get();
+        /** @psalm-suppress PossiblyNullFunctionCall */
+        $resolved = $provider();
+        self::assertSame($inner, $resolved);
     }
 }

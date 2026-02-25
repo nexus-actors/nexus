@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 
 /**
  * @psalm-api
@@ -69,6 +70,74 @@ final readonly class Behavior
     {
         /** @var Behavior<U> */
         return new self(BehaviorTag::Setup, Option::some($factory), self::noSignalHandler(), self::noState());
+    }
+
+    /**
+     * @template U of object
+     * @param Closure(TimerScheduler): Behavior<U> $factory
+     * @return Behavior<U>
+     * @psalm-suppress UndefinedDocblockClass TimerScheduler will be created in a future task
+     * @psalm-suppress UnusedParam $factory is stored for resolution by ActorCell
+     */
+    public static function withTimers(Closure $factory): self
+    {
+        /** @var Behavior<U> */
+        return new self(BehaviorTag::WithTimers, Option::some($factory), self::noSignalHandler(), self::noState());
+    }
+
+    /**
+     * @template U of object
+     * @param Closure(StashBuffer): Behavior<U> $factory
+     * @return Behavior<U>
+     * @psalm-suppress UndefinedDocblockClass StashBuffer will be created in a future task
+     * @psalm-suppress UnusedParam $capacity and $factory are stored for resolution by ActorCell
+     */
+    public static function withStash(int $capacity, Closure $factory): self
+    {
+        /** @var Behavior<U> */
+        return new self(
+            BehaviorTag::WithStash,
+            Option::some($factory),
+            self::noSignalHandler(),
+            Option::some($capacity),
+        );
+    }
+
+    /**
+     * @template U of object
+     * @param Behavior<U> $inner
+     * @return Behavior<U>
+     */
+    public static function supervise(self $inner, SupervisionStrategy $strategy): self
+    {
+        $provider = static fn(): self => $inner;
+
+        /** @var Behavior<U> */
+        return new self(
+            BehaviorTag::Supervised,
+            Option::some($provider),
+            self::noSignalHandler(),
+            Option::some($strategy),
+        );
+    }
+
+    /**
+     * @internal Used by StashBuffer to create a replay behavior.
+     *
+     * @template U of object
+     * @param list<\Monadial\Nexus\Core\Mailbox\Envelope> $envelopes
+     * @param Behavior<U> $target
+     * @return Behavior<U>
+     */
+    public static function unstashAllReplay(array $envelopes, self $target): self
+    {
+        $provider = static fn(): array => [
+            'envelopes' => $envelopes,
+            'target' => $target,
+        ];
+
+        /** @var Behavior<U> */
+        return new self(BehaviorTag::UnstashAll, Option::some($provider), self::noSignalHandler(), self::noState());
     }
 
     /**

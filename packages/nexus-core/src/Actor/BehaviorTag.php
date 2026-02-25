@@ -14,4 +14,8 @@ enum BehaviorTag: string
     case Stopped = 'stopped';
     case Unhandled = 'unhandled';
     case Empty = 'empty';
+    case WithTimers = 'with_timers';
+    case WithStash = 'with_stash';
+    case Supervised = 'supervised';
+    case UnstashAll = 'unstash_all';
 }
