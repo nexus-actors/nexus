@@ -12,8 +12,10 @@ use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Psr\Log\NullLogger;
 
 use function is_object;
 
@@ -47,6 +49,8 @@ final class PersistenceEngine
      * @param SnapshotStore|null $snapshotStore Optional store for snapshots
      * @param SnapshotStrategy|null $snapshotStrategy When to take snapshots (default: never)
      * @param RetentionPolicy|null $retentionPolicy Event/snapshot retention (default: keep all)
+     * @param string $writerId Writer identity stamped on persisted events and snapshots
+     * @param ReplayFilter|null $replayFilter Filter for detecting writer conflicts during recovery
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -58,9 +62,12 @@ final class PersistenceEngine
         ?SnapshotStore $snapshotStore = null,
         ?SnapshotStrategy $snapshotStrategy = null,
         ?RetentionPolicy $retentionPolicy = null,
+        string $writerId = '',
+        ?ReplayFilter $replayFilter = null,
     ): Behavior {
         $strategy = $snapshotStrategy ?? SnapshotStrategy::never();
         $retention = $retentionPolicy ?? RetentionPolicy::none();
+        $filter = $replayFilter ?? ReplayFilter::off();
 
         /** @psalm-suppress UnusedClosureParam, InvalidArgument */
         return Behavior::setup(static function (ActorContext $_ctx) use (
@@ -72,6 +79,8 @@ final class PersistenceEngine
             $snapshotStore,
             $strategy,
             $retention,
+            $writerId,
+            $filter,
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
@@ -90,7 +99,10 @@ final class PersistenceEngine
             // 2. Replay events from snapshot's sequenceNr + 1
             $events = $eventStore->load($persistenceId, $sequenceNr + 1);
 
-            foreach ($events as $envelope) {
+            // 3. Apply replay filter for single-writer violation detection
+            $filteredEvents = $filter->filter($persistenceId, $events, new NullLogger());
+
+            foreach ($filteredEvents as $envelope) {
                 /** @psalm-suppress InvalidArgument */
                 $state = $eventHandler($state, $envelope->event);
                 $sequenceNr = $envelope->sequenceNr;
@@ -109,6 +121,7 @@ final class PersistenceEngine
                     $snapshotStore,
                     $strategy,
                     $retention,
+                    $writerId,
                 ): BehaviorWithState {
                     /** @var array{state: object, sequenceNr: int} $data */
                     $state = $data['state'];
@@ -129,6 +142,7 @@ final class PersistenceEngine
                             $snapshotStore,
                             $strategy,
                             $retention,
+                            $writerId,
                         ),
                         EffectType::None => BehaviorWithState::same(),
                         EffectType::Unhandled => BehaviorWithState::same(),
@@ -155,6 +169,7 @@ final class PersistenceEngine
         ?SnapshotStore $snapshotStore,
         SnapshotStrategy $strategy,
         RetentionPolicy $retention,
+        string $writerId,
     ): BehaviorWithState {
         // 1. Build EventEnvelopes with incrementing sequenceNr
         $envelopes = [];
@@ -168,6 +183,7 @@ final class PersistenceEngine
                 event: $event,
                 eventType: $event::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: $writerId,
             );
         }
 
@@ -198,6 +214,7 @@ final class PersistenceEngine
                 state: $newState,
                 stateType: $newState::class,
                 timestamp: new DateTimeImmutable(),
+                writerId: $writerId,
             ));
 
             // 5. Apply retention policy: delete old events up to snapshot
