@@ -35,6 +35,7 @@ final class DbalEventStoreTest extends TestCase
         self::assertCount(1, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
         self::assertSame(stdClass::class, $loaded[0]->eventType);
+        self::assertSame('test-writer', $loaded[0]->writerId);
     }
 
     #[Test]

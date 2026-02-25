@@ -36,6 +36,7 @@ final class DbalDurableStateStoreTest extends TestCase
         self::assertSame(1, $loaded->version);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(42, $loaded->state->value);
+        self::assertSame('test-writer', $loaded->writerId);
     }
 
     #[Test]

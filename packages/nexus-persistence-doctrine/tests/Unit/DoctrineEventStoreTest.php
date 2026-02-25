@@ -37,6 +37,7 @@ final class DoctrineEventStoreTest extends TestCase
         self::assertCount(1, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
         self::assertSame(stdClass::class, $loaded[0]->eventType);
+        self::assertSame('test-writer', $loaded[0]->writerId);
     }
 
     #[Test]
@@ -148,6 +149,7 @@ final class DoctrineEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
             metadata: ['source' => 'api', 'user_id' => '123'],
         );
 
@@ -181,6 +183,7 @@ final class DoctrineEventStoreTest extends TestCase
             event: $event,
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
 
         $this->store->persist($this->id, $envelope);
@@ -230,6 +233,7 @@ final class DoctrineEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: $eventType,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerId: 'test-writer',
         );
     }
 }

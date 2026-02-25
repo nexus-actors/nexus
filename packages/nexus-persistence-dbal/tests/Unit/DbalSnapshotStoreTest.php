@@ -35,6 +35,7 @@ final class DbalSnapshotStoreTest extends TestCase
         self::assertSame(5, $loaded->sequenceNr);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(500, $loaded->state->total);
+        self::assertSame('test-writer', $loaded->writerId);
     }
 
     #[Test]
