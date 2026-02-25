@@ -25,5 +25,7 @@ final class SnapshotEntry
         public private(set) string $stateData,
         #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
         public private(set) DateTimeImmutable $timestamp,
+        #[ORM\Column(name: 'writer_id', type: 'string', length: 26)]
+        public private(set) string $writerId = '',
     ) {}
 }

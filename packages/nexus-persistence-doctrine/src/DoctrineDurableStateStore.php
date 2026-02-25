@@ -38,6 +38,7 @@ final class DoctrineDurableStateStore implements DurableStateStore
             state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
             stateType: $entry->stateType,
             timestamp: $entry->timestamp,
+            writerId: $entry->writerId,
         );
     }
 
@@ -52,9 +53,15 @@ final class DoctrineDurableStateStore implements DurableStateStore
                 stateType: $state->stateType,
                 stateData: $this->serializer->serialize($state->state),
                 timestamp: $state->timestamp,
+                writerId: $state->writerId,
             );
         } else {
-            $entry->update($state->stateType, $this->serializer->serialize($state->state), $state->timestamp);
+            $entry->update(
+                $state->stateType,
+                $this->serializer->serialize($state->state),
+                $state->timestamp,
+                $state->writerId,
+            );
         }
 
         $this->em->persist($entry);
