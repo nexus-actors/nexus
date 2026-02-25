@@ -202,6 +202,33 @@ final class ActorSystemTest extends TestCase
         self::assertInstanceOf(DateTimeImmutable::class, $clock->now());
     }
 
+    #[Test]
+    public function create_generates_writer_uuid(): void
+    {
+        $system = ActorSystem::create('test', $this->runtime);
+
+        $uuid = $system->writerUuid();
+        self::assertMatchesRegularExpression(
+            '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
+            $uuid,
+        );
+    }
+
+    #[Test]
+    public function writer_uuid_is_stable_across_calls(): void
+    {
+        $system = ActorSystem::create('test', $this->runtime);
+        self::assertSame($system->writerUuid(), $system->writerUuid());
+    }
+
+    #[Test]
+    public function different_systems_have_different_writer_uuids(): void
+    {
+        $system1 = ActorSystem::create('test-1', $this->runtime);
+        $system2 = ActorSystem::create('test-2', $this->runtime);
+        self::assertNotSame($system1->writerUuid(), $system2->writerUuid());
+    }
+
     protected function setUp(): void
     {
         $this->clock = new TestClock();

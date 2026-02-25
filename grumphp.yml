@@ -16,6 +16,8 @@ grumphp:
         psalm:
             config: psalm.xml
             triggered_by: ['php']
+            ignore_patterns:
+                - '/tests/'
         phpunit:
             testsuite: unit
             always_execute: true
