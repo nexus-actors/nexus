@@ -148,7 +148,12 @@ $directive = $strategy->decide($exception);
 
 ## Applying a strategy
 
-Attach a supervision strategy to an actor through `Props::withSupervision()`:
+There are two ways to attach a supervision strategy to an actor:
+
+### Props-level supervision
+
+Attach a strategy through `Props::withSupervision()`. This governs how the actor
+supervises its children:
 
 ```php
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -172,6 +177,48 @@ $ref = $system->spawn($props, 'my-actor');
 
 The strategy governs how this actor supervises its children. If the actor itself
 fails, its parent's strategy applies.
+
+### Behavior-level supervision
+
+Wrap a behavior with `Behavior::supervise()` to apply a supervision strategy
+directly to the behavior's handler. This is useful when you want the strategy
+co-located with the behavior definition rather than at the Props level.
+
+```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Core\Supervision\Directive;
+use Monadial\Nexus\Core\Duration;
+
+$behavior = Behavior::supervise(
+    Behavior::receive(
+        fn(ActorContext $ctx, object $msg): Behavior => handleMessage($ctx, $msg),
+    ),
+    SupervisionStrategy::exponentialBackoff(
+        initialBackoff: Duration::millis(200),
+        maxBackoff: Duration::seconds(10),
+        decider: fn(Throwable $e) => match (true) {
+            $e instanceof TransientError => Directive::Restart,
+            default => Directive::Escalate,
+        },
+    ),
+);
+```
+
+When both behavior-level and Props-level strategies exist, the behavior-level
+strategy runs first. If it returns `Escalate`, the Props-level strategy takes
+over. If Props-level also escalates, the failure propagates to the parent actor.
+
+```
+Exception in handler
+  → Behavior-level strategy (Behavior::supervise)
+    → Restart / Stop / Resume: handled here
+    → Escalate: fall through ↓
+  → Props-level strategy (Props::withSupervision)
+    → Restart / Stop / Resume: handled here
+    → Escalate: fall through ↓
+  → Parent actor's supervision
+```
 
 ## Strategy properties
 

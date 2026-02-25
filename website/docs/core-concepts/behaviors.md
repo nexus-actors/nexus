@@ -165,6 +165,143 @@ Creates a behavior with no handler. Useful as a placeholder or for actors that o
 $behavior = Behavior::empty();
 ```
 
+## Composable behavior wrappers
+
+Nexus provides composable behavior wrappers inspired by Akka Typed. These wrappers inject resources (timers, stash buffers) into behavior factories and can be nested to compose multiple capabilities.
+
+### Behavior::withTimers
+
+Provides a `TimerScheduler` for keyed timer management. Timers are identified by string keys -- starting a timer with an existing key auto-cancels the previous one. All timers are automatically cancelled when the actor stops.
+
+```php
+use Monadial\Nexus\Core\Actor\TimerScheduler;
+use Monadial\Nexus\Core\Duration;
+
+readonly class Heartbeat {}
+
+$behavior = Behavior::withTimers(
+    static function (TimerScheduler $timers): Behavior {
+        $timers->startTimerWithFixedDelay('heartbeat', new Heartbeat(), Duration::seconds(5));
+
+        return Behavior::receive(
+            static fn(ActorContext $ctx, object $msg): Behavior => match (true) {
+                $msg instanceof Heartbeat => handleHeartbeat($ctx),
+                default => Behavior::unhandled(),
+            },
+        );
+    },
+);
+```
+
+`TimerScheduler` methods:
+
+| Method | Description |
+|---|---|
+| `startSingleTimer(key, msg, delay)` | Single-fire timer. Auto-cancels previous timer with same key. |
+| `startTimerAtFixedRate(key, msg, interval, ?initialDelay)` | Repeating timer at fixed rate (drift-compensating). |
+| `startTimerWithFixedDelay(key, msg, delay, ?initialDelay)` | Repeating timer with fixed delay between completions. |
+| `cancel(key)` | Cancel a timer by key. No-op if key does not exist. |
+| `cancelAll()` | Cancel all active timers. |
+| `isTimerActive(key)` | Check whether a timer with this key is currently active. |
+
+### Behavior::withStash
+
+Provides a bounded `StashBuffer` for deferring messages. Unlike the basic `$ctx->stash()`, this buffer has an explicit capacity and supports inline replay -- `unstashAll()` processes stashed messages through the new behavior immediately, before any new messages from the mailbox.
+
+```php
+use Monadial\Nexus\Core\Actor\StashBuffer;
+use Monadial\Nexus\Core\Mailbox\Envelope;
+
+readonly class DbReady {
+    public function __construct(public object $connection) {}
+}
+
+$behavior = Behavior::withStash(
+    100,
+    static function (StashBuffer $stash): Behavior {
+        return Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($stash): Behavior {
+                if ($msg instanceof DbReady) {
+                    return $stash->unstashAll(activeBehavior($msg->connection));
+                }
+
+                // Not ready yet -- stash the envelope
+                $stash->stash(Envelope::of($msg, ActorPath::root(), $ctx->path()));
+
+                return Behavior::same();
+            },
+        );
+    },
+);
+```
+
+`StashBuffer` methods:
+
+| Method | Description |
+|---|---|
+| `stash(envelope)` | Stash an envelope. Throws `StashOverflowException` if the buffer is full. |
+| `unstashAll(targetBehavior)` | Replay all stashed messages through the target behavior inline, then continue with it. Returns the target directly if the buffer is empty. |
+| `isEmpty()` | Whether the buffer has no stashed messages. |
+| `isFull()` | Whether the buffer has reached capacity. |
+| `size()` | Number of currently stashed messages. |
+| `capacity()` | Maximum buffer capacity. |
+
+### Behavior::supervise
+
+Wraps a behavior with a supervision strategy. When the inner behavior's handler throws, the behavior-level strategy decides the response. If the behavior-level strategy returns `Escalate`, it falls through to the Props-level strategy (set via `Props::withSupervision`).
+
+```php
+use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Core\Supervision\Directive;
+
+$behavior = Behavior::supervise(
+    Behavior::receive(
+        static fn(ActorContext $ctx, object $msg): Behavior => handleMessage($ctx, $msg),
+    ),
+    SupervisionStrategy::oneForOne(
+        maxRetries: 5,
+        decider: fn(Throwable $e) => match (true) {
+            $e instanceof RecoverableError => Directive::Restart,
+            default => Directive::Escalate,
+        },
+    ),
+);
+```
+
+Supervision precedence:
+
+1. Behavior-level strategy decides first (from `Behavior::supervise`)
+2. If `Escalate` -- falls through to Props-level strategy (from `Props::withSupervision`)
+3. If Props-level also escalates -- parent actor handles it
+
+### Nesting wrappers
+
+All wrappers compose naturally via nesting. The resolution order during actor startup is outside-in:
+
+```php
+$behavior = Behavior::setup(static function (ActorContext $ctx) {
+    $db = $ctx->spawn(Props::fromBehavior($dbBehavior), 'db');
+
+    return Behavior::withTimers(static function (TimerScheduler $timers) use ($db) {
+        return Behavior::withStash(100, static function (StashBuffer $stash) use ($timers, $db) {
+            $timers->startSingleTimer('health', new HealthCheck(), Duration::seconds(30));
+
+            return Behavior::supervise(
+                Behavior::receive(
+                    static fn(ActorContext $ctx, object $msg): Behavior => match (true) {
+                        $msg instanceof HealthCheck => handleHealth($ctx, $db),
+                        default => Behavior::unhandled(),
+                    },
+                ),
+                SupervisionStrategy::oneForOne(maxRetries: 5),
+            );
+        });
+    });
+});
+```
+
+The nesting order does not change the behavior as long as there is no additional logic in any function other than the innermost one. When combining with `supervise`, note that it wraps the behavior it contains -- a restart will not re-execute the `setup` or `withTimers` factories.
+
 ## Signal handling
 
 Signals are lifecycle events delivered to an actor outside the normal message flow. Attach a signal handler to any behavior using `onSignal()`. The method returns a new behavior (the original is unchanged, since behaviors are immutable).
