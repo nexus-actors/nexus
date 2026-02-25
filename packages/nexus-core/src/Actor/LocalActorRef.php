@@ -72,9 +72,14 @@ final readonly class LocalActorRef implements ActorRef
     #[NoDiscard]
     public function ask(object $message, Duration $timeout): Future
     {
-        $slot = $this->runtime->createFutureSlot($timeout);
+        $slot = $this->runtime->createFutureSlot();
         $futureRefPath = ActorPath::fromString('/temp/ask-' . spl_object_id($slot));
         $futureRef = new FutureRef($futureRefPath, $slot);
+        $targetPath = $this->path;
+
+        $this->runtime->scheduleOnce($timeout, static function () use ($slot, $targetPath, $timeout): void {
+            $slot->fail(new AskTimeoutException($targetPath, $timeout));
+        });
 
         $envelope = new Envelope($message, $futureRefPath, $this->path, $futureRef);
 

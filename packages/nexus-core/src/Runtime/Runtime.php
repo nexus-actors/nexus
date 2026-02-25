@@ -19,9 +19,9 @@ interface Runtime
 
     /**
      * Create a lightweight value slot for the ask pattern.
-     * The slot auto-fails with AskTimeoutException after the given timeout.
+     * The caller is responsible for scheduling timeout failures.
      */
-    public function createFutureSlot(Duration $timeout): FutureSlot;
+    public function createFutureSlot(): FutureSlot;
 
     public function spawn(callable $actorLoop): string;
 

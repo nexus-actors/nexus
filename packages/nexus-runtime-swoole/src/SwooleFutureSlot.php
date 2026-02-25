@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Swoole;
 
 use Monadial\Nexus\Core\Actor\FutureSlot;
-use Monadial\Nexus\Core\Duration;
 use Override;
 use Swoole\Coroutine\Channel;
 use Throwable;
 
 /**
- * Swoole-based FutureSlot using a Channel(1) for suspension.
+ * Swoole-based FutureSlot using a Channel(1) for coroutine suspension.
+ *
+ * Blocks indefinitely on await(). The caller schedules a timeout timer
+ * that calls fail() to unblock with an exception.
  */
 final class SwooleFutureSlot implements FutureSlot
 {
@@ -20,7 +22,7 @@ final class SwooleFutureSlot implements FutureSlot
     private ?Throwable $failure = null;
     private bool $resolved = false;
 
-    public function __construct(private readonly Duration $timeout)
+    public function __construct()
     {
         $this->channel = new Channel(1);
     }
@@ -59,7 +61,7 @@ final class SwooleFutureSlot implements FutureSlot
     public function await(): object
     {
         if (!$this->resolved) {
-            $this->channel->pop($this->timeout->toSecondsFloat());
+            $this->channel->pop(-1);
         }
 
         if ($this->failure !== null) {
