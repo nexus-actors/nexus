@@ -146,7 +146,9 @@ final class FiberRuntime implements Runtime
     private function tick(): void
     {
         foreach ($this->fibers as $id => $fiber) {
-            if (!$fiber->isStarted()) {
+            if ($fiber->isTerminated()) {
+                unset($this->fibers[$id]);
+            } elseif (!$fiber->isStarted()) {
                 $fiber->start();
 
                 if ($fiber->isTerminated()) {

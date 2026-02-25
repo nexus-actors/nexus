@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\TaskContext;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
+use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -21,6 +22,8 @@ final readonly class TaskMessage
 #[CoversClass(TaskContext::class)]
 final class TaskContextTest extends TestCase
 {
+    private TestRuntime $runtime;
+
     #[Test]
     public function tell_forwards_to_parent_ref(): void
     {
@@ -29,6 +32,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
+            $this->runtime,
         );
         $logger = new TestLogger();
 
@@ -50,6 +54,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
+            $this->runtime,
         );
         $logger = new TestLogger();
 
@@ -68,6 +73,7 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
+            $this->runtime,
         );
         $logger = new TestLogger();
 
@@ -86,11 +92,17 @@ final class TaskContextTest extends TestCase
             ActorPath::fromString('/user/parent'),
             $mailbox,
             static fn(): bool => true,
+            $this->runtime,
         );
         $logger = new TestLogger();
 
         $taskCtx = new TaskContext($parentRef, $logger);
 
         self::assertSame($logger, $taskCtx->log());
+    }
+
+    protected function setUp(): void
+    {
+        $this->runtime = new TestRuntime();
     }
 }

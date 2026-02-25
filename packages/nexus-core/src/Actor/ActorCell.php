@@ -93,7 +93,7 @@ final class ActorCell implements ActorContext
         $this->currentBehavior = $behavior;
 
         /** @var ActorRef<T> $ref */
-        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive());
+        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive(), $this->runtime);
         $this->selfRef = $ref;
     }
 
@@ -389,6 +389,7 @@ final class ActorCell implements ActorContext
             $senderPath,
             $this->mailbox, // placeholder - in full system would resolve actual mailbox
             static fn(): bool => true,
+            $this->runtime,
         );
 
         return Option::some($senderRef);
