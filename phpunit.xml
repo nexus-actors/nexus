@@ -60,6 +60,7 @@
         <include>
             <directory>packages/nexus-core/src</directory>
             <directory>packages/nexus-runtime-fiber/src</directory>
+            <directory>packages/nexus-runtime/src</directory>
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
