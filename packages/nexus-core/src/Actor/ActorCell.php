@@ -423,54 +423,81 @@ final class ActorCell implements ActorContext
         $depth = 0;
 
         while ($depth < $maxDepth) {
-            $tag = $this->currentBehavior->tag();
+            $resolved = match ($this->currentBehavior->tag()) {
+                BehaviorTag::Setup => $this->resolveSetup(),
+                BehaviorTag::WithTimers => $this->resolveWithTimers(),
+                BehaviorTag::WithStash => $this->resolveWithStash(),
+                BehaviorTag::Supervised => $this->resolveSupervised(),
+                default => null,
+            };
 
-            if ($tag === BehaviorTag::Setup) {
-                $factory = $this->currentBehavior->handler()->get();
-                assert(is_callable($factory));
-
-                /** @var Behavior<T> $resolved */
-                $resolved = $factory($this);
-                $this->currentBehavior = $resolved;
-            } elseif ($tag === BehaviorTag::WithTimers) {
-                $factory = $this->currentBehavior->handler()->get();
-                assert(is_callable($factory));
-
-                $this->timerScheduler = new DefaultTimerScheduler($this->selfRef, $this->runtime);
-
-                /** @var Behavior<T> $resolved */
-                $resolved = $factory($this->timerScheduler);
-                $this->currentBehavior = $resolved;
-            } elseif ($tag === BehaviorTag::WithStash) {
-                $factory = $this->currentBehavior->handler()->get();
-                assert(is_callable($factory));
-
-                /** @var int $capacity */
-                $capacity = $this->currentBehavior->initialState()->get();
-
-                /** @var DefaultStashBuffer<T> $stashBuffer */
-                $stashBuffer = new DefaultStashBuffer($capacity);
-
-                /** @var Behavior<T> $resolved */
-                $resolved = $factory($stashBuffer);
-                $this->currentBehavior = $resolved;
-            } elseif ($tag === BehaviorTag::Supervised) {
-                $innerProvider = $this->currentBehavior->handler()->get();
-                assert(is_callable($innerProvider));
-
-                /** @var SupervisionStrategy $strategy */
-                $strategy = $this->currentBehavior->initialState()->get();
-                $this->behaviorSupervision = $strategy;
-
-                /** @var Behavior<T> $resolved */
-                $resolved = $innerProvider();
-                $this->currentBehavior = $resolved;
-            } else {
+            if ($resolved === null) {
                 break;
             }
 
+            $this->currentBehavior = $resolved;
             $depth++;
         }
+    }
+
+    /**
+     * @return Behavior<T>
+     */
+    private function resolveSetup(): Behavior
+    {
+        $factory = $this->currentBehavior->handler()->get();
+        assert(is_callable($factory));
+
+        /** @var Behavior<T> */
+        return $factory($this);
+    }
+
+    /**
+     * @return Behavior<T>
+     */
+    private function resolveWithTimers(): Behavior
+    {
+        $factory = $this->currentBehavior->handler()->get();
+        assert(is_callable($factory));
+
+        $this->timerScheduler = new DefaultTimerScheduler($this->selfRef, $this->runtime);
+
+        /** @var Behavior<T> */
+        return $factory($this->timerScheduler);
+    }
+
+    /**
+     * @return Behavior<T>
+     */
+    private function resolveWithStash(): Behavior
+    {
+        $factory = $this->currentBehavior->handler()->get();
+        assert(is_callable($factory));
+
+        /** @var int $capacity */
+        $capacity = $this->currentBehavior->initialState()->get();
+
+        /** @var DefaultStashBuffer<T> $stashBuffer */
+        $stashBuffer = new DefaultStashBuffer($capacity);
+
+        /** @var Behavior<T> */
+        return $factory($stashBuffer);
+    }
+
+    /**
+     * @return Behavior<T>
+     */
+    private function resolveSupervised(): Behavior
+    {
+        $innerProvider = $this->currentBehavior->handler()->get();
+        assert(is_callable($innerProvider));
+
+        /** @var SupervisionStrategy $strategy */
+        $strategy = $this->currentBehavior->initialState()->get();
+        $this->behaviorSupervision = $strategy;
+
+        /** @var Behavior<T> */
+        return $innerProvider();
     }
 
     private function handleSystemMessage(SystemMessage $message): void
