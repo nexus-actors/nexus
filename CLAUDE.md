@@ -295,7 +295,7 @@ EventSourcedBehavior::create($persistenceId, $emptyState, $commandHandler, $even
     ->withSnapshotStore($snapshotStore)
     ->withSnapshotStrategy(SnapshotStrategy::everyN(10))
     ->withRetention(RetentionPolicy::snapshotAndEvents(3, deleteEventsTo: true))
-    ->withLockingStrategy(LockingStrategy::optimistic())
+    ->withReplayFilter(ReplayFilterMode::Fail)
     ->toBehavior()
 ```
 
@@ -314,7 +314,7 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 - `DurableEffect::persist($newState)` / `none()` / `stash()` / `stop()` / `reply()`
 - `DurableStateEngine` handles startup recovery (load latest state → ready)
 
-**Locking** — `LockingStrategy::optimistic()` (default, version conflict detection) or `LockingStrategy::pessimistic($lockProvider)` (exclusive lock before command processing).
+**Single-Writer Principle** — Each `ActorSystem` has a unique ULID (`$system->writerId(): Ulid`) stamped on every persisted envelope. `WriterConflictException` is thrown when a store detects a different writer. `ReplayFilter` validates writer consistency during event replay with configurable modes: `Fail` (throw on interleave), `Warn` (log warning), `RepairByDiscardOld` (keep only latest writer's events), `Off` (skip filtering).
 
 ### Clustering
 

@@ -27,14 +27,10 @@ classDiagram
     class DurableStateStore {
         <<interface>>
     }
-    class PessimisticLockProvider {
-        <<interface>>
-    }
 
     DoctrineEventStore ..|> EventStore
     DoctrineSnapshotStore ..|> SnapshotStore
     DoctrineDurableStateStore ..|> DurableStateStore
-    DoctrinePessimisticLockProvider ..|> PessimisticLockProvider
 ```
 
 </details>
@@ -45,10 +41,9 @@ classDiagram
 
 | Class | Description |
 |---|---|
-| `DoctrineEventStore` | `EventStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. |
-| `DoctrineSnapshotStore` | `SnapshotStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). |
-| `DoctrineDurableStateStore` | `DurableStateStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses Doctrine's `#[ORM\Version]` for optimistic locking. |
-| `DoctrinePessimisticLockProvider` | `PessimisticLockProvider` convenience wrapper for Doctrine ORM. Constructor: `EntityManagerInterface`. Delegates to `DbalPessimisticLockProvider` via the EntityManager's connection. |
+| `DoctrineEventStore` | `EventStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. Stores `writer_id` (ULID) per event. |
+| `DoctrineSnapshotStore` | `SnapshotStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Stores `writer_id` (ULID) per snapshot. |
+| `DoctrineDurableStateStore` | `DurableStateStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses Doctrine's `#[ORM\Version]` for optimistic locking. Stores `writer_id` (ULID). |
 
 ## ORM entities
 
@@ -56,9 +51,9 @@ classDiagram
 
 | Class | Description |
 |---|---|
-| `EventEntry` | ORM entity mapped to `nexus_event_journal`. Properties: `persistenceId`, `sequenceNr`, `eventType`, `eventData`, `metadata`, `timestamp`. |
-| `SnapshotEntry` | ORM entity mapped to `nexus_snapshot_store`. Properties: `persistenceId`, `sequenceNr`, `stateType`, `stateData`, `timestamp`. |
-| `DurableStateEntry` | ORM entity mapped to `nexus_durable_state`. Properties: `persistenceId`, `version` (with `#[ORM\Version]`), `stateType`, `stateData`, `timestamp`. |
+| `EventEntry` | ORM entity mapped to `nexus_event_journal`. Properties: `persistenceId`, `sequenceNr`, `eventType`, `eventData`, `metadata`, `writerId`, `timestamp`. |
+| `SnapshotEntry` | ORM entity mapped to `nexus_snapshot_store`. Properties: `persistenceId`, `sequenceNr`, `stateType`, `stateData`, `writerId`, `timestamp`. |
+| `DurableStateEntry` | ORM entity mapped to `nexus_durable_state`. Properties: `persistenceId`, `version` (with `#[ORM\Version]`), `stateType`, `stateData`, `writerId`, `timestamp`. |
 
 ## Usage
 
@@ -88,14 +83,4 @@ use Monadial\Nexus\Serialization\MessageSerializer;
 $eventStore = new DoctrineEventStore($em, $customSerializer);
 $durableStateStore = new DoctrineDurableStateStore($em, $customSerializer);
 
-// Pessimistic locking
-use Monadial\Nexus\Persistence\Doctrine\DoctrinePessimisticLockProvider;
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
-
-$lockProvider = new DoctrinePessimisticLockProvider($em);
-
-$behavior = EventSourcedBehavior::create($persistenceId, $emptyState, $commandHandler, $eventHandler)
-    ->withEventStore($eventStore)
-    ->withLockingStrategy(LockingStrategy::pessimistic($lockProvider))
-    ->toBehavior();
 ```

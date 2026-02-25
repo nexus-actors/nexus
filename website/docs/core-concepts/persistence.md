@@ -262,39 +262,44 @@ Nexus ships with several storage backend implementations:
 All stores implement the same interfaces (`EventStore`, `SnapshotStore`,
 `DurableStateStore`), so you can swap backends without changing actor code.
 
-## Concurrency Control
+## Single-Writer Guarantee
 
-When multiple processes or cluster nodes access the same persistent actor,
-concurrent writes can conflict. Nexus supports two locking strategies:
+Nexus follows Akka's single-writer principle: each `ActorSystem` instance is
+assigned a unique ULID at startup, and every persisted envelope is stamped with
+that writer identity. This makes it possible to detect when two systems
+accidentally write to the same persistence ID.
 
-- **Optimistic** (default) -- no locks acquired. Conflicts are detected at write
-  time via version checks. If another process wrote first, a
-  `ConcurrentModificationException` is thrown. Best for low-conflict workloads.
-- **Pessimistic** -- acquires an exclusive database lock before command
-  processing, re-reads state from the store, then processes and persists within
-  the lock scope. Best for high-conflict workloads where retries are expensive.
+Every `EventEnvelope`, `SnapshotEnvelope`, and `DurableStateEnvelope` carries a
+`writerId` field (a `Symfony\Component\Uid\Ulid`). Stores record this value in a
+`writer_id` column. If a store detects a write from a different writer than
+expected, it throws a `WriterConflictException`.
+
+### Replay Filtering
+
+During recovery, the `ReplayFilter` checks that replayed events come from a
+consistent writer. If events from multiple writers are detected (e.g. due to a
+split-brain or misconfiguration), the filter's mode determines what happens:
+
+| Mode | Behavior |
+|---|---|
+| `ReplayFilterMode::Fail` | Throw a `RecoveryException` on writer interleave |
+| `ReplayFilterMode::Warn` | Log a warning and continue |
+| `ReplayFilterMode::RepairByDiscardOld` | Keep only events from the latest writer |
+| `ReplayFilterMode::Off` | Skip filtering entirely |
 
 ```php
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
-use Monadial\Nexus\Persistence\Dbal\DbalPessimisticLockProvider;
-
-// Default: optimistic (no configuration needed)
-$behavior = EventSourcedBehavior::create(/* ... */)
-    ->withEventStore($eventStore)
-    ->toBehavior();
-
-// Pessimistic: wrap command processing in a database lock
-$lockProvider = new DbalPessimisticLockProvider($connection);
+use Monadial\Nexus\Persistence\Recovery\ReplayFilterMode;
 
 $behavior = EventSourcedBehavior::create(/* ... */)
     ->withEventStore($eventStore)
-    ->withLockingStrategy(LockingStrategy::pessimistic($lockProvider))
+    ->withReplayFilter(ReplayFilterMode::Fail)
     ->toBehavior();
 ```
 
 Both `EventSourcedBehavior` and `DurableStateBehavior` support
-`withLockingStrategy()`. The class-based APIs (`AbstractEventSourcedActor`,
-`AbstractDurableStateActor`) also expose `withLockingStrategy()`.
+`withWriterId()` and `withReplayFilter()`. The class-based APIs
+(`AbstractEventSourcedActor`, `AbstractDurableStateActor`) also expose these
+methods.
 
 ## Choosing Between Event Sourcing and Durable State
 

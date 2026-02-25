@@ -70,30 +70,28 @@ Tools to improve the development and debugging experience:
 - **Message tracing** -- Record and replay message flows for debugging
   complex actor interactions.
 
-## Concurrency control for persistence
+## Single-writer persistence
 
 **Status:** Implemented.
 
-Configurable concurrency control for persistent actors via `LockingStrategy`,
-supporting both optimistic and pessimistic modes per actor:
+Akka-style single-writer guarantee for persistent actors. Each `ActorSystem`
+gets a unique ULID identity stamped on every persisted envelope, enabling
+detection of concurrent writes from different systems:
 
-- **`LockingStrategy`** value object with `optimistic()` and
-  `pessimistic(PessimisticLockProvider)` factories. Configurable per actor via
-  `withLockingStrategy()` on both functional builders and class-based actors.
-- **Optimistic mode** (default) -- zero-overhead pass-through. Event stores use
-  composite primary key `(persistence_id, sequence_nr)` for natural conflict
-  detection. Durable state stores use version checking (`WHERE version = ?` in
-  DBAL, `#[ORM\Version]` in Doctrine). Conflicts throw
-  `ConcurrentModificationException`.
-- **Pessimistic mode** -- acquires an exclusive database lock before command
-  processing, re-reads state from the store (catches writes by other processes),
-  then processes the command and persists within the lock scope. Best for
-  high-conflict workloads where retries are expensive (financial transactions,
-  inventory).
-- **`DbalPessimisticLockProvider`** uses a `nexus_persistence_lock` table with
-  `SELECT ... FOR UPDATE` for row-level locking.
-- **`DoctrinePessimisticLockProvider`** is a convenience wrapper delegating to
-  the DBAL provider via the EntityManager's connection.
+- **Writer identity** -- `ActorSystem::writerId()` returns a `Ulid` assigned at
+  startup. All `EventEnvelope`, `SnapshotEnvelope`, and `DurableStateEnvelope`
+  carry a `writerId` field stored in a `writer_id` column.
+- **`WriterConflictException`** -- thrown when a store detects a write from a
+  different writer. Properties: `persistenceId`, `expectedWriter`, `actualWriter`,
+  `sequenceNr`.
+- **`ReplayFilter`** -- validates writer consistency during event replay with
+  configurable modes: `Fail` (throw on interleave), `Warn` (log warning),
+  `RepairByDiscardOld` (keep only latest writer's events), `Off` (skip).
+  Configurable via `withReplayFilter(ReplayFilterMode)` on behavior builders.
+- **Optimistic version checks** -- Event stores use composite primary key
+  `(persistence_id, sequence_nr)` for natural conflict detection. Durable state
+  stores use version checking (`WHERE version = ?` in DBAL, `#[ORM\Version]` in
+  Doctrine). Conflicts throw `ConcurrentModificationException`.
 - **Injectable serializers** -- All DBAL and Doctrine stores accept a
   `MessageSerializer` constructor parameter (default: `PhpNativeSerializer`),
   allowing custom serialization strategies (JSON, Valinor, etc.).
