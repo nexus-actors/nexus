@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Step;
 
 use Fiber;
-use Monadial\Nexus\Core\Actor\FutureSlot;
+use Monadial\Nexus\Core\Async\FutureSlot;
 use Override;
 use Throwable;
 

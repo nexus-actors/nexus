@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Core\Async\Future;
+use Monadial\Nexus\Core\Async\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use NoDiscard;
 use Override;

@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\FutureRef;
-use Monadial\Nexus\Core\Actor\FutureSlot;
+use Monadial\Nexus\Core\Async\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;

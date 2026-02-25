@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Actor;
+namespace Monadial\Nexus\Core\Async;
 
 use Throwable;
 

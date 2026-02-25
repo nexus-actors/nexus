@@ -9,7 +9,7 @@ use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Core\Actor\Future;
+use Monadial\Nexus\Core\Async\Future;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use NoDiscard;
