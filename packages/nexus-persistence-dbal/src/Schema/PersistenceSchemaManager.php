@@ -29,7 +29,7 @@ final class PersistenceSchemaManager
     {
         $schemaManager = $this->connection->createSchemaManager();
 
-        foreach (['nexus_event_journal', 'nexus_snapshot_store', 'nexus_durable_state', 'nexus_persistence_lock'] as $tableName) {
+        foreach (['nexus_event_journal', 'nexus_snapshot_store', 'nexus_durable_state'] as $tableName) {
             if ($schemaManager->tablesExist([$tableName])) {
                 $schemaManager->dropTable($tableName);
             }
@@ -49,6 +49,7 @@ final class PersistenceSchemaManager
         $events->addColumn('event_data', 'text');
         $events->addColumn('metadata', 'text', ['notnull' => false]);
         $events->addColumn('timestamp', 'datetime_immutable');
+        $events->addColumn('writer_uuid', 'string', ['length' => 36]);
         $events->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id', 'sequence_nr')
@@ -63,6 +64,7 @@ final class PersistenceSchemaManager
         $snapshots->addColumn('state_type', 'string', ['length' => 255]);
         $snapshots->addColumn('state_data', 'text');
         $snapshots->addColumn('timestamp', 'datetime_immutable');
+        $snapshots->addColumn('writer_uuid', 'string', ['length' => 36]);
         $snapshots->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id', 'sequence_nr')
@@ -76,16 +78,8 @@ final class PersistenceSchemaManager
         $durableState->addColumn('state_type', 'string', ['length' => 255]);
         $durableState->addColumn('state_data', 'text');
         $durableState->addColumn('timestamp', 'datetime_immutable');
+        $durableState->addColumn('writer_uuid', 'string', ['length' => 36]);
         $durableState->addPrimaryKeyConstraint(
-            PrimaryKeyConstraint::editor()
-                ->setUnquotedColumnNames('persistence_id')
-                ->create(),
-        );
-
-        // Pessimistic lock
-        $lock = $schema->createTable('nexus_persistence_lock');
-        $lock->addColumn('persistence_id', 'string', ['length' => 255]);
-        $lock->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id')
                 ->create(),

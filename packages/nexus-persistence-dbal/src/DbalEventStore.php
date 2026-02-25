@@ -36,6 +36,7 @@ final class DbalEventStore implements EventStore
                         'persistence_id' => $id->toString(),
                         'sequence_nr' => $envelope->sequenceNr,
                         'timestamp' => $envelope->timestamp->format('Y-m-d H:i:s'),
+                        'writer_uuid' => $envelope->writerUuid,
                     ]);
                 }
             });
@@ -80,6 +81,7 @@ final class DbalEventStore implements EventStore
                 event: $this->serializer->deserialize((string) $row['event_data'], (string) $row['event_type']),
                 eventType: (string) $row['event_type'],
                 timestamp: new DateTimeImmutable((string) $row['timestamp']),
+                writerUuid: (string) $row['writer_uuid'],
                 metadata: $metadata,
             );
         }

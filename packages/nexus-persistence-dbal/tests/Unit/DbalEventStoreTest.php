@@ -146,6 +146,7 @@ final class DbalEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerUuid: 'test-writer',
             metadata: ['source' => 'api', 'user_id' => '123'],
         );
 
@@ -179,6 +180,7 @@ final class DbalEventStoreTest extends TestCase
             event: $event,
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerUuid: 'test-writer',
         );
 
         $this->store->persist($this->id, $envelope);
@@ -214,6 +216,7 @@ final class DbalEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: $eventType,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerUuid: 'test-writer',
         );
     }
 }

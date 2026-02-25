@@ -100,6 +100,7 @@ final class DbalDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerUuid: 'test-writer',
         );
 
         $this->store->upsert($this->id, $envelope);
@@ -145,6 +146,7 @@ final class DbalDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
+            writerUuid: 'test-writer',
         );
     }
 }
