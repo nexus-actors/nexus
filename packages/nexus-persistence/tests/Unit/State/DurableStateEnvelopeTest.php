@@ -30,6 +30,7 @@ final class DurableStateEnvelopeTest extends TestCase
             state: $state,
             stateType: 'CounterState',
             timestamp: $timestamp,
+            writerUuid: 'test-writer',
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
@@ -48,9 +49,25 @@ final class DurableStateEnvelopeTest extends TestCase
             state: new stdClass(),
             stateType: 'CounterState',
             timestamp: new DateTimeImmutable(),
+            writerUuid: 'test-writer',
         );
 
         $reflection = new ReflectionClass($envelope);
         self::assertTrue($reflection->isReadOnly());
+    }
+
+    #[Test]
+    public function constructs_with_writer_uuid(): void
+    {
+        $envelope = new DurableStateEnvelope(
+            persistenceId: PersistenceId::of('counter', 'counter-1'),
+            version: 1,
+            state: new stdClass(),
+            stateType: 'CounterState',
+            timestamp: new DateTimeImmutable(),
+            writerUuid: 'abc-123-uuid',
+        );
+
+        self::assertSame('abc-123-uuid', $envelope->writerUuid);
     }
 }

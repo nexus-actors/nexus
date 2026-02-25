@@ -29,6 +29,7 @@ final class EventEnvelopeTest extends TestCase
             event: $event,
             eventType: 'OrderPlaced',
             timestamp: $timestamp,
+            writerUuid: 'test-writer',
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
@@ -47,6 +48,7 @@ final class EventEnvelopeTest extends TestCase
             event: new stdClass(),
             eventType: 'OrderPlaced',
             timestamp: new DateTimeImmutable(),
+            writerUuid: 'test-writer',
         );
 
         self::assertSame([], $envelope->metadata);
@@ -55,7 +57,7 @@ final class EventEnvelopeTest extends TestCase
     #[Test]
     public function constructsWithMetadata(): void
     {
-        $metadata = ['correlationId' => 'abc-123', 'causationId' => 'def-456'];
+        $metadata = ['causationId' => 'def-456', 'correlationId' => 'abc-123'];
 
         $envelope = new EventEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
@@ -63,6 +65,7 @@ final class EventEnvelopeTest extends TestCase
             event: new stdClass(),
             eventType: 'OrderPlaced',
             timestamp: new DateTimeImmutable(),
+            writerUuid: 'test-writer',
             metadata: $metadata,
         );
 
@@ -78,6 +81,7 @@ final class EventEnvelopeTest extends TestCase
             event: new stdClass(),
             eventType: 'OrderPlaced',
             timestamp: new DateTimeImmutable(),
+            writerUuid: 'test-writer',
             metadata: ['correlationId' => 'abc-123'],
         );
 
@@ -97,6 +101,7 @@ final class EventEnvelopeTest extends TestCase
             event: new stdClass(),
             eventType: 'OrderPlaced',
             timestamp: new DateTimeImmutable(),
+            writerUuid: 'test-writer',
             metadata: ['key' => 'old-value'],
         );
 
@@ -119,6 +124,7 @@ final class EventEnvelopeTest extends TestCase
             event: $event,
             eventType: 'OrderPlaced',
             timestamp: $timestamp,
+            writerUuid: 'test-writer',
         );
 
         $updated = $original->withMetadata(['key' => 'value']);
@@ -128,5 +134,20 @@ final class EventEnvelopeTest extends TestCase
         self::assertSame($event, $updated->event);
         self::assertSame('OrderPlaced', $updated->eventType);
         self::assertSame($timestamp, $updated->timestamp);
+    }
+
+    #[Test]
+    public function constructs_with_writer_uuid(): void
+    {
+        $envelope = new EventEnvelope(
+            persistenceId: PersistenceId::of('order', 'order-1'),
+            sequenceNr: 1,
+            event: new stdClass(),
+            eventType: 'OrderPlaced',
+            timestamp: new DateTimeImmutable(),
+            writerUuid: 'abc-123-uuid',
+        );
+
+        self::assertSame('abc-123-uuid', $envelope->writerUuid);
     }
 }
