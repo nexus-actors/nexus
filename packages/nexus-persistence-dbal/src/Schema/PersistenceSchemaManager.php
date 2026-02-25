@@ -49,7 +49,7 @@ final class PersistenceSchemaManager
         $events->addColumn('event_data', 'text');
         $events->addColumn('metadata', 'text', ['notnull' => false]);
         $events->addColumn('timestamp', 'datetime_immutable');
-        $events->addColumn('writer_uuid', 'string', ['length' => 36]);
+        $events->addColumn('writer_id', 'string', ['length' => 26]);
         $events->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id', 'sequence_nr')
@@ -64,7 +64,7 @@ final class PersistenceSchemaManager
         $snapshots->addColumn('state_type', 'string', ['length' => 255]);
         $snapshots->addColumn('state_data', 'text');
         $snapshots->addColumn('timestamp', 'datetime_immutable');
-        $snapshots->addColumn('writer_uuid', 'string', ['length' => 36]);
+        $snapshots->addColumn('writer_id', 'string', ['length' => 26]);
         $snapshots->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id', 'sequence_nr')
@@ -78,7 +78,7 @@ final class PersistenceSchemaManager
         $durableState->addColumn('state_type', 'string', ['length' => 255]);
         $durableState->addColumn('state_data', 'text');
         $durableState->addColumn('timestamp', 'datetime_immutable');
-        $durableState->addColumn('writer_uuid', 'string', ['length' => 36]);
+        $durableState->addColumn('writer_id', 'string', ['length' => 26]);
         $durableState->addPrimaryKeyConstraint(
             PrimaryKeyConstraint::editor()
                 ->setUnquotedColumnNames('persistence_id')

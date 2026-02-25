@@ -30,7 +30,7 @@ final class DbalSnapshotStore implements SnapshotStore
             'state_data' => $this->serializer->serialize($snapshot->state),
             'state_type' => $snapshot->stateType,
             'timestamp' => $snapshot->timestamp->format('Y-m-d H:i:s'),
-            'writer_uuid' => $snapshot->writerUuid,
+            'writer_id' => $snapshot->writerId,
         ]);
     }
 
@@ -57,7 +57,7 @@ final class DbalSnapshotStore implements SnapshotStore
             state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
             stateType: (string) $row['state_type'],
             timestamp: new DateTimeImmutable((string) $row['timestamp']),
-            writerUuid: (string) $row['writer_uuid'],
+            writerId: (string) $row['writer_id'],
         );
     }
 

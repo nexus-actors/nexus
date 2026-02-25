@@ -119,7 +119,7 @@ final class ReplayFilterTest extends TestCase
         $this->persistenceId = PersistenceId::of('Test', 'test-1');
     }
 
-    private function event(int $seqNr, string $writerUuid): EventEnvelope
+    private function event(int $seqNr, string $writerId): EventEnvelope
     {
         return new EventEnvelope(
             persistenceId: $this->persistenceId,
@@ -127,17 +127,17 @@ final class ReplayFilterTest extends TestCase
             event: new stdClass(),
             eventType: 'stdClass',
             timestamp: new DateTimeImmutable(),
-            writerUuid: $writerUuid,
+            writerId: $writerId,
         );
     }
 
     /** @return list<EventEnvelope> */
-    private function eventsFromWriter(string $writerUuid, int $count): array
+    private function eventsFromWriter(string $writerId, int $count): array
     {
         $events = [];
 
         for ($i = 1; $i <= $count; $i++) {
-            $events[] = $this->event($i, $writerUuid);
+            $events[] = $this->event($i, $writerId);
         }
 
         return $events;

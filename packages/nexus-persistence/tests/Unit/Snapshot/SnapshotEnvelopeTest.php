@@ -30,7 +30,7 @@ final class SnapshotEnvelopeTest extends TestCase
             state: $state,
             stateType: 'OrderState',
             timestamp: $timestamp,
-            writerUuid: 'test-writer',
+            writerId: 'test-writer',
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
@@ -49,7 +49,7 @@ final class SnapshotEnvelopeTest extends TestCase
             state: new stdClass(),
             stateType: 'OrderState',
             timestamp: new DateTimeImmutable(),
-            writerUuid: 'test-writer',
+            writerId: 'test-writer',
         );
 
         $reflection = new ReflectionClass($envelope);
@@ -57,7 +57,7 @@ final class SnapshotEnvelopeTest extends TestCase
     }
 
     #[Test]
-    public function constructs_with_writer_uuid(): void
+    public function constructs_with_writer_id(): void
     {
         $envelope = new SnapshotEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
@@ -65,9 +65,9 @@ final class SnapshotEnvelopeTest extends TestCase
             state: new stdClass(),
             stateType: 'OrderState',
             timestamp: new DateTimeImmutable(),
-            writerUuid: 'abc-123-uuid',
+            writerId: 'abc-123-uuid',
         );
 
-        self::assertSame('abc-123-uuid', $envelope->writerUuid);
+        self::assertSame('abc-123-uuid', $envelope->writerId);
     }
 }

@@ -64,22 +64,22 @@ final readonly class ReplayFilter
 
         foreach ($events as $event) {
             if ($currentWriter === null) {
-                $currentWriter = $event->writerUuid;
+                $currentWriter = $event->writerId;
             }
 
-            if ($event->writerUuid !== $currentWriter) {
+            if ($event->writerId !== $currentWriter) {
                 match ($this->mode) {
                     ReplayFilterMode::Fail => throw new WriterConflictException(
                         $persistenceId,
                         $currentWriter,
-                        $event->writerUuid,
+                        $event->writerId,
                         $event->sequenceNr,
                     ),
                     ReplayFilterMode::Warn => $logger->warning(
                         'Writer conflict detected for {persistenceId} at sequence {sequenceNr}: '
                         . 'expected writer {expectedWriter}, got {actualWriter}',
                         [
-                            'actualWriter' => $event->writerUuid,
+                            'actualWriter' => $event->writerId,
                             'expectedWriter' => $currentWriter,
                             'persistenceId' => $persistenceId->toString(),
                             'sequenceNr' => $event->sequenceNr,
@@ -89,7 +89,7 @@ final readonly class ReplayFilter
                     ReplayFilterMode::Off => null,
                 };
 
-                $currentWriter = $event->writerUuid;
+                $currentWriter = $event->writerId;
             }
 
             $allEvents[] = $event;
@@ -100,7 +100,7 @@ final readonly class ReplayFilter
 
             return array_values(array_filter(
                 $allEvents,
-                static fn(EventEnvelope $e): bool => $e->writerUuid === $latestWriter,
+                static fn(EventEnvelope $e): bool => $e->writerId === $latestWriter,
             ));
         }
 
