@@ -22,6 +22,7 @@ use Monadial\Nexus\Core\Exception\MailboxOverflowException;
 use Monadial\Nexus\Core\Exception\MaxRetriesExceededException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NexusLogicException;
+use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,6 +41,7 @@ use RuntimeException;
 #[CoversClass(InvalidActorStateTransition::class)]
 #[CoversClass(InvalidBehaviorException::class)]
 #[CoversClass(InvalidMailboxConfigException::class)]
+#[CoversClass(NoSenderException::class)]
 final class ExceptionHierarchyTest extends TestCase
 {
     // ── Checked exception hierarchy ──
@@ -190,6 +192,15 @@ final class ExceptionHierarchyTest extends TestCase
     {
         $exception = new InvalidMailboxConfigException('bad config');
         self::assertInstanceOf(NexusLogicException::class, $exception);
+    }
+
+    #[Test]
+    public function noSenderExceptionExtendsActorException(): void
+    {
+        $exception = new NoSenderException('Cannot reply: no sender on current message');
+
+        self::assertInstanceOf(ActorException::class, $exception);
+        self::assertStringContainsString('no sender', $exception->getMessage());
     }
 
     // ── Previous exception chaining ──
