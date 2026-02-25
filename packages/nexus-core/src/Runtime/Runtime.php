@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Runtime;
 
 use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Core\Actor\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
@@ -15,6 +16,12 @@ interface Runtime
     public function name(): string;
 
     public function createMailbox(MailboxConfig $config): Mailbox;
+
+    /**
+     * Create a lightweight value slot for the ask pattern.
+     * The slot auto-fails with AskTimeoutException after the given timeout.
+     */
+    public function createFutureSlot(Duration $timeout): FutureSlot;
 
     public function spawn(callable $actorLoop): string;
 
