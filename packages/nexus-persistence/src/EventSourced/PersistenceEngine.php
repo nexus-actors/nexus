@@ -11,7 +11,6 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
@@ -48,7 +47,6 @@ final class PersistenceEngine
      * @param SnapshotStore|null $snapshotStore Optional store for snapshots
      * @param SnapshotStrategy|null $snapshotStrategy When to take snapshots (default: never)
      * @param RetentionPolicy|null $retentionPolicy Event/snapshot retention (default: keep all)
-     * @param LockingStrategy|null $lockingStrategy Concurrency control (default: optimistic)
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -60,11 +58,9 @@ final class PersistenceEngine
         ?SnapshotStore $snapshotStore = null,
         ?SnapshotStrategy $snapshotStrategy = null,
         ?RetentionPolicy $retentionPolicy = null,
-        ?LockingStrategy $lockingStrategy = null,
     ): Behavior {
         $strategy = $snapshotStrategy ?? SnapshotStrategy::never();
         $retention = $retentionPolicy ?? RetentionPolicy::none();
-        $locking = $lockingStrategy ?? LockingStrategy::optimistic();
 
         /** @psalm-suppress UnusedClosureParam, InvalidArgument */
         return Behavior::setup(static function (ActorContext $_ctx) use (
@@ -76,7 +72,6 @@ final class PersistenceEngine
             $snapshotStore,
             $strategy,
             $retention,
-            $locking,
         ): Behavior {
             // === Recovery Phase ===
             $state = $emptyState;
@@ -114,62 +109,33 @@ final class PersistenceEngine
                     $snapshotStore,
                     $strategy,
                     $retention,
-                    $locking,
                 ): BehaviorWithState {
                     /** @var array{state: object, sequenceNr: int} $data */
+                    $state = $data['state'];
+                    $sequenceNr = $data['sequenceNr'];
 
                     /** @psalm-suppress InvalidArgument */
-                    return $locking->withLock($persistenceId, static function () use (
-                        $data,
-                        $ctx,
-                        $msg,
-                        $persistenceId,
-                        $commandHandler,
-                        $eventHandler,
-                        $eventStore,
-                        $snapshotStore,
-                        $strategy,
-                        $retention,
-                        $locking,
-                    ): BehaviorWithState {
-                        /** @var array{state: object, sequenceNr: int} $data */
-                        $state = $data['state'];
-                        $sequenceNr = $data['sequenceNr'];
+                    $effect = $commandHandler($state, $ctx, $msg);
 
-                        // Pessimistic: replay events since last known position
-                        if ($locking->isPessimistic()) {
-                            $newEvents = $eventStore->load($persistenceId, $sequenceNr + 1);
-
-                            foreach ($newEvents as $envelope) {
-                                /** @psalm-suppress InvalidArgument */
-                                $state = $eventHandler($state, $envelope->event);
-                                $sequenceNr = $envelope->sequenceNr;
-                            }
-                        }
-
-                        /** @psalm-suppress InvalidArgument */
-                        $effect = $commandHandler($state, $ctx, $msg);
-
-                        return match ($effect->type) {
-                            /** @psalm-suppress MixedArgument State loses type through closure capture */
-                            EffectType::Persist => self::handlePersist(
-                                $effect,
-                                $state,
-                                $sequenceNr,
-                                $persistenceId,
-                                $eventHandler,
-                                $eventStore,
-                                $snapshotStore,
-                                $strategy,
-                                $retention,
-                            ),
-                            EffectType::None => BehaviorWithState::same(),
-                            EffectType::Unhandled => BehaviorWithState::same(),
-                            EffectType::Stash => self::handleStash($ctx),
-                            EffectType::Stop => BehaviorWithState::stopped(),
-                            EffectType::Reply => self::handleReply($effect),
-                        };
-                    });
+                    return match ($effect->type) {
+                        /** @psalm-suppress MixedArgument State loses type through closure capture */
+                        EffectType::Persist => self::handlePersist(
+                            $effect,
+                            $state,
+                            $sequenceNr,
+                            $persistenceId,
+                            $eventHandler,
+                            $eventStore,
+                            $snapshotStore,
+                            $strategy,
+                            $retention,
+                        ),
+                        EffectType::None => BehaviorWithState::same(),
+                        EffectType::Unhandled => BehaviorWithState::same(),
+                        EffectType::Stash => self::handleStash($ctx),
+                        EffectType::Stop => BehaviorWithState::stopped(),
+                        EffectType::Reply => self::handleReply($effect),
+                    };
                 },
             );
         });

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
 
-use Closure;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
@@ -22,8 +21,6 @@ use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\EventSourced\PersistenceEngine;
 use Monadial\Nexus\Persistence\EventSourced\RetentionPolicy;
 use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
-use Monadial\Nexus\Persistence\Locking\LockingStrategy;
-use Monadial\Nexus\Persistence\Locking\PessimisticLockProvider;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\InMemorySnapshotStore;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
@@ -1058,113 +1055,6 @@ final class PersistenceEngineTest extends TestCase
         // Should recover from snapshot (seqNr=2: ['apple','banana']) + event 3 ('cherry')
         self::assertNotNull($recoveredState);
         self::assertSame(['apple', 'banana', 'cherry'], $recoveredState->items);
-    }
-
-    // ========================================================================
-    // Pessimistic locking tests
-    // ========================================================================
-
-    #[Test]
-    public function pessimistic_locking_calls_provider_withLock(): void
-    {
-        $eventStore = new InMemoryEventStore();
-        $lockCalled = false;
-
-        $provider = $this->createMock(PessimisticLockProvider::class);
-        $provider->method('withLock')
-            ->willReturnCallback(static function (PersistenceId $id, Closure $cb) use (&$lockCalled): mixed {
-                $lockCalled = true;
-
-                return $cb();
-            });
-
-        $behavior = PersistenceEngine::create(
-            $this->persistenceId,
-            new ShoppingCart(),
-            static function (object $state, ActorContext $ctx, object $msg): Effect {
-                if ($msg instanceof AddItem) {
-                    return Effect::persist(new ItemAdded($msg->item));
-                }
-
-                return Effect::none();
-            },
-            static function (object $state, object $event): object {
-                if ($event instanceof ItemAdded) {
-                    return new ShoppingCart([...$state->items, $event->item]);
-                }
-
-                return $state;
-            },
-            $eventStore,
-            lockingStrategy: LockingStrategy::pessimistic($provider),
-        );
-
-        $cell = $this->createCell($behavior);
-        $cell->start();
-
-        $cell->processMessage($this->envelope(new AddItem('apple')));
-
-        self::assertTrue($lockCalled);
-
-        $events = iterator_to_array($eventStore->load($this->persistenceId));
-        self::assertCount(1, $events);
-    }
-
-    #[Test]
-    public function pessimistic_locking_refreshes_state_from_store(): void
-    {
-        $eventStore = new InMemoryEventStore();
-
-        $provider = $this->createMock(PessimisticLockProvider::class);
-        $provider->method('withLock')
-            ->willReturnCallback(static fn(PersistenceId $id, Closure $cb): mixed => $cb());
-
-        $commandStates = [];
-
-        $behavior = PersistenceEngine::create(
-            $this->persistenceId,
-            new ShoppingCart(),
-            static function (object $state, ActorContext $ctx, object $msg) use (&$commandStates): Effect {
-                $commandStates[] = $state;
-
-                if ($msg instanceof AddItem) {
-                    return Effect::persist(new ItemAdded($msg->item));
-                }
-
-                return Effect::none();
-            },
-            static function (object $state, object $event): object {
-                if ($event instanceof ItemAdded) {
-                    return new ShoppingCart([...$state->items, $event->item]);
-                }
-
-                return $state;
-            },
-            $eventStore,
-            lockingStrategy: LockingStrategy::pessimistic($provider),
-        );
-
-        $cell = $this->createCell($behavior);
-        $cell->start();
-
-        // Process first message normally
-        $cell->processMessage($this->envelope(new AddItem('apple')));
-
-        // Simulate another process writing to the event store directly
-        $eventStore->persist($this->persistenceId, new EventEnvelope(
-            persistenceId: $this->persistenceId,
-            sequenceNr: 2,
-            event: new ItemAdded('banana-from-other-process'),
-            eventType: ItemAdded::class,
-            timestamp: new DateTimeImmutable(),
-        ));
-
-        // Next command should see the refreshed state (including banana)
-        $cell->processMessage($this->envelope(new DoNothing()));
-
-        // The command handler should have seen the banana from the other process
-        self::assertCount(2, $commandStates);
-        self::assertContains('banana-from-other-process', $commandStates[1]->items);
     }
 
     protected function setUp(): void
