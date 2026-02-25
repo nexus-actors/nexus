@@ -5,6 +5,8 @@ title: Runtime Overview
 
 # Runtime Overview
 
+Start here for setup: [Bootstrap Runtime](./bootstrap.md).
+
 The `Runtime` interface is the abstraction that decouples actor code from the
 underlying concurrency mechanism. All scheduling, mailbox creation, and
 fiber/coroutine management flow through this single interface, making actor
@@ -13,7 +15,7 @@ behaviors completely portable between runtimes.
 ## The Runtime interface
 
 ```php
-namespace Monadial\Nexus\Core\Runtime;
+namespace Monadial\Nexus\Runtime\Runtime;
 
 interface Runtime
 {

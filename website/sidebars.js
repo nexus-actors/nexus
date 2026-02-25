@@ -16,6 +16,7 @@ const sidebars = {
       type: 'category',
       label: 'Core Concepts',
       items: [
+        'core-concepts/nexus-thesis',
         'core-concepts/actors',
         'core-concepts/behaviors',
         'core-concepts/props',
@@ -31,6 +32,8 @@ const sidebars = {
       label: 'Runtimes',
       items: [
         'runtimes/overview',
+        'runtimes/bootstrap',
+        'runtimes/runtime-standalone',
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',
@@ -50,6 +53,7 @@ const sidebars = {
       label: 'Packages',
       items: [
         'packages/core',
+        'packages/runtime',
         'packages/runtime-fiber',
         'packages/runtime-swoole',
         'packages/runtime-step',
