@@ -393,8 +393,8 @@ function Thesis() {
           </div>
         </div>
         <div className={styles.thesisCtaWrap}>
-          <Link className={styles.ctaGhost} to="/docs/core-concepts/nexus-thesis">
-            Read the full thesis
+          <Link className={styles.ctaGhost} to="/docs/getting-started/concepts">
+            Read the core concepts
           </Link>
         </div>
       </div>
