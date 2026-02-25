@@ -16,7 +16,7 @@ Requires the Swoole PHP extension.
 
 ### SwooleRuntime
 
-Implements `Monadial\Nexus\Core\Runtime\Runtime`.
+Implements `Monadial\Nexus\Runtime\Runtime\Runtime`.
 
 The production runtime. Wraps Swoole's `Co\run()` block and uses
 `Swoole\Coroutine::create()` for spawning actors. Calls made before `run()`

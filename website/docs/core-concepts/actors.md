@@ -282,7 +282,7 @@ $behavior = Behavior::receive(
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 
 $system = ActorSystem::create(
     name: 'my-app',

@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
-use Monadial\Nexus\Core\Async\Future;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use NoDiscard;
 use Override;
 

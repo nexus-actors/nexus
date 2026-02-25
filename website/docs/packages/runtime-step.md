@@ -16,7 +16,7 @@ guaranteed ordering.
 
 ### StepRuntime
 
-Implements `Monadial\Nexus\Core\Runtime\Runtime`.
+Implements `Monadial\Nexus\Runtime\Runtime\Runtime`.
 
 The testing runtime. Uses PHP Fibers internally but replaces the automatic tick
 loop with manual control. Each `step()` call processes exactly one message.

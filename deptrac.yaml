@@ -12,6 +12,11 @@ deptrac:
         - type: directory
           value: packages/nexus-core/src/.*
 
+    - name: Runtime
+      collectors:
+        - type: directory
+          value: packages/nexus-runtime/src/.*
+
     - name: App
       collectors:
         - type: directory
@@ -68,23 +73,31 @@ deptrac:
           value: packages/nexus-persistence-doctrine/src/.*
 
   ruleset:
-    Core: ~
+    Core:
+      - Runtime
+    Runtime:
+      - Core
     App:
       - Core
+      - Runtime
     Serialization:
       - Core
     RuntimeFiber:
       - Core
+      - Runtime
     RuntimeSwoole:
       - Core
+      - Runtime
     RuntimeStep:
       - Core
+      - Runtime
     Psalm:
       - Core
       - Cluster
       - Serialization
     Cluster:
       - Core
+      - Runtime
     ClusterSwoole:
       - Cluster
       - Core

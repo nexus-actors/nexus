@@ -26,6 +26,7 @@ jobs:
         package:
           - { local: 'nexus-core',                 remote: 'core' }
           - { local: 'nexus-serialization',        remote: 'serialization' }
+          - { local: 'nexus-runtime',              remote: 'runtime' }
           - { local: 'nexus-runtime-fiber',        remote: 'runtime-fiber' }
           - { local: 'nexus-runtime-swoole',       remote: 'runtime-swoole' }
           - { local: 'nexus-runtime-step',         remote: 'runtime-step' }

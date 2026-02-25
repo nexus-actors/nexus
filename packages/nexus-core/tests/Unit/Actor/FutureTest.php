@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
-use Monadial\Nexus\Core\Async\Future;
-use Monadial\Nexus\Core\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

@@ -2,20 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Runtime\Step;
+namespace Monadial\Nexus\Runtime\Tests\Support;
 
-use Fiber;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Override;
+use RuntimeException;
 use Throwable;
 
-/**
- * Deterministic FutureSlot for StepRuntime.
- *
- * In Step, all processing is driven by explicit step()/drain() calls.
- * The slot suspends the fiber on await() and resumes when resolved.
- */
-final class StepFutureSlot implements FutureSlot
+final class TestFutureSlot implements FutureSlot
 {
     private ?object $result = null;
     private ?Throwable $failure = null;
@@ -52,15 +46,13 @@ final class StepFutureSlot implements FutureSlot
     #[Override]
     public function await(): object
     {
-        while (!$this->resolved) {
-            Fiber::suspend('future_wait');
-        }
-
         if ($this->failure !== null) {
             throw $this->failure;
         }
 
-        assert($this->result !== null);
+        if ($this->result === null) {
+            throw new RuntimeException('TestFutureSlot: await() called before resolve()');
+        }
 
         return $this->result;
     }

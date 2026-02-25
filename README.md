@@ -108,6 +108,7 @@ composer require nexus-actors/persistence-doctrine
 | Package | Description |
 |---|---|
 | [`nexus-actors/core`](packages/nexus-core) | Behaviors, actors, supervision, mailboxes, and the core API |
+| [`nexus-actors/runtime`](packages/nexus-runtime) | Shared runtime abstractions and async primitives (`Future`, `FutureSlot`, `Runtime`) |
 | [`nexus-actors/runtime-fiber`](packages/nexus-runtime-fiber) | Fiber runtime -- actors as PHP fibers with cooperative scheduling |
 | [`nexus-actors/runtime-swoole`](packages/nexus-runtime-swoole) | Swoole runtime -- actors as Swoole coroutines with native channels |
 | [`nexus-actors/cluster`](packages/nexus-cluster) | Pure PHP scaling abstractions -- transport, directory, serializer interfaces |
@@ -118,11 +119,14 @@ composer require nexus-actors/persistence-doctrine
 | [`nexus-actors/serialization`](packages/nexus-serialization) | Valinor-based message serialization with type registry |
 | [`nexus-actors/app`](packages/nexus-app) | Application layer -- PSR-11 container integration for actor systems |
 | [`nexus-actors/psalm`](packages/nexus-psalm) | Psalm plugin for generic type inference on actors and behaviors |
-| [`nexus-actors/nexus`](packages/nexus) | Meta-package: core + Fiber runtime + serialization |
+| [`nexus-actors/nexus`](packages/nexus) | Meta-package: core + runtime + Fiber runtime + serialization |
 
 ## Documentation
 
 Full documentation is available at [nexus-actors.github.io/nexus](https://nexus-actors.github.io/nexus/).
+
+Start with the Nexus thesis for scope and tradeoffs:
+- [When to use Nexus, when not to, and why](https://nexus-actors.github.io/nexus/docs/core-concepts/nexus-thesis)
 
 ## Requirements
 

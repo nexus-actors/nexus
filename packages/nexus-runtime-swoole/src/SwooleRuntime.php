@@ -6,11 +6,11 @@ namespace Monadial\Nexus\Runtime\Swoole;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Async\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 use Swoole\Coroutine;
 use Swoole\Timer;

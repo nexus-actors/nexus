@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 
 /** @psalm-api */

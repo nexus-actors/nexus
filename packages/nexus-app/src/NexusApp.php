@@ -7,7 +7,7 @@ namespace Monadial\Nexus\App;
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Psr\Log\LoggerInterface;
 
 /**
