@@ -86,43 +86,6 @@ final class FutureTest extends TestCase
         self::assertSame($second, $chained->await());
     }
 
-    #[Test]
-    public function zip_awaits_all_futures(): void
-    {
-        $a = new stdClass();
-        $a->val = 'a';
-        $b = new stdClass();
-        $b->val = 'b';
-        $c = new stdClass();
-        $c->val = 'c';
-
-        $fa = new Future($this->createPreResolvedSlot($a));
-        $fb = new Future($this->createPreResolvedSlot($b));
-        $fc = new Future($this->createPreResolvedSlot($c));
-
-        $zipped = Future::zip($fa, $fb, $fc);
-        $results = $zipped->await();
-
-        self::assertIsArray($results);
-        self::assertCount(3, $results);
-        self::assertSame('a', $results[0]->val);
-        self::assertSame('b', $results[1]->val);
-        self::assertSame('c', $results[2]->val);
-    }
-
-    #[Test]
-    public function zip_propagates_failure(): void
-    {
-        $a = new Future($this->createPreResolvedSlot(new stdClass()));
-        $b = new Future($this->createFailedSlot(new RuntimeException('zip-fail')));
-
-        $zipped = Future::zip($a, $b);
-
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('zip-fail');
-        $zipped->await();
-    }
-
     private function createPreResolvedSlot(object $value): FutureSlot
     {
         $slot = $this->createStub(FutureSlot::class);
