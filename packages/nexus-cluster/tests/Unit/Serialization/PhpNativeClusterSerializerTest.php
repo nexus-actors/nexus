@@ -53,7 +53,7 @@ final class PhpNativeClusterSerializerTest extends TestCase
             new TestClusterMessage('x', 1),
             ActorPath::fromString('/sender'),
             ActorPath::fromString('/target'),
-            ['trace-id' => 'abc-123', 'priority' => 'high'],
+            metadata: ['trace-id' => 'abc-123', 'priority' => 'high'],
         );
 
         $restored = $this->serializer->deserialize($this->serializer->serialize($envelope));

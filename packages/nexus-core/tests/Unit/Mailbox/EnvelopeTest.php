@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Tests\Unit\Mailbox;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -83,13 +84,47 @@ final class EnvelopeTest extends TestCase
     }
 
     #[Test]
+    public function senderRefIsPreservedThroughWithMetadata(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $envelope = new Envelope(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'), $ref);
+        $updated = $envelope->withMetadata(['key' => 'value']);
+
+        self::assertSame($ref, $updated->senderRef);
+    }
+
+    #[Test]
+    public function senderRefIsPreservedThroughWithSender(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $envelope = new Envelope(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'), $ref);
+        $updated = $envelope->withSender(ActorPath::fromString('/new-sender'));
+
+        self::assertSame($ref, $updated->senderRef);
+    }
+
+    #[Test]
+    public function withSenderRefReturnsNewInstanceWithRef(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $envelope = Envelope::of(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'));
+
+        self::assertNull($envelope->senderRef);
+
+        $updated = $envelope->withSenderRef($ref);
+
+        self::assertNotSame($envelope, $updated);
+        self::assertSame($ref, $updated->senderRef);
+    }
+
+    #[Test]
     public function constructorAcceptsMetadata(): void
     {
         $message = new stdClass();
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
 
-        $envelope = new Envelope($message, $sender, $target, ['request-id' => 'req-456']);
+        $envelope = new Envelope($message, $sender, $target, metadata: ['request-id' => 'req-456']);
 
         self::assertSame($message, $envelope->message);
         self::assertTrue($envelope->sender->equals($sender));

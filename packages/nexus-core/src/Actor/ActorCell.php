@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
 use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Core\Exception\NexusException;
+use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
@@ -373,6 +374,11 @@ final class ActorCell implements ActorContext
             return $none;
         }
 
+        // If the envelope carries a direct ref (from ask()), use it
+        if ($this->currentEnvelope->senderRef !== null) {
+            return Option::some($this->currentEnvelope->senderRef);
+        }
+
         $senderPath = $this->currentEnvelope->sender;
 
         // Root path means no sender
@@ -383,16 +389,27 @@ final class ActorCell implements ActorContext
             return $none;
         }
 
-        // Create a lightweight ref for the sender path
-        // In a full system this would look up the actual ref; for now we create a ref
+        // Path-based reconstruction for cluster/remote senders
         $senderRef = new LocalActorRef(
             $senderPath,
-            $this->mailbox, // placeholder - in full system would resolve actual mailbox
+            $this->mailbox, // placeholder — in full system would resolve actual mailbox
             static fn(): bool => true,
             $this->runtime,
         );
 
         return Option::some($senderRef);
+    }
+
+    #[Override]
+    public function reply(object $message): void
+    {
+        $sender = $this->sender();
+
+        if ($sender->isNone()) {
+            throw new NoSenderException('Cannot reply: no sender on current message');
+        }
+
+        $sender->get()->tell($message);
     }
 
     /** @param Closure(TaskContext): void $task */
