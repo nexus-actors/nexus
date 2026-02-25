@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Core\Async\Future;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use NoDiscard;

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
 
-use Monadial\Nexus\Core\Actor\FutureSlot;
+use Monadial\Nexus\Core\Async\FutureSlot;
 use Override;
 use Swoole\Coroutine\Channel;
 use Throwable;

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Actor;
+namespace Monadial\Nexus\Core\Async;
 
 use Closure;
 
 /**
  * @psalm-api
  *
- * A handle to a pending ask() result.
+ * A handle to a pending async result.
  *
  * Asks are eager — the request is sent at ask() call time.
  * await() suspends the current fiber until the reply arrives or the timeout fires.
