@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(DurableStateEnvelope::class)]
 final class DurableStateEnvelopeTest extends TestCase
@@ -30,7 +31,7 @@ final class DurableStateEnvelopeTest extends TestCase
             state: $state,
             stateType: 'CounterState',
             timestamp: $timestamp,
-            writerId: 'test-writer',
+            writerId: new Ulid(),
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
@@ -49,7 +50,7 @@ final class DurableStateEnvelopeTest extends TestCase
             state: new stdClass(),
             stateType: 'CounterState',
             timestamp: new DateTimeImmutable(),
-            writerId: 'test-writer',
+            writerId: new Ulid(),
         );
 
         $reflection = new ReflectionClass($envelope);
@@ -59,15 +60,17 @@ final class DurableStateEnvelopeTest extends TestCase
     #[Test]
     public function constructs_with_writer_id(): void
     {
+        $writerId = new Ulid();
+
         $envelope = new DurableStateEnvelope(
             persistenceId: PersistenceId::of('counter', 'counter-1'),
             version: 1,
             state: new stdClass(),
             stateType: 'CounterState',
             timestamp: new DateTimeImmutable(),
-            writerId: 'abc-123-uuid',
+            writerId: $writerId,
         );
 
-        self::assertSame('abc-123-uuid', $envelope->writerId);
+        self::assertSame($writerId, $envelope->writerId);
     }
 }

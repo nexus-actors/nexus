@@ -13,6 +13,7 @@ use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DbalDurableStateStore implements DurableStateStore
@@ -43,7 +44,7 @@ final class DbalDurableStateStore implements DurableStateStore
             state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
             stateType: (string) $row['state_type'],
             timestamp: new DateTimeImmutable((string) $row['timestamp']),
-            writerId: (string) $row['writer_id'],
+            writerId: Ulid::fromString((string) $row['writer_id']),
         );
     }
 
@@ -67,7 +68,7 @@ final class DbalDurableStateStore implements DurableStateStore
             ->setParameter('state_type', $state->stateType)
             ->setParameter('state_data', $this->serializer->serialize($state->state))
             ->setParameter('timestamp', $state->timestamp->format('Y-m-d H:i:s'))
-            ->setParameter('writer_id', $state->writerId)
+            ->setParameter('writer_id', (string) $state->writerId)
             ->executeStatement();
 
         if ($affected === 0) {
@@ -94,7 +95,7 @@ final class DbalDurableStateStore implements DurableStateStore
                 'state_type' => $state->stateType,
                 'timestamp' => $state->timestamp->format('Y-m-d H:i:s'),
                 'version' => $state->version,
-                'writer_id' => $state->writerId,
+                'writer_id' => (string) $state->writerId,
             ]);
         }
     }

@@ -14,17 +14,20 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(ReplayFilter::class)]
 final class ReplayFilterTest extends TestCase
 {
     private PersistenceId $persistenceId;
+    private Ulid $writerA;
+    private Ulid $writerB;
 
     #[Test]
     public function fail_mode_passes_single_writer_events(): void
     {
         $filter = ReplayFilter::fail();
-        $events = $this->eventsFromWriter('writer-a', 3);
+        $events = $this->eventsFromWriter($this->writerA, 3);
 
         $result = $filter->filter($this->persistenceId, $events, new NullLogger());
 
@@ -36,9 +39,9 @@ final class ReplayFilterTest extends TestCase
     {
         $filter = ReplayFilter::fail();
         $events = [
-            $this->event(1, 'writer-a'),
-            $this->event(2, 'writer-a'),
-            $this->event(3, 'writer-b'),
+            $this->event(1, $this->writerA),
+            $this->event(2, $this->writerA),
+            $this->event(3, $this->writerB),
         ];
 
         $this->expectException(WriterConflictException::class);
@@ -51,9 +54,9 @@ final class ReplayFilterTest extends TestCase
     {
         $filter = ReplayFilter::warn();
         $events = [
-            $this->event(1, 'writer-a'),
-            $this->event(2, 'writer-b'),
-            $this->event(3, 'writer-a'),
+            $this->event(1, $this->writerA),
+            $this->event(2, $this->writerB),
+            $this->event(3, $this->writerA),
         ];
 
         $result = $filter->filter($this->persistenceId, $events, new NullLogger());
@@ -66,10 +69,10 @@ final class ReplayFilterTest extends TestCase
     {
         $filter = ReplayFilter::repairByDiscardOld();
         $events = [
-            $this->event(1, 'writer-a'),
-            $this->event(2, 'writer-a'),
-            $this->event(3, 'writer-b'),
-            $this->event(4, 'writer-b'),
+            $this->event(1, $this->writerA),
+            $this->event(2, $this->writerA),
+            $this->event(3, $this->writerB),
+            $this->event(4, $this->writerB),
         ];
 
         $result = $filter->filter($this->persistenceId, $events, new NullLogger());
@@ -84,8 +87,8 @@ final class ReplayFilterTest extends TestCase
     {
         $filter = ReplayFilter::off();
         $events = [
-            $this->event(1, 'writer-a'),
-            $this->event(2, 'writer-b'),
+            $this->event(1, $this->writerA),
+            $this->event(2, $this->writerB),
         ];
 
         $result = $filter->filter($this->persistenceId, $events, new NullLogger());
@@ -107,7 +110,7 @@ final class ReplayFilterTest extends TestCase
     public function single_event_always_passes(): void
     {
         $filter = ReplayFilter::fail();
-        $events = [$this->event(1, 'writer-a')];
+        $events = [$this->event(1, $this->writerA)];
 
         $result = $filter->filter($this->persistenceId, $events, new NullLogger());
 
@@ -117,9 +120,11 @@ final class ReplayFilterTest extends TestCase
     protected function setUp(): void
     {
         $this->persistenceId = PersistenceId::of('Test', 'test-1');
+        $this->writerA = new Ulid();
+        $this->writerB = new Ulid();
     }
 
-    private function event(int $seqNr, string $writerId): EventEnvelope
+    private function event(int $seqNr, Ulid $writerId): EventEnvelope
     {
         return new EventEnvelope(
             persistenceId: $this->persistenceId,
@@ -132,7 +137,7 @@ final class ReplayFilterTest extends TestCase
     }
 
     /** @return list<EventEnvelope> */
-    private function eventsFromWriter(string $writerId, int $count): array
+    private function eventsFromWriter(Ulid $writerId, int $count): array
     {
         $events = [];
 

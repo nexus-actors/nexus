@@ -12,6 +12,7 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DbalSnapshotStore implements SnapshotStore
@@ -30,7 +31,7 @@ final class DbalSnapshotStore implements SnapshotStore
             'state_data' => $this->serializer->serialize($snapshot->state),
             'state_type' => $snapshot->stateType,
             'timestamp' => $snapshot->timestamp->format('Y-m-d H:i:s'),
-            'writer_id' => $snapshot->writerId,
+            'writer_id' => (string) $snapshot->writerId,
         ]);
     }
 
@@ -57,7 +58,7 @@ final class DbalSnapshotStore implements SnapshotStore
             state: $this->serializer->deserialize((string) $row['state_data'], (string) $row['state_type']),
             stateType: (string) $row['state_type'],
             timestamp: new DateTimeImmutable((string) $row['timestamp']),
-            writerId: (string) $row['writer_id'],
+            writerId: Ulid::fromString((string) $row['writer_id']),
         );
     }
 

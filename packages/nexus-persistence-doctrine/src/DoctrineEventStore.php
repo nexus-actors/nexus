@@ -15,6 +15,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DoctrineEventStore implements EventStore
@@ -35,7 +36,7 @@ final class DoctrineEventStore implements EventStore
                     eventType: $envelope->eventType,
                     eventData: $this->serializer->serialize($envelope->event),
                     timestamp: $envelope->timestamp,
-                    writerId: $envelope->writerId,
+                    writerId: (string) $envelope->writerId,
                     metadata: $envelope->metadata !== [] ? json_encode($envelope->metadata, JSON_THROW_ON_ERROR) : null,
                 );
 
@@ -84,7 +85,7 @@ final class DoctrineEventStore implements EventStore
                 event: $this->serializer->deserialize($entry->eventData, $entry->eventType),
                 eventType: $entry->eventType,
                 timestamp: $entry->timestamp,
-                writerId: $entry->writerId,
+                writerId: Ulid::fromString($entry->writerId),
                 metadata: $metadata,
             );
         }

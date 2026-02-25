@@ -11,6 +11,7 @@ use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * Class-based OOP alternative to the functional EventSourcedBehavior API.
@@ -31,7 +32,7 @@ abstract class AbstractEventSourcedActor
     private ?SnapshotStore $snapshotStore = null;
     private SnapshotStrategy $snapshotStrategy;
     private RetentionPolicy $retentionPolicy;
-    private string $writerId = '';
+    private Ulid $writerId;
     private ?ReplayFilter $replayFilter = null;
 
     /**
@@ -66,6 +67,7 @@ abstract class AbstractEventSourcedActor
     {
         $this->snapshotStrategy = SnapshotStrategy::never();
         $this->retentionPolicy = RetentionPolicy::none();
+        $this->writerId = new Ulid();
     }
 
     /**
@@ -95,7 +97,7 @@ abstract class AbstractEventSourcedActor
     /**
      * @return static
      */
-    public function withWriterId(string $writerId): static
+    public function withWriterId(Ulid $writerId): static
     {
         return clone($this, ['writerId' => $writerId]);
     }

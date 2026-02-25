@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\Event;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final readonly class EventEnvelope
@@ -17,7 +18,7 @@ final readonly class EventEnvelope
         public object $event,
         public string $eventType,
         public DateTimeImmutable $timestamp,
-        public string $writerId = '',
+        public Ulid $writerId = new Ulid(),
         public array $metadata = [],
     ) {}
 

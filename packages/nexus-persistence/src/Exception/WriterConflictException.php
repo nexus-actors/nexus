@@ -6,14 +6,15 @@ namespace Monadial\Nexus\Persistence\Exception;
 
 use Monadial\Nexus\Persistence\PersistenceId;
 use RuntimeException;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class WriterConflictException extends RuntimeException
 {
     public function __construct(
         public readonly PersistenceId $persistenceId,
-        public readonly string $expectedWriter,
-        public readonly string $actualWriter,
+        public readonly Ulid $expectedWriter,
+        public readonly Ulid $actualWriter,
         public readonly int $sequenceNr,
     ) {
         parent::__construct(

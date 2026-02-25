@@ -12,6 +12,7 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DoctrineSnapshotStore implements SnapshotStore
@@ -30,7 +31,7 @@ final class DoctrineSnapshotStore implements SnapshotStore
             stateType: $snapshot->stateType,
             stateData: $this->serializer->serialize($snapshot->state),
             timestamp: $snapshot->timestamp,
-            writerId: $snapshot->writerId,
+            writerId: (string) $snapshot->writerId,
         );
 
         $this->em->persist($entry);
@@ -62,7 +63,7 @@ final class DoctrineSnapshotStore implements SnapshotStore
             state: $this->serializer->deserialize($result->stateData, $result->stateType),
             stateType: $result->stateType,
             timestamp: $result->timestamp,
-            writerId: $result->writerId,
+            writerId: Ulid::fromString($result->writerId),
         );
     }
 

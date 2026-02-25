@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * Class-based OOP alternative to the functional DurableStateBehavior API.
@@ -22,7 +23,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
  */
 abstract class AbstractDurableStateActor
 {
-    private string $writerId = '';
+    private Ulid $writerId;
 
     /**
      * The unique persistence identity for this actor.
@@ -43,12 +44,15 @@ abstract class AbstractDurableStateActor
      */
     abstract public function handleCommand(object $state, ActorContext $ctx, object $command): DurableEffect;
 
-    public function __construct(private readonly DurableStateStore $stateStore) {}
+    public function __construct(private readonly DurableStateStore $stateStore)
+    {
+        $this->writerId = new Ulid();
+    }
 
     /**
      * @return static
      */
-    public function withWriterId(string $writerId): static
+    public function withWriterId(Ulid $writerId): static
     {
         return clone($this, ['writerId' => $writerId]);
     }
