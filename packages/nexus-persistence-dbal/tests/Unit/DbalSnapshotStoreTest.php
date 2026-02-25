@@ -15,6 +15,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(DbalSnapshotStore::class)]
 final class DbalSnapshotStoreTest extends TestCase
@@ -22,6 +23,7 @@ final class DbalSnapshotStoreTest extends TestCase
     private Connection $connection;
     private DbalSnapshotStore $store;
     private PersistenceId $id;
+    private Ulid $testWriterId;
 
     #[Test]
     public function saveAndLoad(): void
@@ -35,7 +37,7 @@ final class DbalSnapshotStoreTest extends TestCase
         self::assertSame(5, $loaded->sequenceNr);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(500, $loaded->state->total);
-        self::assertSame('test-writer', $loaded->writerId);
+        self::assertTrue($this->testWriterId->equals($loaded->writerId));
     }
 
     #[Test]
@@ -103,7 +105,7 @@ final class DbalSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
 
         $this->store->save($this->id, $snapshot);
@@ -120,6 +122,7 @@ final class DbalSnapshotStoreTest extends TestCase
         (new PersistenceSchemaManager($this->connection))->createSchema();
         $this->store = new DbalSnapshotStore($this->connection);
         $this->id = PersistenceId::of('order', 'order-1');
+        $this->testWriterId = new Ulid();
     }
 
     private function makeSnapshot(int $sequenceNr): SnapshotEnvelope
@@ -133,7 +136,7 @@ final class DbalSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
     }
 }

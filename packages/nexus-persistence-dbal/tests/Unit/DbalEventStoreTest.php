@@ -16,6 +16,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(DbalEventStore::class)]
 final class DbalEventStoreTest extends TestCase
@@ -23,6 +24,7 @@ final class DbalEventStoreTest extends TestCase
     private Connection $connection;
     private DbalEventStore $store;
     private PersistenceId $id;
+    private Ulid $testWriterId;
 
     #[Test]
     public function persistsSingleEvent(): void
@@ -35,7 +37,7 @@ final class DbalEventStoreTest extends TestCase
         self::assertCount(1, $loaded);
         self::assertSame(1, $loaded[0]->sequenceNr);
         self::assertSame(stdClass::class, $loaded[0]->eventType);
-        self::assertSame('test-writer', $loaded[0]->writerId);
+        self::assertTrue($this->testWriterId->equals($loaded[0]->writerId));
     }
 
     #[Test]
@@ -147,7 +149,7 @@ final class DbalEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
             metadata: ['source' => 'api', 'user_id' => '123'],
         );
 
@@ -181,7 +183,7 @@ final class DbalEventStoreTest extends TestCase
             event: $event,
             eventType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
 
         $this->store->persist($this->id, $envelope);
@@ -207,6 +209,7 @@ final class DbalEventStoreTest extends TestCase
         (new PersistenceSchemaManager($this->connection))->createSchema();
         $this->store = new DbalEventStore($this->connection);
         $this->id = PersistenceId::of('order', 'order-1');
+        $this->testWriterId = new Ulid();
     }
 
     private function makeEnvelope(int $sequenceNr, string $eventType = stdClass::class): EventEnvelope
@@ -217,7 +220,7 @@ final class DbalEventStoreTest extends TestCase
             event: new stdClass(),
             eventType: $eventType,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
     }
 }

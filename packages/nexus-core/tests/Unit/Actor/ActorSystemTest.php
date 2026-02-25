@@ -17,6 +17,7 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(ActorSystem::class)]
 final class ActorSystemTest extends TestCase
@@ -208,7 +209,8 @@ final class ActorSystemTest extends TestCase
         $system = ActorSystem::create('test', $this->runtime);
 
         $id = $system->writerId();
-        self::assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/', $id);
+        self::assertInstanceOf(Ulid::class, $id);
+        self::assertMatchesRegularExpression('/^[0-9A-HJKMNP-TV-Z]{26}$/', (string) $id);
     }
 
     #[Test]

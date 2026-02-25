@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(SnapshotEnvelope::class)]
 final class SnapshotEnvelopeTest extends TestCase
@@ -30,7 +31,7 @@ final class SnapshotEnvelopeTest extends TestCase
             state: $state,
             stateType: 'OrderState',
             timestamp: $timestamp,
-            writerId: 'test-writer',
+            writerId: new Ulid(),
         );
 
         self::assertSame($persistenceId, $envelope->persistenceId);
@@ -49,7 +50,7 @@ final class SnapshotEnvelopeTest extends TestCase
             state: new stdClass(),
             stateType: 'OrderState',
             timestamp: new DateTimeImmutable(),
-            writerId: 'test-writer',
+            writerId: new Ulid(),
         );
 
         $reflection = new ReflectionClass($envelope);
@@ -59,15 +60,17 @@ final class SnapshotEnvelopeTest extends TestCase
     #[Test]
     public function constructs_with_writer_id(): void
     {
+        $writerId = new Ulid();
+
         $envelope = new SnapshotEnvelope(
             persistenceId: PersistenceId::of('order', 'order-1'),
             sequenceNr: 1,
             state: new stdClass(),
             stateType: 'OrderState',
             timestamp: new DateTimeImmutable(),
-            writerId: 'abc-123-uuid',
+            writerId: $writerId,
         );
 
-        self::assertSame('abc-123-uuid', $envelope->writerId);
+        self::assertSame($writerId, $envelope->writerId);
     }
 }

@@ -14,6 +14,7 @@ use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DoctrineDurableStateStore implements DurableStateStore
@@ -38,7 +39,7 @@ final class DoctrineDurableStateStore implements DurableStateStore
             state: $this->serializer->deserialize($entry->stateData, $entry->stateType),
             stateType: $entry->stateType,
             timestamp: $entry->timestamp,
-            writerId: $entry->writerId,
+            writerId: Ulid::fromString($entry->writerId),
         );
     }
 
@@ -53,14 +54,14 @@ final class DoctrineDurableStateStore implements DurableStateStore
                 stateType: $state->stateType,
                 stateData: $this->serializer->serialize($state->state),
                 timestamp: $state->timestamp,
-                writerId: $state->writerId,
+                writerId: (string) $state->writerId,
             );
         } else {
             $entry->update(
                 $state->stateType,
                 $this->serializer->serialize($state->state),
                 $state->timestamp,
-                $state->writerId,
+                (string) $state->writerId,
             );
         }
 

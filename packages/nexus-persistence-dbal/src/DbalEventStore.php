@@ -14,6 +14,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final class DbalEventStore implements EventStore
@@ -36,7 +37,7 @@ final class DbalEventStore implements EventStore
                         'persistence_id' => $id->toString(),
                         'sequence_nr' => $envelope->sequenceNr,
                         'timestamp' => $envelope->timestamp->format('Y-m-d H:i:s'),
-                        'writer_id' => $envelope->writerId,
+                        'writer_id' => (string) $envelope->writerId,
                     ]);
                 }
             });
@@ -81,7 +82,7 @@ final class DbalEventStore implements EventStore
                 event: $this->serializer->deserialize((string) $row['event_data'], (string) $row['event_type']),
                 eventType: (string) $row['event_type'],
                 timestamp: new DateTimeImmutable((string) $row['timestamp']),
-                writerId: (string) $row['writer_id'],
+                writerId: Ulid::fromString((string) $row['writer_id']),
                 metadata: $metadata,
             );
         }

@@ -18,6 +18,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(DoctrineDurableStateStore::class)]
 final class DoctrineDurableStateStoreTest extends TestCase
@@ -25,6 +26,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
     private EntityManagerInterface $em;
     private DoctrineDurableStateStore $store;
     private PersistenceId $id;
+    private Ulid $testWriterId;
 
     #[Test]
     public function upsertAndGet(): void
@@ -38,7 +40,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
         self::assertSame(1, $loaded->version);
         self::assertSame(stdClass::class, $loaded->stateType);
         self::assertEquals(42, $loaded->state->value);
-        self::assertSame('test-writer', $loaded->writerId);
+        self::assertTrue($this->testWriterId->equals($loaded->writerId));
     }
 
     #[Test]
@@ -103,7 +105,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
 
         $this->store->upsert($this->id, $envelope);
@@ -152,6 +154,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
 
         $this->store = new DoctrineDurableStateStore($this->em);
         $this->id = PersistenceId::of('counter', 'counter-1');
+        $this->testWriterId = new Ulid();
     }
 
     private function makeState(int $version, int $value = 0): DurableStateEnvelope
@@ -165,7 +168,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerId: 'test-writer',
+            writerId: $this->testWriterId,
         );
     }
 }

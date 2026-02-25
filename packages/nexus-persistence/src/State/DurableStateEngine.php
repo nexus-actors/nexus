@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Symfony\Component\Uid\Ulid;
 
 use function is_object;
 
@@ -41,7 +42,7 @@ final class DurableStateEngine
      * @param S $emptyState Initial empty state before any persisted state
      * @param Closure(S, ActorContext, object): DurableEffect $commandHandler Processes commands, returns DurableEffect
      * @param DurableStateStore $stateStore Store for persisting and loading state
-     * @param string $writerId Writer identity stamped on persisted state
+     * @param Ulid $writerId Writer identity stamped on persisted state
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -49,7 +50,7 @@ final class DurableStateEngine
         object $emptyState,
         Closure $commandHandler,
         DurableStateStore $stateStore,
-        string $writerId = '',
+        Ulid $writerId = new Ulid(),
     ): Behavior {
         /** @psalm-suppress UnusedClosureParam, InvalidArgument */
         return Behavior::setup(static function (ActorContext $_ctx) use (
@@ -116,7 +117,7 @@ final class DurableStateEngine
         int $version,
         PersistenceId $persistenceId,
         DurableStateStore $stateStore,
-        string $writerId,
+        Ulid $writerId,
     ): BehaviorWithState {
         $newVersion = $version + 1;
         $newState = $effect->state;

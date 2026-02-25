@@ -48,7 +48,7 @@ final class ActorSystem
         private readonly LoggerInterface $logger,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly DeadLetterRef $deadLetters,
-        private readonly string $writerId,
+        private readonly Ulid $writerId,
         array $initialChildren,
     ) {
         $this->children = $initialChildren;
@@ -155,7 +155,7 @@ final class ActorSystem
      * Used by the persistence layer to identify which system instance
      * wrote a given event or snapshot (single-writer principle).
      */
-    public function writerId(): string
+    public function writerId(): Ulid
     {
         return $this->writerId;
     }
@@ -278,8 +278,8 @@ final class ActorSystem
     /**
      * Generate a ULID (Universally Unique Lexicographically Sortable Identifier).
      */
-    private static function generateUlid(): string
+    private static function generateUlid(): Ulid
     {
-        return (string) new Ulid();
+        return new Ulid();
     }
 }

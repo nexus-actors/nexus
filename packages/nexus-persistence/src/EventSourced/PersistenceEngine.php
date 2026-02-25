@@ -16,6 +16,7 @@ use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Psr\Log\NullLogger;
+use Symfony\Component\Uid\Ulid;
 
 use function is_object;
 
@@ -49,7 +50,7 @@ final class PersistenceEngine
      * @param SnapshotStore|null $snapshotStore Optional store for snapshots
      * @param SnapshotStrategy|null $snapshotStrategy When to take snapshots (default: never)
      * @param RetentionPolicy|null $retentionPolicy Event/snapshot retention (default: keep all)
-     * @param string $writerId Writer identity stamped on persisted events and snapshots
+     * @param Ulid $writerId Writer identity stamped on persisted events and snapshots
      * @param ReplayFilter|null $replayFilter Filter for detecting writer conflicts during recovery
      * @return Behavior The behavior to use when spawning the actor
      */
@@ -62,7 +63,7 @@ final class PersistenceEngine
         ?SnapshotStore $snapshotStore = null,
         ?SnapshotStrategy $snapshotStrategy = null,
         ?RetentionPolicy $retentionPolicy = null,
-        string $writerId = '',
+        Ulid $writerId = new Ulid(),
         ?ReplayFilter $replayFilter = null,
     ): Behavior {
         $strategy = $snapshotStrategy ?? SnapshotStrategy::never();
@@ -169,7 +170,7 @@ final class PersistenceEngine
         ?SnapshotStore $snapshotStore,
         SnapshotStrategy $strategy,
         RetentionPolicy $retention,
-        string $writerId,
+        Ulid $writerId,
     ): BehaviorWithState {
         // 1. Build EventEnvelopes with incrementing sequenceNr
         $envelopes = [];

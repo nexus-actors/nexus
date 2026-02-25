@@ -8,6 +8,7 @@ use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Exception\WriterConflictException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Psr\Log\LoggerInterface;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * Detects interleaved writers during event replay (recovery).
@@ -60,6 +61,7 @@ final readonly class ReplayFilter
         }
 
         $allEvents = [];
+        /** @var ?Ulid $currentWriter */
         $currentWriter = null;
 
         foreach ($events as $event) {
@@ -67,7 +69,7 @@ final readonly class ReplayFilter
                 $currentWriter = $event->writerId;
             }
 
-            if ($event->writerId !== $currentWriter) {
+            if (!$event->writerId->equals($currentWriter)) {
                 match ($this->mode) {
                     ReplayFilterMode::Fail => throw new WriterConflictException(
                         $persistenceId,
@@ -100,7 +102,7 @@ final readonly class ReplayFilter
 
             return array_values(array_filter(
                 $allEvents,
-                static fn(EventEnvelope $e): bool => $e->writerId === $latestWriter,
+                static fn(EventEnvelope $e): bool => $latestWriter !== null && $e->writerId->equals($latestWriter),
             ));
         }
 

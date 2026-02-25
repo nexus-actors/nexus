@@ -11,6 +11,7 @@ use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * Immutable builder for creating event-sourced Behaviors.
@@ -35,7 +36,7 @@ final class EventSourcedBehavior
         private readonly ?SnapshotStore $snapshotStore = null,
         private readonly ?SnapshotStrategy $snapshotStrategy = null,
         private readonly ?RetentionPolicy $retentionPolicy = null,
-        private readonly string $writerId = '',
+        private readonly Ulid $writerId = new Ulid(),
         private readonly ?ReplayFilter $replayFilter = null,
     ) {}
 
@@ -78,7 +79,7 @@ final class EventSourcedBehavior
         return clone($this, ['retentionPolicy' => $policy]);
     }
 
-    public function withWriterId(string $writerId): self
+    public function withWriterId(Ulid $writerId): self
     {
         return clone($this, ['writerId' => $writerId]);
     }

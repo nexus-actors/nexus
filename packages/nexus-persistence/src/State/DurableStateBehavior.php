@@ -8,6 +8,7 @@ use Closure;
 use LogicException;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * Immutable builder for creating durable-state Behaviors.
@@ -27,7 +28,7 @@ final class DurableStateBehavior
         private readonly object $emptyState,
         private readonly Closure $commandHandler,
         private readonly ?DurableStateStore $stateStore = null,
-        private readonly string $writerId = '',
+        private readonly Ulid $writerId = new Ulid(),
     ) {}
 
     /**
@@ -49,7 +50,7 @@ final class DurableStateBehavior
         return clone($this, ['stateStore' => $store]);
     }
 
-    public function withWriterId(string $writerId): self
+    public function withWriterId(Ulid $writerId): self
     {
         return clone($this, ['writerId' => $writerId]);
     }

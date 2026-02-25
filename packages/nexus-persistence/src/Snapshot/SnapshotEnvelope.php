@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\Snapshot;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final readonly class SnapshotEnvelope
@@ -16,6 +17,6 @@ final readonly class SnapshotEnvelope
         public object $state,
         public string $stateType,
         public DateTimeImmutable $timestamp,
-        public string $writerId = '',
+        public Ulid $writerId = new Ulid(),
     ) {}
 }

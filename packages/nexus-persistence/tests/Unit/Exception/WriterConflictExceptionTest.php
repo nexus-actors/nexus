@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Symfony\Component\Uid\Ulid;
 
 #[CoversClass(WriterConflictException::class)]
 final class WriterConflictExceptionTest extends TestCase
@@ -18,11 +19,13 @@ final class WriterConflictExceptionTest extends TestCase
     public function exposes_all_properties(): void
     {
         $id = PersistenceId::of('Order', 'order-1');
-        $exception = new WriterConflictException($id, 'writer-a', 'writer-b', 5);
+        $writerA = new Ulid();
+        $writerB = new Ulid();
+        $exception = new WriterConflictException($id, $writerA, $writerB, 5);
 
         self::assertSame($id, $exception->persistenceId);
-        self::assertSame('writer-a', $exception->expectedWriter);
-        self::assertSame('writer-b', $exception->actualWriter);
+        self::assertSame($writerA, $exception->expectedWriter);
+        self::assertSame($writerB, $exception->actualWriter);
         self::assertSame(5, $exception->sequenceNr);
     }
 
@@ -31,8 +34,8 @@ final class WriterConflictExceptionTest extends TestCase
     {
         $exception = new WriterConflictException(
             PersistenceId::of('Order', 'order-1'),
-            'writer-a',
-            'writer-b',
+            new Ulid(),
+            new Ulid(),
             1,
         );
 
@@ -42,15 +45,18 @@ final class WriterConflictExceptionTest extends TestCase
     #[Test]
     public function message_describes_conflict(): void
     {
+        $writerA = new Ulid();
+        $writerB = new Ulid();
+
         $exception = new WriterConflictException(
             PersistenceId::of('Order', 'order-1'),
-            'writer-a',
-            'writer-b',
+            $writerA,
+            $writerB,
             5,
         );
 
-        self::assertStringContainsString('writer-a', $exception->getMessage());
-        self::assertStringContainsString('writer-b', $exception->getMessage());
+        self::assertStringContainsString((string) $writerA, $exception->getMessage());
+        self::assertStringContainsString((string) $writerB, $exception->getMessage());
         self::assertStringContainsString('Order|order-1', $exception->getMessage());
     }
 }
