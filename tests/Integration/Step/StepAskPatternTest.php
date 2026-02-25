@@ -10,16 +10,16 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 use Monadial\Nexus\Tests\Integration\Step\Messages\CountReply;
-use Monadial\Nexus\Tests\Integration\Step\Messages\GetCount;
 use Monadial\Nexus\Tests\Integration\Step\Messages\Increment;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-final readonly class DoAsk
+final readonly class AskGetCount
 {
-    // Marker message to trigger an ask from within actor context
+    // ask-pattern request message (no replyTo field needed)
 }
 
 final class StepAskPatternTest extends TestCase
@@ -38,8 +38,8 @@ final class StepAskPatternTest extends TestCase
                     return BehaviorWithState::next($count + 1);
                 }
 
-                if ($msg instanceof GetCount) {
-                    $msg->replyTo->tell(new CountReply($count));
+                if ($msg instanceof AskGetCount) {
+                    $ctx->reply(new CountReply($count));
 
                     return BehaviorWithState::same();
                 }
@@ -60,30 +60,14 @@ final class StepAskPatternTest extends TestCase
             $this->runtime->step();
         }
 
-        /** @var CountReply|null $result */
-        $result = null;
+        /** @var Future<CountReply> $future */
+        $future = $counterRef->ask(new AskGetCount(), Duration::seconds(5));
 
-        // Spawn an "asker" actor that uses ask() to get the count
-        /** @var Behavior<object> $askerBehavior */
-        $askerBehavior = Behavior::receive(
-            static function (ActorContext $ctx, object $msg) use ($counterRef, &$result): Behavior {
-                if ($msg instanceof DoAsk) {
-                    $result = $counterRef->ask(
-                        static fn($replyTo) => new GetCount($replyTo),
-                        Duration::seconds(5),
-                    );
-                }
-
-                return Behavior::same();
-            },
-        );
-
-        $askerRef = $this->system->spawn(Props::fromBehavior($askerBehavior), 'asker');
-        $askerRef->tell(new DoAsk());
-
-        // Drain: asker processes DoAsk → asks counter → counter replies → asker gets reply
+        // Drain: counter processes ask request and resolves the future
         $this->runtime->drain();
 
+        /** @var CountReply $result */
+        $result = $future->await();
         self::assertInstanceOf(CountReply::class, $result);
         self::assertSame(3, $result->count);
     }

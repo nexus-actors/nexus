@@ -108,7 +108,7 @@ final class EnvelopeSerializationTest extends TestCase
             new OrderPlaced('ORD-META', 42.0),
             $sender,
             $target,
-            [
+            metadata: [
                 'correlation-id' => 'corr-001',
                 'request-id' => 'req-789',
                 'trace-id' => 'abc-123-def-456',
@@ -185,7 +185,7 @@ final class EnvelopeSerializationTest extends TestCase
             $message,
             ActorPath::fromString('/user/web'),
             ActorPath::fromString('/user/cart-service'),
-            [
+            metadata: [
                 'session-id' => 'sess-abc',
                 'user-agent' => 'test-client/1.0',
             ],
