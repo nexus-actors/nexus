@@ -27,6 +27,7 @@ final class DurableStateBehavior
         private readonly object $emptyState,
         private readonly Closure $commandHandler,
         private readonly ?DurableStateStore $stateStore = null,
+        private readonly string $writerId = '',
     ) {}
 
     /**
@@ -48,6 +49,11 @@ final class DurableStateBehavior
         return clone($this, ['stateStore' => $store]);
     }
 
+    public function withWriterId(string $writerId): self
+    {
+        return clone($this, ['writerId' => $writerId]);
+    }
+
     /**
      * Build the final Behavior using DurableStateEngine.
      *
@@ -64,6 +70,7 @@ final class DurableStateBehavior
             $this->stateStore ?? throw new LogicException(
                 'DurableStateStore is required — call withStateStore() before toBehavior()',
             ),
+            $this->writerId,
         );
     }
 }
