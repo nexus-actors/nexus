@@ -152,7 +152,7 @@ final class EnvelopeSerializationTest extends TestCase
         $message = new ShipmentCreated('SHP-ENV', $address);
         $sender = ActorPath::fromString('/user/warehouse');
         $target = ActorPath::fromString('/user/shipping');
-        $envelope = new Envelope($message, $sender, $target, ['priority' => 'high']);
+        $envelope = new Envelope($message, $sender, $target, metadata: ['priority' => 'high']);
 
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);

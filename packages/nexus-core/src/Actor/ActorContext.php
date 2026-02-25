@@ -8,6 +8,7 @@ use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
+use Monadial\Nexus\Core\Exception\NoSenderException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -62,6 +63,14 @@ interface ActorContext
 
     /** @return Option<ActorRef<object>> */
     public function sender(): Option;
+
+    /**
+     * Reply to the sender of the current message.
+     * Only works for messages received via ask() — throws for regular tell().
+     *
+     * @throws NoSenderException If no sender on current message
+     */
+    public function reply(object $message): void;
 
     /**
      * Spawn a background task bound to this actor's lifecycle.

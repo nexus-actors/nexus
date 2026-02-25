@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Mailbox;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 
 /**
  * @psalm-api
@@ -21,6 +22,7 @@ final readonly class Envelope
         public object $message,
         public ActorPath $sender,
         public ActorPath $target,
+        public ?ActorRef $senderRef = null,
         public array $metadata = [],
     ) {}
 
@@ -30,6 +32,14 @@ final readonly class Envelope
     public static function of(object $message, ActorPath $sender, ActorPath $target): self
     {
         return new self($message, $sender, $target);
+    }
+
+    /**
+     * Returns a new Envelope with the given senderRef.
+     */
+    public function withSenderRef(ActorRef $senderRef): self
+    {
+        return clone($this, ['senderRef' => $senderRef]);
     }
 
     /**

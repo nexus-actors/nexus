@@ -78,6 +78,6 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
             throw new MessageDeserializationException('Envelope', 'Invalid actor path: ' . $e->getMessage(), $e);
         }
 
-        return new Envelope($message, $sender, $target, $payload['metadata']);
+        return new Envelope($message, $sender, $target, metadata: $payload['metadata']);
     }
 }

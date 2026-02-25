@@ -72,7 +72,7 @@ final class DefaultEnvelopeSerializerTest extends TestCase
             new EnvelopeTestMessage('test', 1),
             $sender,
             $target,
-            ['trace-id' => 'abc-123', 'request-id' => 'req-456'],
+            metadata: ['trace-id' => 'abc-123', 'request-id' => 'req-456'],
         );
 
         $data = $serializer->serialize($envelope);
