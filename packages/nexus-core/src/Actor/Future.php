@@ -14,39 +14,11 @@ use Closure;
  * Asks are eager — the request is sent at ask() call time.
  * await() suspends the current fiber until the reply arrives or the timeout fires.
  *
- * @template R
+ * @template R of object
  */
 final readonly class Future
 {
-    /**
-     * @param FutureSlot|Closure(): R $source
-     *
-     * @psalm-suppress PossiblyInvalidPropertyAssignmentValue
-     */
-    public function __construct(private FutureSlot|Closure $source) {}
-
-    /**
-     * Await multiple futures. Returns when all resolve.
-     *
-     * Since asks are eager (sent at ask() time), sequential awaiting
-     * still gives concurrent behavior — all requests are already in flight.
-     *
-     * @param Future<object> ...$futures
-     * @return Future<list<object>>
-     */
-    public static function zip(self ...$futures): self
-    {
-        /** @var Future<list<object>> */
-        return new self(static function () use ($futures): array {
-            $results = [];
-
-            foreach ($futures as $future) {
-                $results[] = $future->await();
-            }
-
-            return $results;
-        });
-    }
+    public function __construct(private FutureSlot $slot) {}
 
     /**
      * Block the current fiber until the result is available.
@@ -54,67 +26,54 @@ final readonly class Future
      * @return R
      * @throws \Monadial\Nexus\Core\Exception\AskTimeoutException
      */
-    public function await(): mixed
+    public function await(): object
     {
-        if ($this->source instanceof FutureSlot) {
-            /** @var R */
-            return $this->source->await();
-        }
-
         /** @var R */
-        return ($this->source)();
+        return $this->slot->await();
     }
 
     public function isResolved(): bool
     {
-        if ($this->source instanceof FutureSlot) {
-            return $this->source->isResolved();
-        }
-
-        return false;
+        return $this->slot->isResolved();
     }
 
     /**
      * Transform the result when it arrives. Lazy — does not block.
      *
-     * @template U
+     * @template U of object
      * @param Closure(R): U $fn
      * @return Future<U>
      */
     public function map(Closure $fn): self
     {
-        $source = $this->source;
+        $slot = $this->slot;
 
         /** @var Future<U> */
-        return new self(static function () use ($source, $fn): mixed {
+        return new self(new LazyFutureSlot(static function () use ($slot, $fn): object {
             /** @var R $value */
-            $value = $source instanceof FutureSlot
-                ? $source->await()
-                : $source();
+            $value = $slot->await();
 
             return $fn($value);
-        });
+        }));
     }
 
     /**
      * Chain a dependent ask. Lazy — does not block.
      *
-     * @template U
+     * @template U of object
      * @param Closure(R): Future<U> $fn
      * @return Future<U>
      */
     public function flatMap(Closure $fn): self
     {
-        $source = $this->source;
+        $slot = $this->slot;
 
         /** @var Future<U> */
-        return new self(static function () use ($source, $fn): mixed {
+        return new self(new LazyFutureSlot(static function () use ($slot, $fn): object {
             /** @var R $value */
-            $value = $source instanceof FutureSlot
-                ? $source->await()
-                : $source();
+            $value = $slot->await();
 
             return $fn($value)->await();
-        });
+        }));
     }
 }
