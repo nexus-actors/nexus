@@ -357,6 +357,51 @@ function Problem() {
   );
 }
 
+function Thesis() {
+  return (
+    <section className={styles.thesis}>
+      <div className={styles.sectionInner}>
+        <h2 className={styles.sectionTitle}>Nexus thesis</h2>
+        <p className={styles.sectionSub}>
+          Actors are powerful, but not free. Use them where concurrency and failure semantics are core,
+          avoid them where simple request/response architecture already works.
+        </p>
+        <div className={styles.thesisGrid}>
+          <div className={styles.thesisCard}>
+            <h3 className={styles.thesisTitle}>Use Nexus when</h3>
+            <ul className={styles.thesisList}>
+              <li>you run many stateful workflows concurrently</li>
+              <li>you need supervision and explicit recovery policy</li>
+              <li>message protocols and isolation reduce domain risk</li>
+            </ul>
+          </div>
+          <div className={styles.thesisCard}>
+            <h3 className={styles.thesisTitle}>Avoid Nexus when</h3>
+            <ul className={styles.thesisList}>
+              <li>your app is mostly CRUD request/response</li>
+              <li>queue workers already solve the workload</li>
+              <li>the team is not operating long-running services yet</li>
+            </ul>
+          </div>
+          <div className={styles.thesisCard}>
+            <h3 className={styles.thesisTitle}>Intentional tradeoffs</h3>
+            <ul className={styles.thesisList}>
+              <li>isolation over shared state</li>
+              <li>supervision over scattered retry logic</li>
+              <li>typed protocols over dynamic message handling</li>
+            </ul>
+          </div>
+        </div>
+        <div className={styles.thesisCtaWrap}>
+          <Link className={styles.ctaGhost} to="/docs/core-concepts/nexus-thesis">
+            Read the full thesis
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Pillars() {
   return (
     <section className={styles.pillars}>
@@ -666,6 +711,13 @@ function Architecture() {
             </p>
           </div>
           <div className={styles.archCard}>
+            <code className={styles.archPkg}>nexus-actors/runtime</code>
+            <p className={styles.archDesc}>
+              Shared runtime and async primitives. `Future`, `FutureSlot`,
+              and runtime contracts reusable outside actor-system internals.
+            </p>
+          </div>
+          <div className={styles.archCard}>
             <code className={styles.archPkg}>nexus-actors/runtime-fiber</code>
             <p className={styles.archDesc}>
               Fiber-based runtime. No extensions. Cooperative multitasking
@@ -774,6 +826,7 @@ export default function Home() {
       <main className={styles.landing}>
         <Hero />
         <Problem />
+        <Thesis />
         <Pillars />
         <Showcases />
         <Features />

@@ -8,7 +8,7 @@ use LogicException;
 use Monadial\Nexus\App\NexusApp;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Override;

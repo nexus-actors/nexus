@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Runtime;
+namespace Monadial\Nexus\Runtime\Runtime;
 
 use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Async\FutureSlot;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
 
 /** @psalm-api */
 interface Runtime

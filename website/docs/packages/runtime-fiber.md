@@ -16,7 +16,7 @@ No extensions required.
 
 ### FiberRuntime
 
-Implements `Monadial\Nexus\Core\Runtime\Runtime`.
+Implements `Monadial\Nexus\Runtime\Runtime\Runtime`.
 
 The main runtime class. Manages a map of `Fiber` instances and a
 `FiberScheduler` for timer management. The `run()` method enters a tick loop

@@ -134,5 +134,5 @@ The runtime-agnostic architecture allows new runtime implementations:
 - **FrankenPHP** -- Worker mode integration for FrankenPHP deployments.
 
 Community contributions for additional runtimes are welcome. Any implementation
-of the `Monadial\Nexus\Core\Runtime\Runtime` interface is compatible with the
+of the `Monadial\Nexus\Runtime\Runtime\Runtime` interface is compatible with the
 full Nexus actor system.

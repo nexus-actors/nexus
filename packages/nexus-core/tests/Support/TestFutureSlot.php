@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
-use Monadial\Nexus\Core\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Override;
 use RuntimeException;
 use Throwable;

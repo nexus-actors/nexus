@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
 use Monadial\Nexus\Core\Actor\Cancellable;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Runtime\Swoole\SwooleMailbox;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;

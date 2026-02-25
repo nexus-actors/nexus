@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Async;
+namespace Monadial\Nexus\Runtime\Async;
 
 use Closure;
 
@@ -11,7 +11,7 @@ use Closure;
  *
  * A handle to a pending async result.
  *
- * Asks are eager — the request is sent at ask() call time.
+ * Asks are eager - the request is sent at ask() call time.
  * await() suspends the current fiber until the reply arrives or the timeout fires.
  *
  * @template R of object
@@ -38,7 +38,7 @@ final readonly class Future
     }
 
     /**
-     * Transform the result when it arrives. Lazy — does not block.
+     * Transform the result when it arrives. Lazy - does not block.
      *
      * @template U of object
      * @param Closure(R): U $fn
@@ -58,7 +58,7 @@ final readonly class Future
     }
 
     /**
-     * Chain a dependent ask. Lazy — does not block.
+     * Chain a dependent ask. Lazy - does not block.
      *
      * @template U of object
      * @param Closure(R): Future<U> $fn

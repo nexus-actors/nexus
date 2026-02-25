@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Async;
+namespace Monadial\Nexus\Runtime\Async;
 
 use Throwable;
 
@@ -17,13 +17,13 @@ use Throwable;
 interface FutureSlot
 {
     /**
-     * Resolve the slot with a value. Idempotent — second call is a no-op.
+     * Resolve the slot with a value. Idempotent - second call is a no-op.
      * Wakes the awaiting fiber/coroutine if one is suspended.
      */
     public function resolve(object $value): void;
 
     /**
-     * Fail the slot with an exception. Idempotent — second call is a no-op.
+     * Fail the slot with an exception. Idempotent - second call is a no-op.
      * Wakes the awaiting fiber/coroutine if one is suspended.
      */
     public function fail(Throwable $e): void;

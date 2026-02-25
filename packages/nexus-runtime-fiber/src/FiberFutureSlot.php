@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Runtime\Fiber;
 
 use Closure;
 use Fiber;
-use Monadial\Nexus\Core\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Override;
 use Throwable;
 

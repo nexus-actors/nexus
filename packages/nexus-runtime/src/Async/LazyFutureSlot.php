@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Async;
+namespace Monadial\Nexus\Runtime\Async;
 
 use Closure;
 use Override;
@@ -23,13 +23,13 @@ final class LazyFutureSlot implements FutureSlot
     #[Override]
     public function resolve(object $value): void
     {
-        // LazyFutureSlot is not externally resolvable — it resolves itself on await()
+        // LazyFutureSlot is not externally resolvable - it resolves itself on await()
     }
 
     #[Override]
     public function fail(Throwable $e): void
     {
-        // LazyFutureSlot is not externally failable — failures propagate through the closure
+        // LazyFutureSlot is not externally failable - failures propagate through the closure
     }
 
     #[Override]
