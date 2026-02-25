@@ -11,7 +11,8 @@
         "psr/event-dispatcher": "^1.0",
         "brick/math": "^0.12",
         "fp4php/functional": "^6.0",
-        "azjezz/psl": "^4.0"
+        "azjezz/psl": "^4.0",
+        "symfony/uid": "^8.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0",
