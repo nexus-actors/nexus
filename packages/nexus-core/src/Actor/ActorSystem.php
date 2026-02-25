@@ -47,6 +47,7 @@ final class ActorSystem
         private readonly LoggerInterface $logger,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly DeadLetterRef $deadLetters,
+        private readonly string $writerUuid,
         array $initialChildren,
     ) {
         $this->children = $initialChildren;
@@ -71,6 +72,11 @@ final class ActorSystem
             }
         };
 
+        $bytes = random_bytes(16);
+        $bytes[6] = chr(ord($bytes[6]) & 0x0f | 0x40); // Version 4
+        $bytes[8] = chr(ord($bytes[8]) & 0x3f | 0x80); // Variant 1
+        $writerUuid = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
+
         return new self(
             $name,
             $runtime,
@@ -78,6 +84,7 @@ final class ActorSystem
             $logger ?? new NullLogger(),
             $eventDispatcher ?? new NullDispatcher(),
             new DeadLetterRef(),
+            $writerUuid,
             [],
         );
     }
@@ -144,6 +151,17 @@ final class ActorSystem
     public function name(): string
     {
         return $this->systemName;
+    }
+
+    /**
+     * Returns the unique writer UUID for this actor system instance.
+     *
+     * Used by the persistence layer to identify which system instance
+     * wrote a given event or snapshot (single-writer principle).
+     */
+    public function writerUuid(): string
+    {
+        return $this->writerUuid;
     }
 
     /**
