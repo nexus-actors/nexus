@@ -26,6 +26,8 @@ final class EventEntry
         public private(set) string $eventData,
         #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
         public private(set) DateTimeImmutable $timestamp,
+        #[ORM\Column(name: 'writer_id', type: 'string', length: 26)]
+        public private(set) string $writerId = '',
         #[ORM\Column(name: 'metadata', type: 'text', nullable: true)]
         public private(set) ?string $metadata = null,
     ) {}

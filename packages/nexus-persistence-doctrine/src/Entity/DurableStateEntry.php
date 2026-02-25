@@ -26,12 +26,19 @@ final class DurableStateEntry
         public private(set) string $stateData,
         #[ORM\Column(name: 'timestamp', type: 'datetime_immutable')]
         public private(set) DateTimeImmutable $timestamp,
+        #[ORM\Column(name: 'writer_id', type: 'string', length: 26)]
+        public private(set) string $writerId = '',
     ) {}
 
-    public function update(string $stateType, string $stateData, DateTimeImmutable $timestamp): void
-    {
+    public function update(
+        string $stateType,
+        string $stateData,
+        DateTimeImmutable $timestamp,
+        string $writerId = '',
+    ): void {
         $this->stateType = $stateType;
         $this->stateData = $stateData;
         $this->timestamp = $timestamp;
+        $this->writerId = $writerId;
     }
 }
