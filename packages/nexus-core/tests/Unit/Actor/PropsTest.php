@@ -160,9 +160,8 @@ final class PropsTest extends TestCase
             }
         };
 
-        $container = $this->createMock(ContainerInterface::class);
+        $container = $this->createStub(ContainerInterface::class);
         $container->method('get')
-            ->with($handler::class)
             ->willReturn($handler);
 
         $props = Props::fromContainer($container, $handler::class);

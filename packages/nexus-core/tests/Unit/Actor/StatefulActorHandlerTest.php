@@ -49,7 +49,7 @@ final class StatefulActorHandlerTest extends TestCase
             }
         };
 
-        $ctx = $this->createMock(ActorContext::class);
+        $ctx = $this->createStub(ActorContext::class);
         $result = $actor->handle($ctx, new stdClass(), 10);
 
         self::assertInstanceOf(BehaviorWithState::class, $result);

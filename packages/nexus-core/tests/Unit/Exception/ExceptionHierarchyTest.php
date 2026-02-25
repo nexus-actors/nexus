@@ -47,14 +47,14 @@ final class ExceptionHierarchyTest extends TestCase
     #[Test]
     public function nexusExceptionExtendsRuntimeException(): void
     {
-        $exception = $this->createMock(NexusException::class);
+        $exception = $this->createStub(NexusException::class);
         self::assertInstanceOf(RuntimeException::class, $exception);
     }
 
     #[Test]
     public function actorExceptionExtendsNexusException(): void
     {
-        $exception = $this->createMock(ActorException::class);
+        $exception = $this->createStub(ActorException::class);
         self::assertInstanceOf(NexusException::class, $exception);
     }
 
@@ -87,7 +87,7 @@ final class ExceptionHierarchyTest extends TestCase
     #[Test]
     public function mailboxExceptionExtendsNexusException(): void
     {
-        $exception = $this->createMock(MailboxException::class);
+        $exception = $this->createStub(MailboxException::class);
         self::assertInstanceOf(NexusException::class, $exception);
     }
 
@@ -136,14 +136,14 @@ final class ExceptionHierarchyTest extends TestCase
     #[Test]
     public function nexusLogicExceptionExtendsLogicException(): void
     {
-        $exception = $this->createMock(NexusLogicException::class);
+        $exception = $this->createStub(NexusLogicException::class);
         self::assertInstanceOf(LogicException::class, $exception);
     }
 
     #[Test]
     public function nexusLogicExceptionIsNotNexusException(): void
     {
-        $exception = $this->createMock(NexusLogicException::class);
+        $exception = $this->createStub(NexusLogicException::class);
         self::assertNotInstanceOf(NexusException::class, $exception);
     }
 

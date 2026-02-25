@@ -88,7 +88,7 @@ final class EffectTest extends TestCase
     #[Test]
     public function replyStoresRefAndMessage(): void
     {
-        $ref = $this->createMock(ActorRef::class);
+        $ref = $this->createStub(ActorRef::class);
         $msg = new stdClass();
         $msg->result = 'ok';
 
@@ -102,7 +102,7 @@ final class EffectTest extends TestCase
     #[Test]
     public function thenReplyChainingStoresSideEffect(): void
     {
-        $ref = $this->createMock(ActorRef::class);
+        $ref = $this->createStub(ActorRef::class);
         $fn = static fn(object $state): object => $state;
 
         $effect = Effect::persist(new stdClass())
@@ -159,8 +159,8 @@ final class EffectTest extends TestCase
     #[Test]
     public function multipleChainingPreservesAllSideEffects(): void
     {
-        $ref1 = $this->createMock(ActorRef::class);
-        $ref2 = $this->createMock(ActorRef::class);
+        $ref1 = $this->createStub(ActorRef::class);
+        $ref2 = $this->createStub(ActorRef::class);
 
         $effect = Effect::persist(new stdClass())
             ->thenReply($ref1, static fn(object $s): object => new stdClass())
@@ -173,7 +173,7 @@ final class EffectTest extends TestCase
     #[Test]
     public function chainingReturnsNewInstance(): void
     {
-        $ref = $this->createMock(ActorRef::class);
+        $ref = $this->createStub(ActorRef::class);
         $original = Effect::persist(new stdClass());
         $chained = $original->thenRun(static function (object $s): void {});
 
