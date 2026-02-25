@@ -102,7 +102,7 @@ final class DbalSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerUuid: 'test-writer',
+            writerId: 'test-writer',
         );
 
         $this->store->save($this->id, $snapshot);
@@ -132,7 +132,7 @@ final class DbalSnapshotStoreTest extends TestCase
             state: $state,
             stateType: stdClass::class,
             timestamp: new DateTimeImmutable('2026-01-15 10:00:00'),
-            writerUuid: 'test-writer',
+            writerId: 'test-writer',
         );
     }
 }

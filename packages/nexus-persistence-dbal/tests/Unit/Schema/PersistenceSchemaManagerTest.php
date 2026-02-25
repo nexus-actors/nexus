@@ -55,7 +55,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertContains('event_data', $columnNames);
         self::assertContains('metadata', $columnNames);
         self::assertContains('timestamp', $columnNames);
-        self::assertContains('writer_uuid', $columnNames);
+        self::assertContains('writer_id', $columnNames);
     }
 
     #[Test]
@@ -83,7 +83,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertContains('state_type', $columnNames);
         self::assertContains('state_data', $columnNames);
         self::assertContains('timestamp', $columnNames);
-        self::assertContains('writer_uuid', $columnNames);
+        self::assertContains('writer_id', $columnNames);
     }
 
     #[Test]
@@ -100,7 +100,7 @@ final class PersistenceSchemaManagerTest extends TestCase
         self::assertContains('state_type', $columnNames);
         self::assertContains('state_data', $columnNames);
         self::assertContains('timestamp', $columnNames);
-        self::assertContains('writer_uuid', $columnNames);
+        self::assertContains('writer_id', $columnNames);
     }
 
     #[Test]

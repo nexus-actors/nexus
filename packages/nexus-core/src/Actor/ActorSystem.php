@@ -47,7 +47,7 @@ final class ActorSystem
         private readonly LoggerInterface $logger,
         private readonly EventDispatcherInterface $eventDispatcher,
         private readonly DeadLetterRef $deadLetters,
-        private readonly string $writerUuid,
+        private readonly string $writerId,
         array $initialChildren,
     ) {
         $this->children = $initialChildren;
@@ -72,11 +72,6 @@ final class ActorSystem
             }
         };
 
-        $bytes = random_bytes(16);
-        $bytes[6] = chr(ord($bytes[6]) & 0x0f | 0x40); // Version 4
-        $bytes[8] = chr(ord($bytes[8]) & 0x3f | 0x80); // Variant 1
-        $writerUuid = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($bytes), 4));
-
         return new self(
             $name,
             $runtime,
@@ -84,7 +79,7 @@ final class ActorSystem
             $logger ?? new NullLogger(),
             $eventDispatcher ?? new NullDispatcher(),
             new DeadLetterRef(),
-            $writerUuid,
+            self::generateUlid(),
             [],
         );
     }
@@ -154,14 +149,14 @@ final class ActorSystem
     }
 
     /**
-     * Returns the unique writer UUID for this actor system instance.
+     * Returns the unique writer ULID for this actor system instance.
      *
      * Used by the persistence layer to identify which system instance
      * wrote a given event or snapshot (single-writer principle).
      */
-    public function writerUuid(): string
+    public function writerId(): string
     {
-        return $this->writerUuid;
+        return $this->writerId;
     }
 
     /**
@@ -277,5 +272,45 @@ final class ActorSystem
                 }
             }
         });
+    }
+
+    /**
+     * Generate a ULID (Universally Unique Lexicographically Sortable Identifier).
+     *
+     * Format: 26 Crockford base32 characters (10 timestamp + 16 random).
+     *
+     * @psalm-suppress InvalidOperand
+     */
+    private static function generateUlid(): string
+    {
+        $encoding = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+        $time = (int) (microtime(true) * 1000);
+
+        // Timestamp part: 10 chars (48 bits)
+        $timeChars = '';
+
+        for ($i = 0; $i < 10; $i++) {
+            $timeChars = $encoding[$time & 0x1f] . $timeChars;
+            $time >>= 5;
+        }
+
+        // Random part: 16 chars (80 bits from 10 random bytes)
+        $bytes = random_bytes(10);
+        $randomChars = '';
+        $bits = 0;
+        $bitsCount = 0;
+        $byteIdx = 0;
+
+        for ($i = 0; $i < 16; $i++) {
+            while ($bitsCount < 5 && $byteIdx < 10) {
+                $bits = ($bits << 8) | ord($bytes[$byteIdx++]);
+                $bitsCount += 8;
+            }
+
+            $bitsCount -= 5;
+            $randomChars .= $encoding[($bits >> $bitsCount) & 0x1f];
+        }
+
+        return $timeChars . $randomChars;
     }
 }
