@@ -11,10 +11,14 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
-use Monadial\Nexus\Tests\Integration\Fiber\Messages\Greet;
 use Monadial\Nexus\Tests\Integration\Fiber\Messages\Greeted;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+
+final readonly class SwooleGreetRequest
+{
+    public function __construct(public string $name) {}
+}
 
 final class SwooleAskPatternTest extends TestCase
 {
@@ -30,8 +34,8 @@ final class SwooleAskPatternTest extends TestCase
 
         /** @var Behavior<object> $greeterBehavior */
         $greeterBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
-            if ($msg instanceof Greet) {
-                $msg->replyTo->tell(new Greeted("Hello, {$msg->name}!"));
+            if ($msg instanceof SwooleGreetRequest) {
+                $ctx->reply(new Greeted("Hello, {$msg->name}!"));
             }
 
             return Behavior::same();
@@ -41,10 +45,7 @@ final class SwooleAskPatternTest extends TestCase
 
         // In Swoole, messages and ask() must happen inside coroutine context
         $runtime->scheduleOnce(Duration::millis(10), static function () use ($greeterRef, &$result): void {
-            $result = $greeterRef->ask(
-                static fn($replyTo) => new Greet('World', $replyTo),
-                Duration::seconds(5),
-            );
+            $result = $greeterRef->ask(new SwooleGreetRequest('World'), Duration::seconds(5))->await();
         });
 
         $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
@@ -77,10 +78,7 @@ final class SwooleAskPatternTest extends TestCase
 
         $runtime->scheduleOnce(Duration::millis(10), static function () use ($blackHoleRef, &$caught): void {
             try {
-                $blackHoleRef->ask(
-                    static fn($replyTo) => new Greet('World', $replyTo),
-                    Duration::millis(100),
-                );
+                $blackHoleRef->ask(new SwooleGreetRequest('World'), Duration::millis(100))->await();
             } catch (AskTimeoutException $e) {
                 $caught = $e;
             }
