@@ -9,6 +9,7 @@ use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\Future;
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use NoDiscard;
@@ -45,11 +46,12 @@ final readonly class RemoteActorRef implements ActorRef
     }
 
     /**
+     * @return Future<object>
      * @throws RuntimeException Always -- ask() is not supported for remote actors in v1
      */
     #[Override]
     #[NoDiscard]
-    public function ask(callable $messageFactory, Duration $timeout): object
+    public function ask(object $message, Duration $timeout): Future
     {
         throw new RuntimeException('ask() is not supported for remote actors');
     }

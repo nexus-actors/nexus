@@ -69,7 +69,7 @@ final class RemoteActorRefTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('not supported for remote actors');
 
-        (void) $ref->ask(static fn() => new Ping(), Duration::seconds(1));
+        (void) $ref->ask(new Ping(), Duration::seconds(1));
     }
 
     /** @return RemoteActorRef<object> */

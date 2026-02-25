@@ -39,14 +39,12 @@ final class DeadLetterRef implements ActorRef
     }
 
     /**
-     * @template R of object
-     * @param callable(ActorRef<R>): object $messageFactory
-     * @return R
+     * @return Future<object>
      * @throws AskTimeoutException
      */
     #[Override]
     #[NoDiscard]
-    public function ask(callable $messageFactory, Duration $timeout): object
+    public function ask(object $message, Duration $timeout): Future
     {
         throw new AskTimeoutException($this->path, $timeout);
     }

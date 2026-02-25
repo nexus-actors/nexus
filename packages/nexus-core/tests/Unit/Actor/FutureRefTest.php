@@ -46,7 +46,7 @@ final class FutureRefTest extends TestCase
         $ref = new FutureRef(ActorPath::fromString('/temp/ask-1'), $slot);
 
         $this->expectException(RuntimeException::class);
-        $ref->ask(static fn() => new stdClass(), Duration::seconds(1));
+        (void) $ref->ask(new stdClass(), Duration::seconds(1));
     }
 
     #[Test]

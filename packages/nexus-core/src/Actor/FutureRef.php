@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Duration;
+use NoDiscard;
 use Override;
 use RuntimeException;
 
@@ -29,8 +30,12 @@ final readonly class FutureRef implements ActorRef
         $this->slot->resolve($message);
     }
 
+    /**
+     * @return Future<object>
+     */
     #[Override]
-    public function ask(callable $messageFactory, Duration $timeout): object
+    #[NoDiscard]
+    public function ask(object $message, Duration $timeout): Future
     {
         throw new RuntimeException('Cannot ask() a FutureRef');
     }
