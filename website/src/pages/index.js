@@ -88,6 +88,12 @@ $ref = $system->spawn(
 const runtimeCode = `// Development: PHP Fibers. Zero extensions needed.
 $system = ActorSystem::create('dev', new FiberRuntime());
 
+// Testing: deterministic stepping + virtual time.
+$runtime = new StepRuntime();
+$system = ActorSystem::create('test', $runtime, clock: $runtime->clock());
+$runtime->step();
+$runtime->advanceTime(Duration::seconds(1));
+
 // Production: Swoole coroutines. 100K+ concurrent actors.
 $system = ActorSystem::create('prod', new SwooleRuntime(
     new SwooleConfig(
@@ -469,8 +475,8 @@ function Showcases() {
       />
 
       <ShowcaseSection
-        title="One codebase, two runtimes"
-        description="Develop locally with the Fiber runtime -- zero extensions required, instant startup, built into PHP. Deploy to production with the Swoole runtime -- true coroutines, native channels, 100K+ concurrent actors. Switch runtimes by changing a single constructor. Your actor code stays identical."
+        title="One codebase, three runtimes"
+        description="Develop locally with Fiber, test deterministically with Step + VirtualClock, and deploy to production with Swoole coroutines. Switch runtimes by changing a single constructor. Your actor code stays identical."
         code={runtimeCode}
         codeTitle="runtime.php"
       />
@@ -717,6 +723,11 @@ function Architecture() {
       desc: 'Swoole coroutine runtime. Native channels, true async I/O, 100K+ concurrent actors. Built for production workloads.',
     },
     {
+      name: 'nexus-actors/runtime-step',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-runtime-step',
+      desc: 'Deterministic step runtime for tests. Manual message stepping and virtual time via StepRuntime and VirtualClock.',
+    },
+    {
       name: 'nexus-actors/serialization',
       href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-serialization',
       desc: 'Message serialization with envelope protocol. PHP native serializer for speed, Valinor mapper for structured wire formats.',
@@ -814,7 +825,7 @@ export default function Home() {
   return (
     <Layout
       title="Concurrent PHP, done right"
-      description="Nexus is a typed actor system for PHP 8.5+ bringing Akka/OTP patterns to PHP. Type-safe actors, supervision trees, event sourcing, multi-process scaling, and pluggable runtimes (Fiber and Swoole)."
+      description="Nexus is a typed actor system for PHP 8.5+ bringing Akka/OTP patterns to PHP. Type-safe actors, supervision trees, event sourcing, multi-process scaling, and pluggable runtimes (Fiber, Swoole, and Step)."
     >
       <main className={styles.landing}>
         <Hero />
