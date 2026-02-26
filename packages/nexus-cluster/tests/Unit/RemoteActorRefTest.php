@@ -10,11 +10,12 @@ use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
 use Monadial\Nexus\Cluster\Tests\Unit\Support\Ping;
 use Monadial\Nexus\Cluster\Transport\InMemoryTransport;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Tests\Support\TestFutureSlot;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 
 #[CoversClass(RemoteActorRef::class)]
 final class RemoteActorRefTest extends TestCase
@@ -62,18 +63,47 @@ final class RemoteActorRefTest extends TestCase
     }
 
     #[Test]
-    public function askThrowsRuntimeException(): void
+    public function askDelegatesToHandler(): void
     {
-        $ref = $this->createRef('/user/orders', 3);
+        $slot = new TestFutureSlot();
+        $slot->resolve(new Ping('reply'));
+        $capturedPath = null;
+        $capturedWorker = null;
+        $capturedMessage = null;
+        $capturedTimeout = null;
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('not supported for remote actors');
+        $ref = $this->createRef(
+            '/user/orders',
+            3,
+            static function (ActorPath $path, int $targetWorker, object $message, Duration $timeout) use (
+                &$capturedPath,
+                &$capturedWorker,
+                &$capturedMessage,
+                &$capturedTimeout,
+                $slot,
+            ): Future {
+                $capturedPath = $path;
+                $capturedWorker = $targetWorker;
+                $capturedMessage = $message;
+                $capturedTimeout = $timeout;
 
-        (void) $ref->ask(new Ping(), Duration::seconds(1));
+                return new Future($slot);
+            },
+        );
+
+        $reply = $ref->ask(new Ping('request'), Duration::seconds(1))->await();
+
+        self::assertSame('/user/orders', (string) $capturedPath);
+        self::assertSame(3, $capturedWorker);
+        self::assertInstanceOf(Ping::class, $capturedMessage);
+        self::assertSame('request', $capturedMessage->payload);
+        self::assertSame('1s', (string) $capturedTimeout);
+        self::assertInstanceOf(Ping::class, $reply);
+        self::assertSame('reply', $reply->payload);
     }
 
     /** @return RemoteActorRef<object> */
-    private function createRef(string $path, int $targetWorker): RemoteActorRef
+    private function createRef(string $path, int $targetWorker, ?callable $askHandler = null,): RemoteActorRef
     {
         return new RemoteActorRef(
             ActorPath::fromString($path),
@@ -81,6 +111,9 @@ final class RemoteActorRefTest extends TestCase
             new InMemoryTransport(),
             new PhpNativeClusterSerializer(),
             new InMemoryDirectory(),
+            $askHandler ?? static fn(ActorPath $path, int $targetWorker, object $message, Duration $timeout): Future => new Future(
+                new TestFutureSlot(),
+            ),
         );
     }
 
@@ -97,6 +130,9 @@ final class RemoteActorRefTest extends TestCase
             $transport,
             $serializer,
             new InMemoryDirectory(),
+            static fn(ActorPath $path, int $targetWorker, object $message, Duration $timeout): Future => new Future(
+                new TestFutureSlot(),
+            ),
         );
     }
 
@@ -112,6 +148,9 @@ final class RemoteActorRefTest extends TestCase
             new InMemoryTransport(),
             new PhpNativeClusterSerializer(),
             $directory,
+            static fn(ActorPath $path, int $targetWorker, object $message, Duration $timeout): Future => new Future(
+                new TestFutureSlot(),
+            ),
         );
     }
 }

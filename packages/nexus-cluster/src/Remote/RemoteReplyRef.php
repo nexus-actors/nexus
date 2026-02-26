@@ -2,10 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster;
+namespace Monadial\Nexus\Cluster\Remote;
 
-use Closure;
-use Monadial\Nexus\Cluster\Directory\ActorDirectory;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -15,38 +14,37 @@ use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use NoDiscard;
 use Override;
+use RuntimeException;
 
 /**
  * @psalm-api
  *
- * Remote actor reference that delivers messages via transport to another worker.
- * Implements ActorRef for location transparency -- actor code never knows
- * whether it holds a LocalActorRef or RemoteActorRef.
+ * SenderRef bridge that routes ctx->reply() back to the requesting worker.
  *
  * @template T of object
  * @implements ActorRef<T>
  */
-final readonly class RemoteActorRef implements ActorRef
+final readonly class RemoteReplyRef implements ActorRef
 {
-    /**
-     * @param Closure(ActorPath, int, object, Duration): Future<object> $askHandler
-     */
     public function __construct(
+        private string $requestId,
+        private int $replyToWorker,
         private ActorPath $path,
-        private int $targetWorker,
         private Transport $transport,
         private ClusterSerializer $serializer,
-        private ActorDirectory $directory,
-        private Closure $askHandler,
     ) {}
 
     /** @param T $message */
     #[Override]
     public function tell(object $message): void
     {
-        $envelope = Envelope::of($message, ActorPath::root(), $this->path);
-        $data = $this->serializer->serialize($envelope);
-        $this->transport->send($this->targetWorker, $data);
+        $envelope = Envelope::of(
+            new RemoteAskReply($this->requestId, $message),
+            ActorPath::root(),
+            ActorPath::root(),
+        );
+
+        $this->transport->send($this->replyToWorker, $this->serializer->serialize($envelope));
     }
 
     /**
@@ -57,8 +55,7 @@ final readonly class RemoteActorRef implements ActorRef
     #[NoDiscard]
     public function ask(object $message, Duration $timeout): Future
     {
-        /** @var Future<R> */
-        return ($this->askHandler)($this->path, $this->targetWorker, $message, $timeout);
+        throw new RuntimeException('Cannot ask() a RemoteReplyRef');
     }
 
     #[Override]
@@ -70,6 +67,6 @@ final readonly class RemoteActorRef implements ActorRef
     #[Override]
     public function isAlive(): bool
     {
-        return $this->directory->has((string) $this->path);
+        return true;
     }
 }
