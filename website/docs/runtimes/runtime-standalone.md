@@ -5,44 +5,46 @@ title: Standalone Runtime Primitives
 
 # Standalone Runtime Primitives
 
-`nexus-runtime` provides `Future` and runtime abstractions independently from
-`nexus-core`.
+`nexus-runtime` can be used without `ActorSystem` when you only need async
+composition, scheduling, and timeout/cancellation primitives.
 
-For a full bootstrapping flow (actor + standalone tracks), start with
-[Bootstrap Runtime](./bootstrap.md).
+## When This Is Useful
+
+- building framework adapters around callback/timer APIs
+- orchestrating background workflows without actor hierarchy
+- sharing `Duration` + `Future` abstractions across packages
+- writing deterministic tests with `StepRuntime` and `VirtualClock`
 
 ## Install
 
 ```bash
+# Runtime contracts + Future primitives
 composer require nexus-actors/runtime
+
+# Optional deterministic runtime implementation for tests
+composer require --dev nexus-actors/runtime-step
 ```
 
-## Future Example (No Actor System)
+## Practical Example (No Actors)
 
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
-use Monadial\Nexus\Runtime\Async\FutureSlot;
-use Monadial\Nexus\Runtime\Exception\FutureException;
-use RuntimeException;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
 
-final class InlineFutureException extends RuntimeException implements FutureException {}
-
-final class InlineSlot implements FutureSlot
-{
-    private ?object $value = null;
-
-    public function resolve(object $value): void { $this->value = $value; }
-    public function fail(FutureException $e): void { throw $e; }
-    public function isResolved(): bool { return $this->value !== null; }
-    public function await(): object { return $this->value ?? throw new RuntimeException('Not resolved'); }
-}
-
-$slot = new InlineSlot();
-$slot->resolve((object) ['count' => 21]);
-
+$runtime = new StepRuntime();
+$slot = $runtime->createFutureSlot();
 $future = new Future($slot);
+
+$runtime->scheduleOnce(Duration::seconds(2), static function () use ($slot): void {
+    $slot->resolve((object) ['status' => 'ok']);
+});
+
+// Deterministic: nothing happens until time is advanced.
+$runtime->advanceTime(Duration::seconds(2));
+
 $result = $future
-    ->map(static fn(object $v): object => (object) ['count' => $v->count * 2])
+    ->map(static fn(object $v): object => (object) ['status' => strtoupper($v->status)])
     ->await();
 ```
 
@@ -51,5 +53,5 @@ $result = $future
 Concrete runtime packages (`runtime-fiber`, `runtime-swoole`, `runtime-step`)
 implement `Monadial\Nexus\Runtime\Runtime\Runtime`.
 
-Use this when you need to accept runtime implementations without depending on
-core actor APIs at the call site.
+Use this when your code should accept runtime implementations without coupling
+to actor APIs.
