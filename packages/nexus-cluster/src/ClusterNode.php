@@ -320,9 +320,15 @@ final class ClusterNode
             path: $request->replyToPath,
             transport: $this->transport,
             serializer: $this->serializer,
-            onReply: function (object $reply) use ($request): void {
+            onReply: function (object $reply) use ($request): bool {
+                if (($this->incomingAskState[$request->requestId] ?? null) !== 'in-progress') {
+                    return false;
+                }
+
                 $this->incomingAskState[$request->requestId] = 'replied';
                 $this->incomingAskReplies[$request->requestId] = $reply;
+
+                return true;
             },
         );
 

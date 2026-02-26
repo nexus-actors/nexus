@@ -27,7 +27,7 @@ use RuntimeException;
  */
 final readonly class RemoteReplyRef implements ActorRef
 {
-    /** @param Closure(object): void $onReply */
+    /** @param Closure(object): bool $onReply */
     public function __construct(
         private string $requestId,
         private int $replyToWorker,
@@ -41,7 +41,9 @@ final readonly class RemoteReplyRef implements ActorRef
     #[Override]
     public function tell(object $message): void
     {
-        ($this->onReply)($message);
+        if (!(($this->onReply)($message))) {
+            return;
+        }
 
         $envelope = Envelope::of(
             new RemoteAskReply($this->requestId, $message),
