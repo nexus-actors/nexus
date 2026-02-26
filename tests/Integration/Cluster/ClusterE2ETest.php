@@ -16,6 +16,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -422,6 +423,130 @@ final class ClusterE2ETest extends TestCase
         self::assertSame('hello-from-1', $receivedOnWorker0[0]);
         self::assertCount(1, $receivedOnWorker1);
         self::assertSame('hello-from-0', $receivedOnWorker1[0]);
+    }
+
+    #[Test]
+    public function remoteAskRoundtripAcrossWorkers(): void
+    {
+        $replyPayload = null;
+
+        /** @psalm-suppress UnusedFunctionCall */
+        run(function () use (&$replyPayload): void {
+            $workerCount = 2;
+            $ring = new ConsistentHashRing($workerCount);
+            $serializer = new PhpNativeClusterSerializer();
+            $directory = new InMemoryDirectory();
+
+            $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
+            $transport1 = new UnixSocketTransport(1, $workerCount, $this->socketDir);
+
+            $runtime0 = $this->createActiveRuntime();
+            $runtime1 = $this->createActiveRuntime();
+            $system0 = ActorSystem::create('worker-0', $runtime0);
+            $system1 = ActorSystem::create('worker-1', $runtime1);
+
+            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
+            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+
+            $transport0->bind();
+            $transport1->bind();
+            Coroutine::sleep(0.05);
+            $transport0->connectToPeers();
+            $transport1->connectToPeers();
+            $node0->start();
+            $node1->start();
+
+            $nameForWorker1 = $this->findNameForWorker($ring, 1);
+
+            $responder = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                $reply = (object) ['payload' => 'reply:' . ($msg->payload ?? 'unknown')];
+                $ctx->reply($reply);
+
+                return Behavior::same();
+            });
+
+            $node1->spawn(Props::fromBehavior($responder), $nameForWorker1);
+
+            $remoteRef = $node0->actorFor("/user/{$nameForWorker1}");
+            self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+
+            $request = (object) ['payload' => 'ping'];
+            $future = $remoteRef->ask($request, Duration::seconds(2));
+            $reply = $future->await();
+            $replyPayload = $reply->payload ?? null;
+
+            $transport0->close();
+            $transport1->close();
+            $system0->shutdown(Duration::millis(100));
+            $system1->shutdown(Duration::millis(100));
+        });
+
+        self::assertSame('reply:ping', $replyPayload);
+    }
+
+    #[Test]
+    public function remoteAskCancelFailsFutureBeforeLateReply(): void
+    {
+        $cancelled = false;
+
+        /** @psalm-suppress UnusedFunctionCall */
+        run(function () use (&$cancelled): void {
+            $workerCount = 2;
+            $ring = new ConsistentHashRing($workerCount);
+            $serializer = new PhpNativeClusterSerializer();
+            $directory = new InMemoryDirectory();
+
+            $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
+            $transport1 = new UnixSocketTransport(1, $workerCount, $this->socketDir);
+
+            $runtime0 = $this->createActiveRuntime();
+            $runtime1 = $this->createActiveRuntime();
+            $system0 = ActorSystem::create('worker-0', $runtime0);
+            $system1 = ActorSystem::create('worker-1', $runtime1);
+
+            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
+            $node1 = new ClusterNode(1, $system1, $transport1, $ring, $serializer, $directory);
+
+            $transport0->bind();
+            $transport1->bind();
+            Coroutine::sleep(0.05);
+            $transport0->connectToPeers();
+            $transport1->connectToPeers();
+            $node0->start();
+            $node1->start();
+
+            $nameForWorker1 = $this->findNameForWorker($ring, 1);
+
+            $slowResponder = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                Coroutine::sleep(0.2);
+                $ctx->reply((object) ['payload' => 'late-reply']);
+
+                return Behavior::same();
+            });
+
+            $node1->spawn(Props::fromBehavior($slowResponder), $nameForWorker1);
+
+            $remoteRef = $node0->actorFor("/user/{$nameForWorker1}");
+            self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+
+            $future = $remoteRef->ask((object) ['payload' => 'ping'], Duration::seconds(2));
+            $future->cancel();
+
+            try {
+                $future->await();
+            } catch (FutureCancelledException) {
+                $cancelled = true;
+            }
+
+            Coroutine::sleep(0.3);
+
+            $transport0->close();
+            $transport1->close();
+            $system0->shutdown(Duration::millis(100));
+            $system1->shutdown(Duration::millis(100));
+        });
+
+        self::assertTrue($cancelled);
     }
 
     protected function setUp(): void
