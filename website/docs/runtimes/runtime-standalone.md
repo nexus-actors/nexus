@@ -22,15 +22,17 @@ composer require nexus-actors/runtime
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use RuntimeException;
-use Throwable;
+
+final class InlineFutureException extends RuntimeException implements FutureException {}
 
 final class InlineSlot implements FutureSlot
 {
     private ?object $value = null;
 
     public function resolve(object $value): void { $this->value = $value; }
-    public function fail(Throwable $e): void { throw $e; }
+    public function fail(FutureException $e): void { throw $e; }
     public function isResolved(): bool { return $this->value !== null; }
     public function await(): object { return $this->value ?? throw new RuntimeException('Not resolved'); }
 }

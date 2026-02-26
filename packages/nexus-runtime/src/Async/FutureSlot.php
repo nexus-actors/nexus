@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Async;
 
 use Monadial\Nexus\Runtime\Exception\FutureException;
-use Throwable;
 
 /**
  * @psalm-api
@@ -16,7 +15,6 @@ use Throwable;
  * suspension primitives (Fiber::suspend, Swoole Channel, etc.).
  *
  * @template R of object
- * @template E of FutureException
  */
 interface FutureSlot
 {
@@ -32,9 +30,8 @@ interface FutureSlot
      * Fail the slot with an exception. Idempotent - second call is a no-op.
      * Wakes the awaiting fiber/coroutine if one is suspended.
      *
-     * @param E $e
      */
-    public function fail(Throwable $e): void;
+    public function fail(FutureException $e): void;
 
     /**
      * Whether the slot has been resolved or failed.

@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Tests\Support;
 
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 use RuntimeException;
-use Throwable;
 
 final class TestFutureSlot implements FutureSlot
 {
     private ?object $result = null;
-    private ?Throwable $failure = null;
+    private ?FutureException $failure = null;
     private bool $resolved = false;
 
     #[Override]
@@ -27,7 +27,7 @@ final class TestFutureSlot implements FutureSlot
     }
 
     #[Override]
-    public function fail(Throwable $e): void
+    public function fail(FutureException $e): void
     {
         if ($this->resolved) {
             return;

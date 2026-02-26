@@ -57,12 +57,14 @@ namespace App\Runtime;
 use DateTimeImmutable;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use RuntimeException;
-use Throwable;
+
+final class InlineFutureException extends RuntimeException implements FutureException {}
 
 final class InlineCancellable implements Cancellable
 {
@@ -82,7 +84,7 @@ final class InlineCancellable implements Cancellable
 final class InlineFutureSlot implements FutureSlot
 {
     private ?object $value = null;
-    private ?Throwable $failure = null;
+    private ?FutureException $failure = null;
     private bool $resolved = false;
 
     public function resolve(object $value): void
@@ -95,7 +97,7 @@ final class InlineFutureSlot implements FutureSlot
         $this->resolved = true;
     }
 
-    public function fail(Throwable $e): void
+    public function fail(FutureException $e): void
     {
         if ($this->resolved) {
             return;

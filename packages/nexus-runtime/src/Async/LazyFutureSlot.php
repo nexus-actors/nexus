@@ -7,15 +7,13 @@ namespace Monadial\Nexus\Runtime\Async;
 use Closure;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
-use Throwable;
 
 /**
  * A FutureSlot that lazily evaluates a closure on await().
  * Used internally by Future combinators (map, flatMap).
  *
  * @template R of object
- * @template E of FutureException
- * @implements FutureSlot<R, E>
+ * @implements FutureSlot<R>
  */
 final class LazyFutureSlot implements FutureSlot
 {
@@ -33,8 +31,7 @@ final class LazyFutureSlot implements FutureSlot
     }
 
     #[Override]
-    /** @param E $e */
-    public function fail(Throwable $e): void
+    public function fail(FutureException $e): void
     {
         // LazyFutureSlot is not externally failable - failures propagate through the closure
     }

@@ -9,7 +9,6 @@ use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
@@ -48,7 +47,7 @@ final readonly class RemoteActorRef implements ActorRef
 
     /**
      * @template R of object
-     * @return Future<R, AskTimeoutException>
+     * @return Future<R>
      * @throws RuntimeException Always -- ask() is not supported for remote actors in v1
      */
     #[Override]

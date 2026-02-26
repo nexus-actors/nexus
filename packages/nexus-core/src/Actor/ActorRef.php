@@ -27,7 +27,7 @@ interface ActorRef
      *
      * @template R of object
      * @param T $message
-     * @return Future<R, AskTimeoutException>
+     * @return Future<R>
      * @throws AskTimeoutException
      */
     #[NoDiscard]
