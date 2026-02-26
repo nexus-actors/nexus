@@ -37,10 +37,24 @@ use Monadial\Nexus\Runtime\Runtime\Cancellable;
  */
 final class ClusterNode
 {
+    private const int ASK_RETRY_MAX_ATTEMPTS = 3;
+    private const int ASK_RETRY_INTERVAL_MILLIS = 50;
+    private const int INBOUND_TERMINAL_TTL_SECONDS = 60;
+    private const int INBOUND_TERMINAL_MAX_ENTRIES = 10_000;
+
     /** @var array<string, LocalActorRef<object>> */
     private array $localRefs = [];
 
-    /** @var array<string, array{slot: FutureSlot<object>, timeout: Cancellable, target: ActorPath, targetWorker: int}> */
+    /** @var array<string, array{
+     *     acked: bool,
+     *     request: RemoteAskRequest,
+     *     retriesRemaining: int,
+     *     retryTimer: Cancellable|null,
+     *     slot: FutureSlot<object>,
+     *     timeout: Cancellable,
+     *     target: ActorPath,
+     *     targetWorker: int
+     * }> */
     private array $pendingOutgoingAsks = [];
 
     /** @var array<string, RemoteAskState> */
@@ -51,6 +65,9 @@ final class ClusterNode
 
     /** @var array<string, object> */
     private array $incomingAskReplies = [];
+
+    /** @var array<string, int> */
+    private array $incomingAskTerminalAt = [];
 
     public function __construct(
         private readonly int $workerId,
@@ -183,6 +200,15 @@ final class ClusterNode
         $requestEnvelope = Envelope::of($message, ActorPath::root(), $targetPath);
         $requestId = $requestEnvelope->requestId;
         $replyPath = ActorPath::fromString('/temp/remote-ask-' . $requestId);
+        $request = new RemoteAskRequest(
+            requestId: $requestId,
+            correlationId: $requestEnvelope->correlationId,
+            causationId: $requestEnvelope->causationId,
+            targetPath: $targetPath,
+            replyToWorker: $this->workerId,
+            replyToPath: $replyPath,
+            payload: $message,
+        );
 
         $slot = $this->system->runtime()->createFutureSlot();
         $timeoutHandle = $this->system->runtime()->scheduleOnce(
@@ -193,12 +219,16 @@ final class ClusterNode
                 }
 
                 $slot->fail(new AskTimeoutException($targetPath, $timeout));
-                unset($this->pendingOutgoingAsks[$requestId]);
+                $this->clearPendingOutgoingAsk($requestId);
                 $this->sendControl($targetWorker, new RemoteAskCancel($requestId));
             },
         );
 
         $this->pendingOutgoingAsks[$requestId] = [
+            'acked' => false,
+            'request' => $request,
+            'retriesRemaining' => self::ASK_RETRY_MAX_ATTEMPTS,
+            'retryTimer' => null,
             'slot' => $slot,
             'target' => $targetPath,
             'targetWorker' => $targetWorker,
@@ -212,28 +242,12 @@ final class ClusterNode
                 return;
             }
 
-            $entry['timeout']->cancel();
-            unset($this->pendingOutgoingAsks[$requestId]);
+            $this->clearPendingOutgoingAsk($requestId);
             $this->sendControl($targetWorker, new RemoteAskCancel($requestId));
         });
 
-        $request = new RemoteAskRequest(
-            requestId: $requestId,
-            correlationId: $requestEnvelope->correlationId,
-            causationId: $requestEnvelope->causationId,
-            targetPath: $targetPath,
-            replyToWorker: $this->workerId,
-            replyToPath: $replyPath,
-            payload: $message,
-        );
-
-        $this->sendControl(
-            $targetWorker,
-            $request,
-            requestId: $requestId,
-            correlationId: $requestEnvelope->correlationId,
-            causationId: $requestEnvelope->causationId,
-        );
+        $this->sendAskRequest($requestId);
+        $this->scheduleAskRetry($requestId);
 
         /** @var Future<R> */
         return new Future($slot);
@@ -267,11 +281,18 @@ final class ClusterNode
             return true;
         }
 
-        return $message instanceof RemoteAskAck;
+        if ($message instanceof RemoteAskAck) {
+            $this->handleRemoteAskAck($message);
+
+            return true;
+        }
+
+        return false;
     }
 
     private function handleRemoteAskRequest(RemoteAskRequest $request): void
     {
+        $this->pruneInboundTerminalState();
         $state = $this->incomingAskState[$request->requestId] ?? null;
 
         if ($state === RemoteAskState::Replied) {
@@ -310,10 +331,13 @@ final class ClusterNode
 
         if ($ref === null) {
             $this->incomingAskState[$request->requestId] = RemoteAskState::Cancelled;
+            $this->incomingAskTerminalAt[$request->requestId] = time();
             $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
 
             return;
         }
+
+        $this->sendControl($request->replyToWorker, new RemoteAskAck($request->requestId));
 
         $replyRef = new RemoteReplyRef(
             requestId: $request->requestId,
@@ -328,6 +352,7 @@ final class ClusterNode
 
                 $this->incomingAskState[$request->requestId] = RemoteAskState::Replied;
                 $this->incomingAskReplies[$request->requestId] = $reply;
+                $this->incomingAskTerminalAt[$request->requestId] = time();
 
                 return true;
             },
@@ -350,9 +375,26 @@ final class ClusterNode
             return;
         }
 
-        $entry['timeout']->cancel();
         $entry['slot']->resolve($reply->payload);
-        unset($this->pendingOutgoingAsks[$reply->requestId]);
+        $this->clearPendingOutgoingAsk($reply->requestId);
+    }
+
+    private function handleRemoteAskAck(RemoteAskAck $ack): void
+    {
+        $entry = $this->pendingOutgoingAsks[$ack->requestId] ?? null;
+
+        if ($entry === null || $entry['acked']) {
+            return;
+        }
+
+        $entry['acked'] = true;
+
+        if ($entry['retryTimer'] !== null) {
+            $entry['retryTimer']->cancel();
+        }
+
+        $entry['retryTimer'] = null;
+        $this->pendingOutgoingAsks[$ack->requestId] = $entry;
     }
 
     private function handleRemoteAskCancel(RemoteAskCancel $cancel): void
@@ -368,6 +410,7 @@ final class ClusterNode
         }
 
         $this->incomingAskState[$cancel->requestId] = RemoteAskState::Cancelled;
+        $this->incomingAskTerminalAt[$cancel->requestId] = time();
         $request = $this->incomingAskRequests[$cancel->requestId] ?? null;
 
         if ($request !== null) {
@@ -383,9 +426,104 @@ final class ClusterNode
             return;
         }
 
-        $entry['timeout']->cancel();
         $entry['slot']->fail(new FutureCancelledException());
-        unset($this->pendingOutgoingAsks[$cancelled->requestId]);
+        $this->clearPendingOutgoingAsk($cancelled->requestId);
+    }
+
+    private function scheduleAskRetry(string $requestId): void
+    {
+        $entry = $this->pendingOutgoingAsks[$requestId] ?? null;
+
+        if ($entry === null || $entry['acked'] || $entry['slot']->isResolved() || $entry['retriesRemaining'] <= 0) {
+            return;
+        }
+
+        $entry['retryTimer'] = $this->system->runtime()->scheduleOnce(
+            Duration::millis(self::ASK_RETRY_INTERVAL_MILLIS),
+            function () use ($requestId): void {
+                $retryEntry = $this->pendingOutgoingAsks[$requestId] ?? null;
+
+                if ($retryEntry === null || $retryEntry['acked'] || $retryEntry['slot']->isResolved()) {
+                    return;
+                }
+
+                if ($retryEntry['retriesRemaining'] <= 0) {
+                    return;
+                }
+
+                $retryEntry['retriesRemaining']--;
+                $this->pendingOutgoingAsks[$requestId] = $retryEntry;
+                $this->sendAskRequest($requestId);
+                $this->scheduleAskRetry($requestId);
+            },
+        );
+
+        $this->pendingOutgoingAsks[$requestId] = $entry;
+    }
+
+    private function sendAskRequest(string $requestId): void
+    {
+        $entry = $this->pendingOutgoingAsks[$requestId] ?? null;
+
+        if ($entry === null) {
+            return;
+        }
+
+        $request = $entry['request'];
+
+        $this->sendControl(
+            $entry['targetWorker'],
+            $request,
+            requestId: $request->requestId,
+            correlationId: $request->correlationId,
+            causationId: $request->causationId,
+        );
+    }
+
+    private function clearPendingOutgoingAsk(string $requestId): void
+    {
+        $entry = $this->pendingOutgoingAsks[$requestId] ?? null;
+
+        if ($entry === null) {
+            return;
+        }
+
+        $entry['timeout']->cancel();
+
+        if ($entry['retryTimer'] !== null) {
+            $entry['retryTimer']->cancel();
+        }
+
+        unset($this->pendingOutgoingAsks[$requestId]);
+    }
+
+    private function pruneInboundTerminalState(): void
+    {
+        $cutoff = time() - self::INBOUND_TERMINAL_TTL_SECONDS;
+
+        foreach ($this->incomingAskTerminalAt as $requestId => $terminalAt) {
+            if ($terminalAt > $cutoff) {
+                continue;
+            }
+
+            unset($this->incomingAskTerminalAt[$requestId]);
+            unset($this->incomingAskState[$requestId]);
+            unset($this->incomingAskRequests[$requestId]);
+            unset($this->incomingAskReplies[$requestId]);
+        }
+
+        while (count($this->incomingAskTerminalAt) > self::INBOUND_TERMINAL_MAX_ENTRIES) {
+            $oldestRequestId = array_key_first($this->incomingAskTerminalAt);
+
+            if ($oldestRequestId === null) {
+                break;
+            }
+
+            unset($this->incomingAskTerminalAt[$oldestRequestId]);
+            unset($this->incomingAskState[$oldestRequestId]);
+            unset($this->incomingAskRequests[$oldestRequestId]);
+            unset($this->incomingAskReplies[$oldestRequestId]);
+        }
     }
 
     private function sendControl(
