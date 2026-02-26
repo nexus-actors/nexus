@@ -47,6 +47,18 @@ final readonly class Future
     }
 
     /**
+     * Register a callback invoked when this future is cancelled.
+     *
+     * @param Closure(): void $callback
+     */
+    public function onCancel(Closure $callback): self
+    {
+        $this->slot->onCancel($callback);
+
+        return $this;
+    }
+
+    /**
      * Transform the result when it arrives. Lazy - does not block.
      *
      * @template U of object
@@ -57,7 +69,6 @@ final readonly class Future
     {
         $slot = $this->slot;
 
-        /** @var Future<U> */
         /** @var FutureSlot<U> $mappedSlot */
         $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();
@@ -79,7 +90,6 @@ final readonly class Future
     {
         $slot = $this->slot;
 
-        /** @var Future<U> */
         /** @var FutureSlot<U> $mappedSlot */
         $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();

@@ -60,4 +60,35 @@ final class ClusterConfigTest extends TestCase
 
         ClusterConfig::withWorkers(0);
     }
+
+    #[Test]
+    public function withIdentityOverridesClusterNodeIdentityDefaults(): void
+    {
+        $config = ClusterConfig::withWorkers(4)->withIdentity(
+            clusterName: 'payments-prod',
+            applicationName: 'checkout',
+            datacenter: 'eu-west-1',
+            nodeNamePrefix: 'checkout-node',
+        );
+
+        self::assertSame('payments-prod', $config->clusterName);
+        self::assertSame('checkout', $config->applicationName);
+        self::assertSame('eu-west-1', $config->datacenter);
+        self::assertSame('checkout-node', $config->nodeNamePrefix);
+    }
+
+    #[Test]
+    public function nodeAddressForWorkerBuildsStructuredAddress(): void
+    {
+        $config = ClusterConfig::withWorkers(2)->withIdentity(
+            clusterName: 'payments-prod',
+            applicationName: 'checkout',
+            datacenter: 'eu-west-1',
+            nodeNamePrefix: 'checkout-node',
+        );
+
+        $address = $config->nodeAddressForWorker(1);
+
+        self::assertSame('/cluster/payments-prod/eu-west-1/checkout/checkout-node-1', $address->toPathPrefix());
+    }
 }

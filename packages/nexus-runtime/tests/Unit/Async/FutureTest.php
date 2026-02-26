@@ -36,4 +36,19 @@ final class FutureTest extends TestCase
         $this->expectException(FutureCancelledException::class);
         $future->await();
     }
+
+    #[Test]
+    public function onCancel_registers_callback_invoked_on_cancel(): void
+    {
+        $slot = new TestFutureSlot();
+        $future = new Future($slot);
+        $invoked = false;
+
+        $future->onCancel(static function () use (&$invoked): void {
+            $invoked = true;
+        });
+        $future->cancel();
+
+        self::assertTrue($invoked);
+    }
 }
