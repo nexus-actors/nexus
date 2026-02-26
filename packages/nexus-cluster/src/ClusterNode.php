@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster;
 
 use Monadial\Nexus\Cluster\Directory\ActorDirectory;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskAck;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancelled;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
@@ -41,8 +42,14 @@ final class ClusterNode
     /** @var array<string, array{slot: FutureSlot<object>, timeout: Cancellable, target: ActorPath, targetWorker: int}> */
     private array $pendingOutgoingAsks = [];
 
-    /** @var array<string, array{request: RemoteAskRequest, state: 'in-progress'|'cancelled'}> */
+    /** @var array<string, 'in-progress'|'replied'|'cancelled'> */
     private array $incomingAskState = [];
+
+    /** @var array<string, RemoteAskRequest> */
+    private array $incomingAskRequests = [];
+
+    /** @var array<string, object> */
+    private array $incomingAskReplies = [];
 
     public function __construct(
         private readonly int $workerId,
@@ -259,28 +266,49 @@ final class ClusterNode
             return true;
         }
 
-        return false;
+        return $message instanceof RemoteAskAck;
     }
 
     private function handleRemoteAskRequest(RemoteAskRequest $request): void
     {
-        $existing = $this->incomingAskState[$request->requestId] ?? null;
+        $state = $this->incomingAskState[$request->requestId] ?? null;
 
-        if ($existing !== null) {
-            if ($existing['state'] === 'cancelled') {
-                $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
+        if ($state === 'replied') {
+            $cachedReply = $this->incomingAskReplies[$request->requestId] ?? null;
+
+            if ($cachedReply !== null) {
+                $this->sendControl(
+                    $request->replyToWorker,
+                    new RemoteAskReply($request->requestId, $cachedReply),
+                    requestId: $request->requestId,
+                    correlationId: $request->correlationId,
+                    causationId: $request->causationId,
+                );
             }
 
             return;
         }
 
-        $this->incomingAskState[$request->requestId] = ['request' => $request, 'state' => 'in-progress'];
+        if ($state === 'cancelled') {
+            $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
+
+            return;
+        }
+
+        if ($state === 'in-progress') {
+            $this->sendControl($request->replyToWorker, new RemoteAskAck($request->requestId));
+
+            return;
+        }
+
+        $this->incomingAskState[$request->requestId] = 'in-progress';
+        $this->incomingAskRequests[$request->requestId] = $request;
 
         $targetPath = (string) $request->targetPath;
         $ref = $this->localRefs[$targetPath] ?? null;
 
         if ($ref === null) {
-            $this->incomingAskState[$request->requestId]['state'] = 'cancelled';
+            $this->incomingAskState[$request->requestId] = 'cancelled';
             $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
 
             return;
@@ -292,6 +320,10 @@ final class ClusterNode
             path: $request->replyToPath,
             transport: $this->transport,
             serializer: $this->serializer,
+            onReply: function (object $reply) use ($request): void {
+                $this->incomingAskState[$request->requestId] = 'replied';
+                $this->incomingAskReplies[$request->requestId] = $reply;
+            },
         );
 
         $envelope = Envelope::of($request->payload, $request->replyToPath, $request->targetPath)
@@ -318,15 +350,22 @@ final class ClusterNode
 
     private function handleRemoteAskCancel(RemoteAskCancel $cancel): void
     {
-        $existing = $this->incomingAskState[$cancel->requestId] ?? null;
+        $state = $this->incomingAskState[$cancel->requestId] ?? null;
 
-        if ($existing === null) {
+        if ($state === null) {
             return;
         }
 
-        $this->incomingAskState[$cancel->requestId]['state'] = 'cancelled';
-        $request = $existing['request'];
-        $this->sendControl($request->replyToWorker, new RemoteAskCancelled($cancel->requestId));
+        if ($state === 'replied') {
+            return;
+        }
+
+        $this->incomingAskState[$cancel->requestId] = 'cancelled';
+        $request = $this->incomingAskRequests[$cancel->requestId] ?? null;
+
+        if ($request !== null) {
+            $this->sendControl($request->replyToWorker, new RemoteAskCancelled($cancel->requestId));
+        }
     }
 
     private function handleRemoteAskCancelled(RemoteAskCancelled $cancelled): void
