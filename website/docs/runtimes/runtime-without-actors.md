@@ -33,11 +33,12 @@ use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 
 $runtime = new StepRuntime();
-$slot = $runtime->createFutureSlot();
-$future = new Future($slot);
+// Result placeholder managed by the runtime (resolve/fail + await).
+$resultSlot = $runtime->createFutureSlot();
+$future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::millis(250), static function () use ($slot): void {
-    $slot->resolve((object) ['count' => 21]);
+$runtime->scheduleOnce(Duration::millis(250), static function () use ($resultSlot): void {
+    $resultSlot->resolve((object) ['count' => 21]);
 });
 
 $runtime->advanceTime(Duration::millis(250));
@@ -59,11 +60,11 @@ use RuntimeException;
 final class QueryTimeout extends RuntimeException implements FutureTimeoutException {}
 
 $runtime = new StepRuntime();
-$slot = $runtime->createFutureSlot();
-$future = new Future($slot);
+$resultSlot = $runtime->createFutureSlot();
+$future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::seconds(1), static function () use ($slot): void {
-    $slot->fail(new QueryTimeout('query timed out'));
+$runtime->scheduleOnce(Duration::seconds(1), static function () use ($resultSlot): void {
+    $resultSlot->fail(new QueryTimeout('query timed out'));
 });
 
 $runtime->advanceTime(Duration::seconds(1));

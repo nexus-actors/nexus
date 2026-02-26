@@ -78,10 +78,11 @@ use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 
 $runtime = new StepRuntime();
-$slot = $runtime->createFutureSlot();
-$future = new Future($slot);
+// Result placeholder managed by the runtime (resolve/fail + await).
+$resultSlot = $runtime->createFutureSlot();
+$future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::millis(100), static fn() => $slot->resolve((object) ['ok' => true]));
+$runtime->scheduleOnce(Duration::millis(100), static fn() => $resultSlot->resolve((object) ['ok' => true]));
 $runtime->advanceTime(Duration::millis(100));
 $result = $future->await();
 ```
