@@ -22,6 +22,9 @@ final readonly class Envelope
         public object $message,
         public ActorPath $sender,
         public ActorPath $target,
+        public string $requestId,
+        public string $correlationId,
+        public string $causationId,
         public ?ActorRef $senderRef = null,
         public array $metadata = [],
     ) {}
@@ -31,7 +34,16 @@ final readonly class Envelope
      */
     public static function of(object $message, ActorPath $sender, ActorPath $target): self
     {
-        return new self($message, $sender, $target);
+        $requestId = self::newId();
+
+        return new self(
+            message: $message,
+            sender: $sender,
+            target: $target,
+            requestId: $requestId,
+            correlationId: $requestId,
+            causationId: $requestId,
+        );
     }
 
     /**
@@ -58,5 +70,25 @@ final readonly class Envelope
     public function withSender(ActorPath $sender): self
     {
         return clone($this, ['sender' => $sender]);
+    }
+
+    public function withRequestId(string $requestId): self
+    {
+        return clone($this, ['requestId' => $requestId]);
+    }
+
+    public function withCorrelationId(string $correlationId): self
+    {
+        return clone($this, ['correlationId' => $correlationId]);
+    }
+
+    public function withCausationId(string $causationId): self
+    {
+        return clone($this, ['causationId' => $causationId]);
+    }
+
+    private static function newId(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 }
