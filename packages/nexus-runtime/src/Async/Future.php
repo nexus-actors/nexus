@@ -41,6 +41,11 @@ final readonly class Future
         return $this->slot->isResolved();
     }
 
+    public function cancel(): void
+    {
+        $this->slot->cancel();
+    }
+
     /**
      * Transform the result when it arrives. Lazy - does not block.
      *

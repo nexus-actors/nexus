@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Tests\Unit\Async;
 
 use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Tests\Support\TestFutureSlot;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -22,5 +23,17 @@ final class FutureTest extends TestCase
         $future = new Future($slot);
 
         self::assertTrue($future->await()->ok);
+    }
+
+    #[Test]
+    public function cancel_then_await_throws_cancelled_exception(): void
+    {
+        $slot = new TestFutureSlot();
+        $future = new Future($slot);
+
+        $future->cancel();
+
+        $this->expectException(FutureCancelledException::class);
+        $future->await();
     }
 }

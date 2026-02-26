@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Async;
 
+use Closure;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 
 /**
@@ -32,6 +33,20 @@ interface FutureSlot
      *
      */
     public function fail(FutureException $e): void;
+
+    /**
+     * Cancel the slot. Idempotent - second call is a no-op.
+     * Wakes the awaiting fiber/coroutine if one is suspended.
+     */
+    public function cancel(): void;
+
+    /**
+     * Register a callback invoked when cancel() transitions the slot
+     * into terminal cancelled state.
+     *
+     * @param Closure(): void $callback
+     */
+    public function onCancel(Closure $callback): void;
 
     /**
      * Whether the slot has been resolved or failed.
