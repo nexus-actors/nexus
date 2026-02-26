@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Core\Actor;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Exception\InvalidActorPathException;
 use Override;
-use Stringable;
 
 /**
  * @psalm-api
@@ -17,7 +16,7 @@ use Stringable;
  * Represents a fully-qualified path like `/user/orders/order-123`.
  * The root path is represented as `/`.
  */
-final readonly class ActorPath implements Stringable
+final class ActorPath implements ActorPathContract
 {
     private const string NAME_PATTERN = '/^[a-zA-Z0-9_\-\.]+$/';
 
@@ -71,6 +70,7 @@ final readonly class ActorPath implements Stringable
     /**
      * Returns the last segment of the path (`'/'` for root).
      */
+    #[Override]
     public function name(): string
     {
         if ($this->elements === []) {
@@ -83,12 +83,13 @@ final readonly class ActorPath implements Stringable
     /**
      * Returns the parent path, or None for the root path.
      *
-     * @return Option<ActorPath>
+     * @return Option<ActorPathContract>
      */
+    #[Override]
     public function parent(): Option
     {
         if ($this->elements === []) {
-            /** @var Option<self> $none fp4php returns Option<empty>, covariant to Option<self> */
+            /** @var Option<ActorPathContract> $none fp4php returns Option<empty>, covariant to Option<ActorPathContract> */
             $none = Option::none();
 
             return $none;
@@ -102,16 +103,18 @@ final readonly class ActorPath implements Stringable
     /**
      * Value equality comparison.
      */
-    public function equals(self $other): bool
+    #[Override]
+    public function equals(ActorPathContract $other): bool
     {
-        return $this->elements === $other->elements;
+        return $this->elements === self::elementsFrom($other);
     }
 
     /**
      * Returns true if this path is a direct child of the given parent
      * (i.e., depth is exactly parent depth + 1 and shares the same prefix).
      */
-    public function isChildOf(self $parent): bool
+    #[Override]
+    public function isChildOf(ActorPathContract $parent): bool
     {
         return $this->depth() === $parent->depth() + 1
             && $this->startsWith($parent);
@@ -120,7 +123,8 @@ final readonly class ActorPath implements Stringable
     /**
      * Returns true if this path is a descendant (child, grandchild, etc.) of the given ancestor.
      */
-    public function isDescendantOf(self $ancestor): bool
+    #[Override]
+    public function isDescendantOf(ActorPathContract $ancestor): bool
     {
         return $this->depth() > $ancestor->depth()
             && $this->startsWith($ancestor);
@@ -129,6 +133,7 @@ final readonly class ActorPath implements Stringable
     /**
      * Returns the depth of this path (0 for root, 1 for `/user`, etc.).
      */
+    #[Override]
     public function depth(): int
     {
         return count($this->elements);
@@ -137,13 +142,34 @@ final readonly class ActorPath implements Stringable
     /**
      * Checks if this path starts with the given ancestor's elements.
      */
-    private function startsWith(self $ancestor): bool
+    private function startsWith(ActorPathContract $ancestor): bool
     {
-        if ($ancestor->elements === []) {
+        $ancestorElements = self::elementsFrom($ancestor);
+
+        if ($ancestorElements === []) {
             return true;
         }
 
-        return array_slice($this->elements, 0, count($ancestor->elements)) === $ancestor->elements;
+        return array_slice($this->elements, 0, count($ancestorElements)) === $ancestorElements;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function elementsFrom(ActorPathContract $path): array
+    {
+        if ($path instanceof self) {
+            return $path->elements;
+        }
+
+        $stringPath = (string) $path;
+
+        if ($stringPath === '/') {
+            return [];
+        }
+
+        /** @var list<string> */
+        return explode('/', substr($stringPath, 1));
     }
 
     #[Override]
