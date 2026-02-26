@@ -81,7 +81,7 @@ final readonly class LocalActorRef implements ActorRef
             $slot->fail(new AskTimeoutException($targetPath, $timeout));
         });
 
-        $envelope = new Envelope($message, $futureRefPath, $this->path, $futureRef);
+        $envelope = Envelope::of($message, $futureRefPath, $this->path)->withSenderRef($futureRef);
 
         try {
             $_ = $this->mailbox->enqueue($envelope);
