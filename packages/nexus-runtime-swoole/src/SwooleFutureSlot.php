@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
 
+use Closure;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 use Swoole\Coroutine\Channel;
@@ -23,6 +25,10 @@ final class SwooleFutureSlot implements FutureSlot
     private ?object $result = null;
     private ?FutureException $failure = null;
     private bool $resolved = false;
+    private bool $cancelled = false;
+
+    /** @var list<Closure(): void> */
+    private array $cancelCallbacks = [];
 
     public function __construct()
     {
@@ -60,6 +66,29 @@ final class SwooleFutureSlot implements FutureSlot
     }
 
     #[Override]
+    public function cancel(): void
+    {
+        if ($this->resolved) {
+            return;
+        }
+
+        $this->cancelled = true;
+        $this->resolved = true;
+
+        foreach ($this->cancelCallbacks as $callback) {
+            $callback();
+        }
+
+        $this->channel->push(false);
+    }
+
+    #[Override]
+    public function onCancel(Closure $callback): void
+    {
+        $this->cancelCallbacks[] = $callback;
+    }
+
+    #[Override]
     public function await(): object
     {
         if (!$this->resolved) {
@@ -68,6 +97,10 @@ final class SwooleFutureSlot implements FutureSlot
 
         if ($this->failure !== null) {
             throw $this->failure;
+        }
+
+        if ($this->cancelled) {
+            throw new FutureCancelledException();
         }
 
         assert($this->result !== null);

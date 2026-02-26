@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
 
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
@@ -206,5 +207,31 @@ final class SwooleRuntimeTest extends TestCase
         self::assertContains('a', $order);
         self::assertContains('b', $order);
         self::assertCount(2, $order);
+    }
+
+    #[Test]
+    public function cancelled_future_slot_await_throws_cancelled_exception(): void
+    {
+        $runtime = new SwooleRuntime();
+        $thrown = null;
+
+        $runtime->spawn(static function () use ($runtime, &$thrown): void {
+            $slot = $runtime->createFutureSlot();
+            $slot->cancel();
+
+            try {
+                $slot->await();
+            } catch (FutureCancelledException $e) {
+                $thrown = $e;
+            }
+        });
+
+        $runtime->scheduleOnce(Duration::millis(50), static function () use ($runtime): void {
+            $runtime->shutdown(Duration::millis(100));
+        });
+
+        $runtime->run();
+
+        self::assertInstanceOf(FutureCancelledException::class, $thrown);
     }
 }

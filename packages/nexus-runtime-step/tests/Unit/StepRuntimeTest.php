@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -333,6 +334,16 @@ final class StepRuntimeTest extends TestCase
 
         $this->runtime->step();
         self::assertTrue($this->runtime->isIdle());
+    }
+
+    #[Test]
+    public function cancelled_future_slot_await_throws_cancelled_exception(): void
+    {
+        $slot = $this->runtime->createFutureSlot();
+        $slot->cancel();
+
+        $this->expectException(FutureCancelledException::class);
+        $slot->await();
     }
 
     #[Test]

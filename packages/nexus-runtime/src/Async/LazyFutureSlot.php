@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Async;
 
 use Closure;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 
@@ -19,7 +20,12 @@ final class LazyFutureSlot implements FutureSlot
 {
     /** @var ?R */
     private ?object $result = null;
+    private ?FutureException $failure = null;
     private bool $resolved = false;
+    private bool $cancelled = false;
+
+    /** @var list<Closure(): void> */
+    private array $cancelCallbacks = [];
 
     /** @param Closure(): R $computation */
     public function __construct(private readonly Closure $computation) {}
@@ -33,7 +39,33 @@ final class LazyFutureSlot implements FutureSlot
     #[Override]
     public function fail(FutureException $e): void
     {
-        // LazyFutureSlot is not externally failable - failures propagate through the closure
+        if ($this->resolved) {
+            return;
+        }
+
+        $this->failure = $e;
+        $this->resolved = true;
+    }
+
+    #[Override]
+    public function cancel(): void
+    {
+        if ($this->resolved) {
+            return;
+        }
+
+        $this->cancelled = true;
+        $this->resolved = true;
+
+        foreach ($this->cancelCallbacks as $callback) {
+            $callback();
+        }
+    }
+
+    #[Override]
+    public function onCancel(Closure $callback): void
+    {
+        $this->cancelCallbacks[] = $callback;
     }
 
     #[Override]
@@ -46,6 +78,14 @@ final class LazyFutureSlot implements FutureSlot
     /** @return R */
     public function await(): object
     {
+        if ($this->failure !== null) {
+            throw $this->failure;
+        }
+
+        if ($this->cancelled) {
+            throw new FutureCancelledException();
+        }
+
         if (!$this->resolved) {
             $this->result = ($this->computation)();
             $this->resolved = true;

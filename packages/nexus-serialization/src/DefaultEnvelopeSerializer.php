@@ -37,14 +37,14 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
         $metadataArray = $envelope->metadata;
 
         $payload = [
+            'causationId' => $envelope->causationId,
+            'correlationId' => $envelope->correlationId,
             'message' => $serializedMessage,
             'messageType' => $envelope->message::class,
             'metadata' => $metadataArray,
+            'requestId' => $envelope->requestId,
             'sender' => (string) $envelope->sender,
             'target' => (string) $envelope->target,
-            'requestId' => $envelope->requestId,
-            'correlationId' => $envelope->correlationId,
-            'causationId' => $envelope->causationId,
         ];
 
         try {
