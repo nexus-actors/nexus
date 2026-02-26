@@ -7,6 +7,9 @@ namespace Monadial\Nexus\Cluster\Tests\Unit;
 use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskRequest;
 use Monadial\Nexus\Cluster\RemoteActorRef;
 use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
 use Monadial\Nexus\Cluster\Tests\Unit\Support\Ping;
@@ -19,6 +22,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -153,6 +157,69 @@ final class ClusterNodeTest extends TestCase
         $ref = $node->actorFor('/user/nonexistent');
 
         self::assertNull($ref);
+    }
+
+    #[Test]
+    public function remoteAskSendsRequestEnvelopeAndResolvesOnReply(): void
+    {
+        $ring = new ConsistentHashRing(4);
+        $remoteName = $this->findNameNotForWorker($ring, 0);
+
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+        $remoteRef = $node->spawn($props, $remoteName);
+        self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+
+        $node->start();
+
+        $future = $remoteRef->ask(new Ping('request'), Duration::seconds(5));
+        $sent = $this->transport->getSent();
+        self::assertNotEmpty($sent);
+
+        $requestEnvelope = $this->serializer->deserialize($sent[0]['data']);
+        self::assertInstanceOf(RemoteAskRequest::class, $requestEnvelope->message);
+        $request = $requestEnvelope->message;
+        self::assertSame("/user/{$remoteName}", (string) $request->targetPath);
+        self::assertInstanceOf(Ping::class, $request->payload);
+
+        $replyEnvelope = Envelope::of(
+            new RemoteAskReply($request->requestId, new Ping('response')),
+            ActorPath::root(),
+            ActorPath::root(),
+        )->withRequestId($request->requestId);
+
+        $this->transport->receive($this->serializer->serialize($replyEnvelope));
+
+        $reply = $future->await();
+        self::assertInstanceOf(Ping::class, $reply);
+        self::assertSame('response', $reply->payload);
+    }
+
+    #[Test]
+    public function remoteAskCancelSendsCancelControlMessage(): void
+    {
+        $ring = new ConsistentHashRing(4);
+        $remoteName = $this->findNameNotForWorker($ring, 0);
+
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+        $remoteRef = $node->spawn($props, $remoteName);
+        self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+
+        $node->start();
+
+        $future = $remoteRef->ask(new Ping('request'), Duration::seconds(5));
+        $future->cancel();
+
+        $sent = $this->transport->getSent();
+        self::assertGreaterThanOrEqual(2, count($sent));
+
+        $cancelEnvelope = $this->serializer->deserialize($sent[array_key_last($sent)]['data']);
+        self::assertInstanceOf(RemoteAskCancel::class, $cancelEnvelope->message);
     }
 
     protected function setUp(): void
