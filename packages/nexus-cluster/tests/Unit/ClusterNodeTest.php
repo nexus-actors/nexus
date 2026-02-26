@@ -8,6 +8,7 @@ use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskCancelled;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskRequest;
 use Monadial\Nexus\Cluster\RemoteActorRef;
@@ -198,6 +199,44 @@ final class ClusterNodeTest extends TestCase
     }
 
     #[Test]
+    public function duplicateRepliesAreIgnoredAfterFirstResolution(): void
+    {
+        $ring = new ConsistentHashRing(4);
+        $remoteName = $this->findNameNotForWorker($ring, 0);
+
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+        $remoteRef = $node->spawn($props, $remoteName);
+        self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+        $node->start();
+
+        $future = $remoteRef->ask(new Ping('request'), Duration::seconds(5));
+        $requestEnvelope = $this->serializer->deserialize($this->transport->getSent()[0]['data']);
+        self::assertInstanceOf(RemoteAskRequest::class, $requestEnvelope->message);
+        $requestId = $requestEnvelope->message->requestId;
+
+        $firstReply = Envelope::of(
+            new RemoteAskReply($requestId, new Ping('first')),
+            ActorPath::root(),
+            ActorPath::root(),
+        )->withRequestId($requestId);
+        $secondReply = Envelope::of(
+            new RemoteAskReply($requestId, new Ping('second')),
+            ActorPath::root(),
+            ActorPath::root(),
+        )->withRequestId($requestId);
+
+        $this->transport->receive($this->serializer->serialize($firstReply));
+        $this->transport->receive($this->serializer->serialize($secondReply));
+
+        $reply = $future->await();
+        self::assertInstanceOf(Ping::class, $reply);
+        self::assertSame('first', $reply->payload);
+    }
+
+    #[Test]
     public function remoteAskCancelSendsCancelControlMessage(): void
     {
         $ring = new ConsistentHashRing(4);
@@ -220,6 +259,40 @@ final class ClusterNodeTest extends TestCase
 
         $cancelEnvelope = $this->serializer->deserialize($sent[array_key_last($sent)]['data']);
         self::assertInstanceOf(RemoteAskCancel::class, $cancelEnvelope->message);
+    }
+
+    #[Test]
+    public function duplicateUnknownRemoteAskRequestReturnsCancelledBothTimes(): void
+    {
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $node->start();
+
+        $request = new RemoteAskRequest(
+            requestId: 'req-duplicate',
+            correlationId: 'corr-duplicate',
+            causationId: 'cause-duplicate',
+            targetPath: ActorPath::fromString('/user/missing'),
+            replyToWorker: 9,
+            replyToPath: ActorPath::fromString('/temp/remote'),
+            payload: new Ping('hello'),
+        );
+
+        $envelope = Envelope::of($request, ActorPath::root(), ActorPath::root())
+            ->withRequestId($request->requestId)
+            ->withCorrelationId($request->correlationId)
+            ->withCausationId($request->causationId);
+
+        $this->transport->receive($this->serializer->serialize($envelope));
+        $this->transport->receive($this->serializer->serialize($envelope));
+
+        $sent = $this->transport->getSent();
+        self::assertCount(2, $sent);
+
+        $first = $this->serializer->deserialize($sent[0]['data']);
+        $second = $this->serializer->deserialize($sent[1]['data']);
+
+        self::assertInstanceOf(RemoteAskCancelled::class, $first->message);
+        self::assertInstanceOf(RemoteAskCancelled::class, $second->message);
     }
 
     protected function setUp(): void

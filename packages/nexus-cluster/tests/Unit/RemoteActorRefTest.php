@@ -103,7 +103,7 @@ final class RemoteActorRefTest extends TestCase
     }
 
     /** @return RemoteActorRef<object> */
-    private function createRef(string $path, int $targetWorker, ?callable $askHandler = null,): RemoteActorRef
+    private function createRef(string $path, int $targetWorker, ?callable $askHandler = null): RemoteActorRef
     {
         return new RemoteActorRef(
             ActorPath::fromString($path),
