@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Cluster\Tests\Unit;
 use Monadial\Nexus\Cluster\ClusterNode;
 use Monadial\Nexus\Cluster\ConsistentHashRing;
 use Monadial\Nexus\Cluster\Directory\InMemoryDirectory;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskAck;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancelled;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
@@ -259,6 +260,45 @@ final class ClusterNodeTest extends TestCase
 
         $cancelEnvelope = $this->serializer->deserialize($sent[array_key_last($sent)]['data']);
         self::assertInstanceOf(RemoteAskCancel::class, $cancelEnvelope->message);
+    }
+
+    #[Test]
+    public function remoteAskRetriesUntilAckAndStopsAfterAck(): void
+    {
+        $ring = new ConsistentHashRing(4);
+        $remoteName = $this->findNameNotForWorker($ring, 0);
+
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+        $remoteRef = $node->spawn($props, $remoteName);
+        self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+        $node->start();
+
+        $future = $remoteRef->ask(new Ping('request'), Duration::seconds(5));
+        self::assertFalse($future->isResolved());
+
+        self::assertCount(1, $this->transport->getSent());
+
+        $this->runtime->advanceTime(Duration::millis(55));
+        self::assertCount(2, $this->transport->getSent());
+
+        $requestEnvelope = $this->serializer->deserialize($this->transport->getSent()[0]['data']);
+        self::assertInstanceOf(RemoteAskRequest::class, $requestEnvelope->message);
+        $requestId = $requestEnvelope->message->requestId;
+
+        $ackEnvelope = Envelope::of(
+            new RemoteAskAck($requestId),
+            ActorPath::root(),
+            ActorPath::root(),
+        )->withRequestId($requestId);
+
+        $this->transport->receive($this->serializer->serialize($ackEnvelope));
+
+        $afterAck = count($this->transport->getSent());
+        $this->runtime->advanceTime(Duration::millis(200));
+        self::assertCount($afterAck, $this->transport->getSent());
     }
 
     #[Test]
