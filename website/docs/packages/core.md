@@ -101,7 +101,7 @@ classDiagram
 |---|---|
 | `Envelope` | Immutable message wrapper. Properties: `message`, `sender` (ActorPath), `target` (ActorPath), `metadata` (array). Factory: `of(object, ActorPath, ActorPath)`. |
 
-Mailbox contracts/configuration moved to `Monadial\Nexus\Runtime\Mailbox\...`.
+Mailbox contracts/configuration are provided under `Monadial\Nexus\Runtime\Mailbox\...`.
 
 ## Supervision namespace
 
@@ -158,10 +158,11 @@ Mailbox contracts/configuration moved to `Monadial\Nexus\Runtime\Mailbox\...`.
 | `InvalidBehaviorException` | Thrown for invalid behavior configurations. |
 | `NexusLogicException` | Thrown for programming errors (extends `LogicException`). |
 
-## Runtime Primitives
+## Related Runtime Types
 
+Core actor APIs use runtime types from `nexus-runtime`, including
 `Duration`, `Cancellable`, mailbox contracts/configuration, and mailbox
-exceptions moved to `nexus-runtime` under `Monadial\Nexus\Runtime\...`.
+exceptions under `Monadial\Nexus\Runtime\...`.
 
 ## Pipe functions
 
