@@ -105,9 +105,12 @@ final class EnvelopeSerializationTest extends TestCase
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
         $envelope = new Envelope(
-            new OrderPlaced('ORD-META', 42.0),
-            $sender,
-            $target,
+            message: new OrderPlaced('ORD-META', 42.0),
+            sender: $sender,
+            target: $target,
+            requestId: 'request-1',
+            correlationId: 'correlation-1',
+            causationId: 'causation-1',
             metadata: [
                 'correlation-id' => 'corr-001',
                 'request-id' => 'req-789',
@@ -121,6 +124,9 @@ final class EnvelopeSerializationTest extends TestCase
         self::assertSame('abc-123-def-456', $restored->metadata['trace-id']);
         self::assertSame('req-789', $restored->metadata['request-id']);
         self::assertSame('corr-001', $restored->metadata['correlation-id']);
+        self::assertSame('request-1', $restored->requestId);
+        self::assertSame('correlation-1', $restored->correlationId);
+        self::assertSame('causation-1', $restored->causationId);
     }
 
     #[Test]
@@ -152,7 +158,15 @@ final class EnvelopeSerializationTest extends TestCase
         $message = new ShipmentCreated('SHP-ENV', $address);
         $sender = ActorPath::fromString('/user/warehouse');
         $target = ActorPath::fromString('/user/shipping');
-        $envelope = new Envelope($message, $sender, $target, metadata: ['priority' => 'high']);
+        $envelope = new Envelope(
+            message: $message,
+            sender: $sender,
+            target: $target,
+            requestId: 'request-2',
+            correlationId: 'correlation-2',
+            causationId: 'causation-2',
+            metadata: ['priority' => 'high'],
+        );
 
         $data = $serializer->serialize($envelope);
         $restored = $serializer->deserialize($data);
@@ -182,9 +196,12 @@ final class EnvelopeSerializationTest extends TestCase
         ];
         $message = new CartUpdated('CART-ENV', $items);
         $envelope = new Envelope(
-            $message,
-            ActorPath::fromString('/user/web'),
-            ActorPath::fromString('/user/cart-service'),
+            message: $message,
+            sender: ActorPath::fromString('/user/web'),
+            target: ActorPath::fromString('/user/cart-service'),
+            requestId: 'request-3',
+            correlationId: 'correlation-3',
+            causationId: 'causation-3',
             metadata: [
                 'session-id' => 'sess-abc',
                 'user-agent' => 'test-client/1.0',

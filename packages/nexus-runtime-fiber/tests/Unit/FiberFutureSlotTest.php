@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
 use Fiber;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 use Monadial\Nexus\Runtime\Fiber\FiberFutureSlot;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -81,6 +82,16 @@ final class FiberFutureSlotTest extends TestCase
         $fiber->resume();
         self::assertTrue($fiber->isTerminated());
         self::assertSame(42, $result->answer);
+    }
+
+    #[Test]
+    public function cancel_then_await_throws_cancelled_exception(): void
+    {
+        $slot = new FiberFutureSlot(static function (): void {});
+        $slot->cancel();
+
+        $this->expectException(FutureCancelledException::class);
+        $slot->await();
     }
 }
 
