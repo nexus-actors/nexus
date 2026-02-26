@@ -5,37 +5,61 @@ title: nexus-runtime
 
 # nexus-runtime
 
-Runtime abstractions and async primitives extracted from `nexus-core`.
+Runtime abstractions and async primitives.
 
 **Composer:** `nexus-actors/runtime`
 
 **Namespace:** `Monadial\Nexus\Runtime\`
 
-## What It Contains
+## Async namespace
 
-- `Monadial\Nexus\Runtime\Async\Future`
-- `Monadial\Nexus\Runtime\Async\FutureSlot`
-- `Monadial\Nexus\Runtime\Async\LazyFutureSlot`
-- `Monadial\Nexus\Runtime\Duration`
-- `Monadial\Nexus\Runtime\Runtime\Cancellable`
-- `Monadial\Nexus\Runtime\Runtime\Runtime`
-- `Monadial\Nexus\Runtime\Mailbox\Mailbox`
-- `Monadial\Nexus\Runtime\Mailbox\MailboxConfig`
-- `Monadial\Nexus\Runtime\Mailbox\OverflowStrategy`
-- `Monadial\Nexus\Runtime\Mailbox\EnqueueResult`
-- `Monadial\Nexus\Runtime\Exception\MailboxException`
-- `Monadial\Nexus\Runtime\Exception\MailboxClosedException`
-- `Monadial\Nexus\Runtime\Exception\MailboxOverflowException`
-- `Monadial\Nexus\Runtime\Exception\MailboxTimeoutException`
-- `Monadial\Nexus\Runtime\Exception\InvalidMailboxConfigException`
-- `Monadial\Nexus\Runtime\Exception\FutureException`
-- `Monadial\Nexus\Runtime\Exception\FutureTimeoutException`
+`Monadial\Nexus\Runtime\Async\`
 
-## Why It Exists
+| Class / Interface | Description |
+|---|---|
+| `Future<T>` | Async result handle. Methods: `await()`, `map(Closure)`, `flatMap(Closure)`, `isResolved()`. |
+| `FutureSlot<T>` | Runtime-backed resolver for `Future`. Methods: `resolve(object)`, `fail(FutureException)`, `await()`, `isResolved()`. |
+| `LazyFutureSlot<T>` | Internal lazy `FutureSlot` used by combinators (`map`, `flatMap`). |
 
-`Future` composition and runtime contracts can now be reused outside the actor
-system package boundary. `nexus-core` depends on this package instead of
-defining async/runtime primitives internally.
+## Runtime namespace
+
+`Monadial\Nexus\Runtime\Runtime\`
+
+| Class / Interface | Description |
+|---|---|
+| `Runtime` | Runtime contract used by runtimes like Fiber, Swoole, and Step. |
+| `Cancellable` | Cancellation handle for scheduled tasks (`cancel()`, `isCancelled()`). |
+
+## Mailbox namespace
+
+`Monadial\Nexus\Runtime\Mailbox\`
+
+| Class / Interface | Description |
+|---|---|
+| `Mailbox<T>` | Generic mailbox contract used by runtime implementations. |
+| `MailboxConfig` | Immutable mailbox configuration (`bounded()`, `unbounded()`, `withCapacity()`, `withStrategy()`). |
+| `OverflowStrategy` | Overflow behavior enum (`DropNewest`, `DropOldest`, `Backpressure`, `ThrowException`). |
+| `EnqueueResult` | Enqueue result enum (`Accepted`, `Dropped`, `Backpressured`). |
+
+## Exception namespace
+
+`Monadial\Nexus\Runtime\Exception\`
+
+| Class / Interface | Description |
+|---|---|
+| `FutureException` | Base marker interface for future failures. |
+| `FutureTimeoutException` | Marker interface for timeout-style future failures. |
+| `MailboxException` | Base mailbox exception. |
+| `MailboxClosedException` | Mailbox operation on closed mailbox. |
+| `MailboxOverflowException` | Mailbox overflow with throw strategy. |
+| `MailboxTimeoutException` | Mailbox operation timed out. |
+| `InvalidMailboxConfigException` | Invalid mailbox configuration. |
+
+## Duration
+
+`Monadial\Nexus\Runtime\Duration`
+
+Immutable nanosecond-precision duration value object used by all runtime APIs.
 
 ## When To Use `nexus-runtime` Only
 
