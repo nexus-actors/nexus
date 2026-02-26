@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster;
 
 use Monadial\Nexus\Cluster\Directory\ActorDirectory;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskCancelled;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
+use Monadial\Nexus\Cluster\Protocol\RemoteAskRequest;
+use Monadial\Nexus\Cluster\Remote\RemoteReplyRef;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -12,6 +17,13 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 
 /**
  * @psalm-api
@@ -25,6 +37,12 @@ final class ClusterNode
 {
     /** @var array<string, LocalActorRef<object>> */
     private array $localRefs = [];
+
+    /** @var array<string, array{slot: FutureSlot<object>, timeout: Cancellable, target: ActorPath, targetWorker: int}> */
+    private array $pendingOutgoingAsks = [];
+
+    /** @var array<string, array{request: RemoteAskRequest, state: 'in-progress'|'cancelled'}> */
+    private array $incomingAskState = [];
 
     public function __construct(
         private readonly int $workerId,
@@ -66,7 +84,14 @@ final class ClusterNode
         $this->directory->register($pathStr, $ownerWorker);
 
         /** @var RemoteActorRef<T> $remoteRef */
-        $remoteRef = new RemoteActorRef($path, $ownerWorker, $this->transport, $this->serializer, $this->directory);
+        $remoteRef = new RemoteActorRef(
+            $path,
+            $ownerWorker,
+            $this->transport,
+            $this->serializer,
+            $this->directory,
+            $this->askRemote(...),
+        );
 
         return $remoteRef;
     }
@@ -96,6 +121,7 @@ final class ClusterNode
             $this->transport,
             $this->serializer,
             $this->directory,
+            $this->askRemote(...),
         );
     }
 
@@ -109,6 +135,11 @@ final class ClusterNode
     {
         $this->transport->listen(function (string $data): void {
             $envelope = $this->serializer->deserialize($data);
+
+            if ($this->handleControlMessage($envelope)) {
+                return;
+            }
+
             $targetPath = (string) $envelope->target;
 
             $ref = $this->localRefs[$targetPath] ?? null;
@@ -134,4 +165,205 @@ final class ClusterNode
     {
         return $this->system;
     }
+
+    /**
+     * @template R of object
+     * @return Future<R>
+     */
+    public function askRemote(ActorPath $targetPath, int $targetWorker, object $message, Duration $timeout): Future
+    {
+        $requestEnvelope = Envelope::of($message, ActorPath::root(), $targetPath);
+        $requestId = $requestEnvelope->requestId;
+        $replyPath = ActorPath::fromString('/temp/remote-ask-' . $requestId);
+
+        $slot = $this->system->runtime()->createFutureSlot();
+        $timeoutHandle = $this->system->runtime()->scheduleOnce(
+            $timeout,
+            function () use ($requestId, $slot, $targetPath, $timeout, $targetWorker): void {
+                if ($slot->isResolved()) {
+                    return;
+                }
+
+                $slot->fail(new AskTimeoutException($targetPath, $timeout));
+                unset($this->pendingOutgoingAsks[$requestId]);
+                $this->sendControl($targetWorker, new RemoteAskCancel($requestId));
+            },
+        );
+
+        $this->pendingOutgoingAsks[$requestId] = [
+            'slot' => $slot,
+            'target' => $targetPath,
+            'targetWorker' => $targetWorker,
+            'timeout' => $timeoutHandle,
+        ];
+
+        $slot->onCancel(function () use ($requestId, $targetWorker): void {
+            $entry = $this->pendingOutgoingAsks[$requestId] ?? null;
+
+            if ($entry === null) {
+                return;
+            }
+
+            $entry['timeout']->cancel();
+            unset($this->pendingOutgoingAsks[$requestId]);
+            $this->sendControl($targetWorker, new RemoteAskCancel($requestId));
+        });
+
+        $request = new RemoteAskRequest(
+            requestId: $requestId,
+            correlationId: $requestEnvelope->correlationId,
+            causationId: $requestEnvelope->causationId,
+            targetPath: $targetPath,
+            replyToWorker: $this->workerId,
+            replyToPath: $replyPath,
+            payload: $message,
+        );
+
+        $this->sendControl(
+            $targetWorker,
+            $request,
+            requestId: $requestId,
+            correlationId: $requestEnvelope->correlationId,
+            causationId: $requestEnvelope->causationId,
+        );
+
+        /** @var Future<R> */
+        return new Future($slot);
+    }
+
+    private function handleControlMessage(Envelope $envelope): bool
+    {
+        $message = $envelope->message;
+
+        if ($message instanceof RemoteAskRequest) {
+            $this->handleRemoteAskRequest($message);
+
+            return true;
+        }
+
+        if ($message instanceof RemoteAskReply) {
+            $this->handleRemoteAskReply($message);
+
+            return true;
+        }
+
+        if ($message instanceof RemoteAskCancel) {
+            $this->handleRemoteAskCancel($message);
+
+            return true;
+        }
+
+        if ($message instanceof RemoteAskCancelled) {
+            $this->handleRemoteAskCancelled($message);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private function handleRemoteAskRequest(RemoteAskRequest $request): void
+    {
+        $existing = $this->incomingAskState[$request->requestId] ?? null;
+
+        if ($existing !== null) {
+            if ($existing['state'] === 'cancelled') {
+                $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
+            }
+
+            return;
+        }
+
+        $this->incomingAskState[$request->requestId] = ['request' => $request, 'state' => 'in-progress'];
+
+        $targetPath = (string) $request->targetPath;
+        $ref = $this->localRefs[$targetPath] ?? null;
+
+        if ($ref === null) {
+            $this->incomingAskState[$request->requestId]['state'] = 'cancelled';
+            $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
+
+            return;
+        }
+
+        $replyRef = new RemoteReplyRef(
+            requestId: $request->requestId,
+            replyToWorker: $request->replyToWorker,
+            path: $request->replyToPath,
+            transport: $this->transport,
+            serializer: $this->serializer,
+        );
+
+        $envelope = Envelope::of($request->payload, $request->replyToPath, $request->targetPath)
+            ->withRequestId($request->requestId)
+            ->withCorrelationId($request->correlationId)
+            ->withCausationId($request->causationId)
+            ->withSenderRef($replyRef);
+
+        $ref->enqueueEnvelope($envelope);
+    }
+
+    private function handleRemoteAskReply(RemoteAskReply $reply): void
+    {
+        $entry = $this->pendingOutgoingAsks[$reply->requestId] ?? null;
+
+        if ($entry === null) {
+            return;
+        }
+
+        $entry['timeout']->cancel();
+        $entry['slot']->resolve($reply->payload);
+        unset($this->pendingOutgoingAsks[$reply->requestId]);
+    }
+
+    private function handleRemoteAskCancel(RemoteAskCancel $cancel): void
+    {
+        $existing = $this->incomingAskState[$cancel->requestId] ?? null;
+
+        if ($existing === null) {
+            return;
+        }
+
+        $this->incomingAskState[$cancel->requestId]['state'] = 'cancelled';
+        $request = $existing['request'];
+        $this->sendControl($request->replyToWorker, new RemoteAskCancelled($cancel->requestId));
+    }
+
+    private function handleRemoteAskCancelled(RemoteAskCancelled $cancelled): void
+    {
+        $entry = $this->pendingOutgoingAsks[$cancelled->requestId] ?? null;
+
+        if ($entry === null) {
+            return;
+        }
+
+        $entry['timeout']->cancel();
+        $entry['slot']->fail(new FutureCancelledException());
+        unset($this->pendingOutgoingAsks[$cancelled->requestId]);
+    }
+
+    private function sendControl(
+        int $targetWorker,
+        object $message,
+        ?string $requestId = null,
+        ?string $correlationId = null,
+        ?string $causationId = null,
+    ): void {
+        $envelope = Envelope::of($message, ActorPath::root(), ActorPath::root());
+
+        if ($requestId !== null) {
+            $envelope = $envelope->withRequestId($requestId);
+        }
+
+        if ($correlationId !== null) {
+            $envelope = $envelope->withCorrelationId($correlationId);
+        }
+
+        if ($causationId !== null) {
+            $envelope = $envelope->withCausationId($causationId);
+        }
+
+        $this->transport->send($targetWorker, $this->serializer->serialize($envelope));
+    }
+
 }
