@@ -41,7 +41,7 @@ final class DeadLetterRef implements ActorRef
 
     /**
      * @template R of object
-     * @return Future<R, AskTimeoutException>
+     * @return Future<R>
      * @throws AskTimeoutException
      */
     #[Override]

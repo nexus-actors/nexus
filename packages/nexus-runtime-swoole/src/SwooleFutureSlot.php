@@ -4,12 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
 
-use InvalidArgumentException;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 use Swoole\Coroutine\Channel;
-use Throwable;
 
 /**
  * Swoole-based FutureSlot using a Channel(1) for coroutine suspension.
@@ -17,7 +15,7 @@ use Throwable;
  * Blocks indefinitely on await(). The caller schedules a timeout timer
  * that calls fail() to unblock with an exception.
  *
- * @implements FutureSlot<object, FutureException>
+ * @implements FutureSlot<object>
  */
 final class SwooleFutureSlot implements FutureSlot
 {
@@ -44,14 +42,10 @@ final class SwooleFutureSlot implements FutureSlot
     }
 
     #[Override]
-    public function fail(Throwable $e): void
+    public function fail(FutureException $e): void
     {
         if ($this->resolved) {
             return;
-        }
-
-        if (!$e instanceof FutureException) {
-            throw new InvalidArgumentException('Future failure must implement FutureException', previous: $e);
         }
 
         $this->failure = $e;

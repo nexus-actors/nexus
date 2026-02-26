@@ -16,12 +16,11 @@ use Monadial\Nexus\Runtime\Exception\FutureException;
  * await() suspends the current fiber until the reply arrives or the timeout fires.
  *
  * @template R of object
- * @template E of FutureException
  */
 final readonly class Future
 {
     /**
-     * @param FutureSlot<R, E> $slot
+     * @param FutureSlot<R> $slot
      */
     public function __construct(private FutureSlot $slot) {}
 
@@ -47,14 +46,14 @@ final readonly class Future
      *
      * @template U of object
      * @param Closure(R): U $fn
-     * @return Future<U, E>
+     * @return Future<U>
      */
     public function map(Closure $fn): self
     {
         $slot = $this->slot;
 
-        /** @var Future<U, E> */
-        /** @var FutureSlot<U, E> $mappedSlot */
+        /** @var Future<U> */
+        /** @var FutureSlot<U> $mappedSlot */
         $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();
 
@@ -68,15 +67,15 @@ final readonly class Future
      * Chain a dependent ask. Lazy - does not block.
      *
      * @template U of object
-     * @param Closure(R): Future<U, E> $fn
-     * @return Future<U, E>
+     * @param Closure(R): Future<U> $fn
+     * @return Future<U>
      */
     public function flatMap(Closure $fn): self
     {
         $slot = $this->slot;
 
-        /** @var Future<U, E> */
-        /** @var FutureSlot<U, E> $mappedSlot */
+        /** @var Future<U> */
+        /** @var FutureSlot<U> $mappedSlot */
         $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();
 

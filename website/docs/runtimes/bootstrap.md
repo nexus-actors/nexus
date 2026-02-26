@@ -74,8 +74,10 @@ You can compose futures without bootstrapping an actor system.
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use RuntimeException;
-use Throwable;
+
+final class InlineFutureException extends RuntimeException implements FutureException {}
 
 final class InlineSlot implements FutureSlot
 {
@@ -83,7 +85,7 @@ final class InlineSlot implements FutureSlot
     private ?Throwable $failure = null;
 
     public function resolve(object $value): void { $this->value = $value; }
-    public function fail(Throwable $e): void { $this->failure = $e; }
+    public function fail(FutureException $e): void { $this->failure = $e; }
     public function isResolved(): bool { return $this->value !== null || $this->failure !== null; }
 
     public function await(): object
@@ -92,7 +94,7 @@ final class InlineSlot implements FutureSlot
             throw $this->failure;
         }
 
-        return $this->value ?? throw new RuntimeException('Slot not resolved');
+        return $this->value ?? throw new InlineFutureException('Slot not resolved');
     }
 }
 
