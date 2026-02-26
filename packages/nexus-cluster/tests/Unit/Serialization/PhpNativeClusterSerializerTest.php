@@ -44,15 +44,21 @@ final class PhpNativeClusterSerializerTest extends TestCase
 
         self::assertSame('/user/actor-a', (string) $restored->sender);
         self::assertSame('/user/actor-b', (string) $restored->target);
+        self::assertSame($envelope->requestId, $restored->requestId);
+        self::assertSame($envelope->correlationId, $restored->correlationId);
+        self::assertSame($envelope->causationId, $restored->causationId);
     }
 
     #[Test]
     public function roundtripPreservesMetadata(): void
     {
         $envelope = new Envelope(
-            new TestClusterMessage('x', 1),
-            ActorPath::fromString('/sender'),
-            ActorPath::fromString('/target'),
+            message: new TestClusterMessage('x', 1),
+            sender: ActorPath::fromString('/sender'),
+            target: ActorPath::fromString('/target'),
+            requestId: 'request-1',
+            correlationId: 'correlation-1',
+            causationId: 'causation-1',
             metadata: ['trace-id' => 'abc-123', 'priority' => 'high'],
         );
 
@@ -60,6 +66,9 @@ final class PhpNativeClusterSerializerTest extends TestCase
 
         self::assertSame('abc-123', $restored->metadata['trace-id']);
         self::assertSame('high', $restored->metadata['priority']);
+        self::assertSame('request-1', $restored->requestId);
+        self::assertSame('correlation-1', $restored->correlationId);
+        self::assertSame('causation-1', $restored->causationId);
     }
 
     protected function setUp(): void
