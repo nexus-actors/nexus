@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Support;
 
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
 use Fiber;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Monadial\Nexus\Runtime\Fiber\FiberFutureSlot;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -32,9 +33,9 @@ final class FiberFutureSlotTest extends TestCase
     public function fail_then_await_throws(): void
     {
         $slot = new FiberFutureSlot(static function (): void {});
-        $slot->fail(new RuntimeException('boom'));
+        $slot->fail(new TestFutureException('boom'));
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(TestFutureException::class);
         $this->expectExceptionMessage('boom');
         $slot->await();
     }
@@ -82,3 +83,5 @@ final class FiberFutureSlotTest extends TestCase
         self::assertSame(42, $result->answer);
     }
 }
+
+final class TestFutureException extends RuntimeException implements FutureException {}

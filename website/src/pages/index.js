@@ -695,6 +695,64 @@ function Philosophy() {
 }
 
 function Architecture() {
+  const packages = [
+    {
+      name: 'nexus-actors/core',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-core',
+      desc: 'Actors, behaviors, supervision, mailboxes, and the full type-safe API. Runtime-agnostic. Zero dependencies beyond PSR interfaces.',
+    },
+    {
+      name: 'nexus-actors/runtime',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-runtime',
+      desc: 'Shared runtime and async primitives. `Future`, `FutureSlot`, and runtime contracts reusable outside actor-system internals.',
+    },
+    {
+      name: 'nexus-actors/runtime-fiber',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-runtime-fiber',
+      desc: 'Fiber-based runtime. No extensions. Cooperative multitasking with PHP\'s native fiber scheduler. Ideal for development and testing.',
+    },
+    {
+      name: 'nexus-actors/runtime-swoole',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-runtime-swoole',
+      desc: 'Swoole coroutine runtime. Native channels, true async I/O, 100K+ concurrent actors. Built for production workloads.',
+    },
+    {
+      name: 'nexus-actors/serialization',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-serialization',
+      desc: 'Message serialization with envelope protocol. PHP native serializer for speed, Valinor mapper for structured wire formats.',
+    },
+    {
+      name: 'nexus-actors/persistence',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-persistence',
+      desc: 'Event sourcing and durable state abstractions. Effects, snapshots, retention policies, concurrency control, and in-memory stores for testing.',
+    },
+    {
+      name: 'nexus-actors/persistence-dbal',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-persistence-dbal',
+      desc: 'Doctrine DBAL storage backends. SQL-backed event, snapshot, and durable state stores. Works with SQLite, PostgreSQL, MySQL.',
+    },
+    {
+      name: 'nexus-actors/persistence-doctrine',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-persistence-doctrine',
+      desc: 'Doctrine ORM adapter. Entity-based stores using EntityManager. Same table schema as the DBAL package.',
+    },
+    {
+      name: 'nexus-actors/cluster',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-cluster',
+      desc: 'Pure PHP abstractions for scaling: consistent hash ring, remote actor refs, pluggable transport and directory interfaces.',
+    },
+    {
+      name: 'nexus-actors/cluster-swoole',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-cluster-swoole',
+      desc: 'Swoole multi-process scaling. ClusterBootstrap, Unix socket transport, shared-memory actor directory via Swoole\\Table.',
+    },
+    {
+      name: 'nexus-actors/psalm',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-psalm',
+      desc: 'Psalm plugin for static analysis of actor message protocols. Type providers and rules that catch errors before runtime.',
+    },
+  ];
+
   return (
     <section className={styles.architecture}>
       <div className={styles.sectionInner}>
@@ -703,83 +761,18 @@ function Architecture() {
           Pick what you need. Leave what you don't.
         </p>
         <div className={styles.archGrid}>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/core</code>
-            <p className={styles.archDesc}>
-              Actors, behaviors, supervision, mailboxes, and the full type-safe
-              API. Runtime-agnostic. Zero dependencies beyond PSR interfaces.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/runtime</code>
-            <p className={styles.archDesc}>
-              Shared runtime and async primitives. `Future`, `FutureSlot`,
-              and runtime contracts reusable outside actor-system internals.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/runtime-fiber</code>
-            <p className={styles.archDesc}>
-              Fiber-based runtime. No extensions. Cooperative multitasking
-              with PHP's native fiber scheduler. Ideal for development and testing.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/runtime-swoole</code>
-            <p className={styles.archDesc}>
-              Swoole coroutine runtime. Native channels, true async I/O,
-              100K+ concurrent actors. Built for production workloads.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/serialization</code>
-            <p className={styles.archDesc}>
-              Message serialization with envelope protocol. PHP native
-              serializer for speed, Valinor mapper for structured wire formats.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/persistence</code>
-            <p className={styles.archDesc}>
-              Event sourcing and durable state abstractions. Effects, snapshots,
-              retention policies, concurrency control, and in-memory stores for testing.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/persistence-dbal</code>
-            <p className={styles.archDesc}>
-              Doctrine DBAL storage backends. SQL-backed event, snapshot, and
-              durable state stores. Works with SQLite, PostgreSQL, MySQL.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/persistence-doctrine</code>
-            <p className={styles.archDesc}>
-              Doctrine ORM adapter. Entity-based stores using EntityManager.
-              Same table schema as the DBAL package.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/cluster</code>
-            <p className={styles.archDesc}>
-              Pure PHP abstractions for scaling: consistent hash ring, remote
-              actor refs, pluggable transport and directory interfaces.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/cluster-swoole</code>
-            <p className={styles.archDesc}>
-              Swoole multi-process scaling. ClusterBootstrap, Unix socket
-              transport, shared-memory actor directory via Swoole\Table.
-            </p>
-          </div>
-          <div className={styles.archCard}>
-            <code className={styles.archPkg}>nexus-actors/psalm</code>
-            <p className={styles.archDesc}>
-              Psalm plugin for static analysis of actor message protocols.
-              Type providers and rules that catch errors before runtime.
-            </p>
-          </div>
+          {packages.map((pkg) => (
+            <Link
+              key={pkg.name}
+              className={styles.archCard}
+              href={pkg.href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <code className={styles.archPkg}>{pkg.name}</code>
+              <p className={styles.archDesc}>{pkg.desc}</p>
+            </Link>
+          ))}
         </div>
       </div>
     </section>

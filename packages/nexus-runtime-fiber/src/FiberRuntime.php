@@ -7,12 +7,11 @@ namespace Monadial\Nexus\Runtime\Fiber;
 use Closure;
 use DateTimeImmutable;
 use Fiber;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 
@@ -43,12 +42,19 @@ final class FiberRuntime implements Runtime
         return 'fiber';
     }
 
+    /**
+     * @template TM of object
+     * @return Mailbox<TM>
+     */
     #[Override]
     public function createMailbox(MailboxConfig $config): Mailbox
     {
-        return new FiberMailbox($config, ActorPath::root(), function (): void {
+        /** @var FiberMailbox<TM> $mailbox */
+        $mailbox = new FiberMailbox($config, function (): void {
             $this->wakeupPending = true;
         });
+
+        return $mailbox;
     }
 
     #[Override]

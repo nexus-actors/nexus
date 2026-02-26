@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Runtime\Fiber;
 
 use Closure;
 use Fiber;
+use InvalidArgumentException;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 use Throwable;
 
@@ -15,11 +17,13 @@ use Throwable;
  *
  * Suspends the calling fiber on await(). Resumes it when resolve() or fail() is called.
  * Uses a wakeup callback to signal the runtime that a fiber needs resumption.
+ *
+ * @implements FutureSlot<object, FutureException>
  */
 final class FiberFutureSlot implements FutureSlot
 {
     private ?object $result = null;
-    private ?Throwable $failure = null;
+    private ?FutureException $failure = null;
     private bool $resolved = false;
 
     /**
@@ -44,6 +48,10 @@ final class FiberFutureSlot implements FutureSlot
     {
         if ($this->resolved) {
             return;
+        }
+
+        if (!$e instanceof FutureException) {
+            throw new InvalidArgumentException('Future failure must implement FutureException', previous: $e);
         }
 
         $this->failure = $e;

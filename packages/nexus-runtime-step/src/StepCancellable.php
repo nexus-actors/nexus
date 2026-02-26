@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Step;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Override;
 
 /** @psalm-api */

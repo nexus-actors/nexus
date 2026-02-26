@@ -7,23 +7,25 @@ namespace Monadial\Nexus\Runtime\Fiber;
 use Closure;
 use Fiber;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use NoDiscard;
 use Override;
 use SplQueue;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ * @template T of object
+ * @implements Mailbox<T>
+ */
 final class FiberMailbox implements Mailbox
 {
-    /** @var SplQueue<Envelope> */
+    /** @var SplQueue<T> */
     private SplQueue $queue;
 
     private bool $closed = false;
@@ -40,35 +42,33 @@ final class FiberMailbox implements Mailbox
     /**
      * @param ?Closure():void $onEnqueue
      */
-    public function __construct(
-        private readonly MailboxConfig $config,
-        private readonly ActorPath $actor,
-        ?callable $onEnqueue = null,
-    ) {
+    public function __construct(private readonly MailboxConfig $config, ?callable $onEnqueue = null)
+    {
         $this->onEnqueue = $onEnqueue !== null
             ? $onEnqueue(...)
             : null;
-        /** @var SplQueue<Envelope> $queue */
+        /** @var SplQueue<T> $queue */
         $queue = new SplQueue();
         $this->queue = $queue;
     }
 
     /**
      * @throws MailboxClosedException
+     * @param T $message
      */
     #[Override]
     #[NoDiscard]
-    public function enqueue(Envelope $envelope): EnqueueResult
+    public function enqueue(object $message): EnqueueResult
     {
         if ($this->closed) {
-            throw new MailboxClosedException($this->actor);
+            throw new MailboxClosedException();
         }
 
         if ($this->config->bounded && $this->queue->count() >= $this->config->capacity) {
-            return $this->handleOverflow($envelope);
+            return $this->handleOverflow($message);
         }
 
-        $this->queue->enqueue($envelope);
+        $this->queue->enqueue($message);
         $this->resumeWaiter();
 
         if ($this->onEnqueue !== null) {
@@ -78,12 +78,12 @@ final class FiberMailbox implements Mailbox
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<Envelope> */
+    /** @return Option<T> */
     #[Override]
     public function dequeue(): Option
     {
         if ($this->queue->isEmpty()) {
-            /** @var Option<Envelope> $none fp4php returns Option<empty>, covariant to Option<Envelope> */
+            /** @var Option<T> $none fp4php returns Option<empty>, covariant to Option<T> */
             $none = Option::none();
 
             return $none;
@@ -96,7 +96,8 @@ final class FiberMailbox implements Mailbox
      * @throws MailboxClosedException
      */
     #[Override]
-    public function dequeueBlocking(Duration $timeout): Envelope
+    /** @return T */
+    public function dequeueBlocking(Duration $timeout): object
     {
         // Fiber-based blocking: suspend and re-check on resume
         $fiber = Fiber::getCurrent();
@@ -108,7 +109,7 @@ final class FiberMailbox implements Mailbox
                 }
 
                 if ($this->closed) {
-                    throw new MailboxClosedException($this->actor);
+                    throw new MailboxClosedException();
                 }
 
                 // Register as waiter only if not already registered
@@ -129,7 +130,7 @@ final class FiberMailbox implements Mailbox
         }
 
         if ($this->closed) {
-            throw new MailboxClosedException($this->actor);
+            throw new MailboxClosedException();
         }
 
         // Not in a fiber context -- poll with timeout
@@ -176,24 +177,29 @@ final class FiberMailbox implements Mailbox
     /**
      * @throws MailboxOverflowException
      */
-    private function handleOverflow(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function handleOverflow(object $message): EnqueueResult
     {
         return match ($this->config->strategy) {
             OverflowStrategy::DropNewest => EnqueueResult::Dropped,
-            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($envelope),
+            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($message),
             OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
             OverflowStrategy::ThrowException => throw new MailboxOverflowException(
-                $this->actor,
                 $this->config->capacity,
                 $this->config->strategy,
             ),
         };
     }
 
-    private function dropOldestAndEnqueue(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function dropOldestAndEnqueue(object $message): EnqueueResult
     {
         $this->queue->dequeue();
-        $this->queue->enqueue($envelope);
+        $this->queue->enqueue($message);
 
         return EnqueueResult::Accepted;
     }
@@ -223,7 +229,8 @@ final class FiberMailbox implements Mailbox
     /**
      * @throws MailboxClosedException
      */
-    private function pollWithTimeout(Duration $timeout): Envelope
+    /** @return T */
+    private function pollWithTimeout(Duration $timeout): object
     {
         $deadline = hrtime(true) + $timeout->toNanos();
 
@@ -233,12 +240,12 @@ final class FiberMailbox implements Mailbox
             }
 
             if ($this->closed) {
-                throw new MailboxClosedException($this->actor);
+                throw new MailboxClosedException();
             }
 
             usleep(100); // small sleep to avoid busy spin
         }
 
-        throw new MailboxClosedException($this->actor);
+        throw new MailboxClosedException();
     }
 }

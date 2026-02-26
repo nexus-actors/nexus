@@ -58,7 +58,7 @@ so static analysis tools will warn if you ignore the return value.
 ## Usage
 
 ```php
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 // Request message — no replyTo field needed
 final readonly class GetBalance {}
@@ -146,7 +146,7 @@ If no reply arrives within the specified `Duration`, `await()` throws
 
 ```php
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 try {
     $balance = $accountRef

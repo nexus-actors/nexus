@@ -14,7 +14,7 @@ Actors are the fundamental unit of computation in Nexus. Each actor encapsulates
 ```php
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 /** @template T of object */
 interface ActorRef
@@ -342,7 +342,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 readonly class Ping
 {

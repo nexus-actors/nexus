@@ -6,15 +6,13 @@ namespace Monadial\Nexus\Runtime\Step;
 
 use Fiber;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use NoDiscard;
 use Override;
 use SplQueue;
@@ -27,10 +25,12 @@ use SplQueue;
  * step() call from the test to be processed.
  *
  * @psalm-api
+ * @template T of object
+ * @implements Mailbox<T>
  */
 final class StepMailbox implements Mailbox
 {
-    /** @var SplQueue<Envelope> */
+    /** @var SplQueue<T> */
     private SplQueue $queue;
 
     private bool $closed = false;
@@ -38,39 +38,40 @@ final class StepMailbox implements Mailbox
     /** @var ?Fiber<mixed, mixed, mixed, mixed> */
     private ?Fiber $waitingFiber = null;
 
-    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor)
+    public function __construct(private readonly MailboxConfig $config)
     {
-        /** @var SplQueue<Envelope> $queue */
+        /** @var SplQueue<T> $queue */
         $queue = new SplQueue();
         $this->queue = $queue;
     }
 
     /**
      * @throws MailboxClosedException
+     * @param T $message
      */
     #[Override]
     #[NoDiscard]
-    public function enqueue(Envelope $envelope): EnqueueResult
+    public function enqueue(object $message): EnqueueResult
     {
         if ($this->closed) {
-            throw new MailboxClosedException($this->actor);
+            throw new MailboxClosedException();
         }
 
         if ($this->config->bounded && $this->queue->count() >= $this->config->capacity) {
-            return $this->handleOverflow($envelope);
+            return $this->handleOverflow($message);
         }
 
-        $this->queue->enqueue($envelope);
+        $this->queue->enqueue($message);
 
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<Envelope> */
+    /** @return Option<T> */
     #[Override]
     public function dequeue(): Option
     {
         if ($this->queue->isEmpty()) {
-            /** @var Option<Envelope> $none */
+            /** @var Option<T> $none */
             $none = Option::none();
 
             return $none;
@@ -86,7 +87,8 @@ final class StepMailbox implements Mailbox
      * @throws MailboxClosedException
      */
     #[Override]
-    public function dequeueBlocking(Duration $timeout): Envelope
+    /** @return T */
+    public function dequeueBlocking(Duration $timeout): object
     {
         $fiber = Fiber::getCurrent();
 
@@ -102,7 +104,7 @@ final class StepMailbox implements Mailbox
                 }
 
                 if ($this->closed) {
-                    throw new MailboxClosedException($this->actor);
+                    throw new MailboxClosedException();
                 }
             }
         }
@@ -112,7 +114,7 @@ final class StepMailbox implements Mailbox
             return $this->queue->dequeue();
         }
 
-        throw new MailboxClosedException($this->actor);
+        throw new MailboxClosedException();
     }
 
     #[Override]
@@ -166,24 +168,29 @@ final class StepMailbox implements Mailbox
     /**
      * @throws MailboxOverflowException
      */
-    private function handleOverflow(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function handleOverflow(object $message): EnqueueResult
     {
         return match ($this->config->strategy) {
             OverflowStrategy::DropNewest => EnqueueResult::Dropped,
-            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($envelope),
+            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($message),
             OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
             OverflowStrategy::ThrowException => throw new MailboxOverflowException(
-                $this->actor,
                 $this->config->capacity,
                 $this->config->strategy,
             ),
         };
     }
 
-    private function dropOldestAndEnqueue(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function dropOldestAndEnqueue(object $message): EnqueueResult
     {
         $this->queue->dequeue();
-        $this->queue->enqueue($envelope);
+        $this->queue->enqueue($message);
 
         return EnqueueResult::Accepted;
     }

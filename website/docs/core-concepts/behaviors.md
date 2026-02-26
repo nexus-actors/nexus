@@ -88,7 +88,7 @@ Runs an initialization function before the actor starts processing messages. The
 
 ```php
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 readonly class Tick {}
 
@@ -175,7 +175,7 @@ Provides a `TimerScheduler` for keyed timer management. Timers are identified by
 
 ```php
 use Monadial\Nexus\Core\Actor\TimerScheduler;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 readonly class Heartbeat {}
 

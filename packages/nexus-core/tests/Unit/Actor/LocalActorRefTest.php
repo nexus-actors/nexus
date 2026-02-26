@@ -6,9 +6,9 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

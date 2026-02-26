@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
 use Monadial\Nexus\Runtime\Fiber\FiberMailbox;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -25,18 +23,18 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function it_implements_mailbox(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
         self::assertInstanceOf(Mailbox::class, $mailbox);
     }
 
     #[Test]
     public function enqueue_dequeue_fifo_order(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
-        $env1 = $this->createEnvelope('msg1');
-        $env2 = $this->createEnvelope('msg2');
-        $env3 = $this->createEnvelope('msg3');
+        $env1 = $this->createMessage('msg1');
+        $env2 = $this->createMessage('msg2');
+        $env3 = $this->createMessage('msg3');
 
         (void) $mailbox->enqueue($env1);
         (void) $mailbox->enqueue($env2);
@@ -50,7 +48,7 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function dequeue_returns_none_when_empty(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         $result = $mailbox->dequeue();
         self::assertTrue($result->isNone());
@@ -59,14 +57,14 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function count_tracks_messages(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         self::assertSame(0, $mailbox->count());
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg1'));
+        (void) $mailbox->enqueue($this->createMessage('msg1'));
         self::assertSame(1, $mailbox->count());
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg2'));
+        (void) $mailbox->enqueue($this->createMessage('msg2'));
         self::assertSame(2, $mailbox->count());
 
         $mailbox->dequeue();
@@ -76,11 +74,11 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function is_empty_reflects_state(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         self::assertTrue($mailbox->isEmpty());
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg'));
+        (void) $mailbox->enqueue($this->createMessage('msg'));
         self::assertFalse($mailbox->isEmpty());
 
         $mailbox->dequeue();
@@ -92,15 +90,14 @@ final class FiberMailboxTest extends TestCase
     {
         $mailbox = new FiberMailbox(
             MailboxConfig::bounded(2, OverflowStrategy::DropNewest),
-            ActorPath::root(),
         );
 
         self::assertFalse($mailbox->isFull());
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg1'));
+        (void) $mailbox->enqueue($this->createMessage('msg1'));
         self::assertFalse($mailbox->isFull());
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg2'));
+        (void) $mailbox->enqueue($this->createMessage('msg2'));
         self::assertTrue($mailbox->isFull());
 
         $mailbox->dequeue();
@@ -110,10 +107,10 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function unbounded_mailbox_is_never_full(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         for ($i = 0; $i < 100; $i++) {
-            (void) $mailbox->enqueue($this->createEnvelope("msg{$i}"));
+            (void) $mailbox->enqueue($this->createMessage("msg{$i}"));
         }
 
         self::assertFalse($mailbox->isFull());
@@ -123,10 +120,10 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function unbounded_mailbox_accepts_unlimited(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         for ($i = 0; $i < 50; $i++) {
-            $result = $mailbox->enqueue($this->createEnvelope("msg{$i}"));
+            $result = $mailbox->enqueue($this->createMessage("msg{$i}"));
             self::assertSame(EnqueueResult::Accepted, $result);
         }
 
@@ -138,12 +135,11 @@ final class FiberMailboxTest extends TestCase
     {
         $mailbox = new FiberMailbox(
             MailboxConfig::bounded(2, OverflowStrategy::DropNewest),
-            ActorPath::root(),
         );
 
-        $env1 = $this->createEnvelope('msg1');
-        $env2 = $this->createEnvelope('msg2');
-        $env3 = $this->createEnvelope('msg3');
+        $env1 = $this->createMessage('msg1');
+        $env2 = $this->createMessage('msg2');
+        $env3 = $this->createMessage('msg3');
 
         self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env1));
         self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env2));
@@ -160,12 +156,11 @@ final class FiberMailboxTest extends TestCase
     {
         $mailbox = new FiberMailbox(
             MailboxConfig::bounded(2, OverflowStrategy::DropOldest),
-            ActorPath::root(),
         );
 
-        $env1 = $this->createEnvelope('msg1');
-        $env2 = $this->createEnvelope('msg2');
-        $env3 = $this->createEnvelope('msg3');
+        $env1 = $this->createMessage('msg1');
+        $env2 = $this->createMessage('msg2');
+        $env3 = $this->createMessage('msg3');
 
         self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env1));
         self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env2));
@@ -182,14 +177,13 @@ final class FiberMailboxTest extends TestCase
     {
         $mailbox = new FiberMailbox(
             MailboxConfig::bounded(2, OverflowStrategy::ThrowException),
-            ActorPath::root(),
         );
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg1'));
-        (void) $mailbox->enqueue($this->createEnvelope('msg2'));
+        (void) $mailbox->enqueue($this->createMessage('msg1'));
+        (void) $mailbox->enqueue($this->createMessage('msg2'));
 
         $this->expectException(MailboxOverflowException::class);
-        (void) $mailbox->enqueue($this->createEnvelope('msg3'));
+        (void) $mailbox->enqueue($this->createMessage('msg3'));
     }
 
     #[Test]
@@ -197,13 +191,12 @@ final class FiberMailboxTest extends TestCase
     {
         $mailbox = new FiberMailbox(
             MailboxConfig::bounded(2, OverflowStrategy::Backpressure),
-            ActorPath::root(),
         );
 
-        (void) $mailbox->enqueue($this->createEnvelope('msg1'));
-        (void) $mailbox->enqueue($this->createEnvelope('msg2'));
+        (void) $mailbox->enqueue($this->createMessage('msg1'));
+        (void) $mailbox->enqueue($this->createMessage('msg2'));
 
-        $result = $mailbox->enqueue($this->createEnvelope('msg3'));
+        $result = $mailbox->enqueue($this->createMessage('msg3'));
         self::assertSame(EnqueueResult::Backpressured, $result);
         self::assertSame(2, $mailbox->count());
     }
@@ -211,19 +204,19 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function close_prevents_enqueue(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
         $mailbox->close();
 
         $this->expectException(MailboxClosedException::class);
-        (void) $mailbox->enqueue($this->createEnvelope('msg'));
+        (void) $mailbox->enqueue($this->createMessage('msg'));
     }
 
     #[Test]
     public function close_allows_dequeue_of_remaining_messages(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
-        $env = $this->createEnvelope('msg');
+        $env = $this->createMessage('msg');
         (void) $mailbox->enqueue($env);
 
         $mailbox->close();
@@ -236,9 +229,9 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function dequeue_blocking_returns_immediately_when_message_available(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
-        $env = $this->createEnvelope('msg');
+        $env = $this->createMessage('msg');
         (void) $mailbox->enqueue($env);
 
         $result = $mailbox->dequeueBlocking(Duration::millis(100));
@@ -248,19 +241,18 @@ final class FiberMailboxTest extends TestCase
     #[Test]
     public function dequeue_blocking_throws_when_closed_and_empty(): void
     {
-        $mailbox = new FiberMailbox(MailboxConfig::unbounded(), ActorPath::root());
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
         $mailbox->close();
 
         $this->expectException(MailboxClosedException::class);
         $mailbox->dequeueBlocking(Duration::millis(100));
     }
 
-    private function createEnvelope(string $label): Envelope
+    private function createMessage(string $label): object
     {
-        return Envelope::of(
-            new stdClass(),
-            ActorPath::root(),
-            ActorPath::root(),
-        );
+        $message = new stdClass();
+        $message->label = $label;
+
+        return $message;
     }
 }

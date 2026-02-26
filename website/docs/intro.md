@@ -58,7 +58,8 @@ Nexus is organized as a monorepo of focused packages:
 
 | Package | Composer name | Purpose |
 |---|---|---|
-| **nexus-core** | `nexus-actors/core` | Actors, behaviors, supervision, mailboxes, and the `ActorSystem` entry point. Pure abstractions with no runtime dependency. |
+| **nexus-core** | `nexus-actors/core` | Actors, behaviors, supervision, and the `ActorSystem` entry point. Depends on `nexus-runtime` for shared runtime and mailbox contracts. |
+| **nexus-runtime** | `nexus-actors/runtime` | Shared runtime abstractions and concurrency primitives: `Runtime`, `Duration`, `Cancellable`, mailbox contracts, and `Future`/`FutureSlot`. |
 | **nexus-runtime-fiber** | `nexus-actors/runtime-fiber` | Fiber-based runtime using PHP 8.1+ native fibers with cooperative scheduling. Ideal for development and testing. |
 | **nexus-runtime-swoole** | `nexus-actors/runtime-swoole` | Swoole-based runtime using coroutines and native channels. Designed for production workloads with true parallelism. |
 | **nexus-cluster** | `nexus-actors/cluster` | Pure PHP abstractions for multi-process scaling and future clustering: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
@@ -81,8 +82,9 @@ and `nexus-serialization` for convenience.
   the current one.
 - **PSR compatibility.** Nexus integrates with `psr/log`, `psr/clock`,
   `psr/container`, and `psr/event-dispatcher` out of the box.
-- **Runtime-agnostic core.** The `nexus-core` package contains zero runtime
-  coupling. You choose the runtime (Fiber or Swoole) at the composition root.
+- **Runtime-agnostic actor APIs.** Actor code depends on interfaces, not a
+  concrete runtime implementation. You choose the runtime (Fiber, Swoole, or
+  Step) at the composition root.
 - **Type safety.** All public APIs use generics tracked by Psalm. The
   `nexus-psalm` plugin ensures your message protocols are consistent at analysis
   time.

@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Runtime\Fiber;
 
 use Closure;
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 /**
  * @psalm-api

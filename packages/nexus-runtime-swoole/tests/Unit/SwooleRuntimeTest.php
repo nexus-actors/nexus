@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Runtime\Swoole\SwooleMailbox;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;

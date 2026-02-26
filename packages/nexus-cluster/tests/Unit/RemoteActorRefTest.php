@@ -10,7 +10,7 @@ use Monadial\Nexus\Cluster\Serialization\PhpNativeClusterSerializer;
 use Monadial\Nexus\Cluster\Tests\Unit\Support\Ping;
 use Monadial\Nexus\Cluster\Transport\InMemoryTransport;
 use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

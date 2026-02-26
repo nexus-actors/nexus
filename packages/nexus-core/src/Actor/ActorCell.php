@@ -8,19 +8,15 @@ use Closure;
 use Error;
 use Fp\Functional\Option\Option;
 use LogicException;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Message\Resume;
 use Monadial\Nexus\Core\Message\Suspend;
@@ -29,6 +25,11 @@ use Monadial\Nexus\Core\Message\Unwatch;
 use Monadial\Nexus\Core\Message\Watch;
 use Monadial\Nexus\Core\Supervision\Directive;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 use Psr\Clock\ClockInterface;
@@ -78,6 +79,7 @@ final class ActorCell implements ActorContext
 
     /**
      * @param Behavior<T> $behavior
+     * @param Mailbox<Envelope> $mailbox
      * @param Option<ActorRef<object>> $parentRef
      */
     public function __construct(
@@ -230,6 +232,7 @@ final class ActorCell implements ActorContext
         }
 
         $childPath = $this->actorPath->child($name);
+        /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
         $childSupervision = $props->supervision->isSome()
@@ -733,6 +736,7 @@ final class ActorCell implements ActorContext
      * Spawn a fiber that dequeues messages from the mailbox and processes them.
      *
      * @param ActorCell<object> $cell
+     * @param Mailbox<Envelope> $mailbox
      */
     private function spawnMessageLoop(self $cell, Mailbox $mailbox): void
     {

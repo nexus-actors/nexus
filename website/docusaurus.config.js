@@ -1,4 +1,5 @@
 // @ts-check
+const path = require('path');
 const { themes } = require('prism-react-renderer');
 
 /** @type {import('@docusaurus/types').Config} */
@@ -14,15 +15,39 @@ const config = {
   projectName: 'nexus',
 
   onBrokenLinks: 'throw',
-  onBrokenMarkdownLinks: 'warn',
 
   staticDirectories: ['static'],
 
   markdown: {
     mermaid: true,
+    hooks: {
+      onBrokenMarkdownLinks: 'warn',
+    },
   },
 
   themes: ['@docusaurus/theme-mermaid'],
+  plugins: [
+    function preferVscodeLsTypesEsm() {
+      return {
+        name: 'prefer-vscode-ls-types-esm',
+        configureWebpack() {
+          const esmEntry = path.resolve(
+            __dirname,
+            'node_modules/vscode-languageserver-types/lib/esm/main.js',
+          );
+
+          return {
+            resolve: {
+              alias: {
+                'vscode-languageserver-types$': esmEntry,
+                'vscode-languageserver-types/lib/umd/main.js': esmEntry,
+              },
+            },
+          };
+        },
+      };
+    },
+  ],
 
   i18n: {
     defaultLocale: 'en',
@@ -96,7 +121,7 @@ const config = {
           customCss: './src/css/custom.css',
         },
         sitemap: {
-          lastmod: 'date',
+          lastmod: null,
           changefreq: 'weekly',
           priority: 0.5,
           filename: 'sitemap.xml',

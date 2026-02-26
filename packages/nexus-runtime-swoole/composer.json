@@ -6,7 +6,6 @@
     "require": {
         "php": ">=8.5",
         "ext-swoole": "*",
-        "nexus-actors/core": "dev-main",
         "nexus-actors/runtime": "dev-main"
     },
     "require-dev": {

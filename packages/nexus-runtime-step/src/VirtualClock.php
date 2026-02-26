@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Step;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Override;
 use Psr\Clock\ClockInterface;
 

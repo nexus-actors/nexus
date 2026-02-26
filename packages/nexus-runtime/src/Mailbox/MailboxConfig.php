@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core\Mailbox;
+namespace Monadial\Nexus\Runtime\Mailbox;
 
 /**
  * @psalm-api

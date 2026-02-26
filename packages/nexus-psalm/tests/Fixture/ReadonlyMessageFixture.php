@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Psalm\Tests\Fixture;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 final readonly class GoodMessage {}
 

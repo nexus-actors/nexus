@@ -6,8 +6,8 @@ namespace Monadial\Nexus\Runtime\Fiber;
 
 use Closure;
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 
 /** @psalm-api */
 final class FiberScheduler

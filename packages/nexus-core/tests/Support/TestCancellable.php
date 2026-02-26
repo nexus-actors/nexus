@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 
 final class TestCancellable implements Cancellable
 {

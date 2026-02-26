@@ -483,11 +483,14 @@
 }
 
 .archCard {
+  display: block;
   background: var(--nx-bg);
   border: 1px solid var(--nx-border);
   border-radius: 12px;
   padding: 2rem;
   transition: border-color 0.2s;
+  color: inherit;
+  text-decoration: none;
 }
 
 .archCard:hover {

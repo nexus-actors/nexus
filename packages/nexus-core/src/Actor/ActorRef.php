@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Duration;
 use NoDiscard;
 
 /**
@@ -27,7 +27,7 @@ interface ActorRef
      *
      * @template R of object
      * @param T $message
-     * @return Future<R>
+     * @return Future<R, AskTimeoutException>
      * @throws AskTimeoutException
      */
     #[NoDiscard]

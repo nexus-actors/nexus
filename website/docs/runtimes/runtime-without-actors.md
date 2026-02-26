@@ -26,6 +26,12 @@ composer require nexus-actors/runtime
   - supports `await()`, `map()`, `flatMap()`
 - `Monadial\Nexus\Runtime\Async\FutureSlot`
   - low-level slot that is `resolve()`/`fail()`-ed by producer side
+- `Monadial\Nexus\Runtime\Duration`
+  - immutable duration primitive used for scheduling and timeout control
+- `Monadial\Nexus\Runtime\Runtime\Cancellable`
+  - cancellation handle returned by scheduling methods
+- `Monadial\Nexus\Runtime\Mailbox\MailboxConfig`
+  - mailbox configuration object used by `createMailbox()`
 - `Monadial\Nexus\Runtime\Runtime\Runtime`
   - runtime contract for scheduling, task orchestration, and lifecycle control
 
@@ -49,11 +55,11 @@ declare(strict_types=1);
 namespace App\Runtime;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use RuntimeException;
 use Throwable;
@@ -241,8 +247,8 @@ Now use that runtime without actors:
 
 ```php
 use App\Runtime\MinimalRuntime;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Duration;
 
 $runtime = new MinimalRuntime();
 $slot = $runtime->createFutureSlot();
@@ -266,13 +272,16 @@ $result = $future
 ## Timeout / Failure Path Example
 
 ```php
-use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Runtime\Exception\FutureTimeoutException;
+use RuntimeException;
+
+final class TimeoutLikeException extends RuntimeException implements FutureTimeoutException {}
 
 $slot = $runtime->createFutureSlot();
 $future = new Future($slot);
 
 $runtime->scheduleOnce(Duration::millis(100), static function () use ($slot): void {
-    $slot->fail(new RuntimeException('timeout-like failure'));
+    $slot->fail(new TimeoutLikeException('timeout-like failure'));
 });
 
 $runtime->scheduleOnce(Duration::millis(150), static function () use ($runtime): void {

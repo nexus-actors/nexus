@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Tests\Support;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
 use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 
+use function assert;
+
+/** @implements Mailbox<Envelope> */
 final class TestMailbox implements Mailbox
 {
     /** @var list<Envelope> */
@@ -36,10 +38,13 @@ final class TestMailbox implements Mailbox
     /**
      * @throws MailboxClosedException
      */
-    public function enqueue(Envelope $envelope): EnqueueResult
+    public function enqueue(object $message): EnqueueResult
     {
+        assert($message instanceof Envelope);
+        $envelope = $message;
+
         if ($this->closed) {
-            throw new MailboxClosedException($envelope->target);
+            throw new MailboxClosedException();
         }
 
         if ($this->config->bounded && count($this->queue) >= $this->config->capacity) {
@@ -48,7 +53,6 @@ final class TestMailbox implements Mailbox
                 OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($envelope),
                 OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
                 OverflowStrategy::ThrowException => throw new MailboxOverflowException(
-                    $envelope->target,
                     $this->config->capacity,
                     $this->config->strategy,
                 ),
@@ -81,12 +85,12 @@ final class TestMailbox implements Mailbox
     public function dequeueBlocking(Duration $timeout): Envelope
     {
         if ($this->closed && $this->queue === []) {
-            throw new MailboxClosedException(ActorPath::root());
+            throw new MailboxClosedException();
         }
 
         // In test runtime, blocking just returns next or throws
         if ($this->queue === []) {
-            throw new MailboxClosedException(ActorPath::root());
+            throw new MailboxClosedException();
         }
 
         return array_shift($this->queue);

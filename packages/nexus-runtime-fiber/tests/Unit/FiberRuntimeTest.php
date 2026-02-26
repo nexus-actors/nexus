@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberMailbox;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;

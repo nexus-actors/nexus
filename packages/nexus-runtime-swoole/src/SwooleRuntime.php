@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
 
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 use Swoole\Coroutine;
@@ -51,10 +50,17 @@ final class SwooleRuntime implements Runtime
         return 'swoole';
     }
 
+    /**
+     * @template TM of object
+     * @return Mailbox<TM>
+     */
     #[Override]
     public function createMailbox(MailboxConfig $config): Mailbox
     {
-        return new SwooleMailbox($config, ActorPath::root());
+        /** @var SwooleMailbox<TM> $mailbox */
+        $mailbox = new SwooleMailbox($config);
+
+        return $mailbox;
     }
 
     #[Override]

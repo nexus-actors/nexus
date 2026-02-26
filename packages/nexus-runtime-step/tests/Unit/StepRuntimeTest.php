@@ -9,7 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

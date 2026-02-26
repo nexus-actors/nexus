@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
 use Monadial\Nexus\Runtime\Fiber\FiberCancellable;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

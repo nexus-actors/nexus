@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Tests\Unit\Support;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

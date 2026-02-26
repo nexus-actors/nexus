@@ -4,8 +4,7 @@
     "type": "library",
     "license": "MIT",
     "require": {
-        "php": ">=8.5",
-        "nexus-actors/core": "dev-main"
+        "php": ">=8.5"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"
