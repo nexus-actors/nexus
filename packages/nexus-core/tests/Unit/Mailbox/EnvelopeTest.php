@@ -27,6 +27,9 @@ final class EnvelopeTest extends TestCase
         self::assertSame($message, $envelope->message);
         self::assertTrue($envelope->sender->equals($sender));
         self::assertTrue($envelope->target->equals($target));
+        self::assertNotSame('', $envelope->requestId);
+        self::assertSame($envelope->requestId, $envelope->correlationId);
+        self::assertSame($envelope->requestId, $envelope->causationId);
         self::assertSame([], $envelope->metadata);
     }
 
@@ -84,10 +87,31 @@ final class EnvelopeTest extends TestCase
     }
 
     #[Test]
+    public function withContextIdsReturnsNewInstanceWithUpdatedIds(): void
+    {
+        $original = Envelope::of(
+            new stdClass(),
+            ActorPath::fromString('/sender'),
+            ActorPath::fromString('/target'),
+        );
+
+        $updated = $original
+            ->withRequestId('request-2')
+            ->withCorrelationId('correlation-2')
+            ->withCausationId('causation-2');
+
+        self::assertNotSame($original, $updated);
+        self::assertSame('request-2', $updated->requestId);
+        self::assertSame('correlation-2', $updated->correlationId);
+        self::assertSame('causation-2', $updated->causationId);
+    }
+
+    #[Test]
     public function senderRefIsPreservedThroughWithMetadata(): void
     {
         $ref = $this->createStub(ActorRef::class);
-        $envelope = new Envelope(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'), $ref);
+        $envelope = Envelope::of(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'))
+            ->withSenderRef($ref);
         $updated = $envelope->withMetadata(['key' => 'value']);
 
         self::assertSame($ref, $updated->senderRef);
@@ -97,7 +121,8 @@ final class EnvelopeTest extends TestCase
     public function senderRefIsPreservedThroughWithSender(): void
     {
         $ref = $this->createStub(ActorRef::class);
-        $envelope = new Envelope(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'), $ref);
+        $envelope = Envelope::of(new stdClass(), ActorPath::root(), ActorPath::fromString('/target'))
+            ->withSenderRef($ref);
         $updated = $envelope->withSender(ActorPath::fromString('/new-sender'));
 
         self::assertSame($ref, $updated->senderRef);
@@ -124,11 +149,22 @@ final class EnvelopeTest extends TestCase
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
 
-        $envelope = new Envelope($message, $sender, $target, metadata: ['request-id' => 'req-456']);
+        $envelope = new Envelope(
+            message: $message,
+            sender: $sender,
+            target: $target,
+            requestId: 'request-1',
+            correlationId: 'correlation-1',
+            causationId: 'causation-1',
+            metadata: ['request-id' => 'req-456'],
+        );
 
         self::assertSame($message, $envelope->message);
         self::assertTrue($envelope->sender->equals($sender));
         self::assertTrue($envelope->target->equals($target));
+        self::assertSame('request-1', $envelope->requestId);
+        self::assertSame('correlation-1', $envelope->correlationId);
+        self::assertSame('causation-1', $envelope->causationId);
         self::assertSame(['request-id' => 'req-456'], $envelope->metadata);
     }
 }
