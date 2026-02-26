@@ -27,26 +27,14 @@ composer require --dev nexus-actors/runtime-step
 
 ## Practical Example (No Actors)
 
-```php
-use Monadial\Nexus\Runtime\Async\Future;
-use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Runtime\Step\StepRuntime;
+Use the full standalone examples here:
+[Runtime Without Actors](./runtime-without-actors.md).
 
-$runtime = new StepRuntime();
-$slot = $runtime->createFutureSlot();
-$future = new Future($slot);
+That page covers:
 
-$runtime->scheduleOnce(Duration::seconds(2), static function () use ($slot): void {
-    $slot->resolve((object) ['status' => 'ok']);
-});
-
-// Deterministic: nothing happens until time is advanced.
-$runtime->advanceTime(Duration::seconds(2));
-
-$result = $future
-    ->map(static fn(object $v): object => (object) ['status' => strtoupper($v->status)])
-    ->await();
-```
+- deterministic one-shot orchestration with `StepRuntime`
+- timeout/failure mapping via `FutureTimeoutException`
+- migration guidance for adopting `nexus-core` later
 
 ## Runtime Contract
 
