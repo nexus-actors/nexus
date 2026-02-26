@@ -5,308 +5,82 @@ title: Runtime Without Actors
 
 # Runtime Without Actors
 
-You can use `nexus-runtime` directly without bootstrapping `ActorSystem`.
+You can use Nexus runtime implementations directly, without creating an
+`ActorSystem`.
 
-This is useful when you want:
+This is useful when your project needs async orchestration primitives, but not
+actor lifecycle/supervision/message protocols yet.
 
-- `Future` composition (`map`, `flatMap`, `await`) in plain PHP workflows
-- timer scheduling and cancellation primitives for lightweight orchestration
-- a custom runtime contract for framework adapters or protocol bridges
+## Good Use Cases
+
+- wrapping callback-based APIs into `Future`
+- orchestrating retries/timeouts in infrastructure modules
+- deterministic test orchestration with manual time control
+- shared library code that should not depend on `nexus-core`
 
 ## Install
 
 ```bash
 composer require nexus-actors/runtime
+composer require --dev nexus-actors/runtime-step
 ```
 
-## Core Contracts (Non-Actor View)
-
-- `Monadial\Nexus\Runtime\Async\Future`
-  - immutable handle to an async result
-  - supports `await()`, `map()`, `flatMap()`
-- `Monadial\Nexus\Runtime\Async\FutureSlot`
-  - low-level slot that is `resolve()`/`fail()`-ed by producer side
-- `Monadial\Nexus\Runtime\Duration`
-  - immutable duration primitive used for scheduling and timeout control
-- `Monadial\Nexus\Runtime\Runtime\Cancellable`
-  - cancellation handle returned by scheduling methods
-- `Monadial\Nexus\Runtime\Mailbox\MailboxConfig`
-  - mailbox configuration object used by `createMailbox()`
-- `Monadial\Nexus\Runtime\Runtime\Runtime`
-  - runtime contract for scheduling, task orchestration, and lifecycle control
-
-When used without actors, `createMailbox()` and `spawn()` can still exist but
-may be minimal/no-op in your implementation if mailboxes are not part of your
-workflow.
-
-## Full Custom Runtime Walkthrough
-
-This example shows a simple in-memory runtime implementation that:
-
-- schedules one-shot and repeating callbacks
-- supports `FutureSlot` creation
-- provides a `run()` loop and graceful `shutdown()`
+## Example 1: Deterministic One-Shot Workflow
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace App\Runtime;
-
-use DateTimeImmutable;
-use Monadial\Nexus\Runtime\Async\FutureSlot;
-use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Runtime\Exception\FutureException;
-use Monadial\Nexus\Runtime\Mailbox\Mailbox;
-use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
-use Monadial\Nexus\Runtime\Runtime\Cancellable;
-use Monadial\Nexus\Runtime\Runtime\Runtime;
-use RuntimeException;
-
-final class InlineFutureException extends RuntimeException implements FutureException {}
-
-final class InlineCancellable implements Cancellable
-{
-    private bool $cancelled = false;
-
-    public function cancel(): void
-    {
-        $this->cancelled = true;
-    }
-
-    public function isCancelled(): bool
-    {
-        return $this->cancelled;
-    }
-}
-
-final class InlineFutureSlot implements FutureSlot
-{
-    private ?object $value = null;
-    private ?FutureException $failure = null;
-    private bool $resolved = false;
-
-    public function resolve(object $value): void
-    {
-        if ($this->resolved) {
-            return;
-        }
-
-        $this->value = $value;
-        $this->resolved = true;
-    }
-
-    public function fail(FutureException $e): void
-    {
-        if ($this->resolved) {
-            return;
-        }
-
-        $this->failure = $e;
-        $this->resolved = true;
-    }
-
-    public function isResolved(): bool
-    {
-        return $this->resolved;
-    }
-
-    public function await(): object
-    {
-        while (!$this->resolved) {
-            usleep(1000);
-        }
-
-        if ($this->failure !== null) {
-            throw $this->failure;
-        }
-
-        return $this->value ?? throw new RuntimeException('Future resolved without value');
-    }
-}
-
-final class MinimalRuntime implements Runtime
-{
-    /** @var list<array{at: DateTimeImmutable, cb: callable, intervalMicros: int|null, cancellable: InlineCancellable}> */
-    private array $timers = [];
-
-    private bool $running = false;
-    private bool $shutdown = false;
-
-    public function name(): string
-    {
-        return 'minimal-runtime';
-    }
-
-    public function createMailbox(MailboxConfig $config): Mailbox
-    {
-        throw new RuntimeException('Mailbox is not used in this runtime-only workflow');
-    }
-
-    public function createFutureSlot(): FutureSlot
-    {
-        return new InlineFutureSlot();
-    }
-
-    public function spawn(callable $actorLoop): string
-    {
-        // No actor fibers/coroutines in this simplified runtime.
-        // You can adapt this to enqueue tasks if needed.
-        return 'task-0';
-    }
-
-    public function scheduleOnce(Duration $delay, callable $callback): Cancellable
-    {
-        $timer = new InlineCancellable();
-        $at = $this->now()->modify('+' . $delay->toMicros() . ' microseconds');
-        $this->timers[] = ['at' => $at, 'cb' => $callback, 'intervalMicros' => null, 'cancellable' => $timer];
-
-        return $timer;
-    }
-
-    public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, callable $callback): Cancellable
-    {
-        $timer = new InlineCancellable();
-        $at = $this->now()->modify('+' . $initialDelay->toMicros() . ' microseconds');
-        $this->timers[] = ['at' => $at, 'cb' => $callback, 'intervalMicros' => $interval->toMicros(), 'cancellable' => $timer];
-
-        return $timer;
-    }
-
-    public function yield(): void
-    {
-        usleep(100);
-    }
-
-    public function sleep(Duration $duration): void
-    {
-        usleep($duration->toMicros());
-    }
-
-    public function run(): void
-    {
-        $this->running = true;
-        $this->shutdown = false;
-
-        while ($this->running) {
-            $this->tickTimers();
-
-            if ($this->shutdown) {
-                $this->running = false;
-                break;
-            }
-
-            usleep(500);
-        }
-    }
-
-    public function shutdown(Duration $timeout): void
-    {
-        $this->shutdown = true;
-    }
-
-    public function isRunning(): bool
-    {
-        return $this->running;
-    }
-
-    private function tickTimers(): void
-    {
-        $now = $this->now();
-        $next = [];
-
-        foreach ($this->timers as $timer) {
-            if ($timer['cancellable']->isCancelled()) {
-                continue;
-            }
-
-            if ($timer['at'] <= $now) {
-                ($timer['cb'])();
-
-                if ($timer['intervalMicros'] !== null && !$timer['cancellable']->isCancelled()) {
-                    $timer['at'] = $timer['at']->modify('+' . $timer['intervalMicros'] . ' microseconds');
-                    $next[] = $timer;
-                }
-            } else {
-                $next[] = $timer;
-            }
-        }
-
-        $this->timers = $next;
-    }
-
-    private function now(): DateTimeImmutable
-    {
-        return new DateTimeImmutable();
-    }
-}
-```
-
-## Standalone Future Usage
-
-Now use that runtime without actors:
-
-```php
-use App\Runtime\MinimalRuntime;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
 
-$runtime = new MinimalRuntime();
+$runtime = new StepRuntime();
 $slot = $runtime->createFutureSlot();
 $future = new Future($slot);
 
-$runtime->scheduleOnce(Duration::millis(25), static function () use ($slot): void {
-    $slot->resolve((object) ['value' => 21]);
+$runtime->scheduleOnce(Duration::millis(250), static function () use ($slot): void {
+    $slot->resolve((object) ['count' => 21]);
 });
 
-$runtime->scheduleOnce(Duration::millis(50), static function () use ($runtime): void {
-    $runtime->shutdown(Duration::seconds(1));
-});
-
-$runtime->run();
+$runtime->advanceTime(Duration::millis(250));
 
 $result = $future
-    ->map(static fn(object $v): object => (object) ['value' => $v->value * 2])
+    ->map(static fn(object $v): object => (object) ['count' => $v->count * 2])
     ->await();
 ```
 
-## Timeout / Failure Path Example
+## Example 2: Timeout / Failure Mapping
 
 ```php
+use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\FutureTimeoutException;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
 use RuntimeException;
 
-final class TimeoutLikeException extends RuntimeException implements FutureTimeoutException {}
+final class QueryTimeout extends RuntimeException implements FutureTimeoutException {}
 
+$runtime = new StepRuntime();
 $slot = $runtime->createFutureSlot();
 $future = new Future($slot);
 
-$runtime->scheduleOnce(Duration::millis(100), static function () use ($slot): void {
-    $slot->fail(new TimeoutLikeException('timeout-like failure'));
+$runtime->scheduleOnce(Duration::seconds(1), static function () use ($slot): void {
+    $slot->fail(new QueryTimeout('query timed out'));
 });
 
-$runtime->scheduleOnce(Duration::millis(150), static function () use ($runtime): void {
-    $runtime->shutdown(Duration::seconds(1));
-});
-
-$runtime->run();
+$runtime->advanceTime(Duration::seconds(1));
 
 try {
     $future->await();
-} catch (RuntimeException $e) {
-    // handle timeout/failure mapping here
+} catch (QueryTimeout $e) {
+    // map/log/retry
 }
 ```
 
-## Practical Constraints
+## Why Start Runtime-Only
 
-- `await()` blocks current execution until resolved/failed.
-- busy-wait loops in example code are intentionally simple; production runtimes
-  should suspend/resume efficiently.
-- keep timer callbacks short to avoid starving other scheduled work.
-- if you later need mailboxes and actor lifecycle, move to `nexus-core` +
-  runtime implementation packages.
+- smaller surface area while introducing concurrency gradually
+- deterministic tests before adopting full actor model
+- clean separation between domain logic and runtime mechanics
+- easy migration path: add `nexus-core` later when actors become valuable
 
 ## Next
 
