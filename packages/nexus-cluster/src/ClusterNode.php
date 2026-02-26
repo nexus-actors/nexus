@@ -10,6 +10,7 @@ use Monadial\Nexus\Cluster\Protocol\RemoteAskCancel;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskCancelled;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskReply;
 use Monadial\Nexus\Cluster\Protocol\RemoteAskRequest;
+use Monadial\Nexus\Cluster\Remote\RemoteAskState;
 use Monadial\Nexus\Cluster\Remote\RemoteReplyRef;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
@@ -42,7 +43,7 @@ final class ClusterNode
     /** @var array<string, array{slot: FutureSlot<object>, timeout: Cancellable, target: ActorPath, targetWorker: int}> */
     private array $pendingOutgoingAsks = [];
 
-    /** @var array<string, 'in-progress'|'replied'|'cancelled'> */
+    /** @var array<string, RemoteAskState> */
     private array $incomingAskState = [];
 
     /** @var array<string, RemoteAskRequest> */
@@ -273,7 +274,7 @@ final class ClusterNode
     {
         $state = $this->incomingAskState[$request->requestId] ?? null;
 
-        if ($state === 'replied') {
+        if ($state === RemoteAskState::Replied) {
             $cachedReply = $this->incomingAskReplies[$request->requestId] ?? null;
 
             if ($cachedReply !== null) {
@@ -289,26 +290,26 @@ final class ClusterNode
             return;
         }
 
-        if ($state === 'cancelled') {
+        if ($state === RemoteAskState::Cancelled) {
             $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
 
             return;
         }
 
-        if ($state === 'in-progress') {
+        if ($state === RemoteAskState::InProgress) {
             $this->sendControl($request->replyToWorker, new RemoteAskAck($request->requestId));
 
             return;
         }
 
-        $this->incomingAskState[$request->requestId] = 'in-progress';
+        $this->incomingAskState[$request->requestId] = RemoteAskState::InProgress;
         $this->incomingAskRequests[$request->requestId] = $request;
 
         $targetPath = (string) $request->targetPath;
         $ref = $this->localRefs[$targetPath] ?? null;
 
         if ($ref === null) {
-            $this->incomingAskState[$request->requestId] = 'cancelled';
+            $this->incomingAskState[$request->requestId] = RemoteAskState::Cancelled;
             $this->sendControl($request->replyToWorker, new RemoteAskCancelled($request->requestId));
 
             return;
@@ -321,11 +322,11 @@ final class ClusterNode
             transport: $this->transport,
             serializer: $this->serializer,
             onReply: function (object $reply) use ($request): bool {
-                if (($this->incomingAskState[$request->requestId] ?? null) !== 'in-progress') {
+                if (($this->incomingAskState[$request->requestId] ?? null) !== RemoteAskState::InProgress) {
                     return false;
                 }
 
-                $this->incomingAskState[$request->requestId] = 'replied';
+                $this->incomingAskState[$request->requestId] = RemoteAskState::Replied;
                 $this->incomingAskReplies[$request->requestId] = $reply;
 
                 return true;
@@ -362,11 +363,11 @@ final class ClusterNode
             return;
         }
 
-        if ($state === 'replied') {
+        if ($state === RemoteAskState::Replied) {
             return;
         }
 
-        $this->incomingAskState[$cancel->requestId] = 'cancelled';
+        $this->incomingAskState[$cancel->requestId] = RemoteAskState::Cancelled;
         $request = $this->incomingAskRequests[$cancel->requestId] ?? null;
 
         if ($request !== null) {
