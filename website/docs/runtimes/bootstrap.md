@@ -70,41 +70,24 @@ $runtime->advanceTime(\Monadial\Nexus\Runtime\Duration::seconds(1));
 ## Track B: Standalone Runtime Primitives
 
 You can compose futures without bootstrapping an actor system.
+Use this minimal bootstrap:
 
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
-use Monadial\Nexus\Runtime\Async\FutureSlot;
-use Monadial\Nexus\Runtime\Exception\FutureException;
-use RuntimeException;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
 
-final class InlineFutureException extends RuntimeException implements FutureException {}
+$runtime = new StepRuntime();
+$slot = $runtime->createFutureSlot();
+$future = new Future($slot);
 
-final class InlineSlot implements FutureSlot
-{
-    private ?object $value = null;
-    private ?Throwable $failure = null;
-
-    public function resolve(object $value): void { $this->value = $value; }
-    public function fail(FutureException $e): void { $this->failure = $e; }
-    public function isResolved(): bool { return $this->value !== null || $this->failure !== null; }
-
-    public function await(): object
-    {
-        if ($this->failure !== null) {
-            throw $this->failure;
-        }
-
-        return $this->value ?? throw new InlineFutureException('Slot not resolved');
-    }
-}
-
-$slot = new InlineSlot();
-$slot->resolve((object) ['count' => 21]);
-
-$result = (new Future($slot))
-    ->map(static fn(object $v): object => (object) ['count' => $v->count * 2])
-    ->await();
+$runtime->scheduleOnce(Duration::millis(100), static fn() => $slot->resolve((object) ['ok' => true]));
+$runtime->advanceTime(Duration::millis(100));
+$result = $future->await();
 ```
+
+For complete standalone guidance and richer examples, see:
+[Runtime Without Actors](./runtime-without-actors.md).
 
 ## Bootstrap Checklist
 
