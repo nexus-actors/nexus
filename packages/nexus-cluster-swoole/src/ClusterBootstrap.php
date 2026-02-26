@@ -122,6 +122,7 @@ final class ClusterBootstrap
                 $ring,
                 $this->serializer,
                 $directory,
+                $this->config->nodeAddressForWorker($workerId),
             );
 
             $transport->bind();

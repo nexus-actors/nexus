@@ -21,6 +21,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
@@ -184,6 +185,10 @@ final class ClusterNodeTest extends TestCase
         self::assertInstanceOf(RemoteAskRequest::class, $requestEnvelope->message);
         $request = $requestEnvelope->message;
         self::assertSame("/user/{$remoteName}", (string) $request->targetPath);
+        self::assertStringStartsWith(
+            '/cluster/local/local/nexus/node-0/temp/remote-ask-',
+            (string) $request->replyToPath,
+        );
         self::assertInstanceOf(Ping::class, $request->payload);
 
         $replyEnvelope = Envelope::of(
@@ -253,6 +258,9 @@ final class ClusterNodeTest extends TestCase
         $node->start();
 
         $future = $remoteRef->ask(new Ping('request'), Duration::seconds(5));
+        $requestEnvelope = $this->serializer->deserialize($this->transport->getSent()[0]['data']);
+        self::assertInstanceOf(RemoteAskRequest::class, $requestEnvelope->message);
+        $request = $requestEnvelope->message;
         $future->cancel();
 
         $sent = $this->transport->getSent();
@@ -260,6 +268,9 @@ final class ClusterNodeTest extends TestCase
 
         $cancelEnvelope = $this->serializer->deserialize($sent[array_key_last($sent)]['data']);
         self::assertInstanceOf(RemoteAskCancel::class, $cancelEnvelope->message);
+        self::assertSame($request->requestId, $cancelEnvelope->requestId);
+        self::assertSame($request->correlationId, $cancelEnvelope->correlationId);
+        self::assertSame($request->causationId, $cancelEnvelope->causationId);
     }
 
     #[Test]
@@ -302,6 +313,35 @@ final class ClusterNodeTest extends TestCase
     }
 
     #[Test]
+    public function remoteAskTimeoutRejectsFutureAndSendsBestEffortCancel(): void
+    {
+        $ring = new ConsistentHashRing(4);
+        $remoteName = $this->findNameNotForWorker($ring, 0);
+
+        $node = $this->createNode(workerId: 0, workerCount: 4);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+        $remoteRef = $node->spawn($props, $remoteName);
+        self::assertInstanceOf(RemoteActorRef::class, $remoteRef);
+        $node->start();
+
+        $future = $remoteRef->ask(new Ping('request'), Duration::millis(25));
+        $this->runtime->advanceTime(Duration::millis(30));
+
+        self::expectException(AskTimeoutException::class);
+
+        try {
+            $future->await();
+        } finally {
+            $sent = $this->transport->getSent();
+            self::assertNotEmpty($sent);
+            $lastEnvelope = $this->serializer->deserialize($sent[array_key_last($sent)]['data']);
+            self::assertInstanceOf(RemoteAskCancel::class, $lastEnvelope->message);
+        }
+    }
+
+    #[Test]
     public function duplicateUnknownRemoteAskRequestReturnsCancelledBothTimes(): void
     {
         $node = $this->createNode(workerId: 0, workerCount: 4);
@@ -333,6 +373,12 @@ final class ClusterNodeTest extends TestCase
 
         self::assertInstanceOf(RemoteAskCancelled::class, $first->message);
         self::assertInstanceOf(RemoteAskCancelled::class, $second->message);
+        self::assertSame($request->requestId, $first->requestId);
+        self::assertSame($request->correlationId, $first->correlationId);
+        self::assertSame($request->causationId, $first->causationId);
+        self::assertSame($request->requestId, $second->requestId);
+        self::assertSame($request->correlationId, $second->correlationId);
+        self::assertSame($request->causationId, $second->causationId);
     }
 
     protected function setUp(): void
