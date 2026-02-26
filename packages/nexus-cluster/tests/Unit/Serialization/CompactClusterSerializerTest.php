@@ -45,6 +45,9 @@ final class CompactClusterSerializerTest extends TestCase
 
         self::assertSame('/user/actor-a', (string) $restored->sender);
         self::assertSame('/user/actor-b', (string) $restored->target);
+        self::assertSame($envelope->requestId, $restored->requestId);
+        self::assertSame($envelope->correlationId, $restored->correlationId);
+        self::assertSame($envelope->causationId, $restored->causationId);
     }
 
     #[Test]

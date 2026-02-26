@@ -41,6 +41,9 @@ final class DefaultEnvelopeSerializerTest extends TestCase
         self::assertSame(42, $restored->message->number);
         self::assertTrue($restored->sender->equals($sender));
         self::assertTrue($restored->target->equals($target));
+        self::assertSame($envelope->requestId, $restored->requestId);
+        self::assertSame($envelope->correlationId, $restored->correlationId);
+        self::assertSame($envelope->causationId, $restored->causationId);
     }
 
     #[Test]
@@ -69,9 +72,12 @@ final class DefaultEnvelopeSerializerTest extends TestCase
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
         $envelope = new Envelope(
-            new EnvelopeTestMessage('test', 1),
-            $sender,
-            $target,
+            message: new EnvelopeTestMessage('test', 1),
+            sender: $sender,
+            target: $target,
+            requestId: 'request-1',
+            correlationId: 'correlation-1',
+            causationId: 'causation-1',
             metadata: ['trace-id' => 'abc-123', 'request-id' => 'req-456'],
         );
 
@@ -80,6 +86,9 @@ final class DefaultEnvelopeSerializerTest extends TestCase
 
         self::assertSame('abc-123', $restored->metadata['trace-id']);
         self::assertSame('req-456', $restored->metadata['request-id']);
+        self::assertSame('request-1', $restored->requestId);
+        self::assertSame('correlation-1', $restored->correlationId);
+        self::assertSame('causation-1', $restored->causationId);
     }
 
     #[Test]

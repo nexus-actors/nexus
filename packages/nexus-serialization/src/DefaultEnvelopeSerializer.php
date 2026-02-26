@@ -42,6 +42,9 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
             'metadata' => $metadataArray,
             'sender' => (string) $envelope->sender,
             'target' => (string) $envelope->target,
+            'requestId' => $envelope->requestId,
+            'correlationId' => $envelope->correlationId,
+            'causationId' => $envelope->causationId,
         ];
 
         try {
@@ -63,7 +66,16 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
     public function deserialize(string $data): Envelope
     {
         try {
-            /** @var array{sender: string, target: string, metadata: array<string, string>, messageType: string, message: string} $payload */
+            /** @var array{
+             *  sender: string,
+             *  target: string,
+             *  metadata: array<string, string>,
+             *  messageType: string,
+             *  message: string,
+             *  requestId: string,
+             *  correlationId: string,
+             *  causationId: string
+             * } $payload */
             $payload = json_decode($data, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             throw new MessageDeserializationException('Envelope', 'Failed to decode envelope: ' . $e->getMessage(), $e);
@@ -78,6 +90,14 @@ final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
             throw new MessageDeserializationException('Envelope', 'Invalid actor path: ' . $e->getMessage(), $e);
         }
 
-        return new Envelope($message, $sender, $target, metadata: $payload['metadata']);
+        return new Envelope(
+            message: $message,
+            sender: $sender,
+            target: $target,
+            requestId: $payload['requestId'],
+            correlationId: $payload['correlationId'],
+            causationId: $payload['causationId'],
+            metadata: $payload['metadata'],
+        );
     }
 }

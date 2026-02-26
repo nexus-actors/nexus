@@ -27,6 +27,12 @@ use function unserialize;
  *   [N bytes: target path string]
  *   [2 bytes: sender path length (network byte order)]
  *   [N bytes: sender path string]
+ *   [2 bytes: request id length]
+ *   [N bytes: request id]
+ *   [2 bytes: correlation id length]
+ *   [N bytes: correlation id]
+ *   [2 bytes: causation id length]
+ *   [N bytes: causation id]
  *   [remaining bytes: serialize($message)]
  */
 final readonly class CompactClusterSerializer implements ClusterSerializer
@@ -37,10 +43,16 @@ final readonly class CompactClusterSerializer implements ClusterSerializer
     {
         $target = (string) $envelope->target;
         $sender = (string) $envelope->sender;
+        $requestId = $envelope->requestId;
+        $correlationId = $envelope->correlationId;
+        $causationId = $envelope->causationId;
         $message = serialize($envelope->message);
 
         return pack('n', strlen($target)) . $target
             . pack('n', strlen($sender)) . $sender
+            . pack('n', strlen($requestId)) . $requestId
+            . pack('n', strlen($correlationId)) . $correlationId
+            . pack('n', strlen($causationId)) . $causationId
             . $message;
     }
 
@@ -55,35 +67,11 @@ final readonly class CompactClusterSerializer implements ClusterSerializer
             throw new RuntimeException('Compact envelope too short');
         }
 
-        // Target path
-        /** @var array{1: int} $unpacked */
-        $unpacked = unpack('n', $data, $pos);
-        $targetLen = $unpacked[1];
-        $pos += 2;
-
-        if ($pos + $targetLen > $len) {
-            throw new RuntimeException('Compact envelope truncated at target path');
-        }
-
-        $targetStr = substr($data, $pos, $targetLen);
-        $pos += $targetLen;
-
-        // Sender path
-        if ($pos + 2 > $len) {
-            throw new RuntimeException('Compact envelope truncated at sender length');
-        }
-
-        /** @var array{1: int} $unpacked */
-        $unpacked = unpack('n', $data, $pos);
-        $senderLen = $unpacked[1];
-        $pos += 2;
-
-        if ($pos + $senderLen > $len) {
-            throw new RuntimeException('Compact envelope truncated at sender path');
-        }
-
-        $senderStr = substr($data, $pos, $senderLen);
-        $pos += $senderLen;
+        $targetStr = $this->unpackString($data, $pos, $len, 'target path');
+        $senderStr = $this->unpackString($data, $pos, $len, 'sender path');
+        $requestId = $this->unpackString($data, $pos, $len, 'request id');
+        $correlationId = $this->unpackString($data, $pos, $len, 'correlation id');
+        $causationId = $this->unpackString($data, $pos, $len, 'causation id');
 
         // Message
         $messageData = substr($data, $pos);
@@ -95,10 +83,34 @@ final readonly class CompactClusterSerializer implements ClusterSerializer
             throw new RuntimeException('Failed to deserialize compact envelope message');
         }
 
-        return Envelope::of(
-            $message,
-            ActorPath::fromString($senderStr),
-            ActorPath::fromString($targetStr),
+        return new Envelope(
+            message: $message,
+            sender: ActorPath::fromString($senderStr),
+            target: ActorPath::fromString($targetStr),
+            requestId: $requestId,
+            correlationId: $correlationId,
+            causationId: $causationId,
         );
+    }
+
+    private function unpackString(string $data, int &$pos, int $len, string $segment): string
+    {
+        if ($pos + 2 > $len) {
+            throw new RuntimeException("Compact envelope truncated at {$segment} length");
+        }
+
+        /** @var array{1: int} $unpacked */
+        $unpacked = unpack('n', $data, $pos);
+        $segmentLen = $unpacked[1];
+        $pos += 2;
+
+        if ($pos + $segmentLen > $len) {
+            throw new RuntimeException("Compact envelope truncated at {$segment}");
+        }
+
+        $value = substr($data, $pos, $segmentLen);
+        $pos += $segmentLen;
+
+        return $value;
     }
 }
