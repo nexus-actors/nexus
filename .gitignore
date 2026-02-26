@@ -17,3 +17,4 @@ docs/plans/
 website/node_modules/
 website/.docusaurus/
 website/build/
+coverage-guard-test.php

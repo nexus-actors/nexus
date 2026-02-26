@@ -16,6 +16,7 @@ const sidebars = {
       type: 'category',
       label: 'Core Concepts',
       items: [
+        'core-concepts/nexus-thesis',
         'core-concepts/actors',
         'core-concepts/behaviors',
         'core-concepts/props',

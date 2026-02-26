@@ -62,13 +62,13 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-runtime** | `nexus-actors/runtime` | Shared runtime abstractions and concurrency primitives: `Runtime`, `Duration`, `Cancellable`, mailbox contracts, and `Future`/`FutureSlot`. |
 | **nexus-runtime-fiber** | `nexus-actors/runtime-fiber` | Fiber-based runtime using PHP 8.1+ native fibers with cooperative scheduling. Ideal for development and testing. |
 | **nexus-runtime-swoole** | `nexus-actors/runtime-swoole` | Swoole-based runtime using coroutines and native channels. Designed for production workloads with true parallelism. |
+| **nexus-runtime-step** | `nexus-actors/runtime-step` | Deterministic step-by-step runtime for tests. Use `step()` + `VirtualClock` for fully reproducible message and timer behavior. |
 | **nexus-cluster** | `nexus-actors/cluster` | Pure PHP abstractions for multi-process scaling and future clustering: consistent hash ring, transport and directory interfaces, `RemoteActorRef`, `ClusterNode`. |
 | **nexus-cluster-swoole** | `nexus-actors/cluster-swoole` | Swoole multi-process scaling: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap` with `Process\Pool`. |
 | **nexus-persistence** | `nexus-actors/persistence` | Event sourcing and durable state abstractions. Effects, snapshots, retention policies, concurrency control, and in-memory stores for testing. |
 | **nexus-persistence-dbal** | `nexus-actors/persistence-dbal` | Doctrine DBAL storage backends for persistence. SQL-backed event, snapshot, and durable state stores. |
 | **nexus-persistence-doctrine** | `nexus-actors/persistence-doctrine` | Doctrine ORM adapter for persistence. Entity-based stores using `EntityManagerInterface`. |
 | **nexus-serialization** | `nexus-actors/serialization` | Valinor-based message serialization with a type registry for wire-format encoding and decoding. |
-| **nexus-runtime-step** | `nexus-actors/runtime-step` | Deterministic step-by-step runtime for testing. Paired with `VirtualClock` for time-controlled tests. |
 | **nexus-app** | `nexus-actors/app` | Application kernel for declarative actor registration and single-process execution. |
 | **nexus-psalm** | `nexus-actors/psalm` | Psalm plugin providing static analysis support for actor message protocols and behavior types. |
 
@@ -91,6 +91,7 @@ and `nexus-serialization` for convenience.
 
 ## Next steps
 
+- [Nexus Thesis](./core-concepts/nexus-thesis.md) -- decide quickly whether actor architecture is the right fit.
 - [Installation](./getting-started/installation.md) -- set up Nexus in your project.
 - [Quick Start](./getting-started/quick-start.md) -- build your first actor in five minutes.
 - [Key Concepts](./getting-started/concepts.md) -- understand the actor model from a PHP perspective.
