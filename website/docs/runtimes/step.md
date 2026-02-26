@@ -108,7 +108,7 @@ $t2 = $clock->now();
 You can also manipulate the clock directly:
 
 ```php
-$clock->advance(Duration::minutes(5));
+$clock->advance(Duration::seconds(300));
 $clock->set(new DateTimeImmutable('2030-01-01T00:00:00+00:00'));
 ```
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Tests\Support;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Psr\Clock\ClockInterface;
 
 final class TestClock implements ClockInterface

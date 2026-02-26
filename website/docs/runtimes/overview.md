@@ -23,6 +23,8 @@ interface Runtime
 
     public function createMailbox(MailboxConfig $config): Mailbox;
 
+    public function createFutureSlot(): FutureSlot;
+
     public function spawn(callable $actorLoop): string;
 
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable;
@@ -45,6 +47,7 @@ Each method serves a specific role in the actor lifecycle:
 
 - **`name()`** -- Returns a string identifier for the runtime (`'fiber'`, `'swoole'`, or `'step'`).
 - **`createMailbox()`** -- Creates a runtime-specific `Mailbox` implementation from a `MailboxConfig`.
+- **`createFutureSlot()`** -- Creates a runtime-specific slot implementation for `Future`.
 - **`spawn()`** -- Registers a callable as a new concurrent task (fiber or coroutine) and returns an identifier string.
 - **`scheduleOnce()`** -- Schedules a one-shot callback after `$delay`. Returns a `Cancellable` handle.
 - **`scheduleRepeatedly()`** -- Schedules a recurring callback with an initial delay and a fixed interval. Returns a `Cancellable` handle.
@@ -66,7 +69,7 @@ Nexus ships with three runtime implementations:
 
 All three implement the `Runtime` interface identically. Actor code never
 references a specific runtime class -- it depends only on the `Runtime`
-interface and the core abstractions (`Mailbox`, `Cancellable`, `Duration`).
+interface and runtime abstractions (`Mailbox`, `Cancellable`, `Duration`).
 
 ## Runtime pluggability
 

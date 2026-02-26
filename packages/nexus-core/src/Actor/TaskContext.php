@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Override;
 use Psr\Log\LoggerInterface;
 

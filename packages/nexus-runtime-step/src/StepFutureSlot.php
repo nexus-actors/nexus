@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Step;
 
 use Fiber;
+use InvalidArgumentException;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Override;
 use Throwable;
 
@@ -14,11 +16,13 @@ use Throwable;
  *
  * In Step, all processing is driven by explicit step()/drain() calls.
  * The slot suspends the fiber on await() and resumes when resolved.
+ *
+ * @implements FutureSlot<object, FutureException>
  */
 final class StepFutureSlot implements FutureSlot
 {
     private ?object $result = null;
-    private ?Throwable $failure = null;
+    private ?FutureException $failure = null;
     private bool $resolved = false;
 
     #[Override]
@@ -37,6 +41,10 @@ final class StepFutureSlot implements FutureSlot
     {
         if ($this->resolved) {
             return;
+        }
+
+        if (!$e instanceof FutureException) {
+            throw new InvalidArgumentException('Future failure must implement FutureException', previous: $e);
         }
 
         $this->failure = $e;

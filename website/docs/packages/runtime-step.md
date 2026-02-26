@@ -38,6 +38,7 @@ $runtime = new StepRuntime($clock);
 
 - `name(): string` -- Returns `'step'`.
 - `createMailbox(MailboxConfig): Mailbox` -- Returns a new `StepMailbox`.
+- `createFutureSlot(): FutureSlot` -- Returns a runtime slot implementation for `Future`.
 - `spawn(callable): string` -- Creates a `Fiber` from the callable and returns an ID like `'step-0'`.
 - `scheduleOnce(Duration, callable): Cancellable` -- Stores timer with virtual fire time. Returns `StepCancellable`.
 - `scheduleRepeatedly(Duration, Duration, callable): Cancellable` -- Stores repeating timer with virtual fire time.
@@ -61,7 +62,7 @@ $runtime = new StepRuntime($clock);
 
 ### StepMailbox
 
-Implements `Monadial\Nexus\Core\Mailbox\Mailbox`.
+Implements `Monadial\Nexus\Runtime\Mailbox\Mailbox`.
 
 `SplQueue`-backed mailbox that always suspends the fiber in
 `dequeueBlocking()`, even when messages are available. This guarantees each
@@ -88,7 +89,7 @@ $clock->set(new DateTimeImmutable(...));// jump to a specific time
 
 ### StepCancellable
 
-Implements `Monadial\Nexus\Core\Actor\Cancellable`.
+Implements `Monadial\Nexus\Runtime\Runtime\Cancellable`.
 
 Simple boolean-flag cancellable. Calling `cancel()` sets the flag; timers check
 it before firing and skip cancelled entries.

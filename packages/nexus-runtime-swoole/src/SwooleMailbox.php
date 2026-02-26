@@ -5,16 +5,14 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Swoole;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
+use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use NoDiscard;
 use Override;
 use SplQueue;
@@ -31,6 +29,8 @@ use Swoole\Coroutine\Channel;
  * (0.001s) for non-blocking operations instead.
  *
  * @psalm-api
+ * @template T of object
+ * @implements Mailbox<T>
  */
 final class SwooleMailbox implements Mailbox
 {
@@ -43,10 +43,10 @@ final class SwooleMailbox implements Mailbox
 
     private bool $closed = false;
 
-    /** @var SplQueue<Envelope> */
+    /** @var SplQueue<T> */
     private SplQueue $drainQueue;
 
-    public function __construct(private readonly MailboxConfig $config, private readonly ActorPath $actor)
+    public function __construct(private readonly MailboxConfig $config)
     {
         $capacity = $this->config->bounded
             ? $this->config->capacity
@@ -54,32 +54,33 @@ final class SwooleMailbox implements Mailbox
 
         $this->channel = new Channel($capacity);
 
-        /** @var SplQueue<Envelope> $queue */
+        /** @var SplQueue<T> $queue */
         $queue = new SplQueue();
         $this->drainQueue = $queue;
     }
 
     /**
      * @throws MailboxClosedException
+     * @param T $message
      */
     #[Override]
     #[NoDiscard]
-    public function enqueue(Envelope $envelope): EnqueueResult
+    public function enqueue(object $message): EnqueueResult
     {
         if ($this->closed) {
-            throw new MailboxClosedException($this->actor);
+            throw new MailboxClosedException();
         }
 
         if ($this->config->bounded && $this->channel->length() >= $this->config->capacity) {
-            return $this->handleOverflow($envelope);
+            return $this->handleOverflow($message);
         }
 
-        $this->channel->push($envelope, self::NON_BLOCKING_TIMEOUT);
+        $this->channel->push($message, self::NON_BLOCKING_TIMEOUT);
 
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<Envelope> */
+    /** @return Option<T> */
     #[Override]
     public function dequeue(): Option
     {
@@ -89,24 +90,24 @@ final class SwooleMailbox implements Mailbox
                 return Option::some($this->drainQueue->dequeue());
             }
 
-            /** @var Option<Envelope> $none */
+            /** @var Option<T> $none */
             $none = Option::none();
 
             return $none;
         }
 
         if ($this->channel->isEmpty()) {
-            /** @var Option<Envelope> $none */
+            /** @var Option<T> $none */
             $none = Option::none();
 
             return $none;
         }
 
-        /** @var Envelope|false $result */
+        /** @var T|false $result */
         $result = $this->channel->pop(self::NON_BLOCKING_TIMEOUT);
 
         if ($result === false) {
-            /** @var Option<Envelope> $none */
+            /** @var Option<T> $none */
             $none = Option::none();
 
             return $none;
@@ -120,7 +121,8 @@ final class SwooleMailbox implements Mailbox
      * @throws MailboxTimeoutException
      */
     #[Override]
-    public function dequeueBlocking(Duration $timeout): Envelope
+    /** @return T */
+    public function dequeueBlocking(Duration $timeout): object
     {
         // Fast path: check drain queue first when closed
         if ($this->closed) {
@@ -128,12 +130,12 @@ final class SwooleMailbox implements Mailbox
                 return $this->drainQueue->dequeue();
             }
 
-            throw new MailboxClosedException($this->actor);
+            throw new MailboxClosedException();
         }
 
         $timeoutSeconds = $timeout->toSecondsFloat();
 
-        /** @var Envelope|false $result */
+        /** @var T|false $result */
         $result = $this->channel->pop($timeoutSeconds);
 
         if ($result === false) {
@@ -141,10 +143,10 @@ final class SwooleMailbox implements Mailbox
             $errCode = $this->channel->errCode;
 
             if ($errCode === SWOOLE_CHANNEL_CLOSED) {
-                throw new MailboxClosedException($this->actor);
+                throw new MailboxClosedException();
             }
 
-            throw new MailboxTimeoutException($this->actor, $timeout);
+            throw new MailboxTimeoutException($timeout);
         }
 
         return $result;
@@ -198,7 +200,7 @@ final class SwooleMailbox implements Mailbox
         // Drain remaining messages from the channel into the backup queue
         // before closing the channel (which discards remaining items).
         while (!$this->channel->isEmpty()) {
-            /** @var Envelope|false $item */
+            /** @var T|false $item */
             $item = $this->channel->pop(self::NON_BLOCKING_TIMEOUT);
 
             if ($item !== false) {
@@ -212,26 +214,31 @@ final class SwooleMailbox implements Mailbox
     /**
      * @throws MailboxOverflowException
      */
-    private function handleOverflow(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function handleOverflow(object $message): EnqueueResult
     {
         return match ($this->config->strategy) {
             OverflowStrategy::DropNewest => EnqueueResult::Dropped,
-            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($envelope),
+            OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($message),
             OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
             OverflowStrategy::ThrowException => throw new MailboxOverflowException(
-                $this->actor,
                 $this->config->capacity,
                 $this->config->strategy,
             ),
         };
     }
 
-    private function dropOldestAndEnqueue(Envelope $envelope): EnqueueResult
+    /**
+     * @param T $message
+     */
+    private function dropOldestAndEnqueue(object $message): EnqueueResult
     {
         // Pop the oldest message (non-blocking)
         $this->channel->pop(self::NON_BLOCKING_TIMEOUT);
         // Push the new message
-        $this->channel->push($envelope, self::NON_BLOCKING_TIMEOUT);
+        $this->channel->push($message, self::NON_BLOCKING_TIMEOUT);
 
         return EnqueueResult::Accepted;
     }

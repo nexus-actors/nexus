@@ -22,7 +22,7 @@ Only the failed child is acted upon. Siblings continue running undisturbed.
 
 ```php
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 // Default: 3 retries within 60 seconds, always restart
 $strategy = SupervisionStrategy::oneForOne();
@@ -159,7 +159,7 @@ supervises its children:
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 $behavior = Behavior::receive(
     fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
@@ -188,7 +188,7 @@ co-located with the behavior definition rather than at the Props level.
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Supervision\Directive;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 $behavior = Behavior::supervise(
     Behavior::receive(

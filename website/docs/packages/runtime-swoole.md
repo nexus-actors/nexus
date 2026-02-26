@@ -33,6 +33,7 @@ $runtime = new SwooleRuntime(new SwooleConfig(maxCoroutines: 50_000));
 
 - `name(): string` -- Returns `'swoole'`.
 - `createMailbox(MailboxConfig): Mailbox` -- Returns a new `SwooleMailbox`.
+- `createFutureSlot(): FutureSlot` -- Returns a runtime slot implementation for `Future`.
 - `spawn(callable): string` -- Creates a Swoole coroutine (or queues it if called before `run()`). Returns an ID like `'swoole-0'`.
 - `scheduleOnce(Duration, callable): Cancellable` -- Uses `Swoole\Timer::after()`. Returns `SwooleCancellable` or `DeferredCancellable`.
 - `scheduleRepeatedly(Duration, Duration, callable): Cancellable` -- Uses `Timer::after()` for the initial delay, then `Timer::tick()` for repeating.
@@ -63,7 +64,7 @@ final readonly class SwooleConfig
 
 ### SwooleMailbox
 
-Implements `Monadial\Nexus\Core\Mailbox\Mailbox`.
+Implements `Monadial\Nexus\Runtime\Mailbox\Mailbox`.
 
 Backed by a `Swoole\Coroutine\Channel`. Coroutine suspension and resumption
 for blocking dequeue are handled natively by Swoole. On `close()`, remaining
@@ -74,14 +75,14 @@ Supports all `OverflowStrategy` modes for bounded mailboxes.
 
 ### SwooleCancellable
 
-Implements `Monadial\Nexus\Core\Actor\Cancellable`.
+Implements `Monadial\Nexus\Runtime\Runtime\Cancellable`.
 
 Wraps a Swoole timer ID. Calling `cancel()` invokes `Swoole\Timer::clear()`
 on the underlying timer.
 
 ### DeferredCancellable
 
-Implements `Monadial\Nexus\Core\Actor\Cancellable`.
+Implements `Monadial\Nexus\Runtime\Runtime\Cancellable`.
 
 Used for timers scheduled before `Co\run()` starts. Holds a shared boolean
 reference. When `cancel()` is called, the flag prevents the timer from being

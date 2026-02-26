@@ -5,10 +5,10 @@ title: nexus-core
 
 # nexus-core
 
-The core package contains all actor system abstractions, behaviors, supervision,
-mailboxes, lifecycle signals, and the `ActorSystem` entry point. It has no
-runtime dependency -- concurrency is delegated to whichever `Runtime`
-implementation is injected.
+The core package contains actor system abstractions, behaviors, supervision,
+lifecycle signals, and the `ActorSystem` entry point. Concurrency primitives
+(`Duration`, `Cancellable`, mailbox contracts) are provided by
+`nexus-runtime`, and `nexus-core` depends on that package.
 
 **Composer:** `nexus-actors/core`
 
@@ -46,7 +46,7 @@ classDiagram
         +shutdown(Duration) void
     }
 
-    class Mailbox {
+    class RuntimeMailbox {
         <<interface>>
         +enqueue(Envelope) EnqueueResult
         +dequeueBlocking(Duration) Envelope
@@ -66,6 +66,9 @@ classDiagram
     RemoteActorRef ..|> ActorRef
     DeadLetterRef ..|> ActorRef
 ```
+
+`RuntimeMailbox` in this diagram refers to the mailbox interface provided by
+`nexus-runtime`.
 
 </details>
 
@@ -90,19 +93,15 @@ classDiagram
 | `DeadLetterRef` | Null-object `ActorRef` that captures undeliverable messages. Always returns `false` from `isAlive()`. |
 | `ActorState` | Enum: `New`, `Starting`, `Running`, `Suspended`, `Stopping`, `Stopped`. |
 | `BehaviorTag` | Enum: `Receive`, `WithState`, `Setup`, `Same`, `Stopped`, `Unhandled`, `Empty`. |
-| `Cancellable` | Interface for cancelling scheduled operations. Methods: `cancel()`, `isCancelled()`. |
-
 ## Mailbox namespace
 
 `Monadial\Nexus\Core\Mailbox\`
 
 | Class / Interface | Description |
 |---|---|
-| `Mailbox` | Interface for actor mailboxes. Methods: `enqueue(Envelope): EnqueueResult`, `dequeue(): Option<Envelope>`, `dequeueBlocking(Duration): Envelope`, `count()`, `isFull()`, `isEmpty()`, `close()`. |
-| `MailboxConfig` | Immutable configuration. Factory methods: `bounded(int $capacity, OverflowStrategy)`, `unbounded()`. Instance methods: `withCapacity(int)`, `withStrategy(OverflowStrategy)`. |
 | `Envelope` | Immutable message wrapper. Properties: `message`, `sender` (ActorPath), `target` (ActorPath), `metadata` (array). Factory: `of(object, ActorPath, ActorPath)`. |
-| `EnqueueResult` | Enum: `Accepted`, `Dropped`, `Backpressured`. |
-| `OverflowStrategy` | Enum: `DropNewest`, `DropOldest`, `Backpressure`, `ThrowException`. |
+
+Mailbox contracts/configuration moved to `Monadial\Nexus\Runtime\Mailbox\...`.
 
 ## Supervision namespace
 
@@ -153,47 +152,16 @@ classDiagram
 | `ActorException` | Base exception for actor-related errors. |
 | `ActorInitializationException` | Thrown when actor setup fails. |
 | `AskTimeoutException` | Thrown when an `ask()` call exceeds its timeout. |
-| `MailboxException` | Base exception for mailbox errors. |
-| `MailboxClosedException` | Thrown when enqueuing or dequeuing from a closed mailbox. |
-| `MailboxOverflowException` | Thrown when a bounded mailbox overflows with the `ThrowException` strategy. |
 | `MaxRetriesExceededException` | Thrown when supervision retry limits are exceeded. |
 | `InvalidActorPathException` | Thrown for malformed actor path strings. |
 | `InvalidActorStateTransition` | Thrown for illegal state machine transitions. |
 | `InvalidBehaviorException` | Thrown for invalid behavior configurations. |
-| `InvalidMailboxConfigException` | Thrown for invalid mailbox configurations. |
 | `NexusLogicException` | Thrown for programming errors (extends `LogicException`). |
 
-## Duration
+## Runtime Primitives
 
-`Monadial\Nexus\Core\Duration`
-
-Nanosecond-precision, immutable duration value object. Implements `Stringable`.
-
-**Factory methods:**
-
-```php
-Duration::seconds(5);
-Duration::millis(500);
-Duration::micros(1000);
-Duration::nanos(1_000_000);
-Duration::zero();
-```
-
-**Arithmetic:**
-
-```php
-$a = Duration::seconds(1);
-$b = Duration::millis(500);
-
-$a->plus($b);         // 1s 500ms
-$a->minus($b);        // 500ms
-$a->multipliedBy(3);  // 3s
-$a->dividedBy(2);     // 500ms
-```
-
-**Conversions:** `toNanos()`, `toMicros()`, `toMillis()`, `toSeconds()`, `toSecondsFloat()`.
-
-**Comparisons:** `equals()`, `isGreaterThan()`, `isLessThan()`, `isZero()`, `compareTo()`.
+`Duration`, `Cancellable`, mailbox contracts/configuration, and mailbox
+exceptions moved to `nexus-runtime` under `Monadial\Nexus\Runtime\...`.
 
 ## Pipe functions
 

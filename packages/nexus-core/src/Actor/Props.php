@@ -8,7 +8,7 @@ use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Psr\Container\ContainerInterface;
 
 /**

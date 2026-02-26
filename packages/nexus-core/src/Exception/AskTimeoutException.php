@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Exception;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureTimeoutException;
 use Throwable;
 
 /** @psalm-api */
-final class AskTimeoutException extends ActorException
+final class AskTimeoutException extends ActorException implements FutureTimeoutException
 {
     public function __construct(
         public readonly ActorPath $target,

@@ -6,9 +6,10 @@ namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Psr\Log\LoggerInterface;
 
 /**

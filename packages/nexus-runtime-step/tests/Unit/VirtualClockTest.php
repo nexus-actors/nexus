@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Step\Tests\Unit;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\VirtualClock;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

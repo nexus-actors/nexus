@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Core;
+namespace Monadial\Nexus\Runtime;
 
 use NoDiscard;
 use Override;

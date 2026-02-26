@@ -6,8 +6,8 @@ namespace Monadial\Nexus\Core\Actor\Functions;
 
 use Closure;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 
 /**
  * @psalm-api

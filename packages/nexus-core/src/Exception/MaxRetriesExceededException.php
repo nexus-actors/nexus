@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Exception;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Throwable;
 
 /** @psalm-api */

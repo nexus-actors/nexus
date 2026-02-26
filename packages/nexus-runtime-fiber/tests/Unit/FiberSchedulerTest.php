@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberScheduler;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;

@@ -4,17 +4,20 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Runtime;
 
-use Monadial\Nexus\Core\Actor\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 
 /** @psalm-api */
 interface Runtime
 {
     public function name(): string;
 
+    /**
+     * @template T of object
+     * @return Mailbox<T>
+     */
     public function createMailbox(MailboxConfig $config): Mailbox;
 
     /**

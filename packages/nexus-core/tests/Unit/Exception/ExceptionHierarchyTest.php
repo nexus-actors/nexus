@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Core\Tests\Unit\Exception;
 use LogicException;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorState;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
@@ -15,15 +14,11 @@ use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Exception\InvalidActorPathException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
 use Monadial\Nexus\Core\Exception\InvalidBehaviorException;
-use Monadial\Nexus\Core\Exception\InvalidMailboxConfigException;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
 use Monadial\Nexus\Core\Exception\MaxRetriesExceededException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NexusLogicException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -33,14 +28,11 @@ use RuntimeException;
 #[CoversClass(NexusLogicException::class)]
 #[CoversClass(AskTimeoutException::class)]
 #[CoversClass(ActorInitializationException::class)]
-#[CoversClass(MailboxOverflowException::class)]
-#[CoversClass(MailboxClosedException::class)]
 #[CoversClass(MaxRetriesExceededException::class)]
 #[CoversClass(InvalidActorPathException::class)]
 #[CoversClass(ActorNameExistsException::class)]
 #[CoversClass(InvalidActorStateTransition::class)]
 #[CoversClass(InvalidBehaviorException::class)]
-#[CoversClass(InvalidMailboxConfigException::class)]
 #[CoversClass(NoSenderException::class)]
 final class ExceptionHierarchyTest extends TestCase
 {
@@ -84,37 +76,6 @@ final class ExceptionHierarchyTest extends TestCase
         self::assertSame($path, $exception->actor);
         self::assertSame('constructor threw', $exception->reason);
         self::assertInstanceOf(ActorException::class, $exception);
-    }
-
-    #[Test]
-    public function mailboxExceptionExtendsNexusException(): void
-    {
-        $exception = $this->createStub(MailboxException::class);
-        self::assertInstanceOf(NexusException::class, $exception);
-    }
-
-    #[Test]
-    public function mailboxOverflowExceptionCarriesContext(): void
-    {
-        $path = ActorPath::fromString('/user/orders');
-
-        $exception = new MailboxOverflowException($path, 5000, OverflowStrategy::ThrowException);
-
-        self::assertSame($path, $exception->actor);
-        self::assertSame(5000, $exception->capacity);
-        self::assertSame(OverflowStrategy::ThrowException, $exception->strategy);
-        self::assertInstanceOf(MailboxException::class, $exception);
-    }
-
-    #[Test]
-    public function mailboxClosedExceptionCarriesContext(): void
-    {
-        $path = ActorPath::fromString('/user/orders');
-
-        $exception = new MailboxClosedException($path);
-
-        self::assertSame($path, $exception->actor);
-        self::assertInstanceOf(MailboxException::class, $exception);
     }
 
     #[Test]
@@ -184,13 +145,6 @@ final class ExceptionHierarchyTest extends TestCase
     public function invalidBehaviorExceptionIsUnchecked(): void
     {
         $exception = new InvalidBehaviorException('bad behavior');
-        self::assertInstanceOf(NexusLogicException::class, $exception);
-    }
-
-    #[Test]
-    public function invalidMailboxConfigExceptionIsUnchecked(): void
-    {
-        $exception = new InvalidMailboxConfigException('bad config');
         self::assertInstanceOf(NexusLogicException::class, $exception);
     }
 

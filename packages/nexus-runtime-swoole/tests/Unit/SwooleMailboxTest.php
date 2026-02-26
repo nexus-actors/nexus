@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
 
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Exception\MailboxOverflowException;
-use Monadial\Nexus\Core\Exception\MailboxTimeoutException;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
+use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use Monadial\Nexus\Runtime\Swoole\SwooleMailbox;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -31,7 +29,7 @@ final class SwooleMailboxTest extends TestCase
     public function it_implements_mailbox(): void
     {
         run(static function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
             self::assertInstanceOf(Mailbox::class, $mailbox);
         });
     }
@@ -40,11 +38,11 @@ final class SwooleMailboxTest extends TestCase
     public function enqueue_dequeue_fifo_order(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
-            $env1 = $this->createEnvelope();
-            $env2 = $this->createEnvelope();
-            $env3 = $this->createEnvelope();
+            $env1 = $this->createMessage();
+            $env2 = $this->createMessage();
+            $env3 = $this->createMessage();
 
             (void) $mailbox->enqueue($env1);
             (void) $mailbox->enqueue($env2);
@@ -60,7 +58,7 @@ final class SwooleMailboxTest extends TestCase
     public function dequeue_returns_none_when_empty(): void
     {
         run(static function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
             $result = $mailbox->dequeue();
             self::assertTrue($result->isNone());
@@ -71,14 +69,14 @@ final class SwooleMailboxTest extends TestCase
     public function count_tracks_messages(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
             self::assertSame(0, $mailbox->count());
 
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
             self::assertSame(1, $mailbox->count());
 
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
             self::assertSame(2, $mailbox->count());
 
             $mailbox->dequeue();
@@ -90,11 +88,11 @@ final class SwooleMailboxTest extends TestCase
     public function is_empty_reflects_state(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
             self::assertTrue($mailbox->isEmpty());
 
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
             self::assertFalse($mailbox->isEmpty());
 
             $mailbox->dequeue();
@@ -108,15 +106,14 @@ final class SwooleMailboxTest extends TestCase
         run(function (): void {
             $mailbox = new SwooleMailbox(
                 MailboxConfig::bounded(2, OverflowStrategy::DropNewest),
-                ActorPath::root(),
             );
 
             self::assertFalse($mailbox->isFull());
 
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
             self::assertFalse($mailbox->isFull());
 
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
             self::assertTrue($mailbox->isFull());
 
             $mailbox->dequeue();
@@ -130,12 +127,11 @@ final class SwooleMailboxTest extends TestCase
         run(function (): void {
             $mailbox = new SwooleMailbox(
                 MailboxConfig::bounded(2, OverflowStrategy::DropNewest),
-                ActorPath::root(),
             );
 
-            $env1 = $this->createEnvelope();
-            $env2 = $this->createEnvelope();
-            $env3 = $this->createEnvelope();
+            $env1 = $this->createMessage();
+            $env2 = $this->createMessage();
+            $env3 = $this->createMessage();
 
             self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env1));
             self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env2));
@@ -153,12 +149,11 @@ final class SwooleMailboxTest extends TestCase
         run(function (): void {
             $mailbox = new SwooleMailbox(
                 MailboxConfig::bounded(2, OverflowStrategy::DropOldest),
-                ActorPath::root(),
             );
 
-            $env1 = $this->createEnvelope();
-            $env2 = $this->createEnvelope();
-            $env3 = $this->createEnvelope();
+            $env1 = $this->createMessage();
+            $env2 = $this->createMessage();
+            $env3 = $this->createMessage();
 
             self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env1));
             self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env2));
@@ -178,14 +173,13 @@ final class SwooleMailboxTest extends TestCase
         run(function () use (&$thrown): void {
             $mailbox = new SwooleMailbox(
                 MailboxConfig::bounded(2, OverflowStrategy::ThrowException),
-                ActorPath::root(),
             );
 
-            (void) $mailbox->enqueue($this->createEnvelope());
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
+            (void) $mailbox->enqueue($this->createMessage());
 
             try {
-                (void) $mailbox->enqueue($this->createEnvelope());
+                (void) $mailbox->enqueue($this->createMessage());
             } catch (Throwable $e) {
                 $thrown = $e;
             }
@@ -200,13 +194,12 @@ final class SwooleMailboxTest extends TestCase
         run(function (): void {
             $mailbox = new SwooleMailbox(
                 MailboxConfig::bounded(2, OverflowStrategy::Backpressure),
-                ActorPath::root(),
             );
 
-            (void) $mailbox->enqueue($this->createEnvelope());
-            (void) $mailbox->enqueue($this->createEnvelope());
+            (void) $mailbox->enqueue($this->createMessage());
+            (void) $mailbox->enqueue($this->createMessage());
 
-            $result = $mailbox->enqueue($this->createEnvelope());
+            $result = $mailbox->enqueue($this->createMessage());
             self::assertSame(EnqueueResult::Backpressured, $result);
             self::assertSame(2, $mailbox->count());
         });
@@ -218,11 +211,11 @@ final class SwooleMailboxTest extends TestCase
         $thrown = null;
 
         run(function () use (&$thrown): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
             $mailbox->close();
 
             try {
-                (void) $mailbox->enqueue($this->createEnvelope());
+                (void) $mailbox->enqueue($this->createMessage());
             } catch (Throwable $e) {
                 $thrown = $e;
             }
@@ -235,9 +228,9 @@ final class SwooleMailboxTest extends TestCase
     public function close_allows_dequeue_of_remaining_messages(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
-            $env = $this->createEnvelope();
+            $env = $this->createMessage();
             (void) $mailbox->enqueue($env);
 
             $mailbox->close();
@@ -252,9 +245,9 @@ final class SwooleMailboxTest extends TestCase
     public function dequeue_blocking_returns_immediately_when_message_available(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
-            $env = $this->createEnvelope();
+            $env = $this->createMessage();
             (void) $mailbox->enqueue($env);
 
             $result = $mailbox->dequeueBlocking(Duration::millis(100));
@@ -268,7 +261,7 @@ final class SwooleMailboxTest extends TestCase
         $thrown = null;
 
         run(static function () use (&$thrown): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
             $mailbox->close();
 
             try {
@@ -285,9 +278,9 @@ final class SwooleMailboxTest extends TestCase
     public function dequeue_blocking_waits_for_message(): void
     {
         run(function (): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
-            $env = $this->createEnvelope();
+            $env = $this->createMessage();
 
             // Spawn a coroutine that pushes a message after a short delay
             Coroutine::create(static function () use ($mailbox, $env): void {
@@ -306,7 +299,7 @@ final class SwooleMailboxTest extends TestCase
         $thrown = null;
 
         run(static function () use (&$thrown): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
             try {
                 $mailbox->dequeueBlocking(Duration::millis(10));
@@ -324,7 +317,7 @@ final class SwooleMailboxTest extends TestCase
         $thrown = null;
 
         run(static function () use (&$thrown): void {
-            $mailbox = new SwooleMailbox(MailboxConfig::unbounded(), ActorPath::root());
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
             $mailbox->close();
 
             try {
@@ -337,8 +330,8 @@ final class SwooleMailboxTest extends TestCase
         self::assertInstanceOf(MailboxClosedException::class, $thrown);
     }
 
-    private function createEnvelope(): Envelope
+    private function createMessage(): object
     {
-        return Envelope::of(new stdClass(), ActorPath::root(), ActorPath::root());
+        return new stdClass();
     }
 }

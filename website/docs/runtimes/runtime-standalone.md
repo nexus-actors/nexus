@@ -22,6 +22,8 @@ composer require nexus-actors/runtime
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
+use RuntimeException;
+use Throwable;
 
 final class InlineSlot implements FutureSlot
 {

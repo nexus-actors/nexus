@@ -5,11 +5,11 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "nexus-actors/core": "dev-main",
         "nexus-actors/runtime": "dev-main",
         "psr/clock": "^1.0"
     },
     "require-dev": {
+        "nexus-actors/core": "dev-main",
         "phpunit/phpunit": "^13.0"
     },
     "autoload": {

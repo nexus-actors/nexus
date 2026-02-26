@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use NoDiscard;
 use Override;
@@ -27,7 +27,7 @@ final readonly class LocalActorRef implements ActorRef
 {
     /**
      * @param ActorPath $path The actor's path in the hierarchy
-     * @param Mailbox $mailbox The actor's mailbox for message delivery
+     * @param Mailbox<Envelope> $mailbox The actor's mailbox for message delivery
      * @param Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      * @param Runtime $runtime Runtime for creating FutureSlots
      */
@@ -65,7 +65,7 @@ final readonly class LocalActorRef implements ActorRef
     /**
      * @template R of object
      * @param T $message
-     * @return Future<R>
+     * @return Future<R, AskTimeoutException>
      * @throws AskTimeoutException
      */
     #[Override]
@@ -89,7 +89,7 @@ final readonly class LocalActorRef implements ActorRef
             $slot->fail(new AskTimeoutException($this->path, $timeout));
         }
 
-        /** @var Future<R> */
+        /** @var Future<R, AskTimeoutException> */
         return new Future($slot);
     }
 

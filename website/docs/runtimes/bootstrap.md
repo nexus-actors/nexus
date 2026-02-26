@@ -64,7 +64,7 @@ $system = ActorSystem::create('test-system', $runtime, clock: $runtime->clock())
 
 // manual execution for deterministic assertions
 $runtime->step();
-$runtime->advanceTime(\Monadial\Nexus\Core\Duration::seconds(1));
+$runtime->advanceTime(\Monadial\Nexus\Runtime\Duration::seconds(1));
 ```
 
 ## Track B: Standalone Runtime Primitives

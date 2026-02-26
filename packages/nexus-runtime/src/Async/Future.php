@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Async;
 
 use Closure;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 
 /**
  * @psalm-api
@@ -15,16 +16,20 @@ use Closure;
  * await() suspends the current fiber until the reply arrives or the timeout fires.
  *
  * @template R of object
+ * @template E of FutureException
  */
 final readonly class Future
 {
+    /**
+     * @param FutureSlot<R, E> $slot
+     */
     public function __construct(private FutureSlot $slot) {}
 
     /**
      * Block the current fiber until the result is available.
      *
      * @return R
-     * @throws \Monadial\Nexus\Core\Exception\AskTimeoutException
+     * @throws FutureException
      */
     public function await(): object
     {
@@ -42,38 +47,42 @@ final readonly class Future
      *
      * @template U of object
      * @param Closure(R): U $fn
-     * @return Future<U>
+     * @return Future<U, E>
      */
     public function map(Closure $fn): self
     {
         $slot = $this->slot;
 
-        /** @var Future<U> */
-        return new self(new LazyFutureSlot(static function () use ($slot, $fn): object {
-            /** @var R $value */
+        /** @var Future<U, E> */
+        /** @var FutureSlot<U, E> $mappedSlot */
+        $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();
 
             return $fn($value);
-        }));
+        });
+
+        return new self($mappedSlot);
     }
 
     /**
      * Chain a dependent ask. Lazy - does not block.
      *
      * @template U of object
-     * @param Closure(R): Future<U> $fn
-     * @return Future<U>
+     * @param Closure(R): Future<U, E> $fn
+     * @return Future<U, E>
      */
     public function flatMap(Closure $fn): self
     {
         $slot = $this->slot;
 
-        /** @var Future<U> */
-        return new self(new LazyFutureSlot(static function () use ($slot, $fn): object {
-            /** @var R $value */
+        /** @var Future<U, E> */
+        /** @var FutureSlot<U, E> $mappedSlot */
+        $mappedSlot = new LazyFutureSlot(static function () use ($slot, $fn): object {
             $value = $slot->await();
 
             return $fn($value)->await();
-        }));
+        });
+
+        return new self($mappedSlot);
     }
 }

@@ -6,13 +6,14 @@ namespace Monadial\Nexus\Core\Actor;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
-use Monadial\Nexus\Core\Exception\MailboxClosedException;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 use Psr\Clock\ClockInterface;
@@ -226,6 +227,7 @@ final class ActorSystem
     private function createActorCell(Props $props, string $name): ActorRef
     {
         $childPath = $this->userGuardianPath->child($name);
+        /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
         $childSupervision = $props->supervision->isSome()
@@ -260,6 +262,7 @@ final class ActorSystem
      * Spawn a fiber that dequeues messages from the mailbox and processes them.
      *
      * @param ActorCell<object> $cell
+     * @param Mailbox<Envelope> $mailbox
      */
     private function spawnMessageLoop(ActorCell $cell, Mailbox $mailbox): void
     {

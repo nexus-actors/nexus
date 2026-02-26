@@ -151,7 +151,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;

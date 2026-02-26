@@ -32,6 +32,7 @@ $runtime = new FiberRuntime();
 
 - `name(): string` -- Returns `'fiber'`.
 - `createMailbox(MailboxConfig): Mailbox` -- Returns a new `FiberMailbox`.
+- `createFutureSlot(): FutureSlot` -- Returns a runtime slot implementation for `Future`.
 - `spawn(callable): string` -- Creates a `Fiber` from the callable and returns an ID like `'fiber-0'`.
 - `scheduleOnce(Duration, callable): Cancellable` -- Delegates to `FiberScheduler`.
 - `scheduleRepeatedly(Duration, Duration, callable): Cancellable` -- Delegates to `FiberScheduler`.
@@ -43,7 +44,7 @@ $runtime = new FiberRuntime();
 
 ### FiberMailbox
 
-Implements `Monadial\Nexus\Core\Mailbox\Mailbox`.
+Implements `Monadial\Nexus\Runtime\Mailbox\Mailbox`.
 
 Array-backed (`SplQueue`) mailbox with blocking dequeue via fiber suspension.
 When `dequeueBlocking()` is called on an empty mailbox, the current fiber
@@ -63,7 +64,7 @@ Provides:
 
 ### FiberCancellable
 
-Implements `Monadial\Nexus\Core\Actor\Cancellable`.
+Implements `Monadial\Nexus\Runtime\Runtime\Cancellable`.
 
 Simple boolean-flag cancellable. Calling `cancel()` sets the flag; the
 scheduler checks it on the next `advanceTimers()` pass and skips cancelled

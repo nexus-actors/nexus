@@ -13,7 +13,6 @@ use Monadial\Nexus\Core\Actor\ActorState;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
@@ -24,6 +23,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Runtime\Duration;
 use OverflowException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,7 +40,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function checked_exception_in_handler_is_caught_and_logged(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new AskTimeoutException(ActorPath::root(), Duration::seconds(1));
@@ -52,7 +52,7 @@ final class ActorCellAdvancedTest extends TestCase
 
         // The NexusException (AskTimeoutException extends ActorException extends NexusException)
         // should be caught, NOT propagated, and logged at error level.
-        $cell->processMessage($this->envelope(new TestMessage('trigger')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
         // Actor should still be running (exception was caught)
         self::assertSame(ActorState::Running, $cell->actorState());
@@ -67,7 +67,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function unchecked_logic_exception_in_handler_is_caught_and_logged(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new LogicException('bug in handler code');
@@ -77,7 +77,7 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        $cell->processMessage($this->envelope(new TestMessage('trigger')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
         // Actor should still be running
         self::assertSame(ActorState::Running, $cell->actorState());
@@ -92,7 +92,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function unexpected_exception_in_handler_is_caught_and_logged(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new OverflowException('some unexpected error');
@@ -102,7 +102,7 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        $cell->processMessage($this->envelope(new TestMessage('trigger')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
         // Actor should still be running
         self::assertSame(ActorState::Running, $cell->actorState());
@@ -121,7 +121,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function poisonPill_stops_actor(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
@@ -139,7 +139,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function suspend_transitions_to_suspended(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
@@ -168,7 +168,7 @@ final class ActorCellAdvancedTest extends TestCase
         // the observable behavior: after Suspend, processMessage with Resume
         // does NOT transition back (this is the design gap).
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
@@ -194,7 +194,7 @@ final class ActorCellAdvancedTest extends TestCase
     {
         $messageProcessed = false;
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$messageProcessed): Behavior {
                 $messageProcessed = true;
@@ -211,7 +211,7 @@ final class ActorCellAdvancedTest extends TestCase
         self::assertSame(ActorState::Suspended, $cell->actorState());
 
         // User message should be ignored
-        $cell->processMessage($this->envelope(new TestMessage('ignored')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('ignored')));
 
         self::assertFalse($messageProcessed, 'User message should not be processed while Suspended');
         self::assertSame(ActorState::Suspended, $cell->actorState());
@@ -226,11 +226,11 @@ final class ActorCellAdvancedTest extends TestCase
     {
         $spawned = false;
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$spawned): Behavior {
-                if ($msg instanceof TestMessage && $msg->value === 'spawn-twice') {
-                    /** @var Behavior<TestMessage> */
+                if ($msg instanceof AdvancedTestMessage && $msg->value === 'spawn-twice') {
+                    /** @var Behavior<AdvancedTestMessage> */
                     $childBehavior = Behavior::receive(
                         static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
@@ -253,7 +253,7 @@ final class ActorCellAdvancedTest extends TestCase
         // The NexusLogicException (ActorNameExistsException) is a LogicException,
         // caught by the tiered exception handler and logged as critical.
         $cell->processMessage($this->envelope(
-            new TestMessage('spawn-twice'),
+            new AdvancedTestMessage('spawn-twice'),
             ActorPath::fromString('/user/parent'),
         ));
 
@@ -269,11 +269,11 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function stop_child_sends_poison_pill(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
-                if ($msg instanceof TestMessage && $msg->value === 'spawn-and-stop') {
-                    /** @var Behavior<TestMessage> */
+                if ($msg instanceof AdvancedTestMessage && $msg->value === 'spawn-and-stop') {
+                    /** @var Behavior<AdvancedTestMessage> */
                     $childBehavior = Behavior::receive(
                         static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
@@ -291,7 +291,7 @@ final class ActorCellAdvancedTest extends TestCase
         $cell->start();
 
         $cell->processMessage($this->envelope(
-            new TestMessage('spawn-and-stop'),
+            new AdvancedTestMessage('spawn-and-stop'),
             ActorPath::fromString('/user/parent'),
         ));
 
@@ -309,11 +309,11 @@ final class ActorCellAdvancedTest extends TestCase
     {
         $childMailboxes = [];
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
-                if ($msg instanceof TestMessage && $msg->value === 'spawn') {
-                    /** @var Behavior<TestMessage> */
+                if ($msg instanceof AdvancedTestMessage && $msg->value === 'spawn') {
+                    /** @var Behavior<AdvancedTestMessage> */
                     $childBehavior = Behavior::receive(
                         static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
                     );
@@ -330,7 +330,7 @@ final class ActorCellAdvancedTest extends TestCase
 
         // Spawn children
         $cell->processMessage($this->envelope(
-            new TestMessage('spawn'),
+            new AdvancedTestMessage('spawn'),
             ActorPath::fromString('/user/parent'),
         ));
 
@@ -349,7 +349,7 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function setup_failure_transitions_to_stopped_and_throws(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::setup(
             static function (ActorContext $ctx): Behavior {
                 throw new RuntimeException('initialization boom');
@@ -378,13 +378,13 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function empty_behavior_routes_to_dead_letters(): void
     {
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::empty();
 
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        $msg = new TestMessage('nowhere');
+        $msg = new AdvancedTestMessage('nowhere');
         $cell->processMessage($this->envelope($msg));
 
         $captured = $this->deadLetters->captured();
@@ -401,13 +401,13 @@ final class ActorCellAdvancedTest extends TestCase
     {
         $cancellable = null;
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$cancellable): Behavior {
-                if ($msg instanceof TestMessage && $msg->value === 'schedule') {
+                if ($msg instanceof AdvancedTestMessage && $msg->value === 'schedule') {
                     $cancellable = $ctx->scheduleOnce(
                         Duration::seconds(5),
-                        new TestMessage('delayed'),
+                        new AdvancedTestMessage('delayed'),
                     );
                 }
 
@@ -419,7 +419,7 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior, mailbox: $mailbox);
         $cell->start();
 
-        $cell->processMessage($this->envelope(new TestMessage('schedule')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('schedule')));
 
         // The scheduleOnce should have returned a Cancellable
         self::assertNotNull($cancellable);
@@ -432,7 +432,7 @@ final class ActorCellAdvancedTest extends TestCase
         self::assertGreaterThanOrEqual(1, $mailbox->count());
 
         $env = $mailbox->dequeue()->get();
-        self::assertInstanceOf(TestMessage::class, $env->message);
+        self::assertInstanceOf(AdvancedTestMessage::class, $env->message);
         self::assertSame('delayed', $env->message->value);
     }
 
@@ -441,14 +441,14 @@ final class ActorCellAdvancedTest extends TestCase
     {
         $cancellable = null;
 
-        /** @var Behavior<TestMessage> */
+        /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$cancellable): Behavior {
-                if ($msg instanceof TestMessage && $msg->value === 'schedule') {
+                if ($msg instanceof AdvancedTestMessage && $msg->value === 'schedule') {
                     $cancellable = $ctx->scheduleRepeatedly(
                         Duration::seconds(1),
                         Duration::seconds(2),
-                        new TestMessage('tick'),
+                        new AdvancedTestMessage('tick'),
                     );
                 }
 
@@ -460,7 +460,7 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior, mailbox: $mailbox);
         $cell->start();
 
-        $cell->processMessage($this->envelope(new TestMessage('schedule')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('schedule')));
 
         self::assertNotNull($cancellable);
         self::assertFalse($cancellable->isCancelled());
@@ -518,7 +518,10 @@ final class ActorCellAdvancedTest extends TestCase
             ActorPath::root(),
             $target ?? ActorPath::fromString('/user/test'),
         );
-    }// ======================================================================
-    // Tiered Exception Handling
-    // ======================================================================
+    }
+}
+
+final readonly class AdvancedTestMessage
+{
+    public function __construct(public string $value) {}
 }

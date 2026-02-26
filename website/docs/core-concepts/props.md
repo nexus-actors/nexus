@@ -197,8 +197,8 @@ public static function fromStatefulFactory(callable $factory): self;
 Configure the actor's mailbox. By default, actors use an unbounded mailbox. Use `MailboxConfig::bounded()` to set a capacity limit and overflow strategy.
 
 ```php
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 
 $props = Props::fromBehavior($behavior)
     ->withMailbox(MailboxConfig::bounded(1000));
@@ -224,7 +224,7 @@ Set the supervision strategy that governs how the actor handles child failures.
 ```php
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Supervision\Directive;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 // One-for-one: only the failed child is restarted
 $props = Props::fromBehavior($behavior)
@@ -276,9 +276,9 @@ $props = Props::fromFactory(fn () => new WorkerActor())
 Nexus ships pipe-friendly functions in the `Monadial\Nexus\Core\Actor\Functions` namespace. These return closures compatible with the PHP 8.5 pipe operator (`|>`), enabling a left-to-right composition style from behavior to fully-configured Props.
 
 ```php
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 
 use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
 use function Monadial\Nexus\Core\Actor\Functions\withSupervision;

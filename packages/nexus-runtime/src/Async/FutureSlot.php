@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Async;
 
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use Throwable;
 
 /**
@@ -13,18 +14,25 @@ use Throwable;
  *
  * Each runtime provides its own implementation using runtime-specific
  * suspension primitives (Fiber::suspend, Swoole Channel, etc.).
+ *
+ * @template R of object
+ * @template E of FutureException
  */
 interface FutureSlot
 {
     /**
      * Resolve the slot with a value. Idempotent - second call is a no-op.
      * Wakes the awaiting fiber/coroutine if one is suspended.
+     *
+     * @param R $value
      */
     public function resolve(object $value): void;
 
     /**
      * Fail the slot with an exception. Idempotent - second call is a no-op.
      * Wakes the awaiting fiber/coroutine if one is suspended.
+     *
+     * @param E $e
      */
     public function fail(Throwable $e): void;
 
@@ -36,8 +44,8 @@ interface FutureSlot
     /**
      * Block the current fiber/coroutine until the slot is resolved or failed.
      *
-     * @return object The resolved value
-     * @throws Throwable The failure exception if fail() was called
+     * @return R The resolved value
+     * @throws FutureException The failure exception if fail() was called
      */
     public function await(): object;
 }

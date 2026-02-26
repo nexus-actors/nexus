@@ -20,7 +20,7 @@ are created through named constructors.
 The default. No capacity limit. The mailbox grows as needed.
 
 ```php
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 
 $config = MailboxConfig::unbounded();
 ```
@@ -32,8 +32,8 @@ Internally this sets capacity to `PHP_INT_MAX` and marks the mailbox as unbounde
 A fixed-capacity mailbox with a configurable overflow strategy.
 
 ```php
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 
 $config = MailboxConfig::bounded(1000);
 
@@ -128,10 +128,10 @@ fulfill. You rarely interact with it directly, but understanding it helps when
 writing custom runtimes or debugging mailbox behavior.
 
 ```php
-use Monadial\Nexus\Core\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Core\Mailbox\EnqueueResult;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Monadial\Nexus\Runtime\Duration;
 use Fp\Functional\Option\Option;
 
 interface Mailbox
@@ -172,8 +172,8 @@ Attach a mailbox configuration to an actor through `Props::withMailbox()`:
 ```php
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Mailbox\OverflowStrategy;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 
 $behavior = Behavior::receive(
     fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
