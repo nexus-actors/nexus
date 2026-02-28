@@ -12,6 +12,7 @@
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
+            <directory>packages/nexus-worker-pool/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
             <directory>packages/nexus-persistence/tests/Unit</directory>
             <directory>packages/nexus-persistence-dbal/tests/Unit</directory>
@@ -20,7 +21,7 @@
         </testsuite>
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
-            <directory>packages/nexus-cluster-swoole/tests/Unit</directory>
+            <directory>packages/nexus-worker-pool-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -34,8 +35,8 @@
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
-        <testsuite name="integration-cluster">
-            <directory>tests/Integration/Cluster</directory>
+        <testsuite name="integration-workerPool">
+            <directory>tests/Integration/WorkerPool</directory>
         </testsuite>
         <testsuite name="unit-persistence">
             <directory>packages/nexus-persistence/tests/Unit</directory>
@@ -64,7 +65,8 @@
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
-            <directory>packages/nexus-cluster-swoole/src</directory>
+            <directory>packages/nexus-worker-pool/src</directory>
+            <directory>packages/nexus-worker-pool-swoole/src</directory>
             <directory>packages/nexus-app/src</directory>
             <directory>packages/nexus-persistence/src</directory>
             <directory>packages/nexus-persistence-dbal/src</directory>

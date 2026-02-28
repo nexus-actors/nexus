@@ -52,10 +52,15 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster/src/.*
 
-    - name: ClusterSwoole
+    - name: WorkerPool
       collectors:
         - type: directory
-          value: packages/nexus-cluster-swoole/src/.*
+          value: packages/nexus-worker-pool/src/.*
+
+    - name: WorkerPoolSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-worker-pool-swoole/src/.*
 
     - name: Persistence
       collectors:
@@ -93,15 +98,17 @@ deptrac:
       - Runtime
     Psalm:
       - Core
-      - Cluster
       - Serialization
+      - WorkerPool
     Cluster:
       - Core
+    WorkerPool:
+      - Core
       - Runtime
-    ClusterSwoole:
-      - Cluster
+    WorkerPoolSwoole:
       - Core
       - RuntimeSwoole
+      - WorkerPool
     Persistence:
       - Core
       - Serialization
