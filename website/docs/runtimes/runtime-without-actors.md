@@ -1,17 +1,17 @@
 ---
 sidebar_position: 4
-title: Runtime Without Actors
+title: Runtime without actors
 ---
 
-# Runtime Without Actors
+# Runtime without actors
 
-You can use Nexus runtime implementations directly, without creating an
+Nexus runtime implementations can be used directly, without creating an
 `ActorSystem`.
 
-This is useful when your project needs async orchestration primitives, but not
+This is useful when the project needs async orchestration primitives, but not
 actor lifecycle/supervision/message protocols yet.
 
-## Good Use Cases
+## Good use cases
 
 - wrapping callback-based APIs into `Future`
 - orchestrating retries/timeouts in infrastructure modules
@@ -25,7 +25,7 @@ composer require nexus-actors/runtime
 composer require --dev nexus-actors/runtime-step
 ```
 
-## Example 1: Deterministic One-Shot Workflow
+## Example 1: Deterministic one-shot workflow
 
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
@@ -48,7 +48,7 @@ $result = $future
     ->await();
 ```
 
-## Example 2: Timeout / Failure Mapping
+## Example 2: Timeout / failure mapping
 
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
@@ -76,7 +76,7 @@ try {
 }
 ```
 
-## Why Start Runtime-Only
+## Why start runtime-only
 
 - smaller surface area while introducing concurrency gradually
 - deterministic tests before adopting full actor model
@@ -85,6 +85,6 @@ try {
 
 ## Next
 
-- Fast setup: [Bootstrap Runtime](./bootstrap.md)
-- Runtime contracts and implementation matrix: [Runtime Overview](./overview.md)
+- Fast setup: [Bootstrap runtime](./bootstrap.md)
+- Runtime contracts and implementation matrix: [Runtime overview](./overview.md)
 - Package surface: [nexus-runtime](../packages/runtime.md)

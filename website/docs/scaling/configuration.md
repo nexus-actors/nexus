@@ -3,7 +3,7 @@ sidebar_position: 2
 title: Configuration
 ---
 
-# Scaling Configuration
+# Scaling configuration
 
 ## ClusterConfig
 
@@ -33,8 +33,8 @@ A good starting point is the number of CPU cores available:
 $config = ClusterConfig::withWorkers((int) shell_exec('nproc'));
 ```
 
-For I/O-bound workloads, you may benefit from more workers than cores. For
-CPU-bound workloads, match the core count.
+I/O-bound workloads may benefit from more workers than cores. For CPU-bound
+workloads, match the core count.
 
 ### Choosing tableSize
 
@@ -93,8 +93,8 @@ UTF-8 strings and only calls `serialize()` on the message object. This compact
 binary format is ~6x smaller than full PHP serialization and optimal for
 same-machine IPC where all workers share the same code and class definitions.
 
-A `PhpNativeClusterSerializer` is also available if you need full PHP object
-graph serialization.
+`PhpNativeClusterSerializer` is also available for full PHP object graph
+serialization.
 
 For custom serialization (e.g., JSON or Protocol Buffers), implement the
 `ClusterSerializer` interface and pass it to `ClusterBootstrap::withSerializer()`.

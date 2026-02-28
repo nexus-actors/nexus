@@ -96,8 +96,8 @@ $signal->cause; // Throwable
 ### Terminated
 
 Delivered when a watched actor stops, regardless of the reason (graceful stop,
-failure, or kill). You must call `$ctx->watch()` on the target before you receive
-this signal.
+failure, or kill). `$ctx->watch()` must be called on the target before this
+signal is delivered.
 
 ```php
 use Monadial\Nexus\Core\Lifecycle\Terminated;
@@ -175,7 +175,7 @@ function databaseWorker(ConnectionPool $pool): Behavior
 ## Watching actors
 
 Use `$ctx->watch()` to observe another actor's lifecycle. When the watched actor
-stops, you receive a `Terminated` signal containing its `ActorRef`.
+stops, the watching actor receives a `Terminated` signal containing the stopped actor's `ActorRef`.
 
 ```php
 $ctx->watch($otherRef);

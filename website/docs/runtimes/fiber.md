@@ -1,9 +1,9 @@
 ---
 sidebar_position: 2
-title: Fiber Runtime
+title: Fiber runtime
 ---
 
-# Fiber Runtime
+# Fiber runtime
 
 `FiberRuntime` is the default runtime for Nexus. It uses PHP 8.1+ native Fibers
 for cooperative multitasking, requiring no extensions beyond a standard PHP
@@ -54,7 +54,7 @@ are inserted in sorted order to avoid full re-sorts.
 `FiberMailbox` is an `SplQueue`-backed mailbox that implements blocking dequeue
 via fiber suspension.
 
-```
+```text
 enqueue(Envelope) --> SplQueue --> resumeWaiter()
 dequeueBlocking() --> while (empty) { Fiber::suspend('mailbox_wait') }
 ```

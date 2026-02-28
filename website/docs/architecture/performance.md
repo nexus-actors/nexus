@@ -5,16 +5,16 @@ title: Performance
 
 # Performance
 
-:::caution Work in Progress
-Nexus is under active development. These benchmarks reflect the current state
-of the codebase and may change as optimizations are added.
-:::
-
 All benchmarks run inside Docker on an Apple M4 Max (16 cores, 128 GB RAM),
 PHP 8.5.3, Swoole 6.0. Numbers are from the automated PHPUnit performance
 test suite (`tests/Performance/`).
 
-### Message throughput
+:::caution
+These benchmarks reflect the current state of the codebase and may change as
+optimizations are added.
+:::
+
+## Message throughput
 
 How many messages per second a single actor can process end-to-end (tell ->
 mailbox -> behavior handler):
@@ -82,7 +82,7 @@ Cross-worker messaging through Unix domain sockets with `CompactClusterSerialize
 The `CompactClusterSerializer` sends actor paths as raw UTF-8 strings and only
 calls PHP `serialize()` on the message object:
 
-```
+```text
 [2B: target path length][target path bytes][2B: sender path length][sender path bytes][message bytes]
 ```
 

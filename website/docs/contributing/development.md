@@ -77,7 +77,7 @@ The minimum thresholds are 80% MSI and 90% covered MSI.
 
 Nexus is organized as a monorepo with a `packages/` directory:
 
-```
+```text
 nexus/
   packages/
     nexus-core/              # Core abstractions (actors, behaviors, mailboxes, supervision)

@@ -158,7 +158,7 @@ Mailbox contracts/configuration are provided under `Monadial\Nexus\Runtime\Mailb
 | `InvalidBehaviorException` | Thrown for invalid behavior configurations. |
 | `NexusLogicException` | Thrown for programming errors (extends `LogicException`). |
 
-## Related Runtime Types
+## Related runtime types
 
 Core actor APIs use runtime types from `nexus-runtime`, including
 `Duration`, `Cancellable`, mailbox contracts/configuration, and mailbox

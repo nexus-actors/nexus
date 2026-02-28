@@ -1,9 +1,9 @@
 ---
 sidebar_position: 3
-title: Swoole Runtime
+title: Swoole runtime
 ---
 
-# Swoole Runtime
+# Swoole runtime
 
 `SwooleRuntime` uses Swoole 5.0+ coroutines for concurrent actor execution. It
 provides true async I/O, native channel-backed mailboxes, and support for

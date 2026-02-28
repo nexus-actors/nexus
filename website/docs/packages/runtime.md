@@ -61,16 +61,16 @@ Runtime abstractions and async primitives.
 
 Immutable nanosecond-precision duration value object used by all runtime APIs.
 
-## When To Use `nexus-runtime` Only
+## When to use `nexus-runtime` only
 
-Use `nexus-runtime` without `nexus-core` when you need:
+Use `nexus-runtime` without `nexus-core` for:
 
 - async result composition (`Future`, `map`, `flatMap`, `await`) in non-actor code
 - runtime-neutral scheduling contracts for adapters/infrastructure code
 - deterministic orchestration in tests (for example with `nexus-runtime-step`)
 - shared timeout/cancellation primitives (`Duration`, `Cancellable`) in libraries
 
-## Why It Is Useful
+## Why it is useful
 
 - keeps actor-free modules lightweight and decoupled from actor APIs
 - lets infrastructure code depend on stable runtime contracts only
@@ -79,5 +79,5 @@ Use `nexus-runtime` without `nexus-core` when you need:
 
 ## Bootstrap
 
-See [Bootstrap Runtime](../runtimes/bootstrap.md) for actor-system and
+See [Bootstrap runtime](../runtimes/bootstrap.md) for actor-system and
 standalone setup flows.

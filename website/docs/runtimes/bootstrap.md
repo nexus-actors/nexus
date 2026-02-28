@@ -1,9 +1,9 @@
 ---
 sidebar_position: 2
-title: Bootstrap Runtime
+title: Bootstrap runtime
 ---
 
-# Bootstrap Runtime
+# Bootstrap runtime
 
 This page is the fastest way to bootstrap Nexus runtime usage.
 
@@ -12,7 +12,7 @@ Use one of two tracks:
 - Track A: bootstrap an actor system with Fiber, Swoole, or Step runtime
 - Track B: use standalone runtime primitives (`Future`, `FutureSlot`) without actors
 
-## Choose Your Runtime Path
+## Choose your runtime path
 
 | Path | Install | Best for |
 |---|---|---|
@@ -21,7 +21,7 @@ Use one of two tracks:
 | Step actor runtime | `composer require nexus-actors/core nexus-actors/runtime-step` | Deterministic testing with manual stepping |
 | Standalone runtime primitives | `composer require nexus-actors/runtime` | Async composition without actor system APIs |
 
-## Track A: Actor System Bootstrap
+## Track A: Actor system bootstrap
 
 ### Fiber (development default)
 
@@ -67,9 +67,9 @@ $runtime->step();
 $runtime->advanceTime(\Monadial\Nexus\Runtime\Duration::seconds(1));
 ```
 
-## Track B: Standalone Runtime Primitives
+## Track B: Standalone runtime primitives
 
-You can compose futures without bootstrapping an actor system.
+Futures can be composed without bootstrapping an actor system.
 Use this minimal bootstrap:
 
 ```php
@@ -88,11 +88,11 @@ $result = $future->await();
 ```
 
 For complete standalone guidance and richer examples, see:
-[Runtime Without Actors](./runtime-without-actors.md).
+[Runtime without actors](./runtime-without-actors.md).
 
-## Bootstrap Checklist
+## Bootstrap checklist
 
-You are bootstrapped when:
+Bootstrap is complete when:
 
 - dependencies are installed for exactly one chosen path
 - namespace imports compile with `Monadial\Nexus\Runtime\...`
@@ -101,8 +101,8 @@ You are bootstrapped when:
 
 ## Next
 
-- Runtime details: [Runtime Overview](./overview.md)
-- Fiber deep dive: [Fiber Runtime](./fiber.md)
-- Swoole deep dive: [Swoole Runtime](./swoole.md)
-- Deterministic testing: [Step Runtime](./step.md)
+- Runtime details: [Runtime overview](./overview.md)
+- Fiber deep dive: [Fiber runtime](./fiber.md)
+- Swoole deep dive: [Swoole runtime](./swoole.md)
+- Deterministic testing: [Step runtime](./step.md)
 - Package reference: [nexus-runtime](../packages/runtime.md)

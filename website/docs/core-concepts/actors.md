@@ -1,6 +1,6 @@
 ---
 sidebar_position: 1
-title: "Actors"
+title: Actors
 ---
 
 # Actors
@@ -9,11 +9,13 @@ Actors are the fundamental unit of computation in Nexus. Each actor encapsulates
 
 ## ActorRef
 
-`ActorRef<T>` is the interface through which you interact with an actor. You never access an actor's internal state directly -- you send it messages through its reference.
+`ActorRef<T>` is the interface through which actor code communicates with other actors. Internal state is never accessed directly — all interaction happens through messages sent via the reference.
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 
 /** @template T of object */
@@ -23,12 +25,18 @@ interface ActorRef
     public function tell(object $message): void;
 
     /**
+     * Deliver a pre-formed envelope directly.
+     * Used by ActorContext::tell() to propagate correlation and causation IDs.
+     */
+    public function enqueueEnvelope(Envelope $envelope): void;
+
+    /**
      * @template R of object
-     * @param callable(ActorRef<R>): T $messageFactory
-     * @return R
+     * @param T $message
+     * @return Future<R>
      * @throws AskTimeoutException
      */
-    public function ask(callable $messageFactory, Duration $timeout): object;
+    public function ask(object $message, Duration $timeout): Future;
 
     public function path(): ActorPath;
 
@@ -51,7 +59,7 @@ $greeter->tell(new Greet('Alice'));
 
 ### ask -- request-response
 
-`ask()` sends a message and waits for a reply within a timeout. The `$messageFactory` receives a temporary `ActorRef` that the target actor should reply to.
+`ask()` sends a message and waits for a reply within a timeout. The call returns a `Future<R>` — awaiting it blocks the current fiber until a reply arrives or the timeout expires.
 
 ```php
 readonly class GetCount
@@ -65,15 +73,12 @@ readonly class CountResult
 }
 
 /** @var CountResult $result */
-$result = $counter->ask(
-    fn (ActorRef $replyTo) => new GetCount($replyTo),
-    Duration::seconds(5),
-);
+$result = $counter->ask(new GetCount($replyTo), Duration::seconds(5))->await();
 
 echo $result->count; // 42
 ```
 
-If the actor does not respond within the timeout, an `AskTimeoutException` is thrown.
+If the actor does not respond within the timeout, an `AskTimeoutException` is thrown. See the [Ask Pattern](./ask-pattern.md) page for the full request-reply protocol.
 
 ### path and isAlive
 
@@ -87,7 +92,9 @@ echo $ref->isAlive();  // true
 `ActorContext<T>` is available inside message handlers and provides the actor's view of the world: its own reference, its parent, the ability to spawn children, manage watches, schedule messages, and more.
 
 ```php
+use Closure;
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Exception\NoSenderException;
 use Fp\Functional\Option\Option;
 
 /** @template T of object */
@@ -141,6 +148,35 @@ interface ActorContext
 
     /** @return Option<ActorRef<object>> */
     public function sender(): Option;
+
+    /**
+     * Send a message to another actor, propagating the current correlation context.
+     *
+     * Use this instead of $ref->tell() when sending from inside a message handler.
+     * The outgoing envelope inherits the correlationId of the current message and
+     * sets causationId to the current message's requestId.
+     *
+     * @param ActorRef<object> $ref
+     */
+    public function tell(ActorRef $ref, object $message): void;
+
+    /**
+     * Reply to the sender of the current message, propagating the correlation context.
+     *
+     * @throws NoSenderException If there is no sender on the current message
+     */
+    public function reply(object $message): void;
+
+    /**
+     * Spawn a background task bound to this actor's lifecycle.
+     *
+     * The task closure receives a TaskContext for cooperative cancellation
+     * and sending messages back to the actor. All spawned tasks are
+     * automatically cancelled when the actor stops.
+     *
+     * @param Closure(TaskContext): void $task
+     */
+    public function spawnTask(Closure $task): Cancellable;
 }
 ```
 
@@ -220,7 +256,7 @@ $behavior = Behavior::setup(function (ActorContext $ctx): Behavior {
 });
 ```
 
-The returned `Cancellable` lets you stop the scheduled task.
+The returned `Cancellable` cancels the scheduled task.
 
 ```php
 $cancellable->cancel();
@@ -275,6 +311,72 @@ $behavior = Behavior::receive(
     },
 );
 ```
+
+### Sending with ctx->tell()
+
+`$ctx->tell($ref, $message)` is the preferred way to send messages from inside a handler. It propagates tracing IDs automatically (see [Envelopes](#envelope)).
+
+```php
+$behavior = Behavior::receive(
+    static function (ActorContext $ctx, object $msg): Behavior {
+        // Outgoing envelope inherits correlationId and sets causationId = current requestId
+        $ctx->tell($downstreamRef, new ProcessOrder($msg->orderId));
+
+        return Behavior::same();
+    },
+);
+```
+
+Calling `$ref->tell()` directly creates a fresh root envelope with a new correlation thread. Use `$ctx->tell()` inside handlers; use `$ref->tell()` for fire-and-forget messages that start a new independent trace.
+
+### Replying to the sender
+
+`$ctx->reply($message)` is shorthand for `$ctx->tell($ctx->sender()->get(), $message)`. It propagates tracing IDs and throws `NoSenderException` if the current message has no sender.
+
+```php
+$behavior = Behavior::receive(
+    static function (ActorContext $ctx, object $msg): Behavior {
+        if ($msg instanceof GetCount) {
+            $ctx->reply(new CountReply(42)); // equivalent to ctx->tell(sender, ...)
+        }
+
+        return Behavior::same();
+    },
+);
+```
+
+## Envelope
+
+Every message in Nexus is wrapped in an `Envelope` carrying routing and tracing metadata.
+
+```php
+final readonly class Envelope
+{
+    public object $message;       // the actual message object
+    public ActorPath $sender;     // path of the sending actor
+    public ActorPath $target;     // path of the receiving actor
+    public string $requestId;     // unique ULID for this specific message
+    public string $correlationId; // shared across all messages in a logical thread
+    public string $causationId;   // requestId of the message that triggered this one
+    public ?ActorRef $senderRef;  // direct ActorRef — set by ask(), used for replies
+    /** @var array<string, string> */
+    public array $metadata;
+}
+```
+
+### Tracing IDs
+
+| ID | Meaning | Changes per message |
+|---|---|---|
+| `requestId` | Unique ULID for this message | Always — new ULID each time |
+| `correlationId` | Conversation thread shared by all causally linked messages | No — inherited from trigger |
+| `causationId` | `requestId` of the message that directly triggered this one | Yes — set to trigger's `requestId` |
+
+`Envelope::of()` starts a root envelope — all three IDs are set to the same fresh ULID, beginning a new correlation thread.
+
+`Envelope::causedBy($cause, ...)` creates a causally linked envelope — `requestId` is fresh, `correlationId` is inherited from `$cause`, and `causationId` is set to `$cause->requestId`.
+
+`ActorContext::tell()` and `ActorContext::reply()` call `Envelope::causedBy()` internally, so the trace chain is maintained automatically through all handler-to-handler sends.
 
 ## ActorSystem
 
@@ -514,7 +616,7 @@ When spawned via `Props::fromFactory()`, lifecycle hooks are wired automatically
 
 ### StatefulActorHandler
 
-`StatefulActorHandler<T, S>` is designed for actors that manage explicit state. Instead of closing over mutable variables, you provide an `initialState()` and receive the current state on each `handle()` call. State updates are returned via `BehaviorWithState`.
+`StatefulActorHandler<T, S>` is designed for actors that manage explicit state. Instead of closing over mutable variables, the class provides an `initialState()` and receives the current state on each `handle()` call. State updates are returned via `BehaviorWithState`.
 
 ```php
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
@@ -599,4 +701,4 @@ $captured = $deadLetters->captured(); // list<object>
 echo $deadLetters->path(); // "/system/deadLetters"
 ```
 
-Messages that cannot be delivered -- for example, because the target actor has stopped -- are routed to dead letters. You can inspect `captured()` in tests to verify that no messages were lost unexpectedly.
+Messages that cannot be delivered — for example, because the target actor has stopped — are routed to dead letters. The `captured()` list is useful in tests to verify that no messages were lost unexpectedly.

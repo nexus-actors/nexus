@@ -1,13 +1,13 @@
 ---
 sidebar_position: 7
-title: Ask Pattern
+title: Ask pattern
 ---
 
-# Ask Pattern
+# Ask pattern
 
-The ask pattern lets you send a message to an actor and get a `Future` for the
+The ask pattern sends a message to an actor and returns a `Future` for the
 reply. It bridges the actor world (asynchronous, message-driven) with code that
-needs a response.
+needs a synchronous result.
 
 ## Signature
 
@@ -23,7 +23,7 @@ public function ask(object $message, Duration $timeout): Future;
 ```
 
 The method is defined on the `ActorRef` interface. It is marked `#[NoDiscard]`,
-so static analysis tools will warn if you ignore the return value.
+so static analysis tools will warn if the return value is ignored.
 
 ## How it works
 
@@ -38,7 +38,7 @@ so static analysis tools will warn if you ignore the return value.
    arrives or the timeout fires.
 5. If the timeout expires before a reply, `AskTimeoutException` is thrown.
 
-```
+```text
   Caller                    Target Actor
     │                            │
     │  ask($msg, $timeout)       │

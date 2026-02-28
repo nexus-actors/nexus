@@ -1,14 +1,14 @@
 ---
 sidebar_position: 2
-title: Standalone Runtime Primitives
+title: Standalone runtime primitives
 ---
 
-# Standalone Runtime Primitives
+# Standalone runtime primitives
 
-`nexus-runtime` can be used without `ActorSystem` when you only need async
-composition, scheduling, and timeout/cancellation primitives.
+`nexus-runtime` can be used without `ActorSystem` when only async composition,
+scheduling, and timeout/cancellation primitives are needed.
 
-## When This Is Useful
+## When this is useful
 
 - building framework adapters around callback/timer APIs
 - orchestrating background workflows without actor hierarchy
@@ -25,10 +25,10 @@ composer require nexus-actors/runtime
 composer require --dev nexus-actors/runtime-step
 ```
 
-## Practical Example (No Actors)
+## Practical example (no actors)
 
 Use the full standalone examples here:
-[Runtime Without Actors](./runtime-without-actors.md).
+[Runtime without actors](./runtime-without-actors.md).
 
 That page covers:
 
@@ -36,10 +36,10 @@ That page covers:
 - timeout/failure mapping via `FutureTimeoutException`
 - migration guidance for adopting `nexus-core` later
 
-## Runtime Contract
+## Runtime contract
 
 Concrete runtime packages (`runtime-fiber`, `runtime-swoole`, `runtime-step`)
 implement `Monadial\Nexus\Runtime\Runtime\Runtime`.
 
-Use this when your code should accept runtime implementations without coupling
-to actor APIs.
+Use this interface when library code should accept runtime implementations
+without coupling to actor APIs.

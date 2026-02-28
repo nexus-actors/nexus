@@ -1,16 +1,16 @@
 ---
 sidebar_position: 1
-title: "Nexus Thesis"
+title: Nexus thesis
 ---
 
-# Nexus Thesis
+# Nexus thesis
 
 Nexus exists to make concurrent, long-running, fault-tolerant PHP systems practical without changing languages.  
 It is opinionated: actors, supervision, immutable messages, and explicit runtime choices over ad-hoc workers and shared mutable state.
 
 ## When Nexus is the right tool
 
-Use Nexus when your system needs:
+Nexus fits well when the system needs:
 
 - Many independent stateful units running concurrently (sessions, devices, workflows, entities)
 - Clear failure boundaries and automatic recovery through supervision
@@ -27,14 +27,14 @@ Typical fits:
 
 ## When Nexus is not the right tool
 
-Do not use Nexus when your workload is primarily:
+Nexus is a poor fit when the workload is primarily:
 
 - Simple CRUD over HTTP with short-lived request handlers
 - Batch jobs with little state and low coordination needs
 - Small apps where queue workers + cron already solve the problem
 - Teams that cannot operate long-running processes yet
 
-If your concurrency and failure semantics are simple, actors add unnecessary complexity.
+When concurrency and failure semantics are simple, actors add unnecessary complexity.
 
 ## Tradeoffs we choose deliberately
 

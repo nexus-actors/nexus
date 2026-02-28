@@ -1,11 +1,11 @@
 ---
 sidebar_position: 1
-title: Runtime Overview
+title: Runtime overview
 ---
 
-# Runtime Overview
+# Runtime overview
 
-Start here for setup: [Bootstrap Runtime](./bootstrap.md).
+Start here for setup: [Bootstrap runtime](./bootstrap.md).
 
 The `Runtime` interface is the abstraction that decouples actor code from the
 underlying concurrency mechanism. All scheduling, mailbox creation, and
@@ -107,21 +107,21 @@ identical across runtimes.
 
 **StepRuntime** is the right choice when:
 
-- You are writing unit or integration tests for actor behavior.
-- You need deterministic, reproducible message processing order.
-- You need to control time (advance virtual clock, trigger timers on demand).
-- You want to verify state after each individual message.
+- Writing unit or integration tests for actor behavior.
+- Deterministic, reproducible message processing order is required.
+- Time control is needed (advance virtual clock, trigger timers on demand).
+- State verification is needed after each individual message.
 
 **FiberRuntime** is the right choice when:
 
-- You are developing locally and do not want to install extensions.
-- Your application handles moderate concurrency (tens to hundreds of actors).
-- You are running single-process CLI tools or simple services.
-- You need a zero-dependency setup for CI pipelines.
+- Developing locally without installing extensions.
+- The application handles moderate concurrency (tens to hundreds of actors).
+- Running single-process CLI tools or simple services.
+- A zero-dependency setup for CI pipelines is preferred.
 
 **SwooleRuntime** is the right choice when:
 
-- You are running in production with high-concurrency requirements.
-- Your workload involves thousands of concurrent actors or 100K+ connections.
-- You need true async I/O via Swoole's coroutine hooking (database, HTTP, filesystem).
-- You need [multi-process scaling](../scaling/overview.md) to utilize all CPU cores.
+- Running in production with high-concurrency requirements.
+- The workload involves thousands of concurrent actors or 100K+ connections.
+- True async I/O via Swoole's coroutine hooking is needed (database, HTTP, filesystem).
+- [Multi-process scaling](../scaling/overview.md) across all CPU cores is required.

@@ -72,12 +72,12 @@ full and a new message arrives:
 | `OverflowStrategy::Backpressure` | Block the sender until space is available. |
 | `OverflowStrategy::ThrowException` | Throw a `MailboxOverflowException`. This is the default. |
 
-Choose a strategy based on your requirements:
+Choose a strategy based on the actor's requirements:
 
 - **DropNewest** -- acceptable when latest data supersedes older data (sensor
   readings, status updates).
-- **DropOldest** -- acceptable when you always want the most recent messages
-  processed.
+- **DropOldest** -- acceptable when processing only the most recent messages
+  matters (e.g., event streams where older events are superseded).
 - **Backpressure** -- the sender slows down to match the consumer's pace.
   Prevents message loss but may stall upstream actors.
 - **ThrowException** -- fail fast. Useful during development or when overflow
@@ -124,8 +124,8 @@ Both return a new `Envelope` -- the original is unmodified.
 ## Mailbox interface
 
 The `Mailbox` interface defines the contract that runtime implementations must
-fulfill. You rarely interact with it directly, but understanding it helps when
-writing custom runtimes or debugging mailbox behavior.
+fulfill. Direct interaction with it is rarely needed in application code, but
+understanding it helps when writing custom runtimes or debugging mailbox behavior.
 
 ```php
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
@@ -146,7 +146,7 @@ interface Mailbox
 }
 ```
 
-- `enqueue()` is marked `#[NoDiscard]` -- you must inspect the `EnqueueResult`.
+- `enqueue()` is marked `#[NoDiscard]` — the `EnqueueResult` must be inspected.
   Throws `MailboxClosedException` if the mailbox has been closed.
 - `dequeue()` returns `Option::none()` if the mailbox is empty, `Option::some($envelope)` otherwise.
 - `dequeueBlocking()` blocks the current fiber/coroutine until a message arrives

@@ -1,6 +1,6 @@
 ---
 sidebar_position: 8
-title: "Persistence"
+title: Persistence
 ---
 
 # Persistence
@@ -16,11 +16,11 @@ current state directly as a single value. Both models share the same
 `PersistenceId` addressing scheme, storage backend abstraction, and recovery
 lifecycle.
 
-Choose the model that fits your domain. Event Sourcing gives you a full audit
-trail and temporal queries; Durable State gives you simplicity and lower storage
+Choose the model that fits the domain. Event Sourcing provides a full audit
+trail and temporal queries; Durable State provides simplicity and lower storage
 overhead. Both can be mixed within the same actor system.
 
-## Event Sourcing
+## Event sourcing
 
 Event Sourcing follows the pattern: commands arrive, the command handler
 produces effects, effects persist events, and events are applied to the state.
@@ -85,8 +85,7 @@ the new state. Side effects belong in `thenRun` callbacks (see below).
 ## Effects
 
 The `Effect` class describes what the actor system should do after a command is
-handled. Effects are composable -- you can chain persistence with replies and
-side effects.
+handled. Effects are composable — persistence, replies, and side effects can be chained.
 
 | Effect | Description |
 |---|---|
@@ -108,7 +107,7 @@ Effect::persist(new PaymentReceived($amount))
     ->thenRun(fn(object $state) => $ctx->log()->info("Payment processed: {$state->total}"));
 ```
 
-## Durable State
+## Durable state
 
 Durable State is the simpler alternative. Instead of persisting events and
 replaying them, the actor persists its entire current state as a single value.
@@ -153,7 +152,7 @@ $behavior = DurableStateBehavior::create(
 `DurableEffect` supports the same chaining as `Effect` -- `thenReply`,
 `thenRun`, `stash`, and `stop` all work the same way.
 
-## Class-Based API
+## Class-based API
 
 For users who prefer an object-oriented style, Nexus provides abstract base
 classes for both persistence models. Extend `AbstractEventSourcedActor` or
@@ -249,7 +248,7 @@ Commands that arrive during recovery are automatically stashed and replayed in
 order once recovery completes. This means senders do not need to know whether an
 actor has finished recovering -- they can start sending messages immediately.
 
-## Storage Backends
+## Storage backends
 
 Nexus ships with several storage backend implementations:
 
@@ -260,9 +259,9 @@ Nexus ships with several storage backend implementations:
 | `DoctrineEventStore` / `DoctrineSnapshotStore` / `DoctrineDurableStateStore` | Doctrine ORM |
 
 All stores implement the same interfaces (`EventStore`, `SnapshotStore`,
-`DurableStateStore`), so you can swap backends without changing actor code.
+`DurableStateStore`), making backends swappable without changing actor code.
 
-## Single-Writer Guarantee
+## Single-writer guarantee
 
 Nexus follows Akka's single-writer principle: each `ActorSystem` instance is
 assigned a unique ULID at startup, and every persisted envelope is stamped with
@@ -274,7 +273,7 @@ Every `EventEnvelope`, `SnapshotEnvelope`, and `DurableStateEnvelope` carries a
 `writer_id` column. If a store detects a write from a different writer than
 expected, it throws a `WriterConflictException`.
 
-### Replay Filtering
+### Replay filtering
 
 During recovery, the `ReplayFilter` checks that replayed events come from a
 consistent writer. If events from multiple writers are detected (e.g. due to a
@@ -301,7 +300,7 @@ Both `EventSourcedBehavior` and `DurableStateBehavior` support
 (`AbstractEventSourcedActor`, `AbstractDurableStateActor`) also expose these
 methods.
 
-## Choosing Between Event Sourcing and Durable State
+## Choosing between event sourcing and durable state
 
 | | Event Sourcing | Durable State |
 |---|---|---|
@@ -312,5 +311,5 @@ methods.
 | **Recovery** | Replay events (or snapshot + tail) | Load single value |
 | **Best for** | Domains where history matters (finance, ordering, compliance) | Domains where only current state matters (preferences, caches, sessions) |
 
-When in doubt, start with Durable State. You can migrate to Event Sourcing
-later if you discover you need the audit trail or temporal query capabilities.
+When in doubt, start with Durable State. Migration to Event Sourcing is
+possible later if the audit trail or temporal query capabilities become needed.

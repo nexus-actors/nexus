@@ -1,11 +1,11 @@
 ---
 sidebar_position: 3
-title: "Props"
+title: Props
 ---
 
 # Props
 
-`Props<T>` is a `final readonly class` that holds the configuration needed to spawn an actor. It combines a `Behavior`, a `MailboxConfig`, and an optional `SupervisionStrategy` into a single immutable value. You never instantiate `Props` directly -- instead, use one of the static factory methods and chain builder methods as needed.
+`Props<T>` is a `final readonly class` that holds the configuration needed to spawn an actor. It combines a `Behavior`, a `MailboxConfig`, and an optional `SupervisionStrategy` into a single immutable value. `Props` is never instantiated directly — use one of the static factory methods and chain builder methods as needed.
 
 ## Factory methods
 

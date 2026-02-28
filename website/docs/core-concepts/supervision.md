@@ -117,7 +117,7 @@ use Monadial\Nexus\Core\Supervision\Directive;
 ## Custom deciders
 
 The `$decider` parameter accepts a closure that inspects the thrown exception and
-returns a `Directive`. This lets you vary the response based on exception type.
+returns a `Directive`. This enables varying the response based on exception type.
 
 ```php
 use Monadial\Nexus\Core\Supervision\Directive;
@@ -140,7 +140,7 @@ When no decider is provided, the default always returns `Directive::Restart`:
 static fn(Throwable $_): Directive => Directive::Restart
 ```
 
-You can call `decide()` on a strategy to invoke the decider directly:
+Call `decide()` on a strategy to invoke the decider directly:
 
 ```php
 $directive = $strategy->decide($exception);
@@ -181,8 +181,8 @@ fails, its parent's strategy applies.
 ### Behavior-level supervision
 
 Wrap a behavior with `Behavior::supervise()` to apply a supervision strategy
-directly to the behavior's handler. This is useful when you want the strategy
-co-located with the behavior definition rather than at the Props level.
+directly to the behavior's handler. This co-locates the strategy with the
+behavior definition rather than the Props level.
 
 ```php
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -209,7 +209,7 @@ When both behavior-level and Props-level strategies exist, the behavior-level
 strategy runs first. If it returns `Escalate`, the Props-level strategy takes
 over. If Props-level also escalates, the failure propagates to the parent actor.
 
-```
+```text
 Exception in handler
   → Behavior-level strategy (Behavior::supervise)
     → Restart / Stop / Resume: handled here

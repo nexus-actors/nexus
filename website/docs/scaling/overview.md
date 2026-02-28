@@ -1,11 +1,11 @@
 ---
 sidebar_position: 1
-title: Scaling Overview
+title: Scaling overview
 ---
 
-# Multi-Process Scaling
+# Multi-process scaling
 
-:::caution Work in Progress
+:::caution
 Nexus is under active development and **not production-ready**. APIs may change
 without notice.
 :::

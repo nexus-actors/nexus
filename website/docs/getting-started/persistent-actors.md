@@ -1,17 +1,17 @@
 ---
 sidebar_position: 3
-title: "Quick Start: Persistent Actors"
+title: "Quick start: persistent actors"
 ---
 
-# Quick Start: Persistent Actors
+# Quick start: persistent actors
 
 The [basic quick start](./quick-start.md) showed a counter actor that loses its
 state when the process stops. This tutorial makes the counter **persistent** --
 it survives restarts by storing events in a database.
 
-We'll build the same counter, but this time every increment is recorded as an
-event. When the actor restarts, it replays those events to recover its state
-automatically.
+The example builds the same counter, but records every increment as a
+persistent event. When the actor restarts, it replays those events to recover
+its state automatically.
 
 ## Step 1: Define commands and events
 
@@ -276,9 +276,9 @@ $behavior = EventSourcedBehavior::create(/* ... */)
 Now recovery loads the latest snapshot and replays only the events that
 occurred after it -- instead of replaying the entire history.
 
-## Durable State alternative
+## Durable state alternative
 
-If you don't need an event history -- just the latest state -- use
+For actors that do not need an event history — just the latest state — use
 `DurableStateBehavior` instead:
 
 ```php

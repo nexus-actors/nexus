@@ -1,9 +1,9 @@
 ---
 sidebar_position: 1
-title: Design Philosophy
+title: Design philosophy
 ---
 
-# Design Philosophy
+# Design philosophy
 
 Nexus is built on a set of deliberate design decisions that shape every aspect
 of the library. This page explains the reasoning behind each.

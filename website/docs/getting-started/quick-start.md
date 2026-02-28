@@ -1,16 +1,16 @@
 ---
 sidebar_position: 2
-title: Quick Start
+title: Quick start
 ---
 
-# Quick Start
+# Quick start
 
 This tutorial walks through building a counter actor that handles `Increment`
-messages and replies with the current count on `GetCount`. By the end you will
-have a working Nexus program that creates an actor system, spawns actors,
-sends messages, and shuts down cleanly.
+messages and replies with the current count on `GetCount`. The result is a
+complete Nexus program that creates an actor system, spawns actors, sends
+messages, and shuts down cleanly.
 
-## Step 1: Define your messages
+## Step 1: Define messages
 
 Messages in Nexus are plain PHP objects. Use `readonly class` to make them
 immutable:

@@ -1,9 +1,9 @@
 ---
 sidebar_position: 3
-title: Running Multi-Process
+title: Running multi-process
 ---
 
-# Running Multi-Process
+# Running multi-process
 
 ## ClusterBootstrap
 

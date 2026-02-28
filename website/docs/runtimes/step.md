@@ -1,9 +1,9 @@
 ---
 sidebar_position: 4
-title: Step Runtime
+title: Step runtime
 ---
 
-# Step Runtime
+# Step runtime
 
 `StepRuntime` is a deterministic runtime designed for testing. It uses PHP
 Fibers internally but gives tests full control over execution: process exactly
@@ -105,7 +105,7 @@ $t2 = $clock->now();
 // $t2 is exactly 10 seconds after $t1
 ```
 
-You can also manipulate the clock directly:
+The clock can also be manipulated directly:
 
 ```php
 $clock->advance(Duration::seconds(300));
@@ -120,7 +120,7 @@ The key difference from `FiberRuntime` is in the mailbox. `FiberMailbox`
 suspends the fiber only when the queue is empty. `StepMailbox` **always**
 suspends the fiber in `dequeueBlocking()`, even when messages are available:
 
-```
+```text
 1. Actor fiber calls dequeueBlocking()
 2. StepMailbox stores fiber reference, calls Fiber::suspend()
 3. Control returns to the test

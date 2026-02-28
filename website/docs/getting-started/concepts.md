@@ -1,13 +1,12 @@
 ---
 sidebar_position: 4
-title: Key Concepts
+title: Key concepts
 ---
 
-# Key Concepts
+# Key concepts
 
 This page explains the core ideas behind the actor model as implemented in
-Nexus. No code here -- just the mental model you need before diving into the
-API.
+Nexus. No code — just the mental model behind the API.
 
 ## Actors
 
@@ -40,9 +39,9 @@ the default way actors interact.
 
 **Ask (request-reply).** The sender creates a temporary actor behind the scenes,
 passes its reference in the message, and waits for a response with a timeout.
-This is useful when you need a result, but it blocks the calling context until
-the reply arrives (or the timeout expires). Use it sparingly -- prefer tell when
-possible.
+This is the pattern to use when a result is needed synchronously, but it blocks
+the calling fiber until the reply arrives (or the timeout expires). Prefer tell
+when possible.
 
 Messages are plain PHP objects, typically `readonly class` instances. They carry
 data, not behavior. An actor decides what to do based on the type and content of
@@ -84,8 +83,8 @@ The state can be any PHP value -- an integer, an array, a domain object.
 ## Actor hierarchy
 
 Actors form a tree. Every actor has exactly one parent (except the root), and
-can have zero or more children. When you spawn an actor from the actor system,
-it becomes a child of the `/user` guardian. When an actor spawns a child from
+can have zero or more children. Actors spawned from the actor system become
+children of the `/user` guardian. When an actor spawns a child from
 its own context, that child is nested under the spawning actor.
 
 Paths look like filesystem paths:
@@ -96,8 +95,8 @@ Paths look like filesystem paths:
 - `/user/orders/order-123` -- a child of the "orders" actor
 
 The hierarchy serves two purposes. First, it provides a naming and addressing
-scheme so you can reason about your system's structure. Second, it defines
-supervision boundaries.
+scheme for reasoning about system structure. Second, it defines supervision
+boundaries.
 
 ## Supervision
 
@@ -119,8 +118,8 @@ Nexus provides built-in strategies:
   children. Useful when children are interdependent.
 - **Exponential backoff** -- restarts with increasing delays between attempts.
 
-Supervision strategies are configured per actor via its `Props`. You can set
-the maximum number of retries within a time window, and provide a custom
+Supervision strategies are configured per actor via its `Props`. The maximum
+number of retries within a time window is configurable, along with a custom
 decider function that inspects the exception and returns the appropriate
 directive.
 
@@ -131,18 +130,18 @@ shuts down the subtree.
 
 ## Location transparency
 
-An `ActorRef` is a handle to an actor. You use it to send messages. The critical
-property of actor references is that they are location-transparent: the same
-interface works regardless of where the actor lives.
+An `ActorRef` is a handle to an actor used to send messages. The critical
+property of actor references is location transparency: the same interface works
+regardless of where the actor lives.
 
-Today, an `ActorRef` might point to an actor in the same process. In the future,
-the same reference type will point to an actor in a different process or on a
-different machine. Your code does not need to change.
+An `ActorRef` might point to an actor in the same process or to one in a
+different process or machine. The application code does not change between
+these cases.
 
-This is what makes the actor model suitable for distributed systems. You design
-your application as a set of actors exchanging messages. Deployment topology --
-single process, multiple processes, multiple machines -- is a configuration
-concern, not a code concern.
+This is what makes the actor model suitable for distributed systems. The
+application is designed as a set of actors exchanging messages. Deployment
+topology — single process, multiple processes, multiple machines — is a
+configuration concern, not a code concern.
 
 ## Runtimes
 
@@ -161,8 +160,8 @@ The **Swoole runtime** uses Swoole coroutines and channels for concurrent
 execution with I/O multiplexing. It supports true parallel processing and is
 designed for production workloads with high throughput requirements.
 
-Both runtimes implement the same `Runtime` interface. You choose the runtime
-at startup and the rest of your application code remains unchanged.
+Both runtimes implement the same `Runtime` interface. The runtime is selected
+at startup; the rest of the application code remains unchanged.
 
 ## Summary
 
