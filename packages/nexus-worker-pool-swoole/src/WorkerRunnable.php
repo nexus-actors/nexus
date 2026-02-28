@@ -27,7 +27,7 @@ use function Swoole\Coroutine\run;
  * Receives shared Thread\Map (directory) and Thread\Queue[] (inboxes)
  * as constructor arguments — these are the only types that can cross thread boundaries.
  *
- * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency — Swoole\Thread\Pool and Runnable not in stubs
+ * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency, UnusedProperty — Swoole\Thread\Pool and Runnable not in stubs; properties used in run() invoked by Thread\Pool
  */
 final class WorkerRunnable extends Runnable
 {

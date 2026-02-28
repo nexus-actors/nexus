@@ -20,8 +20,10 @@
     <file>packages/nexus-psalm/tests</file>
     <file>packages/nexus-cluster/src</file>
     <file>packages/nexus-cluster/tests</file>
-    <file>packages/nexus-cluster-swoole/src</file>
-    <file>packages/nexus-cluster-swoole/tests</file>
+    <file>packages/nexus-worker-pool/src</file>
+    <file>packages/nexus-worker-pool/tests</file>
+    <file>packages/nexus-worker-pool-swoole/src</file>
+    <file>packages/nexus-worker-pool-swoole/tests</file>
     <file>packages/nexus-app/src</file>
     <file>packages/nexus-app/tests</file>
     <file>packages/nexus-persistence/src</file>

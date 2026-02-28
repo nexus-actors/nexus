@@ -1,12 +1,11 @@
 {
     "name": "nexus-actors/cluster",
-    "description": "Nexus cluster — distributed actors with consistent hashing, transport, and actor directory.",
+    "description": "Nexus cluster — remote multi-node contracts for TCP-based distributed actor routing.",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/runtime": "dev-main"
+        "nexus-actors/core": "dev-main"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"

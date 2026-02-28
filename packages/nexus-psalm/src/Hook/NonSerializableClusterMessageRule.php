@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
 
-use Monadial\Nexus\Cluster\RemoteActorRef;
 use Monadial\Nexus\Psalm\Issue\NonSerializableClusterMessage;
 use Monadial\Nexus\Serialization\MessageType;
+use Monadial\Nexus\WorkerPool\WorkerActorRef;
 use Override;
 use PhpParser\Node\Expr\MethodCall;
 use Psalm\Codebase;
@@ -22,8 +22,8 @@ use function strtolower;
 final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysisInterface
 {
     private const array CHECKED_METHODS = [
-        'monadial\nexus\cluster\remoteactorref::tell' => 0,
         'monadial\nexus\core\actor\actorref::tell' => 0,
+        'monadial\nexus\workerpool\workeractorref::tell' => 0,
     ];
 
     #[Override]
@@ -89,7 +89,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
         }
 
         foreach ($callerType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && strcasecmp($atomic->value, RemoteActorRef::class) === 0) {
+            if ($atomic instanceof TNamedObject && strcasecmp($atomic->value, WorkerActorRef::class) === 0) {
                 return true;
             }
         }
