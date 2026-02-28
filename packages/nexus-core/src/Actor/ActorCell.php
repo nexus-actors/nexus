@@ -152,12 +152,24 @@ final class ActorCell implements ActorContext
         $message = $envelope->message;
 
         try {
-            if ($message instanceof SystemMessage) {
-                $this->handleSystemMessage($message);
-            } elseif ($message instanceof Signal) {
-                $this->handleSignal($message);
-            } else {
-                $this->handleUserMessage($message);
+            switch (true) {
+                case $message instanceof SystemMessage:
+
+                    $this->handleSystemMessage($message);
+
+                    break;
+
+                case $message instanceof Signal:
+
+                    $this->handleSignal($message);
+
+                    break;
+
+                default:
+
+                    $this->handleUserMessage($message);
+
+                    break;
             }
         } finally {
             $this->currentEnvelope = null;
@@ -538,20 +550,38 @@ final class ActorCell implements ActorContext
 
     private function handleSystemMessage(SystemMessage $message): void
     {
-        if ($message instanceof PoisonPill) {
-            $this->initiateStop();
-        } elseif ($message instanceof Suspend) {
-            if ($this->state->canTransitionTo(ActorState::Suspended)) {
-                $this->transitionTo(ActorState::Suspended);
-            }
-        } elseif ($message instanceof Resume) {
-            if ($this->state->canTransitionTo(ActorState::Running)) {
-                $this->transitionTo(ActorState::Running);
-            }
-        } elseif ($message instanceof Watch) {
-            $this->watchers[(string) $message->watcher->path()] = $message->watcher;
-        } elseif ($message instanceof Unwatch) {
-            unset($this->watchers[(string) $message->watcher->path()]);
+        switch (true) {
+            case $message instanceof PoisonPill:
+
+                $this->initiateStop();
+
+                break;
+
+            case $message instanceof Suspend:
+                if ($this->state->canTransitionTo(ActorState::Suspended)) {
+                    $this->transitionTo(ActorState::Suspended);
+                }
+
+                break;
+
+            case $message instanceof Resume:
+                if ($this->state->canTransitionTo(ActorState::Running)) {
+                    $this->transitionTo(ActorState::Running);
+                }
+
+                break;
+
+            case $message instanceof Watch:
+
+                $this->watchers[(string) $message->watcher->path()] = $message->watcher;
+
+                break;
+
+            case $message instanceof Unwatch:
+
+                unset($this->watchers[(string) $message->watcher->path()]);
+
+                break;
         }
     }
 

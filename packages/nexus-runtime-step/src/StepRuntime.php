@@ -258,15 +258,17 @@ final class StepRuntime implements Runtime
                 continue;
             }
 
-            if ($fireAt <= $now) {
-                $callback();
-
-                if ($repeating && $interval !== null) {
-                    $nextFire = $this->addDuration($fireAt, $interval);
-                    $remaining[] = [$callback, $nextFire, true, $interval, $cancellable];
-                }
-            } else {
+            if ($fireAt > $now) {
                 $remaining[] = $timer;
+
+                continue;
+            }
+
+            $callback();
+
+            if ($repeating && $interval !== null) {
+                $nextFire = $this->addDuration($fireAt, $interval);
+                $remaining[] = [$callback, $nextFire, true, $interval, $cancellable];
             }
         }
 

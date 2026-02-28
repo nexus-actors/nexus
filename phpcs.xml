@@ -118,8 +118,21 @@
         <exclude name="SlevomatCodingStandard.ControlStructures.RequireYodaComparison" />
         <!-- New without parentheses is fine for empty constructors -->
         <exclude name="SlevomatCodingStandard.ControlStructures.NewWithoutParentheses" />
-        <!-- Early exit is not always clearer -->
+        <!-- Early exit is not always clearer (more aggressive than DisallowElse) -->
         <exclude name="SlevomatCodingStandard.ControlStructures.EarlyExit" />
+        <!-- Note: SlevomatCodingStandard.ControlStructures.DisallowElse does not exist in
+             Slevomat 8.x. Else/elseif are prohibited by convention; use early-return or
+             switch(true) patterns. -->
+    </rule>
+
+    <!-- Allow blank line after break in non-last case blocks so BlockControlStructureSpacing
+         (which requires 1 blank line before the next case) and JumpStatementsSpacing do not
+         conflict. The last break in the final default/case still has 0 trailing lines. -->
+    <rule ref="SlevomatCodingStandard.ControlStructures.JumpStatementsSpacing">
+        <properties>
+            <property name="linesCountAfterWhenLastInCaseOrDefault" value="1"/>
+            <property name="linesCountAfterWhenLastInLastCaseOrDefault" value="0"/>
+        </properties>
     </rule>
 
     <!-- Slevomat: Operators -->

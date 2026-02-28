@@ -57,9 +57,11 @@ final readonly class ConsistentHashRing
 
             if ($this->hashes[$mid] < $hash) {
                 $lo = $mid + 1;
-            } else {
-                $hi = $mid;
+
+                continue;
             }
+
+            $hi = $mid;
         }
 
         // Wrap around if hash is greater than all ring entries

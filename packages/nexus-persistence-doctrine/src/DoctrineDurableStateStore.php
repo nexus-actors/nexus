@@ -48,23 +48,36 @@ final class DoctrineDurableStateStore implements DurableStateStore
     {
         $entry = $this->em->find(DurableStateEntry::class, $id->toString());
 
-        if ($entry === null) {
-            $entry = new DurableStateEntry(
-                persistenceId: $id->toString(),
-                stateType: $state->stateType,
-                stateData: $this->serializer->serialize($state->state),
-                timestamp: $state->timestamp,
-                writerId: (string) $state->writerId,
-            );
-        } else {
+        if ($entry !== null) {
             $entry->update(
                 $state->stateType,
                 $this->serializer->serialize($state->state),
                 $state->timestamp,
                 (string) $state->writerId,
             );
+            $this->em->persist($entry);
+
+            try {
+                $this->em->flush();
+            } catch (OptimisticLockException $e) {
+                throw new ConcurrentModificationException(
+                    $id,
+                    $state->version - 1,
+                    "Optimistic lock failed for persistence ID '{$id->toString()}'",
+                    $e,
+                );
+            }
+
+            return;
         }
 
+        $entry = new DurableStateEntry(
+            persistenceId: $id->toString(),
+            stateType: $state->stateType,
+            stateData: $this->serializer->serialize($state->state),
+            timestamp: $state->timestamp,
+            writerId: (string) $state->writerId,
+        );
         $this->em->persist($entry);
 
         try {

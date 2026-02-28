@@ -74,11 +74,13 @@ final class SwooleRuntime implements Runtime
     {
         $id = 'swoole-' . $this->nextId++;
 
-        if ($this->insideCoRun) {
-            Coroutine::create($actorLoop);
-        } else {
+        if (!$this->insideCoRun) {
             $this->pendingSpawns[$id] = $actorLoop;
+
+            return $id;
         }
+
+        Coroutine::create($actorLoop);
 
         return $id;
     }

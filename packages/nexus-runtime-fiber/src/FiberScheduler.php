@@ -70,21 +70,23 @@ final class FiberScheduler
                 continue;
             }
 
-            if ($timer->fireAt <= $now) {
-                ($timer->callback)();
-
-                /** @psalm-suppress RedundantCondition -- defensive guard for timer invariants */
-                if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) {
-                    $remaining[] = new TimerEntry(
-                        callback: $timer->callback,
-                        fireAt: $this->addDuration($timer->fireAt, $timer->interval),
-                        repeating: true,
-                        interval: $timer->interval,
-                        cancellable: $timer->cancellable,
-                    );
-                }
-            } else {
+            if ($timer->fireAt > $now) {
                 $remaining[] = $timer;
+
+                continue;
+            }
+
+            ($timer->callback)();
+
+            /** @psalm-suppress RedundantCondition -- defensive guard for timer invariants */
+            if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) {
+                $remaining[] = new TimerEntry(
+                    callback: $timer->callback,
+                    fireAt: $this->addDuration($timer->fireAt, $timer->interval),
+                    repeating: true,
+                    interval: $timer->interval,
+                    cancellable: $timer->cancellable,
+                );
             }
         }
 

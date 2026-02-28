@@ -138,11 +138,13 @@ final class FiberRuntime implements Runtime
             }
 
             // Only sleep when no messages were enqueued during this tick
-            if ($this->wakeupPending) {
-                $this->wakeupPending = false;
-            } else {
+            if (!$this->wakeupPending) {
                 usleep(100);
+
+                continue;
             }
+
+            $this->wakeupPending = false;
         }
     }
 
@@ -163,13 +165,21 @@ final class FiberRuntime implements Runtime
         foreach ($this->fibers as $id => $fiber) {
             if ($fiber->isTerminated()) {
                 unset($this->fibers[$id]);
-            } elseif (!$fiber->isStarted()) {
+
+                continue;
+            }
+
+            if (!$fiber->isStarted()) {
                 $fiber->start();
 
                 if ($fiber->isTerminated()) {
                     unset($this->fibers[$id]);
                 }
-            } elseif ($fiber->isSuspended()) {
+
+                continue;
+            }
+
+            if ($fiber->isSuspended()) {
                 $fiber->resume();
 
                 if ($fiber->isTerminated()) {
