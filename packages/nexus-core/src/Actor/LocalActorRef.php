@@ -51,8 +51,9 @@ final readonly class LocalActorRef implements ActorRef
 
     /**
      * Deliver a pre-formed envelope directly to the mailbox.
-     * Used by cluster transport to preserve sender path from remote workers.
+     * Used by ActorContext::tell() and cluster transport to preserve envelope IDs.
      */
+    #[Override]
     public function enqueueEnvelope(Envelope $envelope): void
     {
         try {

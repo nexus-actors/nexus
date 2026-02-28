@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use NoDiscard;
@@ -20,6 +21,12 @@ interface ActorRef
     public function tell(object $message): void;
 
     /**
+     * Deliver a pre-formed envelope directly.
+     * Used by ActorContext::tell() to propagate correlation and causation IDs.
+     */
+    public function enqueueEnvelope(Envelope $envelope): void;
+
+    /**
      * Send a message and get a Future for the reply.
      *
      * The message is sent immediately (eager). The reply is received
@@ -33,7 +40,7 @@ interface ActorRef
     #[NoDiscard]
     public function ask(object $message, Duration $timeout): Future;
 
-    public function path(): ActorPath;
+    public function path(): ActorPathContract;
 
     public function isAlive(): bool;
 }

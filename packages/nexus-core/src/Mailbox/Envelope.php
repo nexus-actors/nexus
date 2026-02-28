@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Core\Mailbox;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Symfony\Component\Uid\Ulid;
 
 /**
  * @psalm-api
@@ -30,7 +31,8 @@ final readonly class Envelope
     ) {}
 
     /**
-     * Creates an Envelope with empty metadata.
+     * Creates a new root Envelope — no causal context.
+     * All three IDs are set to a fresh ULID (this is the start of a new correlation thread).
      */
     public static function of(object $message, ActorPath $sender, ActorPath $target): self
     {
@@ -43,6 +45,25 @@ final readonly class Envelope
             requestId: $requestId,
             correlationId: $requestId,
             causationId: $requestId,
+        );
+    }
+
+    /**
+     * Creates an Envelope that is causally linked to an incoming envelope.
+     *
+     * - requestId:     new unique ULID for this message
+     * - correlationId: same as the cause (same conversation thread)
+     * - causationId:   the cause's requestId (this message was triggered by that one)
+     */
+    public static function causedBy(self $cause, ActorPath $sender, ActorPath $target, object $message): self
+    {
+        return new self(
+            message: $message,
+            sender: $sender,
+            target: $target,
+            requestId: self::newId(),
+            correlationId: $cause->correlationId,
+            causationId: $cause->requestId,
         );
     }
 
@@ -89,6 +110,6 @@ final readonly class Envelope
 
     private static function newId(): string
     {
-        return bin2hex(random_bytes(16));
+        return (string) new Ulid();
     }
 }

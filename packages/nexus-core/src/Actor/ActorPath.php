@@ -23,7 +23,7 @@ final class ActorPath implements ActorPathContract
     /**
      * @param list<string> $elements Path segments (empty for root, e.g. ['user', 'orders'] for /user/orders)
      */
-    private function __construct(private array $elements) {}
+    private function __construct(private readonly array $elements) {}
 
     /**
      * Creates the root path `/`.

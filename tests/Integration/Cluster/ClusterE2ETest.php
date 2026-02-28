@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\FutureCancelledException;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
@@ -482,6 +483,157 @@ final class ClusterE2ETest extends TestCase
         });
 
         self::assertSame('reply:ping', $replyPayload);
+    }
+
+    #[Test]
+    public function localClusterAskRoundtripSingleWorker(): void
+    {
+        $replyPayload = null;
+
+        /** @psalm-suppress UnusedFunctionCall */
+        run(function () use (&$replyPayload): void {
+            $workerCount = 1;
+            $ring = new ConsistentHashRing($workerCount);
+            $serializer = new PhpNativeClusterSerializer();
+            $directory = new InMemoryDirectory();
+
+            $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
+            $runtime0 = $this->createActiveRuntime();
+            $system0 = ActorSystem::create('worker-0', $runtime0);
+            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
+
+            $transport0->bind();
+            Coroutine::sleep(0.05);
+            $transport0->connectToPeers();
+            $node0->start();
+
+            $nameForWorker0 = $this->findNameForWorker($ring, 0);
+
+            $responder = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                $reply = (object) ['payload' => 'reply:' . ($msg->payload ?? 'unknown')];
+                $ctx->reply($reply);
+
+                return Behavior::same();
+            });
+
+            $localRef = $node0->spawn(Props::fromBehavior($responder), $nameForWorker0);
+            self::assertInstanceOf(LocalActorRef::class, $localRef);
+
+            $ref = $node0->actorFor("/user/{$nameForWorker0}");
+            self::assertInstanceOf(LocalActorRef::class, $ref);
+
+            $future = $ref->ask((object) ['payload' => 'ping'], Duration::seconds(2));
+            $reply = $future->await();
+            $replyPayload = $reply->payload ?? null;
+
+            $system0->shutdown(Duration::millis(100));
+            $transport0->close();
+        });
+
+        self::assertSame('reply:ping', $replyPayload);
+    }
+
+    #[Test]
+    public function localClusterAskCancelSingleWorkerFailsFuture(): void
+    {
+        $cancelled = false;
+
+        /** @psalm-suppress UnusedFunctionCall */
+        run(function () use (&$cancelled): void {
+            $workerCount = 1;
+            $ring = new ConsistentHashRing($workerCount);
+            $serializer = new PhpNativeClusterSerializer();
+            $directory = new InMemoryDirectory();
+
+            $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
+            $runtime0 = $this->createActiveRuntime();
+            $system0 = ActorSystem::create('worker-0', $runtime0);
+            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
+
+            $transport0->bind();
+            Coroutine::sleep(0.05);
+            $transport0->connectToPeers();
+            $node0->start();
+
+            $nameForWorker0 = $this->findNameForWorker($ring, 0);
+
+            $slowResponder = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                Coroutine::sleep(0.2);
+                $ctx->reply((object) ['payload' => 'late-reply']);
+
+                return Behavior::same();
+            });
+
+            $localRef = $node0->spawn(Props::fromBehavior($slowResponder), $nameForWorker0);
+            self::assertInstanceOf(LocalActorRef::class, $localRef);
+
+            $ref = $node0->actorFor("/user/{$nameForWorker0}");
+            self::assertInstanceOf(LocalActorRef::class, $ref);
+
+            $future = $ref->ask((object) ['payload' => 'ping'], Duration::seconds(2));
+            $future->cancel();
+
+            try {
+                $future->await();
+            } catch (FutureCancelledException) {
+                $cancelled = true;
+            }
+
+            Coroutine::sleep(0.25);
+            $system0->shutdown(Duration::millis(100));
+            $transport0->close();
+        });
+
+        self::assertTrue($cancelled);
+    }
+
+    #[Test]
+    public function localClusterAskTimeoutSingleWorkerFailsFuture(): void
+    {
+        $timedOut = false;
+
+        /** @psalm-suppress UnusedFunctionCall */
+        run(function () use (&$timedOut): void {
+            $workerCount = 1;
+            $ring = new ConsistentHashRing($workerCount);
+            $serializer = new PhpNativeClusterSerializer();
+            $directory = new InMemoryDirectory();
+
+            $transport0 = new UnixSocketTransport(0, $workerCount, $this->socketDir);
+            $runtime0 = $this->createActiveRuntime();
+            $system0 = ActorSystem::create('worker-0', $runtime0);
+            $node0 = new ClusterNode(0, $system0, $transport0, $ring, $serializer, $directory);
+
+            $transport0->bind();
+            Coroutine::sleep(0.05);
+            $transport0->connectToPeers();
+            $node0->start();
+
+            $nameForWorker0 = $this->findNameForWorker($ring, 0);
+
+            $noReplyBehavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                return Behavior::same();
+            });
+
+            $localRef = $node0->spawn(Props::fromBehavior($noReplyBehavior), $nameForWorker0);
+            self::assertInstanceOf(LocalActorRef::class, $localRef);
+
+            $ref = $node0->actorFor("/user/{$nameForWorker0}");
+            self::assertInstanceOf(LocalActorRef::class, $ref);
+
+            $future = $ref->ask((object) ['payload' => 'ping'], Duration::millis(50));
+
+            try {
+                $future->await();
+            } catch (AskTimeoutException) {
+                $timedOut = true;
+            }
+
+            $system0->shutdown(Duration::millis(100));
+            $transport0->close();
+        });
+
+        self::assertTrue($timedOut);
     }
 
     #[Test]

@@ -9,6 +9,7 @@ use Monadial\Nexus\Cluster\Directory\ActorDirectory;
 use Monadial\Nexus\Cluster\Serialization\ClusterSerializer;
 use Monadial\Nexus\Cluster\Transport\Transport;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorPathContract;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Async\Future;
@@ -49,6 +50,13 @@ final readonly class RemoteActorRef implements ActorRef
         $this->transport->send($this->targetWorker, $data);
     }
 
+    #[Override]
+    public function enqueueEnvelope(Envelope $envelope): void
+    {
+        $data = $this->serializer->serialize($envelope);
+        $this->transport->send($this->targetWorker, $data);
+    }
+
     /**
      * @template R of object
      * @return Future<R>
@@ -62,7 +70,7 @@ final readonly class RemoteActorRef implements ActorRef
     }
 
     #[Override]
-    public function path(): ActorPath
+    public function path(): ActorPathContract
     {
         return $this->path;
     }

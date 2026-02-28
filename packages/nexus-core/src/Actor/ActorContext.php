@@ -66,8 +66,20 @@ interface ActorContext
     public function sender(): Option;
 
     /**
-     * Reply to the sender of the current message.
-     * Only works for messages received via ask() — throws for regular tell().
+     * Send a message to another actor, propagating the current correlation context.
+     *
+     * Use this instead of $ref->tell() when sending from inside a message handler —
+     * the outgoing envelope will carry the same correlationId and set causationId
+     * to the current message's requestId, preserving the trace thread.
+     *
+     * Outside a handler (e.g. in setup callbacks) falls back to a fresh root envelope.
+     *
+     * @param ActorRef<object> $ref
+     */
+    public function tell(ActorRef $ref, object $message): void;
+
+    /**
+     * Reply to the sender of the current message, propagating the current correlation context.
      *
      * @throws NoSenderException If no sender on current message
      */

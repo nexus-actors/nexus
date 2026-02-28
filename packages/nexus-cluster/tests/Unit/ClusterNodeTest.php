@@ -150,6 +150,7 @@ final class ClusterNodeTest extends TestCase
 
         self::assertNotNull($ref);
         self::assertInstanceOf(RemoteActorRef::class, $ref);
+        self::assertSame('/user/remote-actor', (string) $ref->path());
     }
 
     #[Test]

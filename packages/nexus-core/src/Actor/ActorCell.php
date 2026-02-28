@@ -404,6 +404,21 @@ final class ActorCell implements ActorContext
     }
 
     #[Override]
+    public function tell(ActorRef $ref, object $message): void
+    {
+        $targetPath = $ref->path();
+        $targetActorPath = $targetPath instanceof ActorPath
+            ? $targetPath
+            : ActorPath::fromString((string) $targetPath);
+
+        $envelope = $this->currentEnvelope !== null
+            ? Envelope::causedBy($this->currentEnvelope, $this->path(), $targetActorPath, $message)
+            : Envelope::of($message, $this->path(), $targetActorPath);
+
+        $ref->enqueueEnvelope($envelope);
+    }
+
+    #[Override]
     public function reply(object $message): void
     {
         $sender = $this->sender();
@@ -412,7 +427,7 @@ final class ActorCell implements ActorContext
             throw new NoSenderException('Cannot reply: no sender on current message');
         }
 
-        $sender->get()->tell($message);
+        $this->tell($sender->get(), $message);
     }
 
     /** @param Closure(TaskContext): void $task */

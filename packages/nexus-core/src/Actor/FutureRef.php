@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Duration;
@@ -30,6 +31,12 @@ final readonly class FutureRef implements ActorRef
     public function tell(object $message): void
     {
         $this->slot->resolve($message);
+    }
+
+    #[Override]
+    public function enqueueEnvelope(Envelope $envelope): void
+    {
+        $this->slot->resolve($envelope->message);
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use NoDiscard;
@@ -37,6 +38,12 @@ final class DeadLetterRef implements ActorRef
     public function tell(object $message): void
     {
         $this->captured[] = $message;
+    }
+
+    #[Override]
+    public function enqueueEnvelope(Envelope $envelope): void
+    {
+        $this->captured[] = $envelope->message;
     }
 
     /**

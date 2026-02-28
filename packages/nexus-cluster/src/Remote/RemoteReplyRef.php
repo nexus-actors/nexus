@@ -37,6 +37,14 @@ final readonly class RemoteReplyRef implements ActorRef
         private Closure $onReply,
     ) {}
 
+    #[Override]
+    public function enqueueEnvelope(Envelope $envelope): void
+    {
+        /** @var T $message */
+        $message = $envelope->message;
+        $this->tell($message);
+    }
+
     /** @param T $message */
     #[Override]
     public function tell(object $message): void
