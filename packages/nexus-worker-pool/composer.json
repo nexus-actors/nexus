@@ -1,0 +1,24 @@
+{
+    "name": "nexus-actors/worker-pool",
+    "description": "Nexus worker pool — local multi-worker actor scaling with consistent hashing and envelope-based transport.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime": "dev-main"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\WorkerPool\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\WorkerPool\\Tests\\": "tests/"
+        }
+    }
+}
