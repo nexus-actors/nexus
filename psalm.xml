@@ -15,7 +15,8 @@
         <directory name="packages/nexus-serialization/src" />
         <directory name="packages/nexus-psalm/src" />
         <directory name="packages/nexus-cluster/src" />
-        <directory name="packages/nexus-cluster-swoole/src" />
+        <directory name="packages/nexus-worker-pool/src" />
+        <directory name="packages/nexus-worker-pool-swoole/src" />
         <directory name="packages/nexus-app/src" />
         <directory name="packages/nexus-persistence/src" />
         <directory name="packages/nexus-persistence-dbal/src" />

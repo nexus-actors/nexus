@@ -8,30 +8,32 @@ namespace Monadial\Nexus\Cluster;
  * @psalm-api
  * @psalm-immutable
  *
- * Deterministic consistent hash ring for mapping actor names to worker IDs.
- * Uses crc32 with virtual nodes for even distribution.
- * Same output on all workers — no coordination needed.
+ * Consistent hash ring mapping actor names to cluster NodeAddresses.
+ * Same algorithm as WorkerPool's ConsistentHashRing but maps to nodes, not worker IDs.
  */
-final readonly class ConsistentHashRing
+final readonly class NodeHashRing
 {
     private const int VIRTUAL_NODES = 150;
 
-    /** @var list<int> Sorted hash values */
+    /** @var list<int> */
     private array $hashes;
 
-    /** @var array<int, int> Hash → worker ID */
+    /** @var array<int, int> hash → node index */
     private array $mapping;
 
-    public function __construct(int $workerCount, int $virtualNodes = self::VIRTUAL_NODES)
+    /** @param list<NodeAddress> $nodes */
+    public function __construct(private array $nodes, int $virtualNodes = self::VIRTUAL_NODES)
     {
         $hashes = [];
         $mapping = [];
 
-        for ($worker = 0; $worker < $workerCount; $worker++) {
+        $nodeCount = count($nodes);
+
+        for ($index = 0; $index < $nodeCount; $index++) {
             for ($vnode = 0; $vnode < $virtualNodes; $vnode++) {
-                $hash = crc32("w{$worker}v{$vnode}");
+                $hash = crc32("n{$index}v{$vnode}");
                 $hashes[] = $hash;
-                $mapping[$hash] = $worker;
+                $mapping[$hash] = $index;
             }
         }
 
@@ -40,15 +42,10 @@ final readonly class ConsistentHashRing
         $this->mapping = $mapping;
     }
 
-    /**
-     * Returns the worker ID that owns the given actor name.
-     */
-    public function getWorker(string $name): int
+    public function getNode(string $name): NodeAddress
     {
         $hash = crc32($name);
         $count = count($this->hashes);
-
-        // Binary search for first hash >= $hash
         $lo = 0;
         $hi = $count - 1;
 
@@ -62,11 +59,10 @@ final readonly class ConsistentHashRing
             }
         }
 
-        // Wrap around if hash is greater than all ring entries
         if ($this->hashes[$lo] < $hash) {
             $lo = 0;
         }
 
-        return $this->mapping[$this->hashes[$lo]];
+        return $this->nodes[$this->mapping[$this->hashes[$lo]]];
     }
 }
