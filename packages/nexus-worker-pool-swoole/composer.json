@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/worker-pool-swoole",
+    "description": "Nexus worker pool Swoole adapter — thread-based worker pool using Swoole Thread primitives.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": "*",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
+        "nexus-actors/worker-pool": "dev-main"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\WorkerPool\\Swoole\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\WorkerPool\\Swoole\\Tests\\": "tests/"
+        }
+    }
+}
