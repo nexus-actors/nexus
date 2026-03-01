@@ -29,7 +29,7 @@ mailbox -> behavior handler):
 
 Fiber is faster in single-process benchmarks because it avoids Swoole's
 coroutine scheduling overhead. Swoole's advantage is true async I/O and
-multi-process scaling — not single-process throughput.
+multi-worker scaling — not single-process throughput.
 
 ### Dispatch rate
 
@@ -66,34 +66,19 @@ Round-trip time for a message sent to an actor that replies immediately:
 
 At ~3-4 KB per actor, 100K actors consume roughly 300-400 MB.
 
-## Multi-process scaling (Swoole)
+## Multi-worker scaling (Swoole threads)
 
-Cross-worker messaging through Unix domain sockets with `CompactClusterSerializer`:
+Cross-worker messaging through `Thread\Queue` (one inbox per worker) with a shared `Thread\Map` actor directory:
 
 | Metric | Result |
 |---|---|
 | Cross-worker throughput | **260K** msgs/sec per worker pair |
 | Cross-worker round-trip latency | **20 us** per round trip |
-| Serialization throughput | **1.18M** serialize+deserialize cycles/sec |
 | Fan-out (4 workers, 5K messages) | **188K** msgs/sec aggregate |
 
-### Wire format
+### Envelope delivery
 
-The `CompactClusterSerializer` sends actor paths as raw UTF-8 strings and only
-calls PHP `serialize()` on the message object:
-
-```
-[2B: target path length][target path bytes][2B: sender path length][sender path bytes][message bytes]
-```
-
-This is ~6x smaller than serializing the full `Envelope` object graph with PHP's
-native `serialize()`.
-
-### Read buffering
-
-`UnixSocketTransport` receives up to 64 KB at a time and parses multiple
-length-prefixed frames from the buffer. This reduces read syscalls from 2 per
-message (header + payload) to roughly N per buffer-full.
+The worker pool passes `Envelope` objects directly via `Thread\Queue`. No wire serialization format is needed for same-machine scaling.
 
 ## Running benchmarks
 
@@ -112,7 +97,7 @@ docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filt
 
 **Fiber vs Swoole:** Fiber is faster in isolated single-process benchmarks.
 This does not mean Fiber is "better" — Swoole provides true async I/O
-(database, HTTP, filesystem), multi-process scaling, and native coroutine
+(database, HTTP, filesystem), multi-worker scaling, and native coroutine
 support. Use Fiber for development and moderate workloads. Use Swoole for
 production with I/O-bound or multi-core workloads.
 
