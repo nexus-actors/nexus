@@ -13,6 +13,7 @@ use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
@@ -273,6 +274,8 @@ final class ActorSystem
                     $cell->processMessage($envelope);
                 } catch (MailboxClosedException) {
                     break;
+                } catch (MailboxTimeoutException) {
+                    // No message arrived within the timeout window; re-check isAlive() and retry.
                 }
             }
         });
