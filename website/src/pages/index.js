@@ -169,15 +169,15 @@ $ref->tell(new WriteRecord($data1));
 $ref->tell(new WriteRecord($data2));
 $ref->tell(new DatabaseReady($connection));`;
 
-const scalingCode = `// One machine, all CPU cores. Actors span processes transparently.
+const scalingCode = `// One machine, all CPU cores. Actors span threads transparently.
 // Same ActorRef API -- senders don't know if it's local or remote.
 
-$cluster = ClusterBootstrap::create(
-    ClusterConfig::withWorkers(16),
+$pool = WorkerPoolApp::create(
+    WorkerPoolConfig::withWorkers(16),
 )
-->onWorkerStart(function (ClusterNode $node): void {
-    // Each worker runs an independent ActorSystem.
-    // The hash ring decides which worker owns which actor.
+->onWorkerStart(function (WorkerNode $node): void {
+    // Each thread runs an independent ActorSystem.
+    // The hash ring decides which thread owns which actor.
     $node->spawn(
         Props::fromBehavior($orderBehavior),
         'order-processor',
@@ -185,8 +185,8 @@ $cluster = ClusterBootstrap::create(
 })
 ->run();
 
-// Cross-worker messaging uses Unix domain sockets.
-// 255K msgs/sec per worker pair. Zero config.`;
+// Cross-worker messaging uses Thread\\Queue (no serialization).
+// 260K msgs/sec per worker pair. Zero config.`;
 
 /* ------------------------------------------------------------------ */
 /* Data                                                                */
@@ -254,8 +254,8 @@ const features = [
     icon: '\u25A3',
   },
   {
-    title: 'Multi-Process Scaling',
-    description: 'Scale across all CPU cores with ClusterBootstrap and Swoole Process\\Pool. Consistent hash ring for actor placement. Unix socket transport at 255K msgs/sec.',
+    title: 'Multi-Worker Scaling',
+    description: 'Scale across all CPU cores with WorkerPoolApp and Swoole threads. Consistent hash ring for actor placement. Thread\\Queue transport at 260K msgs/sec. No serialization overhead.',
     icon: '\u2B21',
   },
   {
@@ -288,7 +288,7 @@ function Hero() {
             <span className={styles.heroAccent}>done right.</span>
           </h1>
           <p className={styles.heroTagline}>
-            Type-safe actors, supervision trees, event sourcing, multi-process scaling, pluggable runtimes.
+            Type-safe actors, supervision trees, event sourcing, multi-worker scaling, pluggable runtimes.
             Erlang/OTP and Akka patterns — in the PHP you already know.
           </p>
           <div className={styles.heroCta}>
@@ -498,9 +498,9 @@ function Showcases() {
 
       <ShowcaseSection
         title="Scale across all CPU cores"
-        description="ClusterBootstrap starts a Swoole Process\Pool where each worker runs an independent ActorSystem. A consistent hash ring decides actor placement. Cross-worker messaging uses Unix domain sockets at 255K msgs/sec. Your actor code stays exactly the same -- only the deployment topology changes."
+        description="WorkerPoolApp starts N Swoole worker threads where each thread runs an independent ActorSystem. A consistent hash ring decides actor placement. Cross-worker messaging passes Envelope objects directly via Thread\Queue at 260K msgs/sec — no serialization. Your actor code stays exactly the same — only the deployment topology changes."
         code={scalingCode}
-        codeTitle="cluster.php"
+        codeTitle="worker-pool.php"
         reversed
       />
     </div>
@@ -753,9 +753,14 @@ function Architecture() {
       desc: 'Pure PHP abstractions for scaling: consistent hash ring, remote actor refs, pluggable transport and directory interfaces.',
     },
     {
-      name: 'nexus-actors/cluster-swoole',
-      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-cluster-swoole',
-      desc: 'Swoole multi-process scaling. ClusterBootstrap, Unix socket transport, shared-memory actor directory via Swoole\\Table.',
+      name: 'nexus-actors/worker-pool',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-worker-pool',
+      desc: 'Worker pool abstractions: WorkerNode, WorkerActorRef, and pluggable transport and directory interfaces for thread-based scaling.',
+    },
+    {
+      name: 'nexus-actors/worker-pool-swoole',
+      href: 'https://github.com/nexus-actors/nexus/tree/main/packages/nexus-worker-pool-swoole',
+      desc: 'Swoole thread-based scaling. WorkerPoolApp, WorkerPoolBootstrap, Thread\\Queue transport, and Thread\\Map actor directory.',
     },
     {
       name: 'nexus-actors/psalm',
@@ -825,7 +830,7 @@ export default function Home() {
   return (
     <Layout
       title="Concurrent PHP, done right"
-      description="Nexus is a typed actor system for PHP 8.5+ bringing Akka/OTP patterns to PHP. Type-safe actors, supervision trees, event sourcing, multi-process scaling, and pluggable runtimes (Fiber, Swoole, and Step)."
+      description="Nexus is a typed actor system for PHP 8.5+ bringing Akka/OTP patterns to PHP. Type-safe actors, supervision trees, event sourcing, multi-worker scaling, and pluggable runtimes (Fiber, Swoole, and Step)."
     >
       <main className={styles.landing}>
         <Hero />
