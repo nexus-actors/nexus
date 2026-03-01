@@ -21,14 +21,26 @@ use Swoole\Thread\Queue;
  * and share a Thread\Map as the actor directory.
  *
  * Usage:
+ *     // Class-based handler:
  *     WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads(8))
- *         ->withHandler(MyWorkerFactory::class)
+ *         ->withHandler(MyApp::class)
+ *         ->run();
+ *
+ *     // WorkerPool DSL (passes serialized closure):
+ *     WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads(8))
+ *         ->withSerializedConfigure($serialized)
  *         ->run();
  */
 final class WorkerPoolBootstrap
 {
     /** @var class-string<WorkerStartHandler>|null */
     private ?string $handlerClass = null;
+
+    private ?string $serializedConfigure = null;
+
+    private ?string $loggerClass = null;
+
+    private ?string $serializedLoggerFactory = null;
 
     private function __construct(private readonly WorkerPoolConfig $config) {}
 
@@ -42,8 +54,42 @@ final class WorkerPoolBootstrap
      */
     public function withHandler(string $handlerClass): self
     {
-        $clone = clone $this;
+        $clone               = clone $this;
         $clone->handlerClass = $handlerClass;
+
+        return $clone;
+    }
+
+    /**
+     * Serialized opis/closure configure callable. When set, WorkerRunnable
+     * runs this instead of the WorkerStartHandler.
+     */
+    public function withSerializedConfigure(?string $serializedConfigure): self
+    {
+        $clone                      = clone $this;
+        $clone->serializedConfigure = $serializedConfigure;
+
+        return $clone;
+    }
+
+    /**
+     * @param class-string<\Psr\Log\LoggerInterface>|null $loggerClass
+     */
+    public function withLoggerClass(?string $loggerClass): self
+    {
+        $clone              = clone $this;
+        $clone->loggerClass = $loggerClass;
+
+        return $clone;
+    }
+
+    /**
+     * Serialized opis/closure factory: Closure(): LoggerInterface.
+     */
+    public function withSerializedLoggerFactory(?string $serializedLoggerFactory): self
+    {
+        $clone                          = clone $this;
+        $clone->serializedLoggerFactory = $serializedLoggerFactory;
 
         return $clone;
     }
@@ -53,7 +99,7 @@ final class WorkerPoolBootstrap
      */
     public function run(): void
     {
-        $directory = new Map();
+        $directory       = new Map();
         $workerIdCounter = new Atomic(0);
 
         /** @var array<int, Queue> $queues */
@@ -65,10 +111,6 @@ final class WorkerPoolBootstrap
 
         $handlerClass = $this->handlerClass ?? DefaultWorkerStartHandler::class;
 
-        // Thread\Pool passes the Runnable class name + shared args to every thread.
-        // The pool calls run() in each thread automatically — no on('WorkerStart') needed.
-        // Worker IDs are claimed atomically since all threads receive the same args.
-
         /** @psalm-suppress UndefinedClass, MissingDependency, MixedAssignment */
         $pool = new Pool(
             WorkerRunnable::class,
@@ -78,6 +120,9 @@ final class WorkerPoolBootstrap
             $workerIdCounter,
             $this->config,
             $handlerClass,
+            $this->serializedConfigure ?? '',
+            $this->loggerClass ?? '',
+            $this->serializedLoggerFactory ?? '',
         );
 
         /** @psalm-suppress MixedMethodCall, UndefinedClass */
