@@ -18,6 +18,7 @@ grumphp:
             triggered_by: ['php']
             ignore_patterns:
                 - '/tests/'
+                - '/bin/'
         phpunit:
             testsuite: unit
             always_execute: true
