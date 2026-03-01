@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
 
-use Monadial\Nexus\Psalm\Issue\NonSerializableClusterMessage;
+use Monadial\Nexus\Psalm\Issue\NonSerializableRemoteMessage;
 use Monadial\Nexus\Serialization\MessageType;
 use Monadial\Nexus\WorkerPool\WorkerActorRef;
 use Override;
@@ -65,7 +65,7 @@ final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysis
             }
 
             IssueBuffer::accepts(
-                new NonSerializableClusterMessage(
+                new NonSerializableRemoteMessage(
                     $atomic->value,
                     new CodeLocation($event->getStatementsSource(), $messageArg->value),
                 ),
