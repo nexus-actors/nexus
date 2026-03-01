@@ -108,37 +108,34 @@ visibility.
 
 Suppress with `@psalm-suppress MutableActorState` if needed.
 
-### NonSerializableClusterMessage
+### NonSerializableRemoteMessage
 
-Messages sent through `RemoteActorRef::tell()` must be registered in the
-`TypeRegistry` for cross-worker serialization. This rule flags message classes
-that lack a `#[MessageType]` attribute.
+**NonSerializableRemoteMessage** — Messages passed to `WorkerActorRef::tell()` must
+carry a `#[MessageType]` attribute. This is a forward-compatibility check — the worker
+pool itself does not serialize messages, but marking them ensures they are ready for
+future TCP cluster transport.
 
 ```php
 use Monadial\Nexus\Serialization\MessageType;
 
-// Good — registered for serialization
+// Good — marked for future serialization
 #[MessageType('order.created')]
 final readonly class OrderCreated {
     public function __construct(public string $orderId) {}
 }
 
-// Bad — will fail at runtime when sent across workers
+// Bad — not marked, will fail when TCP transport is introduced
 final readonly class UnregisteredEvent {
     public function __construct(public string $data) {}
 }
 
-$remoteRef->tell(new UnregisteredEvent('x')); // ERROR: NonSerializableClusterMessage
+$workerRef->tell(new UnregisteredEvent('x')); // ERROR: NonSerializableRemoteMessage
 ```
 
-**Why:** In a clustered deployment, messages crossing worker boundaries are
-serialized. Without a stable type identifier from `#[MessageType]`, the
-serializer cannot reconstruct the message on the receiving worker.
-
-This rule only applies to `RemoteActorRef::tell()` — local actor references
+This rule only applies to `WorkerActorRef::tell()` — local actor references
 are not checked since messages stay in-process.
 
-Suppress with `@psalm-suppress NonSerializableClusterMessage` if needed.
+Suppress with `@psalm-suppress NonSerializableRemoteMessage` if needed.
 
 ### BlockingCallInHandler
 

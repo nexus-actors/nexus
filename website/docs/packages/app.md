@@ -57,21 +57,13 @@ final readonly class ActorDefinition
 }
 ```
 
-## Single-process vs multi-process
+## Single-process vs multi-worker
 
-`NexusApp::run()` runs all actors in a single process. For multi-process
-scaling, use `ClusterBootstrap` from `nexus-cluster-swoole` instead:
+`NexusApp::run()` runs all actors in a single process. For multi-worker
+scaling, use `WorkerPoolApp` or `WorkerPoolBootstrap` from
+`nexus-worker-pool-swoole`. See [Scaling Bootstrap](../scaling/bootstrap.md).
 
 ```php
 // Single process
 $app->run(new SwooleRuntime());
-
-// Multi-process cluster
-ClusterBootstrap::create(ClusterConfig::withWorkers(8))
-    ->onWorkerStart(function (ClusterNode $node) use ($app): void {
-        foreach ($app->actors() as $definition) {
-            $node->spawn($definition->props, $definition->name);
-        }
-    })
-    ->run();
 ```
