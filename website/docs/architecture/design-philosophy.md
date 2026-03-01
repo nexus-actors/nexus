@@ -120,9 +120,7 @@ location.
 Nexus provides three `ActorRef` implementations:
 
 - **`LocalActorRef`** -- In-process messaging via the actor's mailbox.
-- **`RemoteActorRef`** -- Cross-worker messaging via `ClusterSerializer` and
-  `Transport`. Serializes the message into an `Envelope` and sends it over Unix
-  domain sockets to the owning worker process.
+- **`WorkerActorRef`** -- Cross-thread within a worker pool via `ThreadQueueTransport`. No serializer; objects pass via `Thread\Queue` internal copy.
 - **`DeadLetterRef`** -- Null-object endpoint for stopped or unknown actors.
 
 All three implement the same `ActorRef<T>` interface. Actor code that calls

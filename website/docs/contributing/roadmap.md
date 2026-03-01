@@ -8,43 +8,36 @@ title: Roadmap
 This page outlines planned features for Nexus. Items are listed roughly in
 order of priority.
 
-## Multi-process scaling
+## Multi-worker scaling
 
 **Status:** Implemented.
 
-Multi-process scaling is available via the `nexus-cluster` and
-`nexus-cluster-swoole` packages. See the [Scaling documentation](../scaling/overview.md)
+Multi-worker scaling is available via the `nexus-cluster` and
+`nexus-worker-pool-swoole` packages. See the [Scaling documentation](../scaling/overview.md)
 for full details.
 
-This is single-machine scaling via Swoole's `Process\Pool` -- utilizing all CPU
+This is single-machine scaling via Swoole threads -- utilizing all CPU
 cores on one server. Not to be confused with multi-server clustering (see below).
 
 Key features:
 
-- **`ClusterBootstrap`** starts a `Swoole\Process\Pool` with N workers, each
+- **`WorkerPoolApp`** and **`WorkerPoolBootstrap`** start N worker threads, each
   running an independent `ActorSystem`.
 - **`ConsistentHashRing`** determines actor placement without coordination.
-- **`RemoteActorRef`** provides location-transparent cross-worker messaging.
-- **`UnixSocketTransport`** uses AF_UNIX domain sockets with length-prefixed
-  framing. Benchmarked at 255K msgs/sec per worker pair.
-- **`SwooleTableDirectory`** provides O(1) shared-memory actor lookups.
+- **`WorkerActorRef`** provides location-transparent cross-worker messaging.
+- **`ThreadQueueTransport`** passes `Envelope` objects directly via `Thread\Queue`.
+  Benchmarked at 260K msgs/sec per worker pair.
+- **`ThreadMapDirectory`** provides O(1) shared actor lookups via `Thread\Map`.
 - Pure PHP abstractions in `nexus-cluster` are designed to support future
   multi-server clustering without changes to actor code.
 
-## Multi-server clustering
+## Multi-machine clustering
 
 **Status:** Planned.
 
-True distributed clustering extends the system across multiple physical or
-virtual servers:
-
-- TCP transport for cross-server messaging.
-- Distributed actor directory with consistency guarantees.
-- Cluster membership and failure detection.
-- Rebalancing when nodes join or leave the cluster.
-
-The pure-PHP abstractions from `nexus-cluster` will be reused, with new
-transport and directory implementations for the network layer.
+TCP-based clustering across multiple hosts. `nexus-cluster` contracts
+(`ClusterTransport`, `NodeDirectory`, `NodeHashRing`, `NodeAddress`) are defined.
+A future `nexus-cluster-swoole` will provide the TCP implementation.
 
 ## Observability
 

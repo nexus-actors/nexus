@@ -123,9 +123,10 @@ The Swoole runtime is designed for:
   distributed across multiple CPU cores.
 - **Real-time applications** -- WebSocket servers, chat systems, and live
   dashboards benefit from Swoole's event-driven architecture.
-- **Multi-process clustering** -- The Swoole runtime is the foundation for
-  Nexus cluster mode, where multiple worker processes coordinate via Unix
-  socket IPC and shared-memory directories.
+- **Multi-worker scaling** -- The Swoole runtime powers the worker pool, where
+  multiple worker threads coordinate via `Thread\Queue` (one inbox per worker)
+  and a shared `Thread\Map` actor directory. See
+  [Scaling Overview](../scaling/overview.md).
 
 ## Limitations
 
