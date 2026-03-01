@@ -2,7 +2,12 @@
 
 ## Status
 
-Accepted
+Superseded by [ADR 0008](0008-worker-pool-cluster-separation.md)
+
+> This ADR describes the original multi-process clustering design using `Process\Pool`
+> and Unix socket IPC (`UnixSocketTransport`, `SwooleTableDirectory`). The architecture
+> was replaced by a Swoole thread-based worker pool in ADR 0008. The content is preserved
+> for historical context.
 
 ## Context
 
