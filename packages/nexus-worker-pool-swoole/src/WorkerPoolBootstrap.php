@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\WorkerPool\Swoole;
 
+use Closure;
 use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
 use Monadial\Nexus\WorkerPool\WorkerStartHandler;
+use RuntimeException;
+use Swoole\Thread;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
 use Swoole\Thread\Pool;
@@ -41,6 +44,9 @@ final class WorkerPoolBootstrap
     private ?string $loggerClass = null;
 
     private ?string $serializedLoggerFactory = null;
+
+    /** @var (Closure(WorkerPoolHandle): void)|null */
+    private ?Closure $onStart = null;
 
     private function __construct(private readonly WorkerPoolConfig $config) {}
 
@@ -95,6 +101,21 @@ final class WorkerPoolBootstrap
     }
 
     /**
+     * Register a main-thread callback to run after all workers are ready.
+     * When set, raw Swoole\Thread instances are used instead of Thread\Pool
+     * so the main thread can invoke the callback while workers are running.
+     *
+     * @param (Closure(WorkerPoolHandle): void)|null $onStart
+     */
+    public function withOnStart(?Closure $onStart): self
+    {
+        $clone          = clone $this;
+        $clone->onStart = $onStart;
+
+        return $clone;
+    }
+
+    /**
      * Start the worker pool. Blocks until the pool exits.
      */
     public function run(): void
@@ -110,7 +131,21 @@ final class WorkerPoolBootstrap
         }
 
         $handlerClass = $this->handlerClass ?? DefaultWorkerStartHandler::class;
+        $onStart      = $this->onStart;
 
+        if ($onStart !== null) {
+            $this->runWithOnStart($directory, $queues, $workerIdCounter, $handlerClass, $onStart);
+        } else {
+            $this->runWithPool($directory, $queues, $workerIdCounter, $handlerClass);
+        }
+    }
+
+    /**
+     * @param array<int, Queue>                $queues
+     * @param class-string<WorkerStartHandler> $handlerClass
+     */
+    private function runWithPool(Map $directory, array $queues, Atomic $workerIdCounter, string $handlerClass): void
+    {
         /** @psalm-suppress UndefinedClass, MissingDependency, MixedAssignment */
         $pool = new Pool(
             WorkerRunnable::class,
@@ -127,5 +162,86 @@ final class WorkerPoolBootstrap
 
         /** @psalm-suppress MixedMethodCall, UndefinedClass */
         $pool->start();
+    }
+
+    /**
+     * @param array<int, Queue>                $queues
+     * @param class-string<WorkerStartHandler> $handlerClass
+     * @param Closure(WorkerPoolHandle): void  $onStart
+     */
+    private function runWithOnStart(
+        Map $directory,
+        array $queues,
+        Atomic $workerIdCounter,
+        string $handlerClass,
+        Closure $onStart,
+    ): void {
+        $workerScript = __DIR__ . '/../bin/worker.php';
+        $autoloader   = $this->findAutoloader();
+        $readyCounter = new Atomic(0);
+        $stopSignal   = new Atomic(0);
+
+        /** @var list<\Swoole\Thread> $threads */
+        $threads = [];
+
+        for ($i = 0; $i < $this->config->workerCount; $i++) {
+            /** @psalm-suppress UndefinedClass */
+            $threads[] = new Thread(
+                $workerScript,
+                $autoloader,
+                $directory,
+                $queues,
+                $workerIdCounter,
+                $this->config,
+                $handlerClass,
+                $this->serializedConfigure ?? '',
+                $this->loggerClass ?? '',
+                $this->serializedLoggerFactory ?? '',
+                $readyCounter,
+                $stopSignal,
+            );
+        }
+
+        // Wait for all workers to become ready.
+        $deadline = time() + 30;
+
+        while ($readyCounter->get() < $this->config->workerCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                throw new RuntimeException('Worker threads did not become ready within 30 seconds');
+            }
+
+            usleep(10_000);
+        }
+
+        // Build handle and call onStart.
+        $handle = new WorkerPoolHandle($this->config->workerCount, $queues, $directory, $stopSignal);
+
+        $onStart($handle);
+
+        // Ensure stop is signalled after onStart returns.
+        $stopSignal->set(1);
+
+        foreach ($threads as $thread) {
+            /** @psalm-suppress UndefinedClass */
+            $thread->join();
+        }
+    }
+
+    private function findAutoloader(): string
+    {
+        foreach (get_included_files() as $file) {
+            if (str_ends_with($file, 'vendor/autoload.php')) {
+                return $file;
+            }
+        }
+
+        throw new RuntimeException('Cannot locate vendor/autoload.php in included files');
     }
 }

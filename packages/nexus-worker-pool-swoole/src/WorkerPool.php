@@ -45,6 +45,9 @@ final class WorkerPool
     /** @var (Closure(): LoggerInterface)|null */
     private ?Closure $loggerFactory = null;
 
+    /** @var (Closure(WorkerPoolHandle): void)|null */
+    private ?Closure $onStart = null;
+
     /** @var list<Closure(WorkerNode): void> */
     private array $steps = [];
 
@@ -196,6 +199,24 @@ final class WorkerPool
     }
 
     /**
+     * Register a main-thread callback to run after all workers are ready.
+     * The closure receives a WorkerPoolHandle for message injection and stopping.
+     *
+     * IMPORTANT: This callback runs in the main thread (not serialized — no opis needed).
+     * The closure does NOT need to be static and can capture any values.
+     * Call $handle->stop() when done, or simply return (stop is called automatically).
+     *
+     * @param Closure(WorkerPoolHandle): void $callback
+     */
+    public function onStart(Closure $callback): self
+    {
+        $clone          = clone $this;
+        $clone->onStart = $callback;
+
+        return $clone;
+    }
+
+    /**
      * Boot the worker pool. Blocks until the pool exits.
      */
     public function run(): void
@@ -207,6 +228,7 @@ final class WorkerPool
             ->withSerializedConfigure($this->buildSerializedConfigure())
             ->withLoggerClass($this->loggerClass)
             ->withSerializedLoggerFactory($this->buildSerializedLoggerFactory())
+            ->withOnStart($this->onStart)
             ->run();
     }
 
