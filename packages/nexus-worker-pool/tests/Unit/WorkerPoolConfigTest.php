@@ -14,16 +14,29 @@ use PHPUnit\Framework\TestCase;
 final class WorkerPoolConfigTest extends TestCase
 {
     #[Test]
-    public function withThreads(): void
+    public function defaultSystemNamePrefixIsWorker(): void
     {
-        $config = WorkerPoolConfig::withThreads(8);
-        self::assertSame(8, $config->workerCount);
+        $config = WorkerPoolConfig::withThreads(4);
+
+        self::assertSame('worker', $config->systemNamePrefix);
     }
 
     #[Test]
-    public function throwsOnZeroWorkers(): void
+    public function withSystemNamePrefixReturnsCopyWithNewPrefix(): void
+    {
+        $original = WorkerPoolConfig::withThreads(4);
+        $modified = $original->withSystemNamePrefix('orders');
+
+        self::assertSame('orders', $modified->systemNamePrefix);
+        self::assertSame(4, $modified->workerCount);
+        self::assertSame('worker', $original->systemNamePrefix); // immutable
+    }
+
+    #[Test]
+    public function withThreadsRejectsZero(): void
     {
         $this->expectException(InvalidArgumentException::class);
+
         WorkerPoolConfig::withThreads(0);
     }
 }
