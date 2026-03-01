@@ -91,7 +91,7 @@ All four must pass. The hooks execute through `docker compose exec -T php`.
 
 ### Design Philosophy
 
-1. **Location Transparency** — Actor code is identical whether sending to local or remote actors. `ActorRef<T>` abstracts `LocalActorRef` (in-process) and `RemoteActorRef` (cross-worker).
+1. **Location Transparency** — Actor code is identical whether sending to local or remote actors. `ActorRef<T>` abstracts `LocalActorRef` (in-process), `WorkerActorRef` (cross-thread within a worker pool), and future remote node refs.
 2. **Immutability-First** — All core types use `readonly` + `final`. Behaviors, Props, Duration, Envelope, ActorPath, SupervisionStrategy are value objects. Mutation returns new instances via `clone()`.
 3. **Generic Type Safety** — Heavy use of Psalm generics: `ActorRef<T>`, `Behavior<T>`, `Props<T>`, `ActorContext<T>`. Psalm Level 1 enforces type safety at compile time.
 4. **Functional Composition** — Behaviors are closures, enabling composition. `Behavior::receive(fn(...) => ...)`, `Behavior::setup(fn(...) => ...)`.
@@ -111,8 +111,9 @@ nexus-core (no dependencies — foundational)
 │   └── nexus-persistence  → Core, Serialization
 │       ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │       └── nexus-persistence-doctrine → Persistence, Core, Serialization
-├── nexus-cluster          → Core only
-│   └── nexus-cluster-swoole → Cluster, Core, RuntimeSwoole
+├── nexus-cluster          → Core only (remote contracts)
+├── nexus-worker-pool      → Core, Runtime
+│   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
 └── nexus-psalm            → (standalone Psalm plugin)
 ```
 
@@ -139,7 +140,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 - `tell(object $message): void` — Fire-and-forget
 - `ask(callable(ActorRef<R>): T, Duration $timeout): R` — Request-response with timeout
 - `path(): ActorPath` / `isAlive(): bool`
-- Implementations: `LocalActorRef<T>` (enqueues to mailbox), `RemoteActorRef<T>` (serializes + sends via transport), `DeadLetterRef` (null object)
+- Implementations: `LocalActorRef<T>` (enqueues to mailbox), `WorkerActorRef<T>` (sends `Envelope` directly via `WorkerTransport` — no serializer), `DeadLetterRef` (null object)
 
 **`ActorContext<T>`** (`Actor/ActorContext.php`) — Runtime context passed to handlers:
 - `self(): ActorRef<T>` / `parent(): Option<ActorRef>` / `sender(): Option<ActorRef>`
@@ -316,14 +317,32 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 
 **Single-Writer Principle** — Each `ActorSystem` has a unique ULID (`$system->writerId(): Ulid`) stamped on every persisted envelope. `WriterConflictException` is thrown when a store detects a different writer. `ReplayFilter` validates writer consistency during event replay with configurable modes: `Fail` (throw on interleave), `Warn` (log warning), `RepairByDiscardOld` (keep only latest writer's events), `Off` (skip filtering).
 
-### Clustering
+### Worker Pool (nexus-worker-pool)
 
-- `ClusterNode` — Per-worker coordinator. Routes via hash ring, handles transport messages.
-- `ConsistentHashRing` — Determines actor-to-worker assignment.
-- `RemoteActorRef<T>` — Proxy that serializes + sends via transport. Same `ActorRef<T>` interface.
-- `Transport` interface — `send(targetWorker, data)` / `listen(callback)`. Implementations: `InMemoryTransport` (tests), `UnixSocketTransport` (Swoole).
-- `ActorDirectory` — Service registry for actor path → worker ID mappings.
-- `CompactClusterSerializer` — Wire format: `[2B target len][target][2B sender len][sender][message bytes]`. ~6x smaller than PHP `serialize()`.
+- `WorkerNode` — Per-worker coordinator. Routes via hash ring, handles transport envelopes, manages local actor refs.
+- `ConsistentHashRing` — Maps actor names to worker IDs via CRC32 with 150 virtual nodes.
+- `WorkerActorRef<T>` — Cross-worker actor reference. Sends `Envelope` objects directly via `WorkerTransport` — no serializer involved.
+- `WorkerTransport` interface — `send(int $targetWorker, Envelope $envelope): void` / `listen(callable): void`. Implementations: `InMemoryWorkerTransport` (tests), `ThreadQueueTransport` (Swoole threads).
+- `WorkerDirectory` interface — Maps actor paths to worker IDs. Implementations: `InMemoryWorkerDirectory` (tests), `ThreadMapDirectory` (Swoole threads).
+- `WorkerPoolConfig` — `WorkerPoolConfig::withThreads(int $workerCount): self`.
+- `WorkerStartHandler` interface — Implement to set up actors when a worker thread starts.
+
+### Worker Pool Swoole (nexus-worker-pool-swoole)
+
+**Prerequisites:** Requires ZTS (Zend Thread Safety) PHP 8.5+ and Swoole compiled with `--enable-swoole-thread` (Swoole 6.0+).
+
+- `WorkerPoolApp` — Abstract base: extend and override `configure(WorkerNode $node)`, call `static::run(WorkerPoolConfig $config)` to boot the pool.
+- `WorkerPoolBootstrap` — Creates N worker threads via `Swoole\Thread\Pool`. Shares a `Thread\Map` directory and one `Thread\Queue` inbox per worker.
+- `WorkerRunnable` — Thread entrypoint (`Swoole\Thread\Runnable`). Atomically claims a worker ID, boots `ActorSystem` + `SwooleRuntime`, calls `WorkerStartHandler::onWorkerStart()`.
+- `ThreadQueueTransport` — Thread-safe transport backed by one `Swoole\Thread\Queue` per worker. Adaptive-poll coroutine loop with backoff: 0µs → 100µs → 1ms → 10ms.
+- `ThreadMapDirectory` — Thread-safe actor directory backed by shared `Swoole\Thread\Map`.
+
+### Cluster — Remote Contracts (nexus-cluster)
+
+- `NodeAddress` — Value object for multi-machine node addressing (`cluster/datacenter/application/node`).
+- `ClusterTransport` interface — `send(NodeAddress $target, string $data): void`. For future TCP inter-node transport.
+- `NodeDirectory` interface — Maps actor paths to `NodeAddress` for multi-machine routing.
+- `NodeHashRing` — Consistent hash ring mapping actor names to `NodeAddress` instances.
 
 ### Application Bootstrap (nexus-app)
 
@@ -347,7 +366,7 @@ NexusApp::create('my-app')
 Custom Psalm plugin with 7 hooks for actor-specific validation:
 1. **ReadonlyMessageRule** — Messages passed to `tell()` must be `readonly` classes
 2. **MutableActorStateRule** — `ActorHandler`/`StatefulActorHandler` properties must be `readonly`
-3. **NonSerializableClusterMessageRule** — `RemoteActorRef::tell()` messages need `#[MessageType]` attribute
+3. **NonSerializableRemoteMessageRule** — `WorkerActorRef::tell()` messages need `#[MessageType]` attribute
 4. **BlockingCallInHandlerRule** — Detects blocking calls (`sleep`, `file_get_contents`, `curl_exec`, etc.) in handlers
 5. **MutableClosureCaptureRule** — `Props::fromFactory()` closures must not capture by reference (`&$var`)
 6. **PropsReturnTypeProvider** — Infers generic types for `Props::from*()` methods
@@ -368,7 +387,7 @@ All exceptions extend `NexusException` (abstract, extends `RuntimeException`):
 ## Test Organization
 
 - Unit tests: `packages/*/tests/Unit/`
-- Integration tests: `tests/Integration/{Fiber,Swoole,Step,Serialization,Cluster,Persistence}/`
+- Integration tests: `tests/Integration/{Fiber,Swoole,Step,Serialization,WorkerPool,Persistence}/`
 - Performance tests: `tests/Performance/`
 - Test utilities: `packages/nexus-core/tests/Support/` (TestRuntime, TestMailbox, TestClock — included in `phpunit.xml` `<source>` for coverage)
 - PHPUnit attributes: `#[CoversClass(ClassName::class)]` on test classes, `#[CoversNothing]` for interface tests, `#[Test]` on methods
