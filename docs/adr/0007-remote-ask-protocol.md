@@ -13,7 +13,7 @@ Remote `ask()` requires explicit protocol rules for:
 Without a written standard, behavior drifts across refactors.
 
 ## Decision
-The cluster remote ask protocol is standardized as follows.
+The worker pool ask protocol is standardized as follows.
 
 ### 1. Correlation and IDs
 - Every remote ask request is identified by mandatory `Envelope.requestId`.
@@ -21,13 +21,13 @@ The cluster remote ask protocol is standardized as follows.
 - Caller-side pending map key is `requestId`.
 
 ### 2. Control messages
-- `RemoteAskRequest`
-- `RemoteAskReply`
-- `RemoteAskCancel`
-- `RemoteAskCancelled`
-- `RemoteAskAck`
+- `WorkerAskRequest`
+- `WorkerAskReply`
+- `WorkerAskCancel`
+- `WorkerAskCancelled`
+- `WorkerAskAck`
 
-All are transported as envelope payloads over the existing cluster serializer/transport path.
+All are transported as envelope payloads via `WorkerTransport` (no serializer — objects pass directly).
 
 ### 3. Inbound state machine
 State enum: `InProgress`, `Replied`, `Cancelled`
@@ -40,24 +40,24 @@ Transitions:
 
 Terminal precedence:
 - First terminal state wins.
-- Late replies after `Cancelled` are suppressed (must not send `RemoteAskReply`).
+- Late replies after `Cancelled` are suppressed (must not send `WorkerAskReply`).
 
 ### 4. Dedup semantics
-- Duplicate request in `InProgress`: respond with `RemoteAskAck`.
-- Duplicate request in `Replied`: replay cached `RemoteAskReply`.
-- Duplicate request in `Cancelled`: reply `RemoteAskCancelled`.
+- Duplicate request in `InProgress`: respond with `WorkerAskAck`.
+- Duplicate request in `Replied`: replay cached `WorkerAskReply`.
+- Duplicate request in `Cancelled`: reply `WorkerAskCancelled`.
 - Duplicate reply/cancel at caller: ignored after pending request is resolved.
 
 ### 5. Caller retry + ack
-- Caller sends initial `RemoteAskRequest` immediately.
+- Caller sends initial `WorkerAskRequest` immediately.
 - Caller retries request up to configured max attempts until one of:
-  - `RemoteAskAck` received
+  - `WorkerAskAck` received
   - terminal outcome (reply/cancelled/timeout/local cancel)
 - Retry timer is cancelled as soon as ack is observed.
 
 ### 6. Timeout and cancel
-- Caller timeout fails future with `AskTimeoutException`, then sends best-effort `RemoteAskCancel`.
-- Local `Future::cancel()` sends best-effort `RemoteAskCancel`.
+- Caller timeout fails future with `AskTimeoutException`, then sends best-effort `WorkerAskCancel`.
+- Local `Future::cancel()` sends best-effort `WorkerAskCancel`.
 - Remote cancel does not forcibly interrupt actor computation; protocol guarantees only terminal outcome handling and late-reply suppression.
 
 ### 7. Bounded memory requirements
