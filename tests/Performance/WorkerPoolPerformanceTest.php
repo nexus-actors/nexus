@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Performance;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
