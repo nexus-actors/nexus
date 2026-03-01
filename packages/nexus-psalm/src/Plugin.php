@@ -8,7 +8,7 @@ use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
-use Monadial\Nexus\Psalm\Hook\NonSerializableClusterMessageRule;
+use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Override;
@@ -27,7 +27,7 @@ final class Plugin implements PluginEntryPointInterface
         $hooks = [
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
-            NonSerializableClusterMessageRule::class,
+            NonSerializableRemoteMessageRule::class,
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
