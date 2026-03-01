@@ -19,6 +19,7 @@ use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
 use Swoole\Thread\Runnable;
 
+use function Opis\Closure\unserialize as opis_unserialize;
 use function Swoole\Coroutine\run;
 
 /**
@@ -75,8 +76,8 @@ final class WorkerRunnable extends Runnable
             $node->start();
 
             if ($this->serializedConfigure !== '') {
-                /** @psalm-suppress MixedMethodCall */
-                $configure = unserialize($this->serializedConfigure)->getClosure();
+                /** @psalm-suppress MixedFunctionCall */
+                $configure = opis_unserialize($this->serializedConfigure);
                 $configure($node);
             } else {
                 $handler = new $this->handlerClass();
@@ -96,8 +97,8 @@ final class WorkerRunnable extends Runnable
         }
 
         if ($this->serializedLoggerFactory !== '') {
-            /** @psalm-suppress MixedMethodCall, MixedReturnStatement, MixedInferredReturnType */
-            $factory = unserialize($this->serializedLoggerFactory)->getClosure();
+            /** @psalm-suppress MixedFunctionCall, MixedReturnStatement, MixedInferredReturnType */
+            $factory = opis_unserialize($this->serializedLoggerFactory);
 
             return $factory();
         }
