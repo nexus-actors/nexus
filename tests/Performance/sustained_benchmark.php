@@ -1,16 +1,19 @@
 <?php
 
 /**
- * Sustained 16-thread throughput benchmark — uses WorkerPool DSL with onStart.
+ * Sustained multi-producer throughput benchmark — N senders × N workers.
  *
- * Key optimisations over the naive loop:
- *   - Pre-allocates one Envelope per worker (eliminates per-message ULID generation)
- *   - Checks time/reports every $batchSize iterations (eliminates per-message time() call)
- *   - Workers defined via ->behavior() DSL — no hand-rolled thread script needed
+ * Each producer thread owns one worker queue (1-producer : 1-consumer),
+ * eliminating inter-producer mutex contention and saturating all CPU cores.
+ *
+ * Optimisations:
+ *   - One pre-allocated Envelope per sender (no per-message ULID generation)
+ *   - Batch push loop (check time every $batchSize iterations)
+ *   - Stats collected via shared Map; main thread aggregates every $reportInterval
  *
  * Usage:
  *   docker compose exec php-swoole php tests/Performance/sustained_benchmark.php
- *   docker compose exec php-swoole php tests/Performance/sustained_benchmark.php 300
+ *   docker compose exec php-swoole php tests/Performance/sustained_benchmark.php 300 16
  */
 
 declare(strict_types=1);
@@ -44,108 +47,132 @@ if ($autoloader === null) {
 require_once $autoloader;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\WorkerPool\Swoole\WorkerPool;
 use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolHandle;
-use Swoole\Thread\Queue;
+use Swoole\Thread;
+use Swoole\Thread\Atomic;
+use Swoole\Thread\Map;
 
 $durationSeconds = (int) ($argv[1] ?? 300);
+$senderCount     = (int) ($argv[2] ?? 16); // producer threads; default = worker count
 $reportInterval  = 10;
-$batchSize       = 10_000; // push this many messages before checking time
+$batchSize       = 10_000; // messages per batch before stats update
 
 WorkerPool::withThreads(16)
     ->withName('bench')
     ->behavior('sink', static fn(): Behavior => Behavior::receive(
         static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
     ))
-    ->onStart(static function (WorkerPoolHandle $handle) use ($durationSeconds, $reportInterval, $batchSize): void {
-        $workerCount = $handle->workerCount();
-        $queues      = $handle->queues();
+    ->onStart(
+        static function (WorkerPoolHandle $handle) use ($durationSeconds, $reportInterval, $batchSize, $senderCount, $autoloader): void {
+            $workerCount  = $handle->workerCount();
+            $queues       = $handle->queues();
+            $senderScript = __DIR__ . '/producer_thread.php';
 
-        fwrite(STDERR, sprintf(
-            "\n  Sustained benchmark — %d workers, %ds duration\n  Workers ready. Sending...\n\n",
-            $workerCount,
-            $durationSeconds,
-        ));
+            fwrite(STDERR, sprintf(
+                "\n  Sustained benchmark — %d workers, %d senders, %ds duration\n  Workers ready. Starting senders...\n\n",
+                $workerCount,
+                $senderCount,
+                $durationSeconds,
+            ));
 
-        // Pre-allocate one reusable Envelope per worker.
-        // Envelope is final readonly — safe to reuse for throughput testing.
-        $senderPath = ActorPath::root();
+            $stopSignal = new Atomic(0);
+            $statsMap   = new Map();
 
-        /** @var array<int, Envelope> $envelopes */
-        $envelopes = [];
+            /** @var list<\Swoole\Thread> $senderThreads */
+            $senderThreads = [];
 
-        for ($w = 0; $w < $workerCount; $w++) {
-            $envelopes[$w] = Envelope::of(
-                new stdClass(),
-                $senderPath,
-                ActorPath::fromString('/user/sink'),
-            );
-        }
-
-        $endTime       = time() + $durationSeconds;
-        $nextReport    = time() + $reportInterval;
-        $totalSent     = 0;
-        $intervalSent  = 0;
-        $intervalStart = hrtime(true);
-        $globalStart   = hrtime(true);
-        $i             = 0;
-
-        while (true) {
-            // Tight batch — no per-message time() or modulo recomputation overhead.
-            for ($b = 0; $b < $batchSize; $b++) {
-                $queues[$i % $workerCount]->push($envelopes[$i % $workerCount], Queue::NOTIFY_ONE);
-                $i++;
+            for ($s = 0; $s < $senderCount; $s++) {
+                /** @psalm-suppress UndefinedClass */
+                $senderThreads[] = new Thread(
+                    $senderScript,
+                    $autoloader,
+                    $queues,
+                    $workerCount,
+                    $s,
+                    $batchSize,
+                    $stopSignal,
+                    $statsMap,
+                );
             }
 
-            $totalSent    += $batchSize;
-            $intervalSent += $batchSize;
+            $endTime       = time() + $durationSeconds;
+            $nextReport    = time() + $reportInterval;
+            $lastTotal     = 0;
+            $intervalStart = hrtime(true);
+            $globalStart   = hrtime(true);
 
-            if (time() >= $endTime) {
-                break;
+            while (true) {
+                usleep(100_000); // 100 ms poll interval
+
+                if (time() >= $endTime) {
+                    break;
+                }
+
+                if (time() >= $nextReport) {
+                    $totalSent = 0;
+
+                    for ($s = 0; $s < $senderCount; $s++) {
+                        $totalSent += (int) ($statsMap["sent_{$s}"] ?? 0);
+                    }
+
+                    $intervalNs   = hrtime(true) - $intervalStart;
+                    $intervalMs   = $intervalNs / 1_000_000;
+                    $intervalSent = $totalSent - $lastTotal;
+                    $opsPerSec    = $intervalMs > 0.0
+                        ? (float) $intervalSent / $intervalMs * 1000.0
+                        : 0.0;
+                    $elapsed = $durationSeconds - ($endTime - time());
+
+                    fwrite(STDERR, sprintf(
+                        "  t=+%3ds  sent: %12s  throughput: %10s msg/sec\n",
+                        $elapsed,
+                        number_format($totalSent),
+                        number_format((int) $opsPerSec),
+                    ));
+
+                    $lastTotal     = $totalSent;
+                    $intervalStart = hrtime(true);
+                    $nextReport    = time() + $reportInterval;
+                }
             }
 
-            if (time() >= $nextReport) {
-                $intervalNs = hrtime(true) - $intervalStart;
-                $intervalMs = $intervalNs / 1_000_000;
-                $opsPerSec  = $intervalMs > 0.0
-                    ? (float) $intervalSent / $intervalMs * 1000.0
-                    : 0.0;
-                $elapsed = $durationSeconds - ($endTime - time());
+            $stopSignal->set(1);
 
-                fwrite(STDERR, sprintf(
-                    "  t=+%3ds  sent: %12s  throughput: %10s msg/sec\n",
-                    $elapsed,
-                    number_format($totalSent),
-                    number_format((int) $opsPerSec),
-                ));
-
-                $intervalSent  = 0;
-                $intervalStart = hrtime(true);
-                $nextReport    = time() + $reportInterval;
+            foreach ($senderThreads as $thread) {
+                /** @psalm-suppress UndefinedClass */
+                $thread->join();
             }
-        }
 
-        $handle->stop();
+            $handle->stop();
 
-        $globalMs   = (hrtime(true) - $globalStart) / 1_000_000;
-        $avgOpsPerSec = $globalMs > 0.0
-            ? (float) $totalSent / $globalMs * 1000.0
-            : 0.0;
+            // Collect final totals after all senders have stopped.
+            $totalSent = 0;
 
-        fwrite(STDERR, sprintf(
-            "\n  ── Final Results ─────────────────────────────────────\n" .
-            "  Duration:   %.1fs\n" .
-            "  Workers:    %d\n" .
-            "  Sent:       %s messages\n" .
-            "  Throughput: %s msg/sec (avg)\n" .
-            "  ──────────────────────────────────────────────────────\n",
-            $globalMs / 1000.0,
-            $workerCount,
-            number_format($totalSent),
-            number_format((int) $avgOpsPerSec),
-        ));
-    })
+            for ($s = 0; $s < $senderCount; $s++) {
+                $totalSent += (int) ($statsMap["sent_{$s}"] ?? 0);
+            }
+
+            $globalMs     = (hrtime(true) - $globalStart) / 1_000_000;
+            $avgOpsPerSec = $globalMs > 0.0
+                ? (float) $totalSent / $globalMs * 1000.0
+                : 0.0;
+
+            fwrite(STDERR, sprintf(
+                "\n  ── Final Results ─────────────────────────────────────\n" .
+                "  Duration:   %.1fs\n" .
+                "  Workers:    %d\n" .
+                "  Senders:    %d\n" .
+                "  Sent:       %s messages\n" .
+                "  Throughput: %s msg/sec (avg)\n" .
+                "  ──────────────────────────────────────────────────────\n",
+                $globalMs / 1000.0,
+                $workerCount,
+                $senderCount,
+                number_format($totalSent),
+                number_format((int) $avgOpsPerSec),
+            ));
+        },
+    )
     ->run();
