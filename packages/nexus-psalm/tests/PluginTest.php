@@ -54,9 +54,9 @@ final class PluginTest extends TestCase
     public function clusterMessageRuleDetectsUnregisteredMessage(): void
     {
         $output = $this->runPsalmOnFixture('ClusterMessageFixture.php');
-        $lines = $this->filterIssueLines($output, 'NonSerializableClusterMessage');
+        $lines = $this->filterIssueLines($output, 'NonSerializableRemoteMessage');
 
-        self::assertCount(1, $lines, 'Expected exactly 1 NonSerializableClusterMessage issue');
+        self::assertCount(1, $lines, 'Expected exactly 1 NonSerializableRemoteMessage issue');
         self::assertStringContains('UnregisteredMessage', $lines[0]);
     }
 
