@@ -18,12 +18,17 @@
  * Lifecycle per thread:
  *   1. Load autoloader so all project classes are available
  *   2. Atomically claim a unique worker ID
- *   3. Boot SwooleRuntime + ActorSystem + WorkerNode
+ *   3. Boot SwooleRuntime + ActorSystem + WorkerNode (all synchronous setup)
  *   4. Find a sink actor name that hashes to this worker ID (local spawn)
  *   5. Spawn sink actor (increments $messageCounter per message)
  *   6. Publish sink path in $sinkPaths[$workerId]
  *   7. Increment $readyCounter to signal startup complete
- *   8. Poll $stopSignal; when non-zero, shut down actor system and close transport
+ *   8. Register stop-signal poll timer
+ *   9. $system->run() — starts Swoole event loop (blocks until shutdown)
+ *
+ * IMPORTANT: Do NOT wrap in Swoole\Coroutine\run() — $system->run() starts the
+ * event loop itself. Nesting run() inside run() causes "Unable to call Event::wait()
+ * in coroutine" fatal error.
  */
 
 declare(strict_types=1);
@@ -38,12 +43,9 @@ use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
 use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
-use Swoole\Coroutine;
 use Swoole\Thread;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
-
-use function Swoole\Coroutine\run;
 
 $args = Thread::getArguments();
 
@@ -51,12 +53,12 @@ $args = Thread::getArguments();
 $autoloader = $args[0];
 /** @var Map $directory */
 $directory = $args[1];
-/** @var array<int, \Swoole\Thread\Queue> $queues */
+/** @var \Swoole\Thread\ArrayList $queues — Swoole converts PHP arrays to ArrayList in threads */
 $queues = $args[2];
 /** @var Atomic $workerIdCounter */
 $workerIdCounter = $args[3];
 /** @var int $workerCount */
-$workerCount = $args[4];
+$workerCount = (int) $args[4];
 /** @var Atomic $messageCounter */
 $messageCounter = $args[5];
 /** @var Atomic $readyCounter */
@@ -70,81 +72,73 @@ require_once $autoloader;
 
 $workerId = $workerIdCounter->add(1) - 1;
 
-Coroutine::enableScheduler();
+// Swoole converts PHP arrays to Thread\ArrayList when passing between threads — convert back.
+$queuesArray = [];
 
-run(static function () use (
-    $workerId,
-    $directory,
-    $queues,
-    $workerCount,
-    $messageCounter,
-    $readyCounter,
-    $sinkPaths,
-    $stopSignal,
-): void {
-    $runtime   = new SwooleRuntime();
-    $system    = ActorSystem::create("worker-{$workerId}", $runtime);
-    $transport = new ThreadQueueTransport($queues, $workerId);
+for ($i = 0; $i < $workerCount; $i++) {
+    $queuesArray[$i] = $queues[$i];
+}
 
-    $threadDirectory = new ThreadMapDirectory($directory);
-    $ring            = new ConsistentHashRing($workerCount);
-    $node            = new WorkerNode($workerId, $system, $transport, $ring, $threadDirectory);
+// All setup is synchronous — no coroutine context needed yet.
+// SwooleRuntime queues spawn/schedule calls until $system->run() starts the event loop.
+$runtime   = new SwooleRuntime();
+$system    = ActorSystem::create("worker-{$workerId}", $runtime);
+$transport = new ThreadQueueTransport($queuesArray, $workerId);
 
-    $node->start();
+$threadDirectory = new ThreadMapDirectory($directory);
+$ring            = new ConsistentHashRing($workerCount);
+$node            = new WorkerNode($workerId, $system, $transport, $ring, $threadDirectory);
 
-    // Find an actor name that hashes to this worker so the spawn is guaranteed local.
-    $sinkName = null;
+$node->start();
 
-    for ($i = 0; $i < 100_000; $i++) {
-        $candidate = "perf-sink-{$workerId}-{$i}";
+// Find an actor name that hashes to this worker so the spawn is guaranteed local.
+$sinkName = null;
 
-        if ($ring->getWorker($candidate) === $workerId) {
-            $sinkName = $candidate;
+for ($i = 0; $i < 100_000; $i++) {
+    $candidate = "perf-sink-{$workerId}-{$i}";
 
-            break;
+    if ($ring->getWorker($candidate) === $workerId) {
+        $sinkName = $candidate;
+
+        break;
+    }
+}
+
+if ($sinkName === null) {
+    $sinkName = "sink-fallback-{$workerId}";
+}
+
+$counter = $messageCounter;
+
+$sinkBehavior = Behavior::receive(
+    static function (ActorContext $_ctx, object $_msg) use ($counter): Behavior {
+        $counter->add(1);
+
+        return Behavior::same();
+    },
+);
+
+$node->spawn(Props::fromBehavior($sinkBehavior), $sinkName);
+
+// Publish sink path so the main thread can address this actor directly.
+$sinkPaths[$workerId] = "/user/{$sinkName}";
+
+// Signal startup complete — messages pushed to the queue before the event loop
+// starts will be drained by the listener coroutine once $system->run() begins.
+$readyCounter->add(1);
+
+// Register stop-signal poll timer. When stopSignal=1, close transport (ends the
+// receive-loop coroutine) then shutdown the actor system, allowing run() to return.
+$runtime->scheduleRepeatedly(
+    Duration::millis(10),
+    Duration::millis(10),
+    static function () use ($stopSignal, $system, $transport): void {
+        if ($stopSignal->get() === 1) {
+            $transport->close();
+            $system->shutdown(Duration::millis(200));
         }
-    }
+    },
+);
 
-    if ($sinkName === null) {
-        // Extremely unlikely: fall back to bypassing ring routing.
-        $sinkName = "sink-fallback-{$workerId}";
-    }
-
-    $counter = $messageCounter;
-
-    /** @psalm-suppress InvalidArgument */
-    $sinkBehavior = Behavior::receive(
-        static function (ActorContext $_ctx, object $_msg) use ($counter): Behavior {
-            $counter->add(1);
-
-            return Behavior::same();
-        },
-    );
-
-    $node->spawn(Props::fromBehavior($sinkBehavior), $sinkName);
-
-    // Publish sink path so the main thread can address this actor directly.
-    /** @psalm-suppress InaccessibleProperty, InvalidArgument */
-    $sinkPaths[$workerId] = "/user/{$sinkName}";
-
-    // Signal this worker is ready to receive messages.
-    $readyCounter->add(1);
-
-    // Poll the stop signal. When set, shut down the actor system and close the
-    // transport. Closing the transport ends the receive-loop coroutine (which
-    // would otherwise run forever), allowing Co\run() to return.
-    $stop = $stopSignal;
-
-    $runtime->scheduleRepeatedly(
-        Duration::millis(10),
-        Duration::millis(10),
-        static function () use ($stop, $system, $transport): void {
-            if ($stop->get() === 1) {
-                $transport->close();
-                $system->shutdown(Duration::millis(200));
-            }
-        },
-    );
-
-    $system->run();
-});
+// Start the Swoole event loop — blocks until $system->shutdown() is called.
+$system->run();
