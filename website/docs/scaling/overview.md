@@ -1,99 +1,81 @@
----
-sidebar_position: 1
-title: Scaling Overview
----
+# Scaling Overview
 
-# Multi-Process Scaling
+Nexus scales to multiple CPU cores on the same machine using a thread-based worker pool.
+Each worker thread runs an independent `ActorSystem`. Actors are distributed across workers
+via a consistent hash ring. Messages between workers are delivered as `Envelope` objects
+directly through `Swoole\Thread\Queue` — no serialization step.
 
-:::caution Work in Progress
-Nexus is under active development and **not production-ready**. APIs may change
-without notice.
-:::
+## Prerequisites
 
-Nexus scales actors across multiple worker processes on a single machine,
-utilizing all available CPU cores. Each worker runs an independent `ActorSystem`
-with its own `SwooleRuntime`, while a shared directory and Unix socket transport
-enable transparent cross-worker messaging.
-
-This is **single-machine scaling** via Swoole's `Process\Pool` -- not
-distributed clustering across multiple servers. True multi-server clustering
-(TCP transport, distributed directory) is a [planned future feature](../contributing/roadmap.md).
+- ZTS (Zend Thread Safety) PHP 8.5+
+- Swoole 6.0+ compiled with `--enable-swoole-thread`
 
 ## Architecture
 
-### Key components
-
-- **`ClusterNode`** -- Per-worker coordinator. Routes messages locally or via
-  transport based on a consistent hash ring. Each worker has exactly one.
-- **`ConsistentHashRing`** -- Deterministic mapping from actor names to worker
-  IDs using crc32 with 150 virtual nodes. Same output on all workers, no
-  coordination needed.
-- **`RemoteActorRef`** -- Implements `ActorRef<T>` for cross-worker messaging.
-  Actor code never knows if a reference is local or remote.
-- **`UnixSocketTransport`** -- AF_UNIX domain sockets with length-prefixed
-  binary framing. Non-blocking via Swoole coroutines.
-- **`SwooleTableDirectory`** -- Shared-memory actor directory backed by
-  `Swoole\Table`. O(1) lookups across all worker processes.
-
-## Location transparency
-
-The `ActorRef<T>` interface is identical for local and remote actors:
-
-```php
-// This code works regardless of where the actor lives
-$ref->tell(new ProcessOrder($orderId));
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  WorkerPoolBootstrap (main thread)                              │
+│  Thread\Map (shared directory)   Thread\Queue[0..N-1] (inboxes) │
+└──────────────────┬──────────────────────────────────────────────┘
+                   │ Thread\Pool spawns N threads
+     ┌─────────────┼─────────────┐
+     ▼             ▼             ▼
+  Worker 0      Worker 1      Worker 2
+  ActorSystem   ActorSystem   ActorSystem
+  WorkerNode    WorkerNode    WorkerNode
 ```
 
-When `ClusterNode::spawn()` is called, the hash ring determines which worker
-owns the actor. If the actor belongs to the current worker, a `LocalActorRef`
-is returned and the actor runs locally. If it belongs to another worker, a
-`RemoteActorRef` is returned that serializes messages and sends them over Unix
-sockets to the owning worker.
+### Key components
+
+- **`WorkerNode`** — Coordinator for one worker. On `spawn()`, consults the hash ring to
+  decide whether the actor lives locally or on another worker. Registers the result in the
+  shared `WorkerDirectory`.
+- **`ConsistentHashRing`** — Maps actor names to worker IDs via CRC32 with 150 virtual
+  nodes per worker for uniform distribution.
+- **`WorkerActorRef`** — Implements `ActorRef<T>`. For actors on other workers, `tell()`
+  wraps the message in an `Envelope` and pushes it to the target worker's `Thread\Queue`.
+  No serializer; `Thread\Queue` handles the internal copy.
+- **`ThreadQueueTransport`** — One `Swoole\Thread\Queue` per worker as inbox. A
+  coroutine-based receive loop with adaptive backoff polls the queue and delivers
+  incoming envelopes to local actor mailboxes.
+- **`ThreadMapDirectory`** — Shared `Swoole\Thread\Map` mapping actor path strings to
+  worker IDs. All threads read and write the same map; `Thread\Map` handles synchronization.
 
 ## Message flow
 
-1. Actor calls `$ref->tell($message)` on a `RemoteActorRef`.
-2. The message is wrapped in an `Envelope` and serialized by `ClusterSerializer`.
-3. The serialized bytes are sent via `UnixSocketTransport` to the target worker.
-4. The target worker's transport listener deserializes the envelope.
-5. The envelope is delivered to the local actor's mailbox via `enqueueEnvelope()`.
-6. The actor processes the message as if it were sent locally.
+### Local delivery (actor on same worker)
+```
+tell() → Envelope → LocalActorRef → mailbox → handler
+```
 
-## Performance
+### Cross-worker delivery
+```
+tell() → Envelope → WorkerActorRef
+  → ThreadQueueTransport.send(targetWorker, envelope)
+  → Thread\Queue[targetWorker].push(envelope)      (Thread\Queue copies object)
+  → receive loop on target worker
+  → LocalActorRef.enqueueEnvelope(envelope)
+  → mailbox → handler
+```
 
-See the [full performance benchmarks](../architecture/performance.md) for
-detailed numbers across all runtimes. Highlights for multi-process scaling:
+## Location transparency
 
-| Metric | Result |
-|---|---|
-| Cross-worker throughput | **260K** msgs/sec per worker pair |
-| Cross-worker round-trip latency | **20 us**/roundtrip |
-| Serialization throughput | **1.18M** cycles/sec |
+`WorkerNode.spawn()` returns an `ActorRef<T>`. Whether the actor lives on this worker or
+another, the caller uses the same interface:
 
-## Scaling vs clustering
+```php
+$ref = $node->spawn(Props::fromBehavior($behavior), 'orders');
+$ref->tell(new PlaceOrder($items));  // identical regardless of which worker owns 'orders'
+```
 
-| | Multi-process scaling | Multi-server clustering |
-|---|---|---|
-| **Status** | Implemented | Planned |
-| **Scope** | Single machine, multiple CPU cores | Multiple machines over network |
-| **Transport** | Unix domain sockets (AF_UNIX) | TCP (future) |
-| **Directory** | Shared memory (`Swoole\Table`) | Distributed directory (future) |
-| **Use case** | Utilize all cores on one server | Horizontal scale-out |
+## Performance characteristics
 
-The pure PHP abstractions in `nexus-cluster` (`Transport`, `ActorDirectory`,
-`ClusterSerializer`) are designed to support both. Future multi-server
-clustering will provide new transport and directory implementations without
-changes to actor code.
+- **Cross-worker throughput**: ~260K messages/sec per worker pair (no serialization step)
+- **Cross-worker latency**: ~20 µs round-trip
+- **Worker count**: set to the number of available CPU cores for CPU-bound workloads
 
-## Package split
+## Future: multi-machine clustering
 
-Scaling is split across two packages:
-
-| Package | Purpose |
-|---|---|
-| **nexus-cluster** | Pure PHP interfaces and abstractions. No Swoole dependency. |
-| **nexus-cluster-swoole** | Swoole implementations: `UnixSocketTransport`, `SwooleTableDirectory`, `ClusterBootstrap`. |
-
-The packages are named `nexus-cluster` (not `nexus-scaling`) because the same
-abstractions will power both single-machine scaling and future multi-server
-clustering.
+For distributing actors across multiple machines over TCP, see the `nexus-cluster` package.
+It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts.
+A TCP-based implementation will arrive in a future `nexus-cluster-swoole` package.

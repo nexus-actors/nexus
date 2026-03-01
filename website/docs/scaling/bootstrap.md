@@ -1,165 +1,116 @@
----
-sidebar_position: 3
-title: Running Multi-Process
----
+# Bootstrap
 
-# Running Multi-Process
+## Prerequisites
 
-## ClusterBootstrap
+- ZTS PHP 8.5+
+- Swoole 6.0+ with `--enable-swoole-thread`
 
-`ClusterBootstrap` is the entry point for multi-process scaling. It creates a
-`Swoole\Process\Pool`, sets up transport and directory infrastructure, and
-starts each worker with a `ClusterNode`.
+## WorkerPoolApp (recommended)
+
+Extend `WorkerPoolApp`, override `configure()`, call `run()`:
 
 ```php
-use Monadial\Nexus\Cluster\ClusterConfig;
-use Monadial\Nexus\Cluster\ClusterNode;
-use Monadial\Nexus\Cluster\Swoole\ClusterBootstrap;
-use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolApp;
+use Monadial\Nexus\WorkerPool\WorkerNode;
+use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Actor\Behavior;
 
-ClusterBootstrap::create(ClusterConfig::withWorkers(8))
-    ->onWorkerStart(function (ClusterNode $node): void {
-        // Spawn actors -- hash ring determines local vs remote
-        $node->spawn(Props::fromBehavior($orderBehavior), 'orders');
-        $node->spawn(Props::fromBehavior($paymentBehavior), 'payments');
-        $node->spawn(Props::fromBehavior($inventoryBehavior), 'inventory');
-    })
+final class MyApp extends WorkerPoolApp
+{
+    protected function configure(WorkerNode $node): void
+    {
+        $node->spawn(
+            Props::fromBehavior(
+                Behavior::receive(static fn($ctx, $msg) => Behavior::same()),
+            ),
+            'orders',
+        );
+    }
+}
+
+MyApp::run(WorkerPoolConfig::withThreads(swoole_cpu_num()));
+```
+
+`configure()` is called once per worker thread with a fresh `WorkerNode`. Closures inside
+`configure()` are safe — the class is re-instantiated in each thread, so no closure crosses
+a thread boundary.
+
+## WorkerPoolBootstrap (lower-level)
+
+```php
+use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolBootstrap;
+use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
+
+WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads(4))
+    ->withHandler(MyWorkerStartHandler::class)
     ->run();
 ```
 
-### What happens on `run()`
+`withHandler()` accepts a `class-string<WorkerStartHandler>`. The class is instantiated
+fresh in each thread.
 
-1. A `Swoole\Table` is created for the shared actor directory.
-2. The socket directory is created if it doesn't exist.
-3. A `Swoole\Process\Pool` is created with `workerCount` workers.
-4. Each worker process starts independently and:
-   - Creates a `SwooleRuntime` and `ActorSystem`.
-   - Creates a `SwooleTableDirectory` backed by the shared table.
-   - Creates a `UnixSocketTransport` and binds its server socket.
-   - Waits briefly for all workers to bind, then connects to peers.
-   - Creates a `ClusterNode` and starts its transport listener.
-   - Calls your `onWorkerStart` callback with the node.
-   - Runs the actor system event loop.
+## WorkerStartHandler
 
-### Spawning actors
-
-Every worker calls `spawn()` for every actor. The `ConsistentHashRing`
-determines which worker actually creates each actor:
+Implement `WorkerStartHandler` directly when you need more control:
 
 ```php
-->onWorkerStart(function (ClusterNode $node): void {
-    // On worker 3, this might return:
-    // - LocalActorRef for 'orders' (if hash ring assigns it to worker 3)
-    // - RemoteActorRef for 'payments' (if assigned to worker 1)
-    $ordersRef = $node->spawn(Props::fromBehavior($orderBehavior), 'orders');
-    $paymentsRef = $node->spawn(Props::fromBehavior($paymentBehavior), 'payments');
+use Monadial\Nexus\WorkerPool\WorkerStartHandler;
+use Monadial\Nexus\WorkerPool\WorkerNode;
 
-    // Both refs implement ActorRef<T> -- usage is identical
-    $ordersRef->tell(new ProcessOrder($orderId));
-    $paymentsRef->tell(new ChargePayment($amount));
-})
-```
-
-### Looking up actors
-
-Use `ClusterNode::actorFor()` to resolve an actor by path:
-
-```php
-$ref = $node->actorFor('/user/orders');
-
-if ($ref !== null) {
-    $ref->tell(new ProcessOrder($orderId));
+final class MyWorkerStartHandler implements WorkerStartHandler
+{
+    public function onWorkerStart(WorkerNode $node): void
+    {
+        $node->spawn(Props::fromBehavior($behavior), 'orders');
+    }
 }
 ```
 
-Returns `LocalActorRef` if the actor is on the current worker,
-`RemoteActorRef` if on another worker, or `null` if the actor is not
-registered in the directory.
+## Looking up actors
 
-### Custom serializer
-
-Replace the default PHP native serializer:
+After spawning, look up a ref by path from within a handler:
 
 ```php
-ClusterBootstrap::create($config)
-    ->withSerializer(new MyCustomSerializer())
-    ->onWorkerStart(function (ClusterNode $node): void {
-        // ...
-    })
-    ->run();
-```
-
-## Running a script
-
-Multi-process scaling requires the Swoole PHP extension. Save your script as a
-regular PHP file and run it directly:
-
-```bash
-# If you have Swoole installed locally
-php cluster.php
-
-# Or via Docker (Swoole provided by the container)
-docker compose exec php-swoole php cluster.php
-```
-
-The `run()` call blocks -- the script stays alive until the process pool is
-stopped (e.g., via `SIGTERM` or `Ctrl+C`).
-
-### With Docker Compose
-
-If using the provided Docker setup:
-
-```bash
-# Start containers
-make up
-
-# Run your scaling script
-docker compose exec php-swoole php your-script.php
-
-# Run integration tests
-make test-cluster
+$ref = $node->actorFor('/user/orders');  // null if not registered
 ```
 
 ## Example: distributed counter
 
-A complete example with actors distributed across workers:
-
 ```php
-use Monadial\Nexus\Cluster\ClusterConfig;
-use Monadial\Nexus\Cluster\ClusterNode;
-use Monadial\Nexus\Cluster\Swoole\ClusterBootstrap;
-use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorWithState;
-use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolApp;
+use Monadial\Nexus\WorkerPool\WorkerNode;
+use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
 
-// Define a stateful counter actor
-$counterBehavior = Behavior::withState(
-    0,
-    function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
-        $next = $count + 1;
-        $ctx->log()->info("Counter at {$next} on worker {$msg->workerId}");
-        return BehaviorWithState::next($next);
-    },
-);
+readonly class Increment {}
+readonly class GetCount { public function __construct(public ActorRef $replyTo) {} }
 
-// Run with 4 workers
-ClusterBootstrap::create(ClusterConfig::withWorkers(4))
-    ->onWorkerStart(function (ClusterNode $node) use ($counterBehavior): void {
-        // Each worker spawns all actors, but only the owner creates them locally
-        for ($i = 0; $i < 100; $i++) {
-            $ref = $node->spawn(
-                Props::fromBehavior($counterBehavior),
+final class CounterApp extends WorkerPoolApp
+{
+    protected function configure(WorkerNode $node): void
+    {
+        // Spawn 8 named counters — each lands on the worker its name hashes to
+        for ($i = 0; $i < 8; $i++) {
+            $node->spawn(
+                Props::fromBehavior(
+                    Behavior::withState(
+                        0,
+                        static function ($ctx, $msg, int $count) {
+                            if ($msg instanceof Increment) {
+                                return BehaviorWithState::next($count + 1);
+                            }
+                            if ($msg instanceof GetCount) {
+                                $msg->replyTo->tell($count);
+                            }
+                            return BehaviorWithState::same();
+                        },
+                    ),
+                ),
                 "counter-{$i}",
             );
-
-            // Send a message to each -- local or remote, it just works
-            $ref->tell((object) ['workerId' => $node->workerId()]);
         }
-    })
-    ->run();
-```
+    }
+}
 
-With 4 workers, roughly 25 of the 100 counters will be local to each worker.
-Messages to remote counters are transparently routed via Unix sockets.
+CounterApp::run(WorkerPoolConfig::withThreads(4));
+```
