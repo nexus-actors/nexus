@@ -12,7 +12,7 @@ use InvalidArgumentException;
  */
 final readonly class WorkerPoolConfig
 {
-    private function __construct(public int $workerCount) {}
+    private function __construct(public int $workerCount, public string $systemNamePrefix = 'worker') {}
 
     public static function withThreads(int $workerCount): self
     {
@@ -21,5 +21,10 @@ final readonly class WorkerPoolConfig
         }
 
         return new self($workerCount);
+    }
+
+    public function withSystemNamePrefix(string $prefix): self
+    {
+        return new self($this->workerCount, $prefix);
     }
 }
