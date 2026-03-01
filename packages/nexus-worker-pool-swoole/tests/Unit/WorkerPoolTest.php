@@ -9,7 +9,9 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
+use Monadial\Nexus\Core\Actor\StatefulActorHandler;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Directory\InMemoryWorkerDirectory;
@@ -141,10 +143,15 @@ final class WorkerPoolTestActor implements ActorHandler
     }
 }
 
-final class WorkerPoolTestStatefulActor implements ActorHandler
+final class WorkerPoolTestStatefulActor implements StatefulActorHandler
 {
-    public function handle(ActorContext $ctx, object $message): Behavior
+    public function initialState(): int
     {
-        return Behavior::same();
+        return 0;
+    }
+
+    public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
+    {
+        return BehaviorWithState::same();
     }
 }
