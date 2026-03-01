@@ -57,7 +57,6 @@ use Swoole\Thread\Map;
 $durationSeconds = (int) ($argv[1] ?? 300);
 $senderCount     = (int) ($argv[2] ?? 16); // producer threads; default = worker count
 $reportInterval  = 10;
-$batchSize       = 10_000; // messages per batch before stats update
 
 WorkerPool::withThreads(16)
     ->withName('bench')
@@ -65,7 +64,7 @@ WorkerPool::withThreads(16)
         static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
     ))
     ->onStart(
-        static function (WorkerPoolHandle $handle) use ($durationSeconds, $reportInterval, $batchSize, $senderCount, $autoloader): void {
+        static function (WorkerPoolHandle $handle) use ($durationSeconds, $reportInterval, $senderCount, $autoloader): void {
             $workerCount  = $handle->workerCount();
             $queues       = $handle->queues();
             $senderScript = __DIR__ . '/producer_thread.php';
@@ -91,7 +90,6 @@ WorkerPool::withThreads(16)
                     $queues,
                     $workerCount,
                     $s,
-                    $batchSize,
                     $stopSignal,
                     $statsMap,
                 );
