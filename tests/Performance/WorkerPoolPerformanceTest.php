@@ -650,6 +650,173 @@ final class WorkerPoolPerformanceTest extends TestCase
     }
 
     /**
+     * Full-core saturation: 16-worker thread pool with fan-out message distribution.
+     *
+     * Boots 16 Swoole threads (one per CPU core) and distributes $messageCount messages
+     * evenly across all worker queues via round-robin fan-out. All 16 sink actors run
+     * concurrently, each incrementing the shared $messageCounter.
+     *
+     * Measures aggregate throughput and per-message latency across all 16 cores.
+     *
+     * Run: docker compose run --rm php-swoole vendor/bin/phpunit --testsuite=performance --filter=testSixteenThreadWorkerPool
+     */
+    #[Test]
+    #[RequiresPhpExtension('swoole')]
+    public function testSixteenThreadWorkerPool(): void
+    {
+        $workerCount  = 16;
+        $messageCount = 100_000;
+        $workerScript = __DIR__ . '/thread_worker_script.php';
+
+        $directory       = new Map();
+        $workerIdCounter = new Atomic(0);
+        $messageCounter  = new Atomic(0);
+        $readyCounter    = new Atomic(0);
+        $sinkPaths       = new Map();
+        $stopSignal      = new Atomic(0);
+
+        /** @var array<int, Queue> $queues */
+        $queues = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            $queues[$i] = new Queue();
+        }
+
+        $autoloader = $this->findAutoloader();
+
+        /** @var list<\Swoole\Thread> $threads */
+        $threads = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            /** @psalm-suppress UndefinedClass */
+            $threads[] = new Thread(
+                $workerScript,
+                $autoloader,
+                $directory,
+                $queues,
+                $workerIdCounter,
+                $workerCount,
+                $messageCounter,
+                $readyCounter,
+                $sinkPaths,
+                $stopSignal,
+            );
+        }
+
+        // Wait for all 16 workers to become ready (max 30s — more workers need more time).
+        $deadline = time() + 30;
+
+        while ($readyCounter->get() < $workerCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail('Worker threads did not become ready within 30 seconds');
+            }
+
+            usleep(10_000); // 10ms poll
+        }
+
+        // Build per-worker sink targets for fan-out distribution.
+        /** @var array<int, Queue> $targetQueues */
+        $targetQueues = [];
+        /** @var array<int, ActorPath> $targetPaths */
+        $targetPaths = [];
+
+        for ($w = 0; $w < $workerCount; $w++) {
+            /** @psalm-suppress InvalidArgument */
+            $path = isset($sinkPaths[$w])
+                ? (string) $sinkPaths[$w]
+                : '';
+
+            if ($path === '') {
+                continue;
+            }
+
+            $queue = $queues[$w] ?? null;
+
+            if ($queue === null) {
+                continue;
+            }
+
+            $targetQueues[] = $queue;
+            $targetPaths[]  = ActorPath::fromString($path);
+        }
+
+        self::assertCount($workerCount, $targetQueues, 'Not all workers published sink paths');
+
+        $senderPath   = ActorPath::root();
+        $targetCount  = count($targetQueues);
+
+        // Fan-out: round-robin push messages across all 16 worker queues.
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $messageCount; $i++) {
+            $idx      = $i % $targetCount;
+            $envelope = Envelope::of(new stdClass(), $senderPath, $targetPaths[$idx]);
+            $targetQueues[$idx]->push($envelope, Queue::NOTIFY_ONE);
+        }
+
+        // Wait for all messages to be processed (max 60s for 100K across 16 workers).
+        $deadline = time() + 60;
+
+        while ($messageCounter->get() < $messageCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail(sprintf(
+                    'Timed out: only %d/%d messages processed after 60s',
+                    $messageCounter->get(),
+                    $messageCount,
+                ));
+            }
+
+            usleep(5_000); // 5ms poll
+        }
+
+        /** @psalm-suppress InvalidOperand */
+        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+
+        $stopSignal->set(1);
+
+        foreach ($threads as $thread) {
+            /** @psalm-suppress UndefinedClass */
+            $thread->join();
+        }
+
+        /** @psalm-suppress InvalidOperand */
+        $opsPerSecond = $elapsedMs > 0.0
+            ? (float) $messageCount / $elapsedMs * 1000.0
+            : 0.0;
+
+        $usPerMessage = $elapsedMs > 0.0
+            ? $elapsedMs * 1000.0 / (float) $messageCount
+            : 0.0;
+
+        fwrite(STDERR, sprintf(
+            "\n  [WorkerPool: %d workers × %s msgs/worker = %s total | fan-out] %.1fms (%.0f msg/sec, %.1fμs/msg)\n",
+            $workerCount,
+            number_format(intdiv($messageCount, $workerCount)),
+            number_format($messageCount),
+            $elapsedMs,
+            $opsPerSecond,
+            $usPerMessage,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
+        self::assertSame($messageCount, $messageCounter->get(), 'Not all messages were processed');
+    }
+
+    /**
      * Resolve the path to vendor/autoload.php.
      */
     private function findAutoloader(): string
