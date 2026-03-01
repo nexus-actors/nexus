@@ -28,7 +28,6 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Swoole\Thread;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
-use Swoole\Thread\Queue;
 
 $args = Thread::getArguments();
 
@@ -54,21 +53,29 @@ $envelope = Envelope::of(
 );
 
 // Backpressure constants.
-// MAX_DEPTH caps each queue at ~10 K items (~3 MB at 300 B/envelope).
-// PUSH_CHUNK is the batch size between depth checks.
-const MAX_DEPTH  = 10_000;
-const PUSH_CHUNK = 1_000;
+// MAX_DEPTH: cap each queue at ~500 K items (~150 MB at 300 B/envelope per queue,
+//            ~2.4 GB across 16 queues).  Larger buffer keeps the worker coroutine
+//            in its tight drain loop far longer, greatly reducing the 1 ms "queue
+//            went empty" sleep overhead.
+// PUSH_CHUNK: batch size between depth checks.  Bigger chunks mean fewer
+//             count() calls (each involves a mutex) per message.
+// push(…, 0): workers use non-blocking pop(0) so no condvar waiter exists;
+//             NOTIFY_ONE would acquire+signal+release a mutex for nothing.
+const MAX_DEPTH  = 500_000;
+const PUSH_CHUNK = 10_000;
 
 $localSent = 0;
 
 while ($stopSignal->get() === 0) {
-    // Backpressure: worker is behind — spin until it drains some items.
-    while ($targetQueue->count() >= MAX_DEPTH) {
-        // intentional busy-wait
+    // Backpressure: worker is behind — yield CPU so it can drain.
+    if ($targetQueue->count() >= MAX_DEPTH) {
+        usleep(500); // 0.5 ms — give the worker coroutine its core back
+
+        continue;
     }
 
     for ($b = 0; $b < PUSH_CHUNK; $b++) {
-        $targetQueue->push($envelope, Queue::NOTIFY_ONE);
+        $targetQueue->push($envelope, 0); // 0 = no condvar notify; workers use pop(0)
     }
 
     $localSent += PUSH_CHUNK;
