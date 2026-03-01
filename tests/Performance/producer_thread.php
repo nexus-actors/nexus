@@ -7,14 +7,18 @@
  * giving a true 1-producer : 1-consumer mapping with zero inter-producer
  * mutex contention on any single queue.
  *
+ * Backpressure: the sender spins until the queue drains below MAX_DEPTH
+ * before pushing the next chunk.  This keeps queue memory bounded and
+ * ensures measured throughput reflects actual worker processing speed,
+ * not queue-fill speed.
+ *
  * Args via Swoole\Thread::getArguments():
  *   [0] string    $autoloader
  *   [1] ArrayList $queues       (PHP array passed as Swoole ArrayList)
  *   [2] int       $workerCount
  *   [3] int       $senderId
- *   [4] int       $batchSize
- *   [5] Atomic    $stopSignal
- *   [6] Map       $statsMap     (key "sent_{senderId}" → cumulative count)
+ *   [4] Atomic    $stopSignal
+ *   [5] Map       $statsMap     (key "sent_{senderId}" → cumulative count)
  */
 
 declare(strict_types=1);
@@ -32,11 +36,10 @@ $autoloader  = (string) $args[0];
 $queuesArg   = $args[1];
 $workerCount = (int) $args[2];
 $senderId    = (int) $args[3];
-$batchSize   = (int) $args[4];
 /** @var Atomic $stopSignal */
-$stopSignal = $args[5];
+$stopSignal = $args[4];
 /** @var Map $statsMap */
-$statsMap = $args[6];
+$statsMap = $args[5];
 
 require_once $autoloader;
 
@@ -50,13 +53,24 @@ $envelope = Envelope::of(
     ActorPath::fromString('/user/sink'),
 );
 
+// Backpressure constants.
+// MAX_DEPTH caps each queue at ~10 K items (~3 MB at 300 B/envelope).
+// PUSH_CHUNK is the batch size between depth checks.
+const MAX_DEPTH  = 10_000;
+const PUSH_CHUNK = 1_000;
+
 $localSent = 0;
 
 while ($stopSignal->get() === 0) {
-    for ($b = 0; $b < $batchSize; $b++) {
+    // Backpressure: worker is behind — spin until it drains some items.
+    while ($targetQueue->count() >= MAX_DEPTH) {
+        // intentional busy-wait
+    }
+
+    for ($b = 0; $b < PUSH_CHUNK; $b++) {
         $targetQueue->push($envelope, Queue::NOTIFY_ONE);
     }
 
-    $localSent += $batchSize;
+    $localSent += PUSH_CHUNK;
     $statsMap["sent_{$senderId}"] = $localSent;
 }
