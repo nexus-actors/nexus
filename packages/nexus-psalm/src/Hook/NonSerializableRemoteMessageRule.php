@@ -19,7 +19,7 @@ use Psalm\Type\Atomic\TNamedObject;
 use function strcasecmp;
 use function strtolower;
 
-final class NonSerializableClusterMessageRule implements AfterMethodCallAnalysisInterface
+final class NonSerializableRemoteMessageRule implements AfterMethodCallAnalysisInterface
 {
     private const array CHECKED_METHODS = [
         'monadial\nexus\core\actor\actorref::tell' => 0,

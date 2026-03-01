@@ -51,7 +51,7 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
-    public function clusterMessageRuleDetectsUnregisteredMessage(): void
+    public function remoteMessageRuleDetectsUnregisteredMessage(): void
     {
         $output = $this->runPsalmOnFixture('ClusterMessageFixture.php');
         $lines = $this->filterIssueLines($output, 'NonSerializableRemoteMessage');
@@ -61,7 +61,7 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
-    public function clusterMessageRuleAllowsRegisteredMessage(): void
+    public function remoteMessageRuleAllowsRegisteredMessage(): void
     {
         $output = $this->runPsalmOnFixture('ClusterMessageFixture.php');
 
