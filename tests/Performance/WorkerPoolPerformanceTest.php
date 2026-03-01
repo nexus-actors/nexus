@@ -23,6 +23,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Swoole\Coroutine;
+use Swoole\Thread;
+use Swoole\Thread\Atomic;
+use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
 
 use function Swoole\Coroutine\run;
@@ -318,6 +321,359 @@ final class WorkerPoolPerformanceTest extends TestCase
         ));
 
         self::assertGreaterThan(0, $pushOpsPerSecond);
+    }
+
+    /**
+     * Cross-thread actor throughput: N messages delivered to a real Swoole actor system.
+     *
+     * Boots a 2-worker thread pool using Swoole\Thread directly (not Thread\Pool, which
+     * blocks the calling thread). Each thread runs a full ActorSystem + WorkerNode with
+     * one "sink" actor that increments a shared Thread\Atomic counter per message.
+     *
+     * The main test thread injects envelopes directly into the workers' Thread\Queues,
+     * bypassing the WorkerActorRef layer. This isolates the actor dispatch path (queue
+     * pop → listener → localRefs lookup → Channel push → coroutine wake → handler).
+     *
+     * Thread coordination:
+     *   - $readyCounter — workers increment this on startup; main thread polls until >= 2
+     *   - $sinkPaths    — workers publish their sink actor path; main thread reads it
+     *   - $stopSignal   — main thread sets to 1 after measurement; workers shut down
+     *
+     * Target: >50K cross-thread actor messages/sec.
+     *
+     * Run: docker compose run --rm php-swoole vendor/bin/phpunit --testsuite=performance --filter=testThreadedActor
+     */
+    #[Test]
+    #[RequiresPhpExtension('swoole')]
+    public function testThreadedActorThroughput(): void
+    {
+        $workerCount  = 2;
+        $messageCount = 5_000;
+        $workerScript = __DIR__ . '/thread_worker_script.php';
+
+        // Shared thread-safe objects — the ONLY types that cross thread boundaries.
+        $directory      = new Map();
+        $workerIdCounter = new Atomic(0);
+        $messageCounter = new Atomic(0);
+        $readyCounter   = new Atomic(0);
+        $sinkPaths      = new Map();
+        $stopSignal     = new Atomic(0);
+
+        /** @var array<int, Queue> $queues */
+        $queues = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            $queues[$i] = new Queue();
+        }
+
+        $autoloader = $this->findAutoloader();
+
+        // Start worker threads. Swoole\Thread is non-blocking — the thread runs
+        // in the background and the main thread continues immediately.
+        /** @var list<\Swoole\Thread> $threads */
+        $threads = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            /** @psalm-suppress UndefinedClass */
+            $threads[] = new Thread(
+                $workerScript,
+                $autoloader,
+                $directory,
+                $queues,
+                $workerIdCounter,
+                $workerCount,
+                $messageCounter,
+                $readyCounter,
+                $sinkPaths,
+                $stopSignal,
+            );
+        }
+
+        // Wait for all workers to finish startup (max 15s).
+        $deadline = time() + 15;
+
+        while ($readyCounter->get() < $workerCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail('Worker threads did not become ready within 15 seconds');
+            }
+
+            usleep(10_000); // 10ms poll
+        }
+
+        // Pick the sink path for worker 1 (any worker would do).
+        // Key 1 = worker 1's sink path (set by $sinkPaths[$workerId] = "/user/..." in thread script).
+        /** @psalm-suppress InvalidArgument */
+        $sinkPath = isset($sinkPaths[1])
+            ? (string) $sinkPaths[1]
+            : '';
+
+        if ($sinkPath === '' && isset($sinkPaths[0])) {
+            /** @psalm-suppress InvalidArgument */
+            $sinkPath = (string) $sinkPaths[0];
+            $targetWorkerForSink = 0;
+        } else {
+            $targetWorkerForSink = 1;
+        }
+
+        self::assertNotEmpty($sinkPath, 'No sink path published by workers');
+
+        $targetQueue = $queues[$targetWorkerForSink] ?? null;
+        self::assertNotNull($targetQueue, "No queue for worker {$targetWorkerForSink}");
+
+        $targetActorPath = ActorPath::fromString($sinkPath);
+        $senderPath      = ActorPath::root();
+
+        // Inject N envelopes directly to the target worker's inbox.
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $messageCount; $i++) {
+            $envelope = Envelope::of(new stdClass(), $senderPath, $targetActorPath);
+            $targetQueue->push($envelope, Queue::NOTIFY_ONE);
+        }
+
+        // Wait for the sink actor to process all messages (max 30s).
+        $deadline = time() + 30;
+
+        while ($messageCounter->get() < $messageCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail(sprintf(
+                    'Timed out: only %d/%d messages processed after 30s',
+                    $messageCounter->get(),
+                    $messageCount,
+                ));
+            }
+
+            usleep(5_000); // 5ms poll
+        }
+
+        /** @psalm-suppress InvalidOperand */
+        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+
+        // Signal workers to shut down.
+        $stopSignal->set(1);
+
+        foreach ($threads as $thread) {
+            /** @psalm-suppress UndefinedClass */
+            $thread->join();
+        }
+
+        /** @psalm-suppress InvalidOperand */
+        $opsPerSecond = $elapsedMs > 0.0
+            ? (float) $messageCount / $elapsedMs * 1000.0
+            : 0.0;
+
+        $usPerMessage = $elapsedMs > 0.0
+            ? $elapsedMs * 1000.0 / (float) $messageCount
+            : 0.0;
+
+        fwrite(STDERR, sprintf(
+            "\n  [WorkerPool: %s cross-thread actor messages via Swoole threads] %.1fms (%.0f msg/sec, %.1fμs/msg)\n",
+            number_format($messageCount),
+            $elapsedMs,
+            $opsPerSecond,
+            $usPerMessage,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
+        self::assertSame($messageCount, $messageCounter->get(), 'Not all messages were processed');
+    }
+
+    /**
+     * Cross-thread actor latency: derived per-message latency from small burst.
+     *
+     * Boots the same 2-worker thread pool as testThreadedActorThroughput but uses a
+     * smaller burst (500 messages) to measure per-message latency without batching
+     * amortization. Latency is derived as: total_elapsed / message_count.
+     *
+     * Note: This is not a true point-to-point latency measurement (which would require
+     * per-message timestamps). It measures the average end-to-end latency across a burst,
+     * including queue push + coroutine wakeup + actor handler + Atomic increment.
+     *
+     * Target: <500μs average end-to-end cross-thread latency.
+     *
+     * Run: docker compose run --rm php-swoole vendor/bin/phpunit --testsuite=performance --filter=testThreadedActor
+     */
+    #[Test]
+    #[RequiresPhpExtension('swoole')]
+    public function testThreadedActorLatency(): void
+    {
+        $workerCount  = 2;
+        $messageCount = 500;
+        $workerScript = __DIR__ . '/thread_worker_script.php';
+
+        $directory       = new Map();
+        $workerIdCounter = new Atomic(0);
+        $messageCounter  = new Atomic(0);
+        $readyCounter    = new Atomic(0);
+        $sinkPaths       = new Map();
+        $stopSignal      = new Atomic(0);
+
+        /** @var array<int, Queue> $queues */
+        $queues = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            $queues[$i] = new Queue();
+        }
+
+        $autoloader = $this->findAutoloader();
+
+        /** @var list<\Swoole\Thread> $threads */
+        $threads = [];
+
+        for ($i = 0; $i < $workerCount; $i++) {
+            /** @psalm-suppress UndefinedClass */
+            $threads[] = new Thread(
+                $workerScript,
+                $autoloader,
+                $directory,
+                $queues,
+                $workerIdCounter,
+                $workerCount,
+                $messageCounter,
+                $readyCounter,
+                $sinkPaths,
+                $stopSignal,
+            );
+        }
+
+        // Wait for all workers to become ready (max 15s).
+        $deadline = time() + 15;
+
+        while ($readyCounter->get() < $workerCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail('Worker threads did not become ready within 15 seconds');
+            }
+
+            usleep(10_000);
+        }
+
+        /** @psalm-suppress InvalidArgument */
+        $sinkPath = isset($sinkPaths[1])
+            ? (string) $sinkPaths[1]
+            : '';
+
+        if ($sinkPath === '' && isset($sinkPaths[0])) {
+            /** @psalm-suppress InvalidArgument */
+            $sinkPath = (string) $sinkPaths[0];
+            $targetWorkerForSink = 0;
+        } else {
+            $targetWorkerForSink = 1;
+        }
+
+        self::assertNotEmpty($sinkPath, 'No sink path published by workers');
+
+        $targetQueue = $queues[$targetWorkerForSink] ?? null;
+        self::assertNotNull($targetQueue, "No queue for worker {$targetWorkerForSink}");
+
+        $targetActorPath = ActorPath::fromString($sinkPath);
+        $senderPath      = ActorPath::root();
+
+        // Measure total elapsed for a small burst.
+        $start = hrtime(true);
+
+        for ($i = 0; $i < $messageCount; $i++) {
+            $envelope = Envelope::of(new stdClass(), $senderPath, $targetActorPath);
+            $targetQueue->push($envelope, Queue::NOTIFY_ONE);
+        }
+
+        $deadline = time() + 30;
+
+        while ($messageCounter->get() < $messageCount) {
+            if (time() > $deadline) {
+                $stopSignal->set(1);
+
+                foreach ($threads as $thread) {
+                    /** @psalm-suppress UndefinedClass */
+                    $thread->join();
+                }
+
+                self::fail(sprintf(
+                    'Timed out: only %d/%d messages processed',
+                    $messageCounter->get(),
+                    $messageCount,
+                ));
+            }
+
+            usleep(1_000); // 1ms poll — tighter for latency test
+        }
+
+        /** @psalm-suppress InvalidOperand */
+        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+
+        $stopSignal->set(1);
+
+        foreach ($threads as $thread) {
+            /** @psalm-suppress UndefinedClass */
+            $thread->join();
+        }
+
+        $avgUsPerMessage = $elapsedMs > 0.0
+            ? $elapsedMs * 1000.0 / (float) $messageCount
+            : 0.0;
+
+        /** @psalm-suppress InvalidOperand */
+        $opsPerSecond = $elapsedMs > 0.0
+            ? (float) $messageCount / $elapsedMs * 1000.0
+            : 0.0;
+
+        fwrite(STDERR, sprintf(
+            "\n  [WorkerPool: %s cross-thread latency burst] %.1fms total | %.1fμs avg/msg | %.0f msg/sec\n",
+            number_format($messageCount),
+            $elapsedMs,
+            $avgUsPerMessage,
+            $opsPerSecond,
+        ));
+
+        self::assertGreaterThan(0, $opsPerSecond);
+        self::assertSame($messageCount, $messageCounter->get(), 'Not all messages were processed');
+    }
+
+    /**
+     * Resolve the path to vendor/autoload.php.
+     */
+    private function findAutoloader(): string
+    {
+        foreach (get_included_files() as $file) {
+            if (str_ends_with($file, 'vendor/autoload.php')) {
+                return $file;
+            }
+        }
+
+        // Fallback: walk up from this file.
+        $dir = __DIR__;
+
+        while ($dir !== '/') {
+            $candidate = $dir . '/vendor/autoload.php';
+
+            if (file_exists($candidate)) {
+                return $candidate;
+            }
+
+            $dir = dirname($dir);
+        }
+
+        self::fail('Could not locate vendor/autoload.php');
     }
 
     /**
