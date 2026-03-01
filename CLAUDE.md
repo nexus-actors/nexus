@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 13 packages under `packages/`, each published independently to Packagist.
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 15 packages under `packages/`, each published independently to Packagist.
 
 ## Development Environment
 
@@ -24,7 +24,7 @@ make shell          # Interactive bash in PHP container
 **Docker services** (`docker-compose.yml`):
 - `php` — Full environment (Xdebug + Swoole) for development
 - `php-fiber` — Fiber-only for unit/integration tests and CI
-- `php-swoole` — Swoole-only for cluster tests and CI
+- `php-swoole` — Swoole-only for Swoole and worker-pool tests and CI
 
 **Dockerfile targets** (`docker/Dockerfile`):
 - `php-fiber` — PHP 8.5 CLI + Xdebug
@@ -415,7 +415,7 @@ Swoole tests differ: messages must be sent inside `scheduleOnce()` callbacks (Sw
 3. `static-analysis` — Psalm + Deptrac (with `php -d error_reporting="E_ALL & ~E_DEPRECATED"` for deptrac PHP 8.5 compat)
 4. `unit-tests` — Unit tests with coverage + Swoole unit tests + Psalm plugin tests + coverage-guard (90% method coverage minimum)
 5. `integration-fiber` — Fiber, Serialization, Step, Persistence integration tests
-6. `integration-swoole` — Swoole + Cluster integration tests
+6. `integration-swoole` — Swoole + Worker Pool integration tests
 7. `mutation-testing` — Infection on PRs only (`continue-on-error: true` for PHPUnit 13 compat)
 
 **split.yml** — Splits each package to its own GitHub repo via splitsh-lite (gated on CI success)
@@ -424,7 +424,7 @@ Swoole tests differ: messages must be sent inside `scheduleOnce()` callbacks (Sw
 
 ## Monorepo Package Updates
 
-When modifying dev dependency versions (e.g., PHPUnit), update both the root `composer.json` AND all 11 `packages/*/composer.json` files — each package is published independently to Packagist.
+When modifying dev dependency versions (e.g., PHPUnit), update both the root `composer.json` AND all 13 `packages/*/composer.json` files — each package is published independently to Packagist.
 
 ## PSR Integration
 
