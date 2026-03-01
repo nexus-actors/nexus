@@ -12,6 +12,7 @@ use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
 use Monadial\Nexus\WorkerPool\WorkerStartHandler;
+use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
@@ -24,15 +25,16 @@ use function Swoole\Coroutine\run;
  * @psalm-api
  *
  * Thread entrypoint for each worker in the pool.
- * Receives shared Thread\Map (directory) and Thread\Queue[] (inboxes)
- * as constructor arguments — these are the only types that can cross thread boundaries.
  *
- * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency, UnusedProperty — Swoole\Thread\Pool and Runnable not in stubs; properties used in run() invoked by Thread\Pool
+ * Receives shared Thread\Map (directory) and Thread\Queue[] (inboxes) plus
+ * optional serialized configure closure and logger factory from WorkerPoolBootstrap.
+ *
+ * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency, UnusedProperty
  */
 final class WorkerRunnable extends Runnable
 {
     /**
-     * @param array<int, Queue> $queues
+     * @param array<int, Queue>                $queues
      * @param class-string<WorkerStartHandler> $handlerClass
      */
     public function __construct(
@@ -41,23 +43,28 @@ final class WorkerRunnable extends Runnable
         private readonly Atomic $workerIdCounter,
         private readonly WorkerPoolConfig $config,
         private readonly string $handlerClass,
+        private readonly string $serializedConfigure,
+        private readonly string $loggerClass,
+        private readonly string $serializedLoggerFactory,
     ) {}
 
     public function run(): void
     {
-        // Atomically claim a worker ID (0-indexed). Each thread gets a unique ID.
         $workerId = $this->workerIdCounter->add(1) - 1;
 
         Coroutine::enableScheduler();
 
         /** @psalm-suppress UnusedFunctionCall */
         run(function () use ($workerId): void {
-            $runtime = new SwooleRuntime();
-            $system = ActorSystem::create("worker-{$workerId}", $runtime);
+            $logger     = $this->createLogger();
+            $runtime    = new SwooleRuntime();
+            $systemName = "{$this->config->systemNamePrefix}-{$workerId}";
+            $system     = ActorSystem::create($systemName, $runtime, null, $logger);
+
             $directory = new ThreadMapDirectory($this->directory);
             $transport = new ThreadQueueTransport($this->queues, $workerId);
-            $ring = new ConsistentHashRing($this->config->workerCount);
-            $node = new WorkerNode(
+            $ring      = new ConsistentHashRing($this->config->workerCount);
+            $node      = new WorkerNode(
                 $workerId,
                 $system,
                 $transport,
@@ -67,10 +74,34 @@ final class WorkerRunnable extends Runnable
 
             $node->start();
 
-            $handler = new $this->handlerClass();
-            $handler->onWorkerStart($node);
+            if ($this->serializedConfigure !== '') {
+                /** @psalm-suppress MixedMethodCall */
+                $configure = unserialize($this->serializedConfigure)->getClosure();
+                $configure($node);
+            } else {
+                $handler = new $this->handlerClass();
+                $handler->onWorkerStart($node);
+            }
 
             $system->run();
         });
+    }
+
+    /** @psalm-suppress UnusedMethod */
+    private function createLogger(): ?LoggerInterface
+    {
+        if ($this->loggerClass !== '') {
+            /** @psalm-suppress MixedReturnStatement, MixedInferredReturnType */
+            return new $this->loggerClass();
+        }
+
+        if ($this->serializedLoggerFactory !== '') {
+            /** @psalm-suppress MixedMethodCall, MixedReturnStatement, MixedInferredReturnType */
+            $factory = unserialize($this->serializedLoggerFactory)->getClosure();
+
+            return $factory();
+        }
+
+        return null;
     }
 }
