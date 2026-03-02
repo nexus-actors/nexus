@@ -37,7 +37,7 @@ Key features:
 
 TCP-based clustering across multiple hosts. `nexus-cluster` contracts
 (`ClusterTransport`, `NodeDirectory`, `NodeHashRing`, `NodeAddress`) are defined.
-A future `nexus-cluster-swoole` will provide the TCP implementation.
+A future TCP transport package will provide the implementation.
 
 ## Observability
 
