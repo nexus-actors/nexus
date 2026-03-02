@@ -128,9 +128,6 @@ interface ActorContext
     /** @param ActorRef<object> $target */
     public function unwatch(ActorRef $target): void;
 
-    /** @param T $message */
-    public function tell(ActorRef $target, object $message): void;
-
     public function reply(object $message): void;
 
     /** @param T $message */
@@ -311,13 +308,14 @@ $behavior = Behavior::receive(
 );
 ```
 
-### Envelope tracing: ctx->tell() vs $ref->tell()
+### Envelope tracing and reply()
 
-`$ctx->tell($target, $message)` and `$ctx->reply($message)` propagate the current
-envelope's `correlationId` to the outgoing message, linking cause and effect in
-distributed traces. Calling `$target->tell($message)` directly starts a new trace
-root with no correlation to the current request chain. Prefer `$ctx->tell()` inside
-handlers when envelope tracing matters.
+`$ctx->reply($message)` propagates the current envelope's `correlationId` to the outgoing
+message, linking the reply to the original request chain. Calling `$target->tell($message)`
+directly starts a new trace root with no correlation to the current request chain.
+
+To preserve trace context when sending messages forward (not replies), use
+`Envelope::causedBy($currentEnvelope, $message)` manually when constructing the envelope.
 
 ## ActorSystem
 
