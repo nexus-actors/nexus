@@ -5,12 +5,10 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "azjezz/psl": "^4.0",
         "brick/math": "^0.12",
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.0",
-        "fp4php/functional": "^6.0",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -19,7 +17,6 @@
     },
     "require-dev": {
         "deptrac/deptrac": "^4.6",
-        "fp4php/functional-psalm-plugin": "^1.0",
         "friendsofphp/php-cs-fixer": "^3.0",
         "infection/infection": "^0.32",
         "phpro/grumphp": "^2.19",

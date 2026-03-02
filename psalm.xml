@@ -27,12 +27,11 @@
     </projectFiles>
 
     <plugins>
-        <pluginClass class="Fp\PsalmPlugin\FunctionalPlugin" />
         <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
     </plugins>
 
     <issueHandlers>
-        <!-- fp4php Fiber generics use 4 template params which Psalm sees as excessive -->
+        <!-- PHP Fiber<T1,T2,T3,T4> has 4 template params which Psalm sees as excessive -->
         <TooManyTemplateParams errorLevel="suppress" />
 
         <!-- nexus-psalm necessarily uses Psalm's internal APIs as a plugin -->
