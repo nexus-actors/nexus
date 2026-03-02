@@ -3,7 +3,7 @@
 Remote contracts for future TCP-based multi-machine clustering.
 
 This package contains **interfaces and value objects only** — no implementation.
-A future `nexus-cluster-swoole` package will implement these interfaces using
+A future TCP transport package will implement these interfaces using
 TCP transport and a distributed directory.
 
 ## Installation

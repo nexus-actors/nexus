@@ -164,7 +164,7 @@ interface Mailbox
 
 - `enqueue()` is marked `#[NoDiscard]` -- the `EnqueueResult` must be inspected.
   Throws `MailboxClosedException` if the mailbox has been closed.
-- `dequeue()` returns `Option::none()` if the mailbox is empty, `Option::some($envelope)` otherwise.
+- `dequeue()` returns `null` if the mailbox is empty, or an `Envelope` otherwise.
 - `dequeueBlocking()` blocks the current fiber/coroutine until a message arrives
   or the timeout elapses. Throws `MailboxClosedException` if the mailbox is
   closed while waiting.
