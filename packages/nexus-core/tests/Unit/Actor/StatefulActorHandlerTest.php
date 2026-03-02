@@ -53,7 +53,7 @@ final class StatefulActorHandlerTest extends TestCase
         $result = $actor->handle($ctx, new stdClass(), 10);
 
         self::assertInstanceOf(BehaviorWithState::class, $result);
-        self::assertTrue($result->state()->isSome());
-        self::assertSame(11, $result->state()->get());
+        self::assertTrue($result->hasNewState());
+        self::assertSame(11, $result->state());
     }
 }

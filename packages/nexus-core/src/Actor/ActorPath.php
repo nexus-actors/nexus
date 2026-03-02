@@ -20,6 +20,9 @@ final class ActorPath implements ActorPathContract
 {
     private const string NAME_PATTERN = '/^[a-zA-Z0-9_\-\.]+$/';
 
+    /** Cached root instance — avoids an allocation on every tell()/Envelope::of() call. */
+    private static ?self $cachedRoot = null;
+
     /**
      * @param list<string> $elements Path segments (empty for root, e.g. ['user', 'orders'] for /user/orders)
      */
@@ -27,10 +30,17 @@ final class ActorPath implements ActorPathContract
 
     /**
      * Creates the root path `/`.
+     *
+     * The instance is cached per thread (PHP ZTS gives each thread its own
+     * static storage), so repeated calls pay only a null-check.
      */
     public static function root(): self
     {
-        return new self([]);
+        if (self::$cachedRoot === null) {
+            self::$cachedRoot = new self([]);
+        }
+
+        return self::$cachedRoot;
     }
 
     /**
@@ -170,6 +180,35 @@ final class ActorPath implements ActorPathContract
 
         /** @var list<string> */
         return explode('/', substr($stringPath, 1));
+    }
+
+    /**
+     * Compact serialization — stores just the path string instead of the private
+     * elements array with its full namespace-qualified field key.
+     *
+     * Before: O:...:1:{s:50:"\0...\0elements";a:2:{i:0;s:4:"user";i:1;s:7:"shard-0";}}
+     * After:  O:...:1:{s:1:"p";s:14:"/user/shard-0";}
+     *
+     * Saves ~130 bytes per Envelope passed through Thread\Queue, improving
+     * cross-thread throughput.
+     *
+     * @return array<string, string>
+     */
+    public function __serialize(): array
+    {
+        return ['p' => (string) $this];
+    }
+
+    /**
+     * @param array<string, string> $data
+     */
+    public function __unserialize(array $data): void
+    {
+        $path = $data['p'];
+
+        $this->elements = $path === '/'
+            ? []
+            : explode('/', substr($path, 1));
     }
 
     #[Override]
