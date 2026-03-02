@@ -9,10 +9,10 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorTag;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Actor\SetupBehavior;
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
@@ -121,7 +121,7 @@ final class PropsTest extends TestCase
 
         $props = Props::fromFactory(static fn() => $handler);
 
-        self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
+        self::assertInstanceOf(SetupBehavior::class, $props->behavior);
         self::assertFalse($props->mailbox->bounded);
         self::assertNull($props->supervision);
     }
@@ -143,7 +143,7 @@ final class PropsTest extends TestCase
             ->withMailbox($mailbox)
             ->withSupervision($strategy);
 
-        self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
+        self::assertInstanceOf(SetupBehavior::class, $props->behavior);
         self::assertTrue($props->mailbox->bounded);
         self::assertSame(50, $props->mailbox->capacity);
         self::assertNotNull($props->supervision);
@@ -165,7 +165,7 @@ final class PropsTest extends TestCase
 
         $props = Props::fromContainer($container, $handler::class);
 
-        self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
+        self::assertInstanceOf(SetupBehavior::class, $props->behavior);
     }
 
     #[Test]
@@ -185,7 +185,7 @@ final class PropsTest extends TestCase
 
         $props = Props::fromStatefulFactory(static fn() => $handler);
 
-        self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
+        self::assertInstanceOf(SetupBehavior::class, $props->behavior);
         self::assertFalse($props->mailbox->bounded);
         self::assertNull($props->supervision);
     }

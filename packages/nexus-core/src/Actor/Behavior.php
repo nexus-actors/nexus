@@ -6,35 +6,46 @@ namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 
 /**
  * @psalm-api
  *
- * Immutable behavior definition for actors.
+ * Immutable behavior definition for actors. Each concrete subclass represents
+ * one distinct behavior variant — use instanceof checks to distinguish them.
  *
  * Template parameter T represents the message protocol the actor handles.
  *
  * @template T of object
  */
-final readonly class Behavior
+abstract readonly class Behavior
 {
-    private function __construct(
-        private BehaviorTag $tag,
-        private ?Closure $handler,
-        private ?Closure $signalHandler,
-        private mixed $initialState,
-    ) {}
+    /**
+     * Returns the signal handler attached via onSignal(), or null if none.
+     *
+     * @return Closure(ActorContext<T>, Signal): Behavior<T>|null
+     */
+    abstract public function signalHandler(): ?Closure;
+
+    /**
+     * Returns a new behavior of the same type with the given signal handler attached.
+     *
+     * @param Closure(ActorContext<T>, Signal): Behavior<T> $handler
+     * @return static
+     */
+    abstract public function onSignal(Closure $handler): static;
+
+    // ---- Factory methods ----
 
     /**
      * @template U of object
      * @param Closure(ActorContext<U>, U): Behavior<U> $handler
-     * @return Behavior<U>
+     * @return ReceiveBehavior<U>
      */
-    public static function receive(Closure $handler): self
+    public static function receive(Closure $handler): ReceiveBehavior
     {
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::Receive, $handler, null, null);
+        return new ReceiveBehavior($handler);
     }
 
     /**
@@ -42,161 +53,103 @@ final readonly class Behavior
      * @template S
      * @param S $initialState
      * @param Closure(ActorContext<U>, U, S): BehaviorWithState<U, S> $handler
-     * @return Behavior<U>
+     * @return WithStateBehavior<U, S>
      */
-    public static function withState(mixed $initialState, Closure $handler): self
+    public static function withState(mixed $initialState, Closure $handler): WithStateBehavior
     {
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::WithState, $handler, null, $initialState);
+        return new WithStateBehavior($handler, $initialState);
     }
 
     /**
      * @template U of object
      * @param Closure(ActorContext<U>): Behavior<U> $factory
-     * @return Behavior<U>
+     * @return SetupBehavior<U>
      */
-    public static function setup(Closure $factory): self
+    public static function setup(Closure $factory): SetupBehavior
     {
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::Setup, $factory, null, null);
+        return new SetupBehavior($factory);
     }
 
     /**
      * @template U of object
      * @param Closure(TimerScheduler): Behavior<U> $factory
-     * @return Behavior<U>
+     * @return WithTimersBehavior<U>
      * @psalm-suppress UndefinedDocblockClass TimerScheduler will be created in a future task
      * @psalm-suppress UnusedParam $factory is stored for resolution by ActorCell
      */
-    public static function withTimers(Closure $factory): self
+    public static function withTimers(Closure $factory): WithTimersBehavior
     {
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::WithTimers, $factory, null, null);
+        return new WithTimersBehavior($factory);
     }
 
     /**
      * @template U of object
      * @param Closure(StashBuffer): Behavior<U> $factory
-     * @return Behavior<U>
+     * @return WithStashBehavior<U>
      * @psalm-suppress UndefinedDocblockClass StashBuffer will be created in a future task
      * @psalm-suppress UnusedParam $capacity and $factory are stored for resolution by ActorCell
      */
-    public static function withStash(int $capacity, Closure $factory): self
+    public static function withStash(int $capacity, Closure $factory): WithStashBehavior
     {
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::WithStash, $factory, null, $capacity);
+        return new WithStashBehavior($factory, $capacity);
     }
 
     /**
      * @template U of object
      * @param Behavior<U> $inner
-     * @return Behavior<U>
+     * @return SupervisedBehavior<U>
      */
-    public static function supervise(self $inner, SupervisionStrategy $strategy): self
+    public static function supervise(self $inner, SupervisionStrategy $strategy): SupervisedBehavior
     {
-        $provider = static fn(): self => $inner;
-
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::Supervised, $provider, null, $strategy);
+        return new SupervisedBehavior($inner, $strategy);
     }
 
     /**
      * @internal Used by StashBuffer to create a replay behavior.
      *
      * @template U of object
-     * @param list<\Monadial\Nexus\Core\Mailbox\Envelope> $envelopes
+     * @param list<Envelope> $envelopes
      * @param Behavior<U> $target
-     * @return Behavior<U>
+     * @return UnstashAllBehavior<U>
      */
-    public static function unstashAllReplay(array $envelopes, self $target): self
+    public static function unstashAllReplay(array $envelopes, self $target): UnstashAllBehavior
     {
-        $provider = static fn(): array => [
-            'envelopes' => $envelopes,
-            'target' => $target,
-        ];
-
-        /** @var Behavior<U> */
-        return new self(BehaviorTag::UnstashAll, $provider, null, null);
+        return new UnstashAllBehavior($envelopes, $target);
     }
 
     /**
-     * @return Behavior<T>
+     * @return SameBehavior<T>
      */
-    public static function same(): self
+    public static function same(): SameBehavior
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Same, null, null, null);
+        /** @var SameBehavior<T> */
+        return new SameBehavior();
     }
 
     /**
-     * @return Behavior<T>
+     * @return StoppedBehavior<T>
      */
-    public static function stopped(): self
+    public static function stopped(): StoppedBehavior
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Stopped, null, null, null);
+        /** @var StoppedBehavior<T> */
+        return new StoppedBehavior();
     }
 
     /**
-     * @return Behavior<T>
+     * @return UnhandledBehavior<T>
      */
-    public static function unhandled(): self
+    public static function unhandled(): UnhandledBehavior
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Unhandled, null, null, null);
+        /** @var UnhandledBehavior<T> */
+        return new UnhandledBehavior();
     }
 
     /**
-     * @return Behavior<T>
+     * @return EmptyBehavior<T>
      */
-    public static function empty(): self
+    public static function empty(): EmptyBehavior
     {
-        /** @var Behavior<T> */
-        return new self(BehaviorTag::Empty, null, null, null);
-    }
-
-    /**
-     * @param Closure(ActorContext<T>, Signal): Behavior<T> $handler
-     * @return Behavior<T>
-     */
-    public function onSignal(Closure $handler): self
-    {
-        /** @var Behavior<T> */
-        return new self($this->tag, $this->handler, $handler, $this->initialState);
-    }
-
-    public function tag(): BehaviorTag
-    {
-        return $this->tag;
-    }
-
-    public function isSame(): bool
-    {
-        return $this->tag === BehaviorTag::Same;
-    }
-
-    public function isStopped(): bool
-    {
-        return $this->tag === BehaviorTag::Stopped;
-    }
-
-    public function isUnhandled(): bool
-    {
-        return $this->tag === BehaviorTag::Unhandled;
-    }
-
-    public function handler(): ?Closure
-    {
-        return $this->handler;
-    }
-
-    public function signalHandler(): ?Closure
-    {
-        return $this->signalHandler;
-    }
-
-    public function initialState(): mixed
-    {
-        return $this->initialState;
+        /** @var EmptyBehavior<T> */
+        return new EmptyBehavior();
     }
 }
