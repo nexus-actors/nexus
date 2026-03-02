@@ -39,9 +39,10 @@ Immutability eliminates an entire category of bugs related to shared mutable
 state, which is critical in a concurrent system where multiple actors may
 reference the same configuration or path objects.
 
-Where optional values are needed, Nexus uses `Option` types from fp4php rather
-than nullable parameters, making the presence or absence of values explicit in
-the type system.
+Where values are conditionally present, Nexus uses PHP's native nullable types
+(`?ActorRef`, `?SupervisionStrategy`) enforced by Psalm's strict nullability analysis.
+Explicit null-checks at call sites are preferred over monadic wrappers — the type
+system ensures callers handle the absent case without additional abstraction overhead.
 
 ## Type safety via generics
 
