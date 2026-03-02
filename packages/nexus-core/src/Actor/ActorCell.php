@@ -133,7 +133,7 @@ final class ActorCell implements ActorContext
 
         // Handle initial state for withState behaviors
         if ($this->currentBehavior->tag() === BehaviorTag::WithState) {
-            $this->currentState = $this->currentBehavior->initialState()->get();
+            $this->currentState = $this->currentBehavior->initialState();
         }
 
         $this->transitionTo(ActorState::Running);
@@ -466,7 +466,7 @@ final class ActorCell implements ActorContext
      */
     private function resolveSetup(): Behavior
     {
-        $factory = $this->currentBehavior->handler()->get();
+        $factory = $this->currentBehavior->handler();
         assert(is_callable($factory));
 
         /** @var Behavior<T> */
@@ -478,7 +478,7 @@ final class ActorCell implements ActorContext
      */
     private function resolveWithTimers(): Behavior
     {
-        $factory = $this->currentBehavior->handler()->get();
+        $factory = $this->currentBehavior->handler();
         assert(is_callable($factory));
 
         $this->timerScheduler = new DefaultTimerScheduler($this->selfRef, $this->runtime);
@@ -492,11 +492,11 @@ final class ActorCell implements ActorContext
      */
     private function resolveWithStash(): Behavior
     {
-        $factory = $this->currentBehavior->handler()->get();
+        $factory = $this->currentBehavior->handler();
         assert(is_callable($factory));
 
         /** @var int $capacity */
-        $capacity = $this->currentBehavior->initialState()->get();
+        $capacity = $this->currentBehavior->initialState();
 
         /** @var DefaultStashBuffer<T> $stashBuffer */
         $stashBuffer = new DefaultStashBuffer($capacity);
@@ -510,11 +510,11 @@ final class ActorCell implements ActorContext
      */
     private function resolveSupervised(): Behavior
     {
-        $innerProvider = $this->currentBehavior->handler()->get();
+        $innerProvider = $this->currentBehavior->handler();
         assert(is_callable($innerProvider));
 
         /** @var SupervisionStrategy $strategy */
-        $strategy = $this->currentBehavior->initialState()->get();
+        $strategy = $this->currentBehavior->initialState();
         $this->behaviorSupervision = $strategy;
 
         /** @var Behavior<T> */
@@ -544,15 +544,13 @@ final class ActorCell implements ActorContext
     {
         $signalHandler = $this->currentBehavior->signalHandler();
 
-        if ($signalHandler->isNone()) {
+        if ($signalHandler === null) {
             return;
         }
 
-        $handler = $signalHandler->get();
-
         try {
             /** @var Behavior<T> $result */
-            $result = $handler($this, $signal);
+            $result = $signalHandler($this, $signal);
             $this->applyBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Signal handler threw NexusException: ' . $e->getMessage());
@@ -573,18 +571,16 @@ final class ActorCell implements ActorContext
 
         $handler = $this->currentBehavior->handler();
 
-        if ($handler->isNone()) {
+        if ($handler === null) {
             // Empty or other non-receive behavior - route to dead letters
             $this->deadLetters->tell($message);
 
             return;
         }
 
-        $fn = $handler->get();
-
         try {
             /** @var Behavior<T> $result */
-            $result = $fn($this, $message);
+            $result = $handler($this, $message);
             $this->applyBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Handler threw NexusException: ' . $e->getMessage());
@@ -600,17 +596,15 @@ final class ActorCell implements ActorContext
     {
         $handler = $this->currentBehavior->handler();
 
-        if ($handler->isNone()) {
+        if ($handler === null) {
             $this->deadLetters->tell($message);
 
             return;
         }
 
-        $fn = $handler->get();
-
         try {
             /** @var BehaviorWithState<T, mixed> $result */
-            $result = $fn($this, $message, $this->currentState);
+            $result = $handler($this, $message, $this->currentState);
             $this->applyStatefulBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Stateful handler threw NexusException: ' . $e->getMessage());
@@ -657,7 +651,7 @@ final class ActorCell implements ActorContext
 
         // If new behavior is withState, initialize its state
         if ($behavior->tag() === BehaviorTag::WithState) {
-            $this->currentState = $behavior->initialState()->get();
+            $this->currentState = $behavior->initialState();
         }
     }
 
@@ -684,7 +678,7 @@ final class ActorCell implements ActorContext
 
             // If new behavior has initial state, use it instead
             if ($newBehavior->tag() === BehaviorTag::WithState) {
-                $this->currentState = $newBehavior->initialState()->get();
+                $this->currentState = $newBehavior->initialState();
             }
         }
     }
@@ -694,7 +688,7 @@ final class ActorCell implements ActorContext
      */
     private function handleUnstashAll(Behavior $unstashBehavior): void
     {
-        $provider = $unstashBehavior->handler()->get();
+        $provider = $unstashBehavior->handler();
         assert(is_callable($provider));
 
         /** @var array{envelopes: list<Envelope>, target: Behavior<T>} $payload */
@@ -706,7 +700,7 @@ final class ActorCell implements ActorContext
         $this->currentBehavior = $target;
 
         if ($target->tag() === BehaviorTag::WithState) {
-            $this->currentState = $target->initialState()->get();
+            $this->currentState = $target->initialState();
         }
 
         // Replay each stashed envelope through the new behavior

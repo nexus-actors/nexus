@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 
@@ -20,16 +19,11 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
  */
 final readonly class Behavior
 {
-    /**
-     * @param Option<Closure> $handler
-     * @param Option<Closure> $signalHandler
-     * @param Option<mixed> $initialState
-     */
     private function __construct(
         private BehaviorTag $tag,
-        private Option $handler,
-        private Option $signalHandler,
-        private Option $initialState,
+        private ?Closure $handler,
+        private ?Closure $signalHandler,
+        private mixed $initialState,
     ) {}
 
     /**
@@ -40,7 +34,7 @@ final readonly class Behavior
     public static function receive(Closure $handler): self
     {
         /** @var Behavior<U> */
-        return new self(BehaviorTag::Receive, Option::some($handler), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Receive, $handler, null, null);
     }
 
     /**
@@ -53,12 +47,7 @@ final readonly class Behavior
     public static function withState(mixed $initialState, Closure $handler): self
     {
         /** @var Behavior<U> */
-        return new self(
-            BehaviorTag::WithState,
-            Option::some($handler),
-            self::noSignalHandler(),
-            Option::some($initialState),
-        );
+        return new self(BehaviorTag::WithState, $handler, null, $initialState);
     }
 
     /**
@@ -69,7 +58,7 @@ final readonly class Behavior
     public static function setup(Closure $factory): self
     {
         /** @var Behavior<U> */
-        return new self(BehaviorTag::Setup, Option::some($factory), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Setup, $factory, null, null);
     }
 
     /**
@@ -82,7 +71,7 @@ final readonly class Behavior
     public static function withTimers(Closure $factory): self
     {
         /** @var Behavior<U> */
-        return new self(BehaviorTag::WithTimers, Option::some($factory), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::WithTimers, $factory, null, null);
     }
 
     /**
@@ -95,12 +84,7 @@ final readonly class Behavior
     public static function withStash(int $capacity, Closure $factory): self
     {
         /** @var Behavior<U> */
-        return new self(
-            BehaviorTag::WithStash,
-            Option::some($factory),
-            self::noSignalHandler(),
-            Option::some($capacity),
-        );
+        return new self(BehaviorTag::WithStash, $factory, null, $capacity);
     }
 
     /**
@@ -113,12 +97,7 @@ final readonly class Behavior
         $provider = static fn(): self => $inner;
 
         /** @var Behavior<U> */
-        return new self(
-            BehaviorTag::Supervised,
-            Option::some($provider),
-            self::noSignalHandler(),
-            Option::some($strategy),
-        );
+        return new self(BehaviorTag::Supervised, $provider, null, $strategy);
     }
 
     /**
@@ -137,7 +116,7 @@ final readonly class Behavior
         ];
 
         /** @var Behavior<U> */
-        return new self(BehaviorTag::UnstashAll, Option::some($provider), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::UnstashAll, $provider, null, null);
     }
 
     /**
@@ -146,7 +125,7 @@ final readonly class Behavior
     public static function same(): self
     {
         /** @var Behavior<T> */
-        return new self(BehaviorTag::Same, self::noHandler(), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Same, null, null, null);
     }
 
     /**
@@ -155,7 +134,7 @@ final readonly class Behavior
     public static function stopped(): self
     {
         /** @var Behavior<T> */
-        return new self(BehaviorTag::Stopped, self::noHandler(), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Stopped, null, null, null);
     }
 
     /**
@@ -164,7 +143,7 @@ final readonly class Behavior
     public static function unhandled(): self
     {
         /** @var Behavior<T> */
-        return new self(BehaviorTag::Unhandled, self::noHandler(), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Unhandled, null, null, null);
     }
 
     /**
@@ -173,7 +152,7 @@ final readonly class Behavior
     public static function empty(): self
     {
         /** @var Behavior<T> */
-        return new self(BehaviorTag::Empty, self::noHandler(), self::noSignalHandler(), self::noState());
+        return new self(BehaviorTag::Empty, null, null, null);
     }
 
     /**
@@ -183,7 +162,7 @@ final readonly class Behavior
     public function onSignal(Closure $handler): self
     {
         /** @var Behavior<T> */
-        return new self($this->tag, $this->handler, Option::some($handler), $this->initialState);
+        return new self($this->tag, $this->handler, $handler, $this->initialState);
     }
 
     public function tag(): BehaviorTag
@@ -206,54 +185,18 @@ final readonly class Behavior
         return $this->tag === BehaviorTag::Unhandled;
     }
 
-    /**
-     * @return Option<Closure>
-     */
-    public function handler(): Option
+    public function handler(): ?Closure
     {
         return $this->handler;
     }
 
-    /**
-     * @return Option<Closure>
-     */
-    public function signalHandler(): Option
+    public function signalHandler(): ?Closure
     {
         return $this->signalHandler;
     }
 
-    /**
-     * @return Option<mixed>
-     */
-    public function initialState(): Option
+    public function initialState(): mixed
     {
         return $this->initialState;
-    }
-
-    /**
-     * @return Option<Closure>
-     */
-    private static function noHandler(): Option
-    {
-        /** @var Option<Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
-        return Option::none();
-    }
-
-    /**
-     * @return Option<Closure>
-     */
-    private static function noSignalHandler(): Option
-    {
-        /** @var Option<Closure> fp4php returns Option<empty>, covariant to Option<\Closure> */
-        return Option::none();
-    }
-
-    /**
-     * @return Option<mixed>
-     */
-    private static function noState(): Option
-    {
-        /** @var Option<mixed> */
-        return Option::none();
     }
 }
