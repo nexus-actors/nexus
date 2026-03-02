@@ -170,23 +170,20 @@ $ref->tell(new WriteRecord($data2));
 $ref->tell(new DatabaseReady($connection));`;
 
 const scalingCode = `// One machine, all CPU cores. Actors span threads transparently.
-// Same ActorRef API -- senders don't know if it's local or remote.
+// Same ActorRef API — senders don't know if it's local or remote.
 
-$pool = WorkerPoolApp::create(
-    WorkerPoolConfig::withWorkers(16),
-)
-->onWorkerStart(function (WorkerNode $node): void {
-    // Each thread runs an independent ActorSystem.
-    // The hash ring decides which thread owns which actor.
-    $node->spawn(
-        Props::fromBehavior($orderBehavior),
-        'order-processor',
-    );
-})
-->run();
+WorkerPool::create()
+    ->actor('order-processor', OrderProcessor::class)
+    ->actor('payment-gateway', PaymentGateway::class)
+    ->onStart(static function (WorkerNode $node): void {
+        // Called once per worker thread after ActorSystem boots.
+        // Register additional actors or publish $node->actorFor('order-processor').
+        $node->log()->info('Worker ready', ['workerId' => $node->workerId()]);
+    })
+    ->run(WorkerPoolConfig::withWorkers(16));
 
-// Cross-worker messaging uses Thread\\Queue (no serialization).
-// 260K msgs/sec per worker pair. Zero config.`;
+// Cross-worker messaging uses Thread\\\\Queue — no serialization.
+// 260K msgs/sec per worker pair. Location transparent.`;
 
 /* ------------------------------------------------------------------ */
 /* Data                                                                */
@@ -281,7 +278,7 @@ function Hero() {
       <div className={styles.heroSplit}>
         <div className={styles.heroLeft}>
           <div className={styles.heroBadge}>
-            WIP &middot; Open source &middot; PHP 8.5+
+            Open source &middot; PHP 8.5+
           </div>
           <h1 className={styles.heroTitle}>
             Concurrent PHP,<br />
