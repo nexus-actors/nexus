@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Runtime\Step;
 
 use Fiber;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
@@ -66,18 +65,15 @@ final class StepMailbox implements Mailbox
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<T> */
+    /** @return T|null */
     #[Override]
-    public function dequeue(): Option
+    public function dequeue(): mixed
     {
         if ($this->queue->isEmpty()) {
-            /** @var Option<T> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
-        return Option::some($this->queue->dequeue());
+        return $this->queue->dequeue();
     }
 
     /**

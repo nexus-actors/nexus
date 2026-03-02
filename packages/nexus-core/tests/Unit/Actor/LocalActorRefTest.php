@@ -30,7 +30,8 @@ final class LocalActorRefTest extends TestCase
 
         self::assertSame(1, $mailbox->count());
 
-        $envelope = $mailbox->dequeue()->get();
+        $envelope = $mailbox->dequeue();
+        self::assertNotNull($envelope);
         self::assertSame($message, $envelope->message);
         self::assertTrue($path->equals($envelope->target));
         self::assertTrue(ActorPath::root()->equals($envelope->sender));
@@ -96,7 +97,8 @@ final class LocalActorRefTest extends TestCase
 
         self::assertSame(1, $mailbox->count());
 
-        $envelope = $mailbox->dequeue()->get();
+        $envelope = $mailbox->dequeue();
+        self::assertNotNull($envelope);
         self::assertSame($message, $envelope->message);
         self::assertNotNull($envelope->senderRef);
         self::assertNotSame('', $envelope->requestId);
