@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Psr\Container\ContainerInterface;
 
@@ -20,7 +21,11 @@ final readonly class Props
     /**
      * @param Behavior<T> $behavior
      */
-    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public ?object $supervision) {}
+    private function __construct(
+        public Behavior $behavior,
+        public MailboxConfig $mailbox,
+        public ?SupervisionStrategy $supervision,
+    ) {}
 
     /**
      * @template U of object
@@ -150,7 +155,7 @@ final readonly class Props
     /**
      * @return Props<T>
      */
-    public function withSupervision(object $strategy): self
+    public function withSupervision(SupervisionStrategy $strategy): self
     {
         return clone($this, ['supervision' => $strategy]);
     }

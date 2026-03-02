@@ -107,6 +107,7 @@ deptrac:
       - Runtime
     WorkerPoolSwoole:
       - Core
+      - Runtime
       - RuntimeSwoole
       - WorkerPool
     Persistence:

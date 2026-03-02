@@ -92,7 +92,17 @@ classDiagram
 | `LocalActorRef<T>` | In-process `ActorRef` that delivers messages via a `Mailbox`. |
 | `DeadLetterRef` | Null-object `ActorRef` that captures undeliverable messages. Always returns `false` from `isAlive()`. |
 | `ActorState` | Enum: `New`, `Starting`, `Running`, `Suspended`, `Stopping`, `Stopped`. |
-| `BehaviorTag` | Enum: `Receive`, `WithState`, `Setup`, `Same`, `Stopped`, `Unhandled`, `Empty`. |
+| `ReceiveBehavior<T>` | Concrete `Behavior` for stateless message handling. |
+| `WithStateBehavior<T, S>` | Concrete `Behavior` for stateful message handling. |
+| `SetupBehavior<T>` | Concrete `Behavior` wrapping a factory closure; resolved at actor startup. |
+| `SameBehavior<T>` | Sentinel `Behavior` — keep current behavior unchanged. |
+| `StoppedBehavior<T>` | Sentinel `Behavior` — stop the actor. |
+| `UnhandledBehavior<T>` | Sentinel `Behavior` — route message to dead letters. |
+| `EmptyBehavior<T>` | Sentinel `Behavior` — no-op; discard all messages. |
+| `SupervisedBehavior<T>` | Wrapper `Behavior` that installs a custom `SupervisionStrategy` for its inner behavior. |
+| `WithTimersBehavior<T>` | Wrapper `Behavior` that provides a `TimerScheduler` to its factory closure. |
+| `WithStashBehavior<T>` | Wrapper `Behavior` that provides a `StashBuffer` to its factory closure. |
+| `UnstashAllBehavior<T>` | Internal `Behavior` carrying stashed envelopes to replay; produced by `StashBuffer::unstashAll()`. |
 ## Mailbox namespace
 
 `Monadial\Nexus\Core\Mailbox\`

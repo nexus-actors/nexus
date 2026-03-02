@@ -424,7 +424,7 @@ Swoole tests differ: messages must be sent inside `scheduleOnce()` callbacks (Sw
 
 ## Monorepo Package Updates
 
-When modifying dev dependency versions (e.g., PHPUnit), update both the root `composer.json` AND all 13 `packages/*/composer.json` files — each package is published independently to Packagist.
+When modifying dev dependency versions (e.g., PHPUnit), update both the root `composer.json` AND all 15 `packages/*/composer.json` files — each package is published independently to Packagist.
 
 ## PSR Integration
 

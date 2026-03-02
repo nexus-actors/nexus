@@ -19,6 +19,9 @@ shell: ## Shell into PHP container
 install: ## Composer install
 	$(DC) composer install
 
+update: ## Composer install
+	$(DC) composer update
+
 test: ## Run all tests
 	$(DC) vendor/bin/phpunit
 
@@ -58,4 +61,10 @@ cs: ## Code style check
 cs-fix: ## Fix code style
 	$(DC) vendor/bin/php-cs-fixer fix
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix
+profile-hotpath: ## Profile hotpath breakdown with SPX (then run make spx-ui)
+	docker compose exec php-swoole bash -c 'SPX_ENABLED=1 SPX_REPORT=full php tests/Performance/hotpath_breakdown.php'
+
+spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?SPX_KEY=nexus&SPX_UI_URI=/)
+	docker compose exec php-swoole php -S 0.0.0.0:8889 docker/spx-ui.php
+
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui

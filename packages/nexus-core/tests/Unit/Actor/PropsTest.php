@@ -26,7 +26,6 @@ use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
-use stdClass;
 
 #[CoversClass(Props::class)]
 final class PropsTest extends TestCase
@@ -74,7 +73,7 @@ final class PropsTest extends TestCase
         $behavior = Behavior::receive($handler);
         $original = Props::fromBehavior($behavior);
 
-        $strategy = new stdClass();
+        $strategy = SupervisionStrategy::oneForOne();
         $updated = $original->withSupervision($strategy);
 
         // Original is unchanged (immutability)
@@ -95,7 +94,7 @@ final class PropsTest extends TestCase
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
-        $strategy = new stdClass();
+        $strategy = SupervisionStrategy::oneForOne();
         $mailbox = MailboxConfig::bounded(50);
 
         $props = Props::fromBehavior($behavior)
@@ -137,7 +136,7 @@ final class PropsTest extends TestCase
         };
 
         $mailbox = MailboxConfig::bounded(50);
-        $strategy = new stdClass();
+        $strategy = SupervisionStrategy::oneForOne();
 
         $props = Props::fromFactory(static fn() => $handler)
             ->withMailbox($mailbox)

@@ -7,6 +7,7 @@
         "php": ">=8.5",
         "ext-swoole": "*",
         "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime": "dev-main",
         "nexus-actors/runtime-swoole": "dev-main",
         "nexus-actors/worker-pool": "dev-main",
         "opis/closure": "^4.0"

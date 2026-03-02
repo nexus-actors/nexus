@@ -25,12 +25,11 @@ use Swoole\Thread\Queue;
  *            backoff to remain coroutine-friendly.
  *
  * Adaptive poll backoff (Swoole minimum sleep is 1 ms):
- *   - Messages present   → continue immediately (no sleep, tight drain loop)
- *   - 1–9 empty polls    → 1ms sleep  (recently active, check again soon)
- *   - 10–99 empty polls  → 1ms sleep
- *   - 100–999 empty polls→ 5ms sleep
- *   - 1000+ empty polls  → 10ms sleep (idle steady state)
- *   - Message arrives    → reset counter, return to tight drain loop
+ *   - Messages present    → continue immediately (no sleep, tight drain loop)
+ *   - 1–99 empty polls    → 1ms sleep  (recently active, check again soon)
+ *   - 100–999 empty polls → 5ms sleep
+ *   - 1000+ empty polls   → 10ms sleep (idle steady state)
+ *   - Message arrives     → reset counter, return to tight drain loop
  */
 final class ThreadQueueTransport implements WorkerTransport
 {
@@ -98,7 +97,6 @@ final class ThreadQueueTransport implements WorkerTransport
                 $emptyCount++;
 
                 Coroutine::sleep(match (true) {
-                    $emptyCount < 10 => 0.001,
                     $emptyCount < 100 => 0.001,
                     $emptyCount < 1000 => 0.005,
                     default => 0.01,
