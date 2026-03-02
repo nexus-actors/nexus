@@ -25,8 +25,8 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::receive($handler);
 
         self::assertSame(BehaviorTag::Receive, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertSame($handler, $behavior->handler()->get());
+        self::assertNotNull($behavior->handler());
+        self::assertSame($handler, $behavior->handler());
     }
 
     #[Test]
@@ -38,10 +38,10 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::withState(42, $handler);
 
         self::assertSame(BehaviorTag::WithState, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertSame($handler, $behavior->handler()->get());
-        self::assertTrue($behavior->initialState()->isSome());
-        self::assertSame(42, $behavior->initialState()->get());
+        self::assertNotNull($behavior->handler());
+        self::assertSame($handler, $behavior->handler());
+        self::assertNotNull($behavior->initialState());
+        self::assertSame(42, $behavior->initialState());
     }
 
     #[Test]
@@ -52,8 +52,8 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::setup($factory);
 
         self::assertSame(BehaviorTag::Setup, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertSame($factory, $behavior->handler()->get());
+        self::assertNotNull($behavior->handler());
+        self::assertSame($factory, $behavior->handler());
     }
 
     #[Test]
@@ -65,7 +65,7 @@ final class BehaviorTest extends TestCase
         self::assertTrue($behavior->isSame());
         self::assertFalse($behavior->isStopped());
         self::assertFalse($behavior->isUnhandled());
-        self::assertTrue($behavior->handler()->isNone());
+        self::assertNull($behavior->handler());
     }
 
     #[Test]
@@ -77,7 +77,7 @@ final class BehaviorTest extends TestCase
         self::assertTrue($behavior->isStopped());
         self::assertFalse($behavior->isSame());
         self::assertFalse($behavior->isUnhandled());
-        self::assertTrue($behavior->handler()->isNone());
+        self::assertNull($behavior->handler());
     }
 
     #[Test]
@@ -89,7 +89,7 @@ final class BehaviorTest extends TestCase
         self::assertTrue($behavior->isUnhandled());
         self::assertFalse($behavior->isSame());
         self::assertFalse($behavior->isStopped());
-        self::assertTrue($behavior->handler()->isNone());
+        self::assertNull($behavior->handler());
     }
 
     #[Test]
@@ -101,7 +101,7 @@ final class BehaviorTest extends TestCase
         self::assertFalse($behavior->isSame());
         self::assertFalse($behavior->isStopped());
         self::assertFalse($behavior->isUnhandled());
-        self::assertTrue($behavior->handler()->isNone());
+        self::assertNull($behavior->handler());
     }
 
     #[Test]
@@ -116,15 +116,15 @@ final class BehaviorTest extends TestCase
         $withSignal = $original->onSignal($signalHandler);
 
         // Original is unchanged (immutability)
-        self::assertTrue($original->signalHandler()->isNone());
+        self::assertNull($original->signalHandler());
 
         // New behavior has the signal handler
-        self::assertTrue($withSignal->signalHandler()->isSome());
-        self::assertSame($signalHandler, $withSignal->signalHandler()->get());
+        self::assertNotNull($withSignal->signalHandler());
+        self::assertSame($signalHandler, $withSignal->signalHandler());
 
         // Tag and handler are preserved
         self::assertSame(BehaviorTag::Receive, $withSignal->tag());
-        self::assertSame($handler, $withSignal->handler()->get());
+        self::assertSame($handler, $withSignal->handler());
     }
 
     #[Test]
@@ -139,9 +139,9 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::withState(99, $handler)->onSignal($signalHandler);
 
         self::assertSame(BehaviorTag::WithState, $behavior->tag());
-        self::assertTrue($behavior->initialState()->isSome());
-        self::assertSame(99, $behavior->initialState()->get());
-        self::assertTrue($behavior->signalHandler()->isSome());
+        self::assertNotNull($behavior->initialState());
+        self::assertSame(99, $behavior->initialState());
+        self::assertNotNull($behavior->signalHandler());
     }
 
     #[Test]
@@ -163,9 +163,9 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::withTimers($factory);
 
         self::assertSame(BehaviorTag::WithTimers, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertSame($factory, $behavior->handler()->get());
-        self::assertTrue($behavior->initialState()->isNone());
+        self::assertNotNull($behavior->handler());
+        self::assertSame($factory, $behavior->handler());
+        self::assertNull($behavior->initialState());
     }
 
     #[Test]
@@ -176,10 +176,10 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::withStash(100, $factory);
 
         self::assertSame(BehaviorTag::WithStash, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertSame($factory, $behavior->handler()->get());
-        self::assertTrue($behavior->initialState()->isSome());
-        self::assertSame(100, $behavior->initialState()->get());
+        self::assertNotNull($behavior->handler());
+        self::assertSame($factory, $behavior->handler());
+        self::assertNotNull($behavior->initialState());
+        self::assertSame(100, $behavior->initialState());
     }
 
     #[Test]
@@ -190,9 +190,9 @@ final class BehaviorTest extends TestCase
         $behavior = Behavior::supervise($inner, $strategy);
 
         self::assertSame(BehaviorTag::Supervised, $behavior->tag());
-        self::assertTrue($behavior->handler()->isSome());
-        self::assertTrue($behavior->initialState()->isSome());
-        self::assertSame($strategy, $behavior->initialState()->get());
+        self::assertNotNull($behavior->handler());
+        self::assertNotNull($behavior->initialState());
+        self::assertSame($strategy, $behavior->initialState());
     }
 
     #[Test]
@@ -202,7 +202,7 @@ final class BehaviorTest extends TestCase
         $strategy = SupervisionStrategy::oneForOne();
         $behavior = Behavior::supervise($inner, $strategy);
 
-        $provider = $behavior->handler()->get();
+        $provider = $behavior->handler();
         /** @psalm-suppress PossiblyNullFunctionCall */
         $resolved = $provider();
         self::assertSame($inner, $resolved);

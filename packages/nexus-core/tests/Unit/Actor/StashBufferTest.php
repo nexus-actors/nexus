@@ -105,7 +105,7 @@ final class StashBufferTest extends TestCase
         $result = $stash->unstashAll($target);
 
         // The handler should return the envelopes and target
-        $data = $result->handler()->get();
+        $data = $result->handler();
         $payload = $data();
         self::assertSame([$env1, $env2, $env3], $payload['envelopes']);
         self::assertSame($target, $payload['target']);
