@@ -473,9 +473,11 @@ final class ActorCellTest extends TestCase
         self::assertSame(2, $mailbox->count());
 
         // Process them
-        $env1 = $mailbox->dequeue()->get();
+        $env1 = $mailbox->dequeue();
+        self::assertNotNull($env1);
         $cell->processMessage($env1);
-        $env2 = $mailbox->dequeue()->get();
+        $env2 = $mailbox->dequeue();
+        self::assertNotNull($env2);
         $cell->processMessage($env2);
 
         self::assertSame(['first', 'second'], $processOrder);

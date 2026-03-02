@@ -77,8 +77,8 @@ final class SpawnTaskTest extends TestCase
 
         // The task should have sent a message to the parent's mailbox
         self::assertSame(1, $mailbox->count());
-        $envelope = $mailbox->dequeue()->get();
-        /** @psalm-suppress PossiblyNullPropertyFetch */
+        $envelope = $mailbox->dequeue();
+        self::assertNotNull($envelope);
         assert($envelope->message instanceof SpawnTaskMessage);
         self::assertSame('from-task', $envelope->message->value);
     }

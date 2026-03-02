@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Runtime\Fiber;
 
 use Closure;
 use Fiber;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
@@ -78,18 +77,15 @@ final class FiberMailbox implements Mailbox
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<T> */
+    /** @return T|null */
     #[Override]
-    public function dequeue(): Option
+    public function dequeue(): mixed
     {
         if ($this->queue->isEmpty()) {
-            /** @var Option<T> $none fp4php returns Option<empty>, covariant to Option<T> */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
-        return Option::some($this->queue->dequeue());
+        return $this->queue->dequeue();
     }
 
     /**

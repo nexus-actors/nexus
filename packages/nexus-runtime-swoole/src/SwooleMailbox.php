@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
@@ -80,40 +79,31 @@ final class SwooleMailbox implements Mailbox
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<T> */
+    /** @return T|null */
     #[Override]
-    public function dequeue(): Option
+    public function dequeue(): mixed
     {
         // After close, drain from the backup queue
         if ($this->closed) {
             if (!$this->drainQueue->isEmpty()) {
-                return Option::some($this->drainQueue->dequeue());
+                return $this->drainQueue->dequeue();
             }
 
-            /** @var Option<T> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
         if ($this->channel->isEmpty()) {
-            /** @var Option<T> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
         /** @var T|false $result */
         $result = $this->channel->pop(self::NON_BLOCKING_TIMEOUT);
 
         if ($result === false) {
-            /** @var Option<T> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
-        return Option::some($result);
+        return $result;
     }
 
     /**

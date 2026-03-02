@@ -38,8 +38,8 @@ final class TaskContextTest extends TestCase
         $taskCtx->tell(new TaskMessage('hello'));
 
         self::assertSame(1, $mailbox->count());
-        $envelope = $mailbox->dequeue()->get();
-        /** @psalm-suppress PossiblyNullPropertyFetch */
+        $envelope = $mailbox->dequeue();
+        self::assertNotNull($envelope);
         assert($envelope->message instanceof TaskMessage);
         self::assertSame('hello', $envelope->message->value);
     }

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Support;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
@@ -64,19 +63,14 @@ final class TestMailbox implements Mailbox
         return EnqueueResult::Accepted;
     }
 
-    /** @return Option<Envelope> */
-    public function dequeue(): Option
+    /** @return Envelope|null */
+    public function dequeue(): mixed
     {
         if ($this->queue === []) {
-            /** @var Option<Envelope> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
-        $envelope = array_shift($this->queue);
-
-        return Option::some($envelope);
+        return array_shift($this->queue);
     }
 
     /**

@@ -431,7 +431,8 @@ final class ActorCellAdvancedTest extends TestCase
         // The mailbox should now have the delayed message
         self::assertGreaterThanOrEqual(1, $mailbox->count());
 
-        $env = $mailbox->dequeue()->get();
+        $env = $mailbox->dequeue();
+        self::assertNotNull($env);
         self::assertInstanceOf(AdvancedTestMessage::class, $env->message);
         self::assertSame('delayed', $env->message->value);
     }

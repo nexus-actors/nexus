@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Mailbox;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
@@ -25,8 +24,8 @@ interface Mailbox
     #[NoDiscard]
     public function enqueue(object $message): EnqueueResult;
 
-    /** @return Option<T> */
-    public function dequeue(): Option;
+    /** @return T|null */
+    public function dequeue(): mixed;
 
     /**
      * @throws MailboxClosedException

@@ -53,13 +53,16 @@ final class TestMailboxTest extends TestCase
 
         self::assertSame(3, $mailbox->count());
 
-        $first = $mailbox->dequeue()->get();
+        $first = $mailbox->dequeue();
+        self::assertNotNull($first);
         self::assertSame($msg1, $first->message);
 
-        $second = $mailbox->dequeue()->get();
+        $second = $mailbox->dequeue();
+        self::assertNotNull($second);
         self::assertSame($msg2, $second->message);
 
-        $third = $mailbox->dequeue()->get();
+        $third = $mailbox->dequeue();
+        self::assertNotNull($third);
         self::assertSame($msg3, $third->message);
     }
 
@@ -70,7 +73,7 @@ final class TestMailboxTest extends TestCase
 
         $result = $mailbox->dequeue();
 
-        self::assertTrue($result->isNone());
+        self::assertNull($result);
     }
 
     #[Test]
@@ -124,10 +127,12 @@ final class TestMailboxTest extends TestCase
         self::assertSame(2, $mailbox->count());
 
         // msg1 was dropped, msg2 should be first
-        $first = $mailbox->dequeue()->get();
+        $first = $mailbox->dequeue();
+        self::assertNotNull($first);
         self::assertSame($msg2, $first->message);
 
-        $second = $mailbox->dequeue()->get();
+        $second = $mailbox->dequeue();
+        self::assertNotNull($second);
         self::assertSame($msg3, $second->message);
     }
 

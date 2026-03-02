@@ -40,9 +40,9 @@ final class FiberMailboxTest extends TestCase
         (void) $mailbox->enqueue($env2);
         (void) $mailbox->enqueue($env3);
 
-        self::assertSame($env1, $mailbox->dequeue()->get());
-        self::assertSame($env2, $mailbox->dequeue()->get());
-        self::assertSame($env3, $mailbox->dequeue()->get());
+        self::assertSame($env1, $mailbox->dequeue());
+        self::assertSame($env2, $mailbox->dequeue());
+        self::assertSame($env3, $mailbox->dequeue());
     }
 
     #[Test]
@@ -51,7 +51,7 @@ final class FiberMailboxTest extends TestCase
         $mailbox = new FiberMailbox(MailboxConfig::unbounded());
 
         $result = $mailbox->dequeue();
-        self::assertTrue($result->isNone());
+        self::assertNull($result);
     }
 
     #[Test]
@@ -147,8 +147,8 @@ final class FiberMailboxTest extends TestCase
 
         self::assertSame(2, $mailbox->count());
         // Original messages remain, newest was dropped
-        self::assertSame($env1, $mailbox->dequeue()->get());
-        self::assertSame($env2, $mailbox->dequeue()->get());
+        self::assertSame($env1, $mailbox->dequeue());
+        self::assertSame($env2, $mailbox->dequeue());
     }
 
     #[Test]
@@ -168,8 +168,8 @@ final class FiberMailboxTest extends TestCase
 
         self::assertSame(2, $mailbox->count());
         // Oldest was dropped, msg2 and msg3 remain
-        self::assertSame($env2, $mailbox->dequeue()->get());
-        self::assertSame($env3, $mailbox->dequeue()->get());
+        self::assertSame($env2, $mailbox->dequeue());
+        self::assertSame($env3, $mailbox->dequeue());
     }
 
     #[Test]
@@ -222,8 +222,8 @@ final class FiberMailboxTest extends TestCase
         $mailbox->close();
 
         // Remaining messages can still be drained
-        self::assertSame($env, $mailbox->dequeue()->get());
-        self::assertTrue($mailbox->dequeue()->isNone());
+        self::assertSame($env, $mailbox->dequeue());
+        self::assertNull($mailbox->dequeue());
     }
 
     #[Test]
