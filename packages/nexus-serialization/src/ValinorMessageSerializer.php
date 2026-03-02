@@ -42,7 +42,7 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
         $className = $message::class;
         $typeName = $this->registry->nameForClass($className);
 
-        if ($typeName->isNone()) {
+        if ($typeName === null) {
             throw new MessageSerializationException($className, "No type name registered for class '{$className}'");
         }
 
@@ -64,7 +64,7 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
     {
         $className = $this->registry->classForName($type);
 
-        if ($className->isNone()) {
+        if ($className === null) {
             throw new MessageDeserializationException($type, "No class registered for type name '{$type}'");
         }
 
@@ -77,7 +77,7 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
 
         try {
             /** @var object $result */
-            $result = $this->mapper->map($className->get(), $decoded);
+            $result = $this->mapper->map($className, $decoded);
         } catch (Throwable $e) {
             throw new MessageDeserializationException($type, $e->getMessage(), $e);
         }
