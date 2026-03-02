@@ -26,13 +26,13 @@ explicitly managed, never shared. The entire API is `readonly` and `final` by de
 - **Supervision that actually works.** Actors form a hierarchy. Parents supervise children. When
   something fails, the supervision strategy decides what happens — restart, stop, escalate, or
   back off exponentially. No try/catch pyramids.
-- **PHP 8.5+ native.** Nexus uses `readonly class`, pipe operator support, and generic templates
+- **PHP 8.5+ native.** Nexus uses `readonly class`, typed class constants, and generic templates
   throughout. Built for modern PHP, not retrofitted onto it.
 - **PSR everywhere.** PSR-11 containers, PSR-3 logging, PSR-14 event dispatching, PSR-20 clocks.
   Nexus plugs into your existing stack.
 - **Multi-worker scaling.** Scale actors across all CPU cores on a single machine via Swoole's
   `Thread\Pool`. Each worker runs an independent `ActorSystem`. `WorkerActorRef` delivers messages
-  cross-thread via `Thread\Queue` at 260K msgs/sec — no serialization.
+  cross-thread via `Thread\Queue` at 260K msgs/sec — no application-level serializer required.
 
 ## Quick Example
 
