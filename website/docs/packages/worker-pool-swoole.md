@@ -3,7 +3,7 @@
 Swoole thread primitives for the worker pool: `Thread\Queue` transport,
 `Thread\Map` directory, and `Thread\Pool` bootstrap.
 
-## Prerequisites
+## Requirements
 
 - **ZTS PHP 8.5+** — verify with `php -r "echo PHP_ZTS;"` (must print `1`)
 - **Swoole 6.0+** compiled with `--enable-swoole-thread` — verify with
