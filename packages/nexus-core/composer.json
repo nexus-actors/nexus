@@ -10,8 +10,6 @@
         "psr/container": "^2.0",
         "psr/event-dispatcher": "^1.0",
         "brick/math": "^0.12",
-        "fp4php/functional": "^6.0",
-        "azjezz/psl": "^4.0",
         "symfony/uid": "^8.0",
         "nexus-actors/runtime": "dev-main"
     },
