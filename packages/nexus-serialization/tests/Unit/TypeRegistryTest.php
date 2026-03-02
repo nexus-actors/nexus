@@ -20,8 +20,8 @@ final class TypeRegistryTest extends TestCase
         $registry = new TypeRegistry();
         $registry->register(TestMessage::class, 'test.message');
 
-        self::assertSame(TestMessage::class, $registry->classForName('test.message')->get());
-        self::assertSame('test.message', $registry->nameForClass(TestMessage::class)->get());
+        self::assertSame(TestMessage::class, $registry->classForName('test.message'));
+        self::assertSame('test.message', $registry->nameForClass(TestMessage::class));
     }
 
     #[Test]
@@ -32,8 +32,8 @@ final class TypeRegistryTest extends TestCase
 
         $result = $registry->classForName('test.message');
 
-        self::assertTrue($result->isSome());
-        self::assertSame(TestMessage::class, $result->get());
+        self::assertNotNull($result);
+        self::assertSame(TestMessage::class, $result);
     }
 
     #[Test]
@@ -44,8 +44,8 @@ final class TypeRegistryTest extends TestCase
 
         $result = $registry->nameForClass(TestMessage::class);
 
-        self::assertTrue($result->isSome());
-        self::assertSame('test.message', $result->get());
+        self::assertNotNull($result);
+        self::assertSame('test.message', $result);
     }
 
     #[Test]
@@ -66,8 +66,8 @@ final class TypeRegistryTest extends TestCase
         $registry = new TypeRegistry();
         $registry->registerFromAttribute(AnnotatedMessage::class);
 
-        self::assertSame(AnnotatedMessage::class, $registry->classForName('annotated.message')->get());
-        self::assertSame('annotated.message', $registry->nameForClass(AnnotatedMessage::class)->get());
+        self::assertSame(AnnotatedMessage::class, $registry->classForName('annotated.message'));
+        self::assertSame('annotated.message', $registry->nameForClass(AnnotatedMessage::class));
     }
 
     #[Test]
@@ -82,12 +82,12 @@ final class TypeRegistryTest extends TestCase
     }
 
     #[Test]
-    public function unknownTypeReturnsNone(): void
+    public function unknownTypeReturnsNull(): void
     {
         $registry = new TypeRegistry();
 
-        self::assertTrue($registry->classForName('nonexistent')->isNone());
-        self::assertTrue($registry->nameForClass('NonExistent\\Class')->isNone());
+        self::assertNull($registry->classForName('nonexistent'));
+        self::assertNull($registry->nameForClass('NonExistent\\Class'));
     }
 }
 

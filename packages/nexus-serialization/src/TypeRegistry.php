@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization;
 
-use Fp\Functional\Option\Option;
 use LogicException;
 use ReflectionClass;
 
@@ -59,36 +58,26 @@ final class TypeRegistry
     }
 
     /**
-     * Returns the type name for a class, or None if not registered.
-     *
-     * @return Option<string>
+     * Returns the type name for a class, or null if not registered.
      */
-    public function nameForClass(string $className): Option
+    public function nameForClass(string $className): ?string
     {
         if (isset($this->classToName[$className])) {
-            return Option::some($this->classToName[$className]);
+            return $this->classToName[$className];
         }
 
-        /** @var Option<string> $none */
-        $none = Option::none();
-
-        return $none;
+        return null;
     }
 
     /**
-     * Returns the class name for a type name, or None if not registered.
-     *
-     * @return Option<string>
+     * Returns the class name for a type name, or null if not registered.
      */
-    public function classForName(string $typeName): Option
+    public function classForName(string $typeName): ?string
     {
         if (isset($this->nameToClass[$typeName])) {
-            return Option::some($this->nameToClass[$typeName]);
+            return $this->nameToClass[$typeName];
         }
 
-        /** @var Option<string> $none */
-        $none = Option::none();
-
-        return $none;
+        return null;
     }
 }

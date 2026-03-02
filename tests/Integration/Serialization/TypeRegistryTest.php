@@ -31,18 +31,18 @@ final class TypeRegistryTest extends TestCase
         $registry->registerFromAttribute(PaymentProcessed::class);
 
         // Verify forward lookups (class -> name)
-        self::assertSame('order.placed', $registry->nameForClass(OrderPlaced::class)->get());
-        self::assertSame('shipment.created', $registry->nameForClass(ShipmentCreated::class)->get());
-        self::assertSame('cart.updated', $registry->nameForClass(CartUpdated::class)->get());
-        self::assertSame('user.profile.updated', $registry->nameForClass(UserProfileUpdated::class)->get());
-        self::assertSame('payment.processed', $registry->nameForClass(PaymentProcessed::class)->get());
+        self::assertSame('order.placed', $registry->nameForClass(OrderPlaced::class));
+        self::assertSame('shipment.created', $registry->nameForClass(ShipmentCreated::class));
+        self::assertSame('cart.updated', $registry->nameForClass(CartUpdated::class));
+        self::assertSame('user.profile.updated', $registry->nameForClass(UserProfileUpdated::class));
+        self::assertSame('payment.processed', $registry->nameForClass(PaymentProcessed::class));
 
         // Verify reverse lookups (name -> class)
-        self::assertSame(OrderPlaced::class, $registry->classForName('order.placed')->get());
-        self::assertSame(ShipmentCreated::class, $registry->classForName('shipment.created')->get());
-        self::assertSame(CartUpdated::class, $registry->classForName('cart.updated')->get());
-        self::assertSame(UserProfileUpdated::class, $registry->classForName('user.profile.updated')->get());
-        self::assertSame(PaymentProcessed::class, $registry->classForName('payment.processed')->get());
+        self::assertSame(OrderPlaced::class, $registry->classForName('order.placed'));
+        self::assertSame(ShipmentCreated::class, $registry->classForName('shipment.created'));
+        self::assertSame(CartUpdated::class, $registry->classForName('cart.updated'));
+        self::assertSame(UserProfileUpdated::class, $registry->classForName('user.profile.updated'));
+        self::assertSame(PaymentProcessed::class, $registry->classForName('payment.processed'));
     }
 
     #[Test]
@@ -58,7 +58,8 @@ final class TypeRegistryTest extends TestCase
         $orderJson = $serializer->serialize($order);
 
         // The type name from the registry should allow deserialization
-        $typeName = $registry->nameForClass(OrderPlaced::class)->get();
+        $typeName = $registry->nameForClass(OrderPlaced::class);
+        self::assertNotNull($typeName);
         $restoredOrder = $serializer->deserialize($orderJson, $typeName);
 
         self::assertInstanceOf(OrderPlaced::class, $restoredOrder);
@@ -69,7 +70,8 @@ final class TypeRegistryTest extends TestCase
         $payment = new PaymentProcessed('PAY-REG-1', 200.00, 'USD', 'completed');
         $paymentJson = $serializer->serialize($payment);
 
-        $paymentTypeName = $registry->nameForClass(PaymentProcessed::class)->get();
+        $paymentTypeName = $registry->nameForClass(PaymentProcessed::class);
+        self::assertNotNull($paymentTypeName);
         $restoredPayment = $serializer->deserialize($paymentJson, $paymentTypeName);
 
         self::assertInstanceOf(PaymentProcessed::class, $restoredPayment);
@@ -84,11 +86,11 @@ final class TypeRegistryTest extends TestCase
         // Step 1: Scan attributes and build registry
         $registry = new TypeRegistry();
         $messageClasses = [
-            OrderPlaced::class,
-            ShipmentCreated::class,
             CartUpdated::class,
-            UserProfileUpdated::class,
+            OrderPlaced::class,
             PaymentProcessed::class,
+            ShipmentCreated::class,
+            UserProfileUpdated::class,
         ];
 
         foreach ($messageClasses as $class) {
@@ -107,8 +109,9 @@ final class TypeRegistryTest extends TestCase
         $json = $serializer->serialize($cartMessage);
 
         // Step 4: Look up the type name and deserialize
-        $typeName = $registry->nameForClass(CartUpdated::class)->get();
+        $typeName = $registry->nameForClass(CartUpdated::class);
         self::assertSame('cart.updated', $typeName);
+        self::assertNotNull($typeName);
 
         $restored = $serializer->deserialize($json, $typeName);
 
@@ -135,7 +138,8 @@ final class TypeRegistryTest extends TestCase
         $address = new Address('100 Broadway', 'New York', '10001', 'US');
         $withAddress = new UserProfileUpdated('USR-PIPE-1', 'Charlie', 'charlie@test.com', $address);
 
-        $typeName = $registry->nameForClass(UserProfileUpdated::class)->get();
+        $typeName = $registry->nameForClass(UserProfileUpdated::class);
+        self::assertNotNull($typeName);
 
         $json = $serializer->serialize($withAddress);
         $restored = $serializer->deserialize($json, $typeName);
