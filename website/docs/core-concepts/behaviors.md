@@ -165,6 +165,42 @@ Creates a behavior with no handler. Useful as a placeholder or for actors that o
 $behavior = Behavior::empty();
 ```
 
+## Concrete Behavior types
+
+Every factory method returns a specific concrete subclass. The runtime dispatches on
+these types internally, but user code can also narrow them with `instanceof` for
+introspection or testing.
+
+| Class | Returned by | Description |
+|---|---|---|
+| `ReceiveBehavior<T>` | `Behavior::receive()` | Stateless message handler with an optional signal handler |
+| `WithStateBehavior<T, S>` | `Behavior::withState()` | Stateful handler; carries `$initialState` and the handler closure |
+| `SetupBehavior<T>` | `Behavior::setup()` | Factory wrapper; the inner closure runs once at actor startup |
+| `SameBehavior<T>` | `Behavior::same()` | Sentinel — keep the current behavior unchanged |
+| `StoppedBehavior<T>` | `Behavior::stopped()` | Sentinel — stop the actor gracefully |
+| `UnhandledBehavior<T>` | `Behavior::unhandled()` | Sentinel — route the current message to dead letters |
+| `EmptyBehavior<T>` | `Behavior::empty()` | Sentinel — silently discard all messages |
+| `SupervisedBehavior<T>` | `Behavior::supervise()` | Wrapper that installs a `SupervisionStrategy` for the inner behavior |
+| `WithTimersBehavior<T>` | `Behavior::withTimers()` | Wrapper that provides a `TimerScheduler` to its factory closure |
+| `WithStashBehavior<T>` | `Behavior::withStash()` | Wrapper that provides a `StashBuffer` to its factory closure |
+| `UnstashAllBehavior<T>` | `StashBuffer::unstashAll()` | Internal — carries stashed envelopes to replay; produced by stash buffer, not user code |
+
+All 11 classes are `final` and `readonly`. Signal handlers are attached via `->onSignal()` on
+any concrete instance and return a new instance with the handler wired in.
+
+```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Actor\ReceiveBehavior;
+use Monadial\Nexus\Core\Actor\WithStateBehavior;
+
+$b = Behavior::receive(static fn ($ctx, $msg): Behavior => Behavior::same());
+assert($b instanceof ReceiveBehavior);    // true
+
+$s = Behavior::withState(0, static fn ($ctx, $msg, $state) => BehaviorWithState::same());
+assert($s instanceof WithStateBehavior);  // true
+```
+
 ## Composable behavior wrappers
 
 Nexus provides composable behavior wrappers inspired by Akka Typed. These wrappers inject resources (timers, stash buffers) into behavior factories and can be nested to compose multiple capabilities.
