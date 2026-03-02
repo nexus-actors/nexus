@@ -6,8 +6,8 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorTag;
 use Monadial\Nexus\Core\Actor\DefaultStashBuffer;
+use Monadial\Nexus\Core\Actor\UnstashAllBehavior;
 use Monadial\Nexus\Core\Exception\StashOverflowException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -65,7 +65,7 @@ final class StashBufferTest extends TestCase
         $result = $stash->unstashAll($target);
 
         // Returns a special behavior for ActorCell to handle
-        self::assertSame(BehaviorTag::UnstashAll, $result->tag());
+        self::assertInstanceOf(UnstashAllBehavior::class, $result);
 
         // Stash is cleared after unstashAll
         self::assertTrue($stash->isEmpty());
@@ -84,11 +84,6 @@ final class StashBufferTest extends TestCase
         self::assertSame($target, $result);
     }
 
-    /**
-     * @psalm-suppress MixedAssignment
-     * @psalm-suppress PossiblyNullFunctionCall
-     * @psalm-suppress MixedArrayAccess
-     */
     #[Test]
     public function unstash_all_preserves_envelope_order(): void
     {
@@ -104,11 +99,9 @@ final class StashBufferTest extends TestCase
         $target = Behavior::receive(static fn() => Behavior::same());
         $result = $stash->unstashAll($target);
 
-        // The handler should return the envelopes and target
-        $data = $result->handler();
-        $payload = $data();
-        self::assertSame([$env1, $env2, $env3], $payload['envelopes']);
-        self::assertSame($target, $payload['target']);
+        self::assertInstanceOf(UnstashAllBehavior::class, $result);
+        self::assertSame([$env1, $env2, $env3], $result->envelopes);
+        self::assertSame($target, $result->target);
     }
 
     #[Test]

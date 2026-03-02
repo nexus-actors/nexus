@@ -45,37 +45,42 @@ final readonly class Props
      */
     public static function fromFactory(callable $factory): self
     {
-        $behavior = Behavior::setup(static function (ActorContext $ctx) use ($factory): Behavior {
-            $actor = $factory();
-            assert($actor instanceof ActorHandler, 'Factory must return an ActorHandler');
+        $behavior = Behavior::setup(/** @return Behavior<U> */
+            static function (ActorContext $ctx) use ($factory): Behavior {
+                $actor = $factory();
+                assert($actor instanceof ActorHandler, 'Factory must return an ActorHandler');
 
-            $receive = Behavior::receive(
-                /** @param ActorContext<U> $c @param U $msg @return Behavior<U> */
-                static function (ActorContext $c, object $msg) use ($actor): Behavior {
-                    /** @var ActorContext<U> $c */
-                    /** @var U $msg */
+                $receive = Behavior::receive(
+                    /** @param ActorContext<U> $c @param U $msg @return Behavior<U> */
+                    static function (ActorContext $c, object $msg) use ($actor): Behavior {
+                        /** @var ActorContext<U> $c */
+                        /** @var U $msg */
 
-                    return $actor->handle($c, $msg);
-                },
-            );
+                        return $actor->handle($c, $msg);
+                    },
+                );
 
-            if ($actor instanceof AbstractActor) {
-                $actor->onPreStart($ctx);
+                if ($actor instanceof AbstractActor) {
+                    $actor->onPreStart($ctx);
 
-                /** @var Closure(ActorContext<U>, Signal): Behavior<U> $signalHandler */
-                $signalHandler = static function (ActorContext $c, Signal $signal) use ($actor): Behavior {
-                    if ($signal instanceof PostStop) {
-                        $actor->onPostStop($c);
-                    }
+                    /** @var Closure(ActorContext<U>, Signal): Behavior<U> $signalHandler */
+                    $signalHandler = static function (ActorContext $c, Signal $signal) use ($actor): Behavior {
+                        if ($signal instanceof PostStop) {
+                            $actor->onPostStop($c);
+                        }
 
-                    return Behavior::same();
-                };
+                        return Behavior::same();
+                    };
 
-                return $receive->onSignal($signalHandler);
-            }
+                    /** @var Behavior<U> $result */
+                    $result = $receive->onSignal($signalHandler);
 
-            return $receive;
-        });
+                    return $result;
+                }
+
+                return $receive;
+            },
+        );
 
         return self::fromBehavior($behavior);
     }

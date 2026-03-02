@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
 
+use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
@@ -25,6 +26,7 @@ final class Plugin implements PluginEntryPointInterface
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
         $hooks = [
+            BehaviorSubclassNarrowingHook::class,
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
             NonSerializableRemoteMessageRule::class,

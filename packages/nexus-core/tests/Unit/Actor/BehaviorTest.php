@@ -6,8 +6,17 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorTag;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Actor\EmptyBehavior;
+use Monadial\Nexus\Core\Actor\ReceiveBehavior;
+use Monadial\Nexus\Core\Actor\SameBehavior;
+use Monadial\Nexus\Core\Actor\SetupBehavior;
+use Monadial\Nexus\Core\Actor\StoppedBehavior;
+use Monadial\Nexus\Core\Actor\SupervisedBehavior;
+use Monadial\Nexus\Core\Actor\UnhandledBehavior;
+use Monadial\Nexus\Core\Actor\WithStashBehavior;
+use Monadial\Nexus\Core\Actor\WithStateBehavior;
+use Monadial\Nexus\Core\Actor\WithTimersBehavior;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -15,6 +24,16 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(Behavior::class)]
+#[CoversClass(ReceiveBehavior::class)]
+#[CoversClass(WithStateBehavior::class)]
+#[CoversClass(SetupBehavior::class)]
+#[CoversClass(SameBehavior::class)]
+#[CoversClass(StoppedBehavior::class)]
+#[CoversClass(UnhandledBehavior::class)]
+#[CoversClass(EmptyBehavior::class)]
+#[CoversClass(WithTimersBehavior::class)]
+#[CoversClass(WithStashBehavior::class)]
+#[CoversClass(SupervisedBehavior::class)]
 final class BehaviorTest extends TestCase
 {
     #[Test]
@@ -24,9 +43,8 @@ final class BehaviorTest extends TestCase
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
-        self::assertSame(BehaviorTag::Receive, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertSame($handler, $behavior->handler());
+        self::assertInstanceOf(ReceiveBehavior::class, $behavior);
+        self::assertSame($handler, $behavior->handler);
     }
 
     #[Test]
@@ -37,11 +55,9 @@ final class BehaviorTest extends TestCase
         /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(42, $handler);
 
-        self::assertSame(BehaviorTag::WithState, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertSame($handler, $behavior->handler());
-        self::assertNotNull($behavior->initialState());
-        self::assertSame(42, $behavior->initialState());
+        self::assertInstanceOf(WithStateBehavior::class, $behavior);
+        self::assertSame($handler, $behavior->handler);
+        self::assertSame(42, $behavior->initialState);
     }
 
     #[Test]
@@ -51,9 +67,8 @@ final class BehaviorTest extends TestCase
         $factory = static fn(ActorContext $ctx): Behavior => Behavior::same();
         $behavior = Behavior::setup($factory);
 
-        self::assertSame(BehaviorTag::Setup, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertSame($factory, $behavior->handler());
+        self::assertInstanceOf(SetupBehavior::class, $behavior);
+        self::assertSame($factory, $behavior->factory);
     }
 
     #[Test]
@@ -61,11 +76,8 @@ final class BehaviorTest extends TestCase
     {
         $behavior = Behavior::same();
 
-        self::assertSame(BehaviorTag::Same, $behavior->tag());
-        self::assertTrue($behavior->isSame());
-        self::assertFalse($behavior->isStopped());
-        self::assertFalse($behavior->isUnhandled());
-        self::assertNull($behavior->handler());
+        self::assertInstanceOf(SameBehavior::class, $behavior);
+        self::assertNull($behavior->signalHandler());
     }
 
     #[Test]
@@ -73,11 +85,8 @@ final class BehaviorTest extends TestCase
     {
         $behavior = Behavior::stopped();
 
-        self::assertSame(BehaviorTag::Stopped, $behavior->tag());
-        self::assertTrue($behavior->isStopped());
-        self::assertFalse($behavior->isSame());
-        self::assertFalse($behavior->isUnhandled());
-        self::assertNull($behavior->handler());
+        self::assertInstanceOf(StoppedBehavior::class, $behavior);
+        self::assertNull($behavior->signalHandler());
     }
 
     #[Test]
@@ -85,11 +94,8 @@ final class BehaviorTest extends TestCase
     {
         $behavior = Behavior::unhandled();
 
-        self::assertSame(BehaviorTag::Unhandled, $behavior->tag());
-        self::assertTrue($behavior->isUnhandled());
-        self::assertFalse($behavior->isSame());
-        self::assertFalse($behavior->isStopped());
-        self::assertNull($behavior->handler());
+        self::assertInstanceOf(UnhandledBehavior::class, $behavior);
+        self::assertNull($behavior->signalHandler());
     }
 
     #[Test]
@@ -97,11 +103,8 @@ final class BehaviorTest extends TestCase
     {
         $behavior = Behavior::empty();
 
-        self::assertSame(BehaviorTag::Empty, $behavior->tag());
-        self::assertFalse($behavior->isSame());
-        self::assertFalse($behavior->isStopped());
-        self::assertFalse($behavior->isUnhandled());
-        self::assertNull($behavior->handler());
+        self::assertInstanceOf(EmptyBehavior::class, $behavior);
+        self::assertNull($behavior->signalHandler());
     }
 
     #[Test]
@@ -122,9 +125,9 @@ final class BehaviorTest extends TestCase
         self::assertNotNull($withSignal->signalHandler());
         self::assertSame($signalHandler, $withSignal->signalHandler());
 
-        // Tag and handler are preserved
-        self::assertSame(BehaviorTag::Receive, $withSignal->tag());
-        self::assertSame($handler, $withSignal->handler());
+        // Type and handler are preserved
+        self::assertInstanceOf(ReceiveBehavior::class, $withSignal);
+        self::assertSame($handler, $withSignal->handler);
     }
 
     #[Test]
@@ -138,21 +141,20 @@ final class BehaviorTest extends TestCase
         /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(99, $handler)->onSignal($signalHandler);
 
-        self::assertSame(BehaviorTag::WithState, $behavior->tag());
-        self::assertNotNull($behavior->initialState());
-        self::assertSame(99, $behavior->initialState());
+        self::assertInstanceOf(WithStateBehavior::class, $behavior);
+        self::assertSame(99, $behavior->initialState);
         self::assertNotNull($behavior->signalHandler());
     }
 
     #[Test]
-    public function tagAccessorsReturnCorrectValues(): void
+    public function factoryMethodsReturnCorrectTypes(): void
     {
-        self::assertSame(BehaviorTag::Receive, Behavior::receive(static fn() => Behavior::same())->tag());
-        self::assertSame(BehaviorTag::Same, Behavior::same()->tag());
-        self::assertSame(BehaviorTag::Stopped, Behavior::stopped()->tag());
-        self::assertSame(BehaviorTag::Unhandled, Behavior::unhandled()->tag());
-        self::assertSame(BehaviorTag::Empty, Behavior::empty()->tag());
-        self::assertSame(BehaviorTag::Setup, Behavior::setup(static fn() => Behavior::same())->tag());
+        self::assertInstanceOf(ReceiveBehavior::class, Behavior::receive(static fn() => Behavior::same()));
+        self::assertInstanceOf(SameBehavior::class, Behavior::same());
+        self::assertInstanceOf(StoppedBehavior::class, Behavior::stopped());
+        self::assertInstanceOf(UnhandledBehavior::class, Behavior::unhandled());
+        self::assertInstanceOf(EmptyBehavior::class, Behavior::empty());
+        self::assertInstanceOf(SetupBehavior::class, Behavior::setup(static fn() => Behavior::same()));
     }
 
     #[Test]
@@ -162,10 +164,8 @@ final class BehaviorTest extends TestCase
         $factory = static fn(object $timers): Behavior => Behavior::same();
         $behavior = Behavior::withTimers($factory);
 
-        self::assertSame(BehaviorTag::WithTimers, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertSame($factory, $behavior->handler());
-        self::assertNull($behavior->initialState());
+        self::assertInstanceOf(WithTimersBehavior::class, $behavior);
+        self::assertSame($factory, $behavior->factory);
     }
 
     #[Test]
@@ -175,11 +175,9 @@ final class BehaviorTest extends TestCase
         $factory = static fn(object $stash): Behavior => Behavior::same();
         $behavior = Behavior::withStash(100, $factory);
 
-        self::assertSame(BehaviorTag::WithStash, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertSame($factory, $behavior->handler());
-        self::assertNotNull($behavior->initialState());
-        self::assertSame(100, $behavior->initialState());
+        self::assertInstanceOf(WithStashBehavior::class, $behavior);
+        self::assertSame($factory, $behavior->factory);
+        self::assertSame(100, $behavior->capacity);
     }
 
     #[Test]
@@ -189,22 +187,17 @@ final class BehaviorTest extends TestCase
         $strategy = SupervisionStrategy::oneForOne();
         $behavior = Behavior::supervise($inner, $strategy);
 
-        self::assertSame(BehaviorTag::Supervised, $behavior->tag());
-        self::assertNotNull($behavior->handler());
-        self::assertNotNull($behavior->initialState());
-        self::assertSame($strategy, $behavior->initialState());
+        self::assertInstanceOf(SupervisedBehavior::class, $behavior);
+        self::assertSame($strategy, $behavior->strategy);
     }
 
     #[Test]
-    public function superviseHandlerReturnsInnerBehavior(): void
+    public function superviseInnerBehaviorIsAccessibleDirectly(): void
     {
         $inner = Behavior::receive(static fn() => Behavior::same());
         $strategy = SupervisionStrategy::oneForOne();
         $behavior = Behavior::supervise($inner, $strategy);
 
-        $provider = $behavior->handler();
-        /** @psalm-suppress PossiblyNullFunctionCall */
-        $resolved = $provider();
-        self::assertSame($inner, $resolved);
+        self::assertSame($inner, $behavior->inner);
     }
 }
