@@ -68,14 +68,72 @@ $ref = $node->spawn(Props::fromBehavior($behavior), 'orders');
 $ref->tell(new PlaceOrder($items));  // identical regardless of which worker owns 'orders'
 ```
 
+## Getting started
+
+The fastest way to start a worker pool is the `WorkerPool` DSL builder in
+`nexus-worker-pool-swoole`:
+
+```php
+use Monadial\Nexus\WorkerPool\Swoole\WorkerPool;
+use Monadial\Nexus\WorkerPool\WorkerNode;
+use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
+
+WorkerPool::create()
+    ->actor('orders', OrderActor::class)
+    ->actor('payments', PaymentActor::class)
+    ->onStart(static function (WorkerNode $node): void {
+        // runs on every worker thread after ActorSystem boots
+    })
+    ->run(WorkerPoolConfig::withWorkers(swoole_cpu_num()));
+```
+
+`WorkerPool::actor()` registers a class-based actor on every worker. The hash ring
+ensures a given actor name always resolves to the same worker thread, so state is
+local within each worker.
+
+For closure-based actors:
+
+```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Actor\Props;
+
+WorkerPool::create()
+    ->behavior('counter', static fn (): Props => Props::fromBehavior(
+        Behavior::withState(0, static fn ($ctx, $msg, $n) => BehaviorWithState::next($n + 1)),
+    ))
+    ->run(WorkerPoolConfig::withWorkers(4));
+```
+
+See [Worker Pool Swoole package reference](../packages/worker-pool-swoole.md) for all
+builder methods.
+
+## Ask protocol (cross-worker request/response)
+
+`WorkerActorRef::ask()` supports request-response across threads. The ask protocol
+uses a reservation slot on the sending worker:
+
+```
+Sender calls ask() → WorkerAskRequest sent to target worker via Thread\Queue
+  → Target processes request, sends WorkerAskReply back to sender's queue
+  → Sender's WorkerNode resolves the Future slot
+  → ask() caller receives the result
+```
+
+The protocol is fault-tolerant: if no reply arrives within a configurable timeout, the
+request times out. See [Worker Pool package reference](../packages/worker-pool.md) for
+the full ask protocol API.
+
 ## Performance characteristics
 
 - **Cross-worker throughput**: ~260K messages/sec per worker pair (no serialization step)
 - **Cross-worker latency**: ~20 µs round-trip
 - **Worker count**: set to the number of available CPU cores for CPU-bound workloads
 
-## Future: multi-machine clustering
+## Multi-machine clustering
 
 For distributing actors across multiple machines over TCP, see the `nexus-cluster` package.
-It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts.
-A TCP-based implementation will arrive in a future `nexus-cluster-swoole` package.
+It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts — the
+same interface shape as `WorkerTransport` and `WorkerDirectory` but addressed by
+`NodeAddress` (cluster/datacenter/application/node) rather than worker ID.
+A TCP transport implementation is deferred to a future package.
