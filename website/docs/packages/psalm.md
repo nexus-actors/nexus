@@ -16,7 +16,7 @@ reconciliation errors.
 
 ## Setup
 
-Register the plugin in your `psalm.xml`:
+Register the plugin in `psalm.xml`:
 
 ```xml
 <plugins>
