@@ -48,20 +48,20 @@ final class SwooleMailboxTest extends TestCase
             (void) $mailbox->enqueue($env2);
             (void) $mailbox->enqueue($env3);
 
-            self::assertSame($env1, $mailbox->dequeue()->get());
-            self::assertSame($env2, $mailbox->dequeue()->get());
-            self::assertSame($env3, $mailbox->dequeue()->get());
+            self::assertSame($env1, $mailbox->dequeue());
+            self::assertSame($env2, $mailbox->dequeue());
+            self::assertSame($env3, $mailbox->dequeue());
         });
     }
 
     #[Test]
-    public function dequeue_returns_none_when_empty(): void
+    public function dequeue_returns_null_when_empty(): void
     {
         run(static function (): void {
             $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
 
             $result = $mailbox->dequeue();
-            self::assertTrue($result->isNone());
+            self::assertNull($result);
         });
     }
 
@@ -138,8 +138,8 @@ final class SwooleMailboxTest extends TestCase
             self::assertSame(EnqueueResult::Dropped, $mailbox->enqueue($env3));
 
             self::assertSame(2, $mailbox->count());
-            self::assertSame($env1, $mailbox->dequeue()->get());
-            self::assertSame($env2, $mailbox->dequeue()->get());
+            self::assertSame($env1, $mailbox->dequeue());
+            self::assertSame($env2, $mailbox->dequeue());
         });
     }
 
@@ -160,8 +160,8 @@ final class SwooleMailboxTest extends TestCase
             self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($env3));
 
             self::assertSame(2, $mailbox->count());
-            self::assertSame($env2, $mailbox->dequeue()->get());
-            self::assertSame($env3, $mailbox->dequeue()->get());
+            self::assertSame($env2, $mailbox->dequeue());
+            self::assertSame($env3, $mailbox->dequeue());
         });
     }
 
@@ -236,8 +236,8 @@ final class SwooleMailboxTest extends TestCase
             $mailbox->close();
 
             // Remaining messages can still be drained
-            self::assertSame($env, $mailbox->dequeue()->get());
-            self::assertTrue($mailbox->dequeue()->isNone());
+            self::assertSame($env, $mailbox->dequeue());
+            self::assertNull($mailbox->dequeue());
         });
     }
 
