@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Fp\Functional\Option\Option;
 use Override;
 
 /**
@@ -38,13 +37,17 @@ final readonly class LocalActorPath implements ActorPathContract
     }
 
     #[Override]
-    public function parent(): Option
+    public function parent(): ?ActorPathContract
     {
-        return $this->path
-            ->parent()
-            ->map(
-                static fn(ActorPathContract $parent): self => new self(ActorPath::fromString((string) $parent)),
-            );
+        $parent = $this->path->parent();
+
+        if ($parent === null) {
+            return null;
+        }
+
+        return new self(
+            $parent instanceof ActorPath ? $parent : ActorPath::fromString((string) $parent),
+        );
     }
 
     #[Override]

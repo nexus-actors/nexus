@@ -57,15 +57,15 @@ final class ActorPathTest extends TestCase
         $path = ActorPath::fromString('/user/orders/order-123');
         $parent = $path->parent();
 
-        self::assertTrue($parent->isSome());
-        self::assertSame('/user/orders', (string) $parent->get());
+        self::assertNotNull($parent);
+        self::assertSame('/user/orders', (string) $parent);
     }
 
     #[Test]
     public function rootHasNoParent(): void
     {
         $path = ActorPath::root();
-        self::assertTrue($path->parent()->isNone());
+        self::assertNull($path->parent());
     }
 
     #[Test]

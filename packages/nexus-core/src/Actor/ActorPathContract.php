@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Fp\Functional\Option\Option;
 use Stringable;
 
 /**
@@ -16,8 +15,7 @@ interface ActorPathContract extends Stringable
 {
     public function name(): string;
 
-    /** @return Option<self> */
-    public function parent(): Option;
+    public function parent(): ?self;
 
     public function equals(self $other): bool;
 
