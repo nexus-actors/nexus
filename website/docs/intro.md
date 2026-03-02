@@ -5,10 +5,10 @@ title: Introduction
 
 # Introduction
 
-:::caution Work in Progress
-Nexus is under active development and **not production-ready**. APIs may change
-without notice. Use it for experimentation, prototyping, and learning -- not for
-production workloads yet.
+:::caution Under active development
+Nexus is under active development. APIs are stabilising and the core actor model,
+supervision, and persistence APIs are considered stable. Worker-pool and cluster
+APIs may still evolve.
 :::
 
 Nexus is an actor system for PHP 8.5+, drawing inspiration from Akka (JVM) and
@@ -89,6 +89,9 @@ and `nexus-serialization` for convenience.
 - **Type safety.** All public APIs use generics tracked by Psalm. The
   `nexus-psalm` plugin ensures your message protocols are consistent at analysis
   time.
+- **Explicit nullable types.** Where values are conditionally present, Nexus uses
+  nullable types (`?ActorRef`, `?SupervisionStrategy`) enforced by Psalm's nullability
+  analysis. There are no optional wrappers or monadic containers in the public API.
 
 ## Next steps
 
