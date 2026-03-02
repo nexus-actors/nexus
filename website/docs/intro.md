@@ -22,7 +22,7 @@ PHP has long been treated as a request-response language. Building concurrent
 systems, fault-tolerant services, or distributed computing pipelines typically
 means reaching for external queues, cron jobs, and glue code across multiple
 infrastructure components. This works, but it spreads concurrency concerns
-across operational tooling rather than expressing them in your application code.
+across operational tooling rather than expressing them in application code.
 
 Nexus addresses this by giving PHP developers a structured concurrency model
 where:
@@ -49,8 +49,8 @@ Nexus is designed for PHP teams building:
 - **Long-running services** -- daemons and workers that must stay up, self-heal,
   and handle partial failures gracefully.
 
-If your team already writes PHP and needs concurrent or fault-tolerant behavior
-without adopting an entirely new language or platform, Nexus fits that gap.
+For PHP teams that need concurrent or fault-tolerant behavior without adopting
+an entirely new language or platform, Nexus fits that gap.
 
 ## Packages
 
@@ -84,10 +84,10 @@ and `nexus-serialization` for convenience.
 - **PSR compatibility.** Nexus integrates with `psr/log`, `psr/clock`,
   `psr/container`, and `psr/event-dispatcher` out of the box.
 - **Runtime-agnostic actor APIs.** Actor code depends on interfaces, not a
-  concrete runtime implementation. You choose the runtime (Fiber, Swoole, or
-  Step) at the composition root.
+  concrete runtime implementation. The runtime (Fiber, Swoole, or Step) is
+  chosen at the composition root.
 - **Type safety.** All public APIs use generics tracked by Psalm. The
-  `nexus-psalm` plugin ensures your message protocols are consistent at analysis
+  `nexus-psalm` plugin ensures message protocols are consistent at analysis
   time.
 - **Explicit nullable types.** Where values are conditionally present, Nexus uses
   nullable types (`?ActorRef`, `?SupervisionStrategy`) enforced by Psalm's nullability
