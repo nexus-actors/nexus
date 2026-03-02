@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
@@ -20,9 +19,8 @@ final readonly class Props
 {
     /**
      * @param Behavior<T> $behavior
-     * @param Option<object> $supervision  Will be typed as SupervisionStrategy in Task 5b
      */
-    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public Option $supervision) {}
+    private function __construct(public Behavior $behavior, public MailboxConfig $mailbox, public ?object $supervision) {}
 
     /**
      * @template U of object
@@ -31,10 +29,7 @@ final readonly class Props
      */
     public static function fromBehavior(Behavior $behavior): self
     {
-        /** @var Option<object> $none */
-        $none = Option::none();
-
-        return new self($behavior, MailboxConfig::unbounded(), $none);
+        return new self($behavior, MailboxConfig::unbounded(), null);
     }
 
     /**
@@ -152,6 +147,6 @@ final readonly class Props
      */
     public function withSupervision(object $strategy): self
     {
-        return clone($this, ['supervision' => Option::some($strategy)]);
+        return clone($this, ['supervision' => $strategy]);
     }
 }

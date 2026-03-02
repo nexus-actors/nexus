@@ -231,12 +231,8 @@ final class ActorSystem
         /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        $childSupervision = $props->supervision->isSome()
-            ? $props->supervision->get()
-            : SupervisionStrategy::oneForOne();
-
         /** @var SupervisionStrategy $typedSupervision */
-        $typedSupervision = $childSupervision;
+        $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
         /** @var Option<ActorRef<object>> $parentOpt */
         $parentOpt = Option::none();

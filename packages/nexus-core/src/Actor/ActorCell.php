@@ -235,12 +235,8 @@ final class ActorCell implements ActorContext
         /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        $childSupervision = $props->supervision->isSome()
-            ? $props->supervision->get()
-            : SupervisionStrategy::oneForOne();
-
         /** @var SupervisionStrategy $typedSupervision */
-        $typedSupervision = $childSupervision;
+        $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
         /** @var Option<ActorRef<object>> $parentOpt fp4php returns Option<ActorRef<T>>, widen to Option<ActorRef<object>> */
         $parentOpt = Option::some($this->selfRef);

@@ -60,8 +60,8 @@ final class FunctionsTest extends TestCase
 
         $result = withSupervision($strategy)($props);
 
-        self::assertTrue($result->supervision->isSome());
-        self::assertSame($strategy, $result->supervision->get());
+        self::assertNotNull($result->supervision);
+        self::assertSame($strategy, $result->supervision);
     }
 
     #[Test]
@@ -77,7 +77,7 @@ final class FunctionsTest extends TestCase
         $props = withSupervision($strategy)($props);
 
         self::assertSame($config, $props->mailbox);
-        self::assertTrue($props->supervision->isSome());
-        self::assertSame($strategy, $props->supervision->get());
+        self::assertNotNull($props->supervision);
+        self::assertSame($strategy, $props->supervision);
     }
 }

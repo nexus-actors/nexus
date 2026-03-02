@@ -42,7 +42,7 @@ final class PropsTest extends TestCase
 
         self::assertSame($behavior, $props->behavior);
         self::assertFalse($props->mailbox->bounded);
-        self::assertTrue($props->supervision->isNone());
+        self::assertNull($props->supervision);
     }
 
     #[Test]
@@ -65,7 +65,7 @@ final class PropsTest extends TestCase
 
         // Behavior is preserved
         self::assertSame($behavior, $updated->behavior);
-        self::assertTrue($updated->supervision->isNone());
+        self::assertNull($updated->supervision);
     }
 
     #[Test]
@@ -79,11 +79,11 @@ final class PropsTest extends TestCase
         $updated = $original->withSupervision($strategy);
 
         // Original is unchanged (immutability)
-        self::assertTrue($original->supervision->isNone());
+        self::assertNull($original->supervision);
 
         // Updated has supervision
-        self::assertTrue($updated->supervision->isSome());
-        self::assertSame($strategy, $updated->supervision->get());
+        self::assertNotNull($updated->supervision);
+        self::assertSame($strategy, $updated->supervision);
 
         // Behavior and mailbox are preserved
         self::assertSame($behavior, $updated->behavior);
@@ -106,8 +106,8 @@ final class PropsTest extends TestCase
         self::assertSame($behavior, $props->behavior);
         self::assertTrue($props->mailbox->bounded);
         self::assertSame(50, $props->mailbox->capacity);
-        self::assertTrue($props->supervision->isSome());
-        self::assertSame($strategy, $props->supervision->get());
+        self::assertNotNull($props->supervision);
+        self::assertSame($strategy, $props->supervision);
     }
 
     #[Test]
@@ -124,7 +124,7 @@ final class PropsTest extends TestCase
 
         self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
         self::assertFalse($props->mailbox->bounded);
-        self::assertTrue($props->supervision->isNone());
+        self::assertNull($props->supervision);
     }
 
     #[Test]
@@ -147,7 +147,7 @@ final class PropsTest extends TestCase
         self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
         self::assertTrue($props->mailbox->bounded);
         self::assertSame(50, $props->mailbox->capacity);
-        self::assertTrue($props->supervision->isSome());
+        self::assertNotNull($props->supervision);
     }
 
     #[Test]
@@ -188,7 +188,7 @@ final class PropsTest extends TestCase
 
         self::assertSame(BehaviorTag::Setup, $props->behavior->tag());
         self::assertFalse($props->mailbox->bounded);
-        self::assertTrue($props->supervision->isNone());
+        self::assertNull($props->supervision);
     }
 
     #[Test]
