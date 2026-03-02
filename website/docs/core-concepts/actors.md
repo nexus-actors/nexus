@@ -9,7 +9,7 @@ Actors are the fundamental unit of computation in Nexus. Each actor encapsulates
 
 ## ActorRef
 
-`ActorRef<T>` is the interface through which you interact with an actor. You never access an actor's internal state directly -- you send it messages through its reference.
+`ActorRef<T>` is the interface through which actors are interacted with. Internal actor state is never accessed directly -- messages are sent through the reference.
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorRef;
@@ -88,7 +88,12 @@ echo $ref->isAlive();  // true
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Fp\Functional\Option\Option;
+use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
+use Psr\Log\LoggerInterface;
 
 /** @template T of object */
 interface ActorContext
@@ -96,8 +101,8 @@ interface ActorContext
     /** @return ActorRef<T> */
     public function self(): ActorRef;
 
-    /** @return Option<ActorRef<object>> */
-    public function parent(): Option;
+    /** @return ?ActorRef<object> */
+    public function parent(): ?ActorRef;
 
     public function path(): ActorPath;
 
@@ -111,8 +116,8 @@ interface ActorContext
     /** @param ActorRef<object> $child */
     public function stop(ActorRef $child): void;
 
-    /** @return Option<ActorRef<object>> */
-    public function child(string $name): Option;
+    /** @return ?ActorRef<object> */
+    public function child(string $name): ?ActorRef;
 
     /** @return array<string, ActorRef<object>> */
     public function children(): array;
@@ -122,6 +127,11 @@ interface ActorContext
 
     /** @param ActorRef<object> $target */
     public function unwatch(ActorRef $target): void;
+
+    /** @param T $message */
+    public function tell(ActorRef $target, object $message): void;
+
+    public function reply(object $message): void;
 
     /** @param T $message */
     public function scheduleOnce(Duration $delay, object $message): Cancellable;
@@ -139,8 +149,8 @@ interface ActorContext
 
     public function log(): LoggerInterface;
 
-    /** @return Option<ActorRef<object>> */
-    public function sender(): Option;
+    /** @return ?ActorRef<object> */
+    public function sender(): ?ActorRef;
 }
 ```
 
@@ -220,7 +230,7 @@ $behavior = Behavior::setup(function (ActorContext $ctx): Behavior {
 });
 ```
 
-The returned `Cancellable` lets you stop the scheduled task.
+The returned `Cancellable` stops the scheduled task.
 
 ```php
 $cancellable->cancel();
@@ -265,16 +275,49 @@ $behavior = Behavior::receive(
 `sender()` returns the `ActorRef` of the actor that sent the current message, if available.
 
 ```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\ActorContext;
+
 $behavior = Behavior::receive(
     static function (ActorContext $ctx, object $msg): Behavior {
-        $ctx->sender()->map(
-            fn (ActorRef $sender) => $sender->tell(new Ack()),
-        );
+        $sender = $ctx->sender();
+
+        if ($sender !== null) {
+            $sender->tell(new Ack());
+        }
 
         return Behavior::same();
     },
 );
 ```
+
+### Replying to the sender
+
+`reply()` sends a message back to the actor that sent the current envelope. It propagates the
+`correlationId` from the current envelope, linking the reply to the original request.
+
+```php
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\ActorContext;
+
+$behavior = Behavior::receive(
+    static function (ActorContext $ctx, object $msg): Behavior {
+        if ($msg instanceof GetCount) {
+            $ctx->reply(new CountResult($count));
+        }
+
+        return Behavior::same();
+    },
+);
+```
+
+### Envelope tracing: ctx->tell() vs $ref->tell()
+
+`$ctx->tell($target, $message)` and `$ctx->reply($message)` propagate the current
+envelope's `correlationId` to the outgoing message, linking cause and effect in
+distributed traces. Calling `$target->tell($message)` directly starts a new trace
+root with no correlation to the current request chain. Prefer `$ctx->tell()` inside
+handlers when envelope tracing matters.
 
 ## ActorSystem
 
@@ -387,7 +430,7 @@ $order = $orders->child('order-123');       // "/user/orders/order-123"
 
 // Navigate the hierarchy
 echo $order->name();                        // "order-123"
-echo $order->parent()->get();               // "/user/orders"
+echo $order->parent();                      // "/user/orders"
 echo $order->depth();                       // 3
 echo ActorPath::root()->depth();            // 0
 
@@ -405,7 +448,7 @@ $a->equals($b);                            // true
 echo $order;                                // "/user/orders/order-123"
 ```
 
-The root path (`/`) returns `Option::none()` from `parent()` and `'/'` from `name()`.
+The root path (`/`) returns `null` from `parent()` and `'/'` from `name()`.
 
 ## Class-based actors
 
@@ -514,7 +557,7 @@ When spawned via `Props::fromFactory()`, lifecycle hooks are wired automatically
 
 ### StatefulActorHandler
 
-`StatefulActorHandler<T, S>` is designed for actors that manage explicit state. Instead of closing over mutable variables, you provide an `initialState()` and receive the current state on each `handle()` call. State updates are returned via `BehaviorWithState`.
+`StatefulActorHandler<T, S>` is designed for actors that manage explicit state. Instead of closing over mutable variables, an `initialState()` is provided and the current state is passed to each `handle()` call. State updates are returned via `BehaviorWithState`.
 
 ```php
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
@@ -599,4 +642,4 @@ $captured = $deadLetters->captured(); // list<object>
 echo $deadLetters->path(); // "/system/deadLetters"
 ```
 
-Messages that cannot be delivered -- for example, because the target actor has stopped -- are routed to dead letters. You can inspect `captured()` in tests to verify that no messages were lost unexpectedly.
+Messages that cannot be delivered -- for example, because the target actor has stopped -- are routed to dead letters. Inspecting `captured()` in tests verifies that no messages were lost unexpectedly.
