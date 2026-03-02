@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Exception\InvalidActorPathException;
 use Override;
 
@@ -91,23 +90,16 @@ final class ActorPath implements ActorPathContract
     }
 
     /**
-     * Returns the parent path, or None for the root path.
-     *
-     * @return Option<ActorPathContract>
+     * Returns the parent path, or null for the root path.
      */
     #[Override]
-    public function parent(): Option
+    public function parent(): ?ActorPathContract
     {
         if ($this->elements === []) {
-            /** @var Option<ActorPathContract> $none fp4php returns Option<empty>, covariant to Option<ActorPathContract> */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
-        $parentElements = array_slice($this->elements, 0, -1);
-
-        return Option::some(new self($parentElements));
+        return new self(array_slice($this->elements, 0, -1));
     }
 
     /**
