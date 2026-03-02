@@ -78,7 +78,97 @@ Cross-worker messaging through `Thread\Queue` (one inbox per worker) with a shar
 
 ### Envelope delivery
 
-The worker pool passes `Envelope` objects directly via `Thread\Queue`. No wire serialization format is needed for same-machine scaling.
+The worker pool passes `Envelope` objects through `Thread\Queue`. PHP serializes each object on push and deserializes on pop — this is the primary throughput ceiling for cross-thread messaging (see [Hot-path breakdown](#hot-path-component-breakdown) below).
+
+## PHP OPcache JIT
+
+PHP's JIT compiler reduces interpreter overhead for hot loops and pure-PHP arithmetic.
+The Nexus `php-swoole` Docker image enables JIT automatically:
+
+```ini
+opcache.enable=1
+opcache.enable_cli=1
+opcache.jit=tracing
+opcache.jit_buffer_size=64M
+```
+
+Effect on the world benchmark (16 workers · 16 senders, Apple M4 Max, Docker):
+
+| JIT mode | Throughput |
+|---|---|
+| JIT disabled (default CLI) | ~3.1M orders/sec |
+| JIT tracing | **~3.5M orders/sec** |
+
+JIT is most effective on the pure-PHP hot paths: actor handler closures,
+`ActorPath` string operations, and `Behavior` dispatch. Cross-thread
+serialization (`Thread\Queue`) is a native C operation and is unaffected.
+
+**ZTS compatibility.** PHP 8.5 ZTS supports JIT. Each thread benefits from
+pre-compiled hot functions in the shared OPcache region. No configuration
+differences are needed between single-threaded and multi-threaded deployments.
+
+**Production deployments.** When not using the Nexus Docker image, add the
+above `opcache.*` settings to `php.ini` or a `conf.d` override file. PHP CLI
+disables OPcache by default; `opcache.enable_cli=1` is required.
+
+## Hot-path component breakdown
+
+Each message through the worker pool passes through five stages. The table below
+shows the measured cost of each stage in isolation (JIT tracing enabled,
+Apple M4 Max, Docker, 300K iterations after warmup):
+
+| Stage | Component | µs/op | M/s ceiling |
+|---|---|---|---|
+| **Producer** | `ActorPath::root()` cache hit | 0.01 | 86 |
+| | `random_bytes(16) + bin2hex()` — Envelope ID | 0.18 | 5.6 |
+| | `Envelope::of()` (rand + alloc + 3 fields) | 0.36 | 2.8 |
+| | `Thread\Queue::push` (PHP serialize) | 0.61 | 1.6 |
+| **Worker** | `Thread\Queue::pop` (PHP unserialize) | 0.98 | 1.0 |
+| | `Channel::push()+pop()` (SwooleMailbox) | 0.07 | 15 |
+| | `ActorCell` dispatch overhead | 0.06 | — |
+| | Full `BehaviorWithState` handler + apply | 0.13 | 7.7 |
+
+### Critical-path analysis
+
+Producer and worker run concurrently on separate OS threads. Only the slower
+side constrains throughput:
+
+```
+Producer:  Envelope::of() + serialize   =  0.97 µs
+Worker:    unserialize + actor dispatch  =  1.24 µs  ← bottleneck
+```
+
+At 1.24 µs per message, each worker's theoretical ceiling is **0.81 M/s**, giving
+**12.9 M/s** across 16 workers. The measured 3.5 M/s is ~27% of this ceiling —
+the gap is **Thread\Queue mutex contention** under concurrent load. Single-threaded
+micro-benchmarks do not capture the synchronization overhead between 16 sender
+threads and 16 worker threads.
+
+### What limits throughput
+
+**Thread\Queue serialization (1.59 µs/msg total)** is the structural ceiling.
+`Thread\Queue` uses PHP's native `serialize()`/`unserialize()` internally; this
+cannot be configured or replaced without changes to Swoole. Reducing the
+serialized payload size (e.g., compact `ActorPath` serialization) saves bytes
+but does not materially improve throughput because the bottleneck is PHP
+interpreter overhead, not data transfer time.
+
+### Secondary hotspots
+
+| Hotspot | Cost | Fixable? |
+|---|---|---|
+| `random_bytes(16)` per `Envelope` — one `getrandom()` syscall/msg | 0.18 µs | Yes — thread-local PRNG eliminates the syscall at the cost of non-CSPRNG IDs |
+| `BehaviorWithState::next()` — 1 PHP object alloc/msg | 0.08 µs | Partially — could cache a static same-state singleton to avoid allocation on no-change paths |
+| `applyStatefulBehavior()` — `isStopped() + hasNewState() + state()` | 0.02 µs | Low priority — direct nullable field access, already very fast |
+
+### Running the breakdown yourself
+
+```bash
+docker compose exec php-swoole php \
+  -d opcache.enable_cli=1 -d opcache.jit=tracing \
+  -d opcache.jit_buffer_size=64M \
+  tests/Performance/hotpath_breakdown.php
+```
 
 ## Running benchmarks
 
