@@ -19,9 +19,9 @@ final class BehaviorWithStateTest extends TestCase
     {
         $result = BehaviorWithState::next(100);
 
-        self::assertTrue($result->state()->isSome());
-        self::assertSame(100, $result->state()->get());
-        self::assertTrue($result->behavior()->isNone());
+        self::assertTrue($result->hasNewState());
+        self::assertSame(100, $result->state());
+        self::assertNull($result->behavior());
         self::assertFalse($result->isStopped());
     }
 
@@ -30,8 +30,8 @@ final class BehaviorWithStateTest extends TestCase
     {
         $result = BehaviorWithState::same();
 
-        self::assertTrue($result->state()->isNone());
-        self::assertTrue($result->behavior()->isNone());
+        self::assertFalse($result->hasNewState());
+        self::assertNull($result->behavior());
         self::assertFalse($result->isStopped());
     }
 
@@ -41,8 +41,8 @@ final class BehaviorWithStateTest extends TestCase
         $result = BehaviorWithState::stopped();
 
         self::assertTrue($result->isStopped());
-        self::assertTrue($result->state()->isNone());
-        self::assertTrue($result->behavior()->isNone());
+        self::assertFalse($result->hasNewState());
+        self::assertNull($result->behavior());
     }
 
     #[Test]
@@ -52,32 +52,37 @@ final class BehaviorWithStateTest extends TestCase
         $newBehavior = Behavior::receive($handler);
         $result = BehaviorWithState::withBehavior($newBehavior, 'new-state');
 
-        self::assertTrue($result->behavior()->isSome());
-        self::assertSame($newBehavior, $result->behavior()->get());
-        self::assertTrue($result->state()->isSome());
-        self::assertSame('new-state', $result->state()->get());
+        self::assertNotNull($result->behavior());
+        self::assertSame($newBehavior, $result->behavior());
+        self::assertTrue($result->hasNewState());
+        self::assertSame('new-state', $result->state());
         self::assertFalse($result->isStopped());
     }
 
     #[Test]
-    public function stateAccessorReturnsOption(): void
+    public function stateAccessorReturnsValue(): void
     {
         $withState = BehaviorWithState::next(['key' => 'value']);
-        self::assertSame(['key' => 'value'], $withState->state()->get());
+
+        self::assertTrue($withState->hasNewState());
+        self::assertSame(['key' => 'value'], $withState->state());
 
         $withoutState = BehaviorWithState::same();
-        self::assertTrue($withoutState->state()->isNone());
+
+        self::assertFalse($withoutState->hasNewState());
     }
 
     #[Test]
-    public function behaviorAccessorReturnsOption(): void
+    public function behaviorAccessorReturnsNullableValue(): void
     {
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
         $withBehavior = BehaviorWithState::withBehavior($behavior, 0);
-        self::assertSame($behavior, $withBehavior->behavior()->get());
+
+        self::assertSame($behavior, $withBehavior->behavior());
 
         $withoutBehavior = BehaviorWithState::next(42);
-        self::assertTrue($withoutBehavior->behavior()->isNone());
+
+        self::assertNull($withoutBehavior->behavior());
     }
 }

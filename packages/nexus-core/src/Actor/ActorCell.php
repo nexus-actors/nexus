@@ -673,13 +673,13 @@ final class ActorCell implements ActorContext
         }
 
         // Update state if provided
-        if ($result->state()->isSome()) {
-            $this->currentState = $result->state()->get();
+        if ($result->hasNewState()) {
+            $this->currentState = $result->state();
         }
 
         // Swap behavior if provided
-        if ($result->behavior()->isSome()) {
-            $newBehavior = $result->behavior()->get();
+        if ($result->behavior() !== null) {
+            $newBehavior = $result->behavior();
             $this->currentBehavior = $newBehavior;
 
             // If new behavior has initial state, use it instead

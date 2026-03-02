@@ -4,16 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-use Fp\Functional\Option\Option;
-
 /**
  * @psalm-api
  * @psalm-immutable
  *
  * Result of a stateful behavior handler.
- *
- * Allows the handler to indicate new state, same state, stopped, or
- * a complete behavior switch.
  *
  * @template T of object
  * @template S
@@ -21,10 +16,15 @@ use Fp\Functional\Option\Option;
 final readonly class BehaviorWithState
 {
     /**
-     * @param Option<Behavior<T>> $behavior
-     * @param Option<S> $state
+     * @param ?Behavior<T> $behavior  null = keep current behavior
+     * @param S $state
      */
-    private function __construct(private Option $behavior, private Option $state, private bool $stopped) {}
+    private function __construct(
+        private ?Behavior $behavior,
+        private mixed $state,
+        private bool $hasState,
+        private bool $stopped,
+    ) {}
 
     /**
      * Same behavior, new state.
@@ -36,7 +36,7 @@ final readonly class BehaviorWithState
     public static function next(mixed $state): self
     {
         /** @var BehaviorWithState<object, NS> */
-        return new self(self::noBehavior(), Option::some($state), false);
+        return new self(null, $state, true, false);
     }
 
     /**
@@ -47,7 +47,7 @@ final readonly class BehaviorWithState
     public static function same(): self
     {
         /** @var BehaviorWithState<T, S> */
-        return new self(self::noBehavior(), self::noState(), false);
+        return new self(null, null, false, false);
     }
 
     /**
@@ -58,7 +58,7 @@ final readonly class BehaviorWithState
     public static function stopped(): self
     {
         /** @var BehaviorWithState<T, S> */
-        return new self(self::noBehavior(), self::noState(), true);
+        return new self(null, null, false, true);
     }
 
     /**
@@ -73,7 +73,7 @@ final readonly class BehaviorWithState
     public static function withBehavior(Behavior $behavior, mixed $state): self
     {
         /** @var BehaviorWithState<U, NS> */
-        return new self(Option::some($behavior), Option::some($state), false);
+        return new self($behavior, $state, true, false);
     }
 
     public function isStopped(): bool
@@ -82,36 +82,30 @@ final readonly class BehaviorWithState
     }
 
     /**
-     * @return Option<Behavior<T>>
+     * The new behavior to switch to, or null to keep the current behavior.
+     *
+     * @return ?Behavior<T>
      */
-    public function behavior(): Option
+    public function behavior(): ?Behavior
     {
         return $this->behavior;
     }
 
     /**
-     * @return Option<S>
+     * The new state value. Only meaningful when hasNewState() returns true.
+     *
+     * @return S
      */
-    public function state(): Option
+    public function state(): mixed
     {
         return $this->state;
     }
 
     /**
-     * @return Option<Behavior<object>>
+     * Whether the handler returned a new state (even if that state is null).
      */
-    private static function noBehavior(): Option
+    public function hasNewState(): bool
     {
-        /** @var Option<Behavior<object>> fp4php returns Option<empty>, covariant to Option<Behavior<object>> */
-        return Option::none();
-    }
-
-    /**
-     * @return Option<mixed>
-     */
-    private static function noState(): Option
-    {
-        /** @var Option<mixed> */
-        return Option::none();
+        return $this->hasState;
     }
 }
