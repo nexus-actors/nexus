@@ -6,8 +6,9 @@ title: nexus-psalm
 # nexus-psalm
 
 Psalm plugin for static analysis of Nexus actor code. Provides custom rules
-that enforce actor-model safety and type providers that improve generic type
-inference.
+that enforce actor-model safety, type providers that improve generic type
+inference, and a narrowing hook that suppresses false-positive template
+reconciliation errors.
 
 **Composer:** `nexus-actors/psalm`
 
@@ -231,6 +232,30 @@ $ref = $system->spawn($props, 'my-actor');
 $ref->tell(new MyCommand('hello')); // OK
 $ref->tell(new WrongType());        // Psalm error: type mismatch
 ```
+
+## BehaviorSubclassNarrowingHook
+
+`BehaviorSubclassNarrowingHook` suppresses false-positive Psalm type-narrowing
+errors that arise when `instanceof`-narrowing `Behavior<T>` to one of its 11
+concrete subclasses.
+
+**Root cause:** Psalm's template-scope reconciliation cannot match `T` in
+`ReceiveBehavior<T>` with `T` in `Behavior<T>` when they are resolved in different
+analysis scopes. This causes `DocblockTypeContradiction`, `TypeDoesNotContainType`,
+and `RedundantConditionGivenDocblockType` issues on otherwise-correct narrowing code.
+
+The hook fires before each issue is recorded and suppresses only the specific cases
+where both `Behavior<` and a known concrete subclass FQCN appear in the issue message,
+making the suppression narrow and safe.
+
+**Affected issue types:**
+- `DocblockTypeContradiction`
+- `TypeDoesNotContainType`
+- `RedundantConditionGivenDocblockType`
+
+This hook runs automatically when the plugin is installed. No configuration is
+required and it cannot be disabled independently. It does not suppress any issue
+outside the `Behavior<T>` narrowing pattern.
 
 ## Generic type safety
 
