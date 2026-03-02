@@ -79,7 +79,7 @@ classDiagram
 | Class / Interface | Description |
 |---|---|
 | `ActorRef<T>` | Interface for sending messages to an actor. Methods: `tell(T)`, `ask(callable, Duration): R`, `path(): ActorPath`, `isAlive(): bool`. |
-| `ActorContext<T>` | Interface passed to behavior handlers. Provides `self()`, `parent()`, `spawn()`, `stop()`, `child()`, `children()`, `watch()`, `unwatch()`, `scheduleOnce()`, `scheduleRepeatedly()`, `stash()`, `unstashAll()`, `log()`, `sender()`. |
+| `ActorContext<T>` | Interface passed to behavior handlers. See method reference below. |
 | `ActorSystem` | Entry point. Created via `ActorSystem::create(string $name, Runtime $runtime)`. Spawns top-level actors under `/user`, manages the runtime lifecycle, and provides the dead-letter endpoint. |
 | `Behavior<T>` | Immutable behavior definition. Factory methods: `receive(Closure)`, `withState(mixed, Closure)`, `setup(Closure)`, `same()`, `stopped()`, `unhandled()`, `empty()`. Instance method: `onSignal(Closure)`. |
 | `BehaviorWithState<T, S>` | Result of a stateful behavior handler. Factory methods: `next(S)`, `same()`, `stopped()`, `withBehavior(Behavior, S)`. |
@@ -103,6 +103,29 @@ classDiagram
 | `WithTimersBehavior<T>` | Wrapper `Behavior` that provides a `TimerScheduler` to its factory closure. |
 | `WithStashBehavior<T>` | Wrapper `Behavior` that provides a `StashBuffer` to its factory closure. |
 | `UnstashAllBehavior<T>` | Internal `Behavior` carrying stashed envelopes to replay; produced by `StashBuffer::unstashAll()`. |
+
+### ActorContext method reference
+
+| Signature | Description |
+|---|---|
+| `self(): ActorRef<T>` | Returns the `ActorRef` of the current actor. |
+| `parent(): ?ActorRef<object>` | Returns the parent `ActorRef`, or `null` for top-level actors. |
+| `path(): ActorPath` | Returns the actor's hierarchical path. |
+| `spawn(Props<C> $props, string $name): ActorRef<C>` | Spawns a named child actor. |
+| `stop(ActorRef<object> $child): void` | Stops the given child actor. |
+| `child(string $name): ?ActorRef<object>` | Returns a child `ActorRef` by name, or `null` if not found. |
+| `children(): array<string, ActorRef<object>>` | Returns all live children keyed by name. |
+| `watch(ActorRef<object> $target): void` | Registers a death-watch on `$target`; delivers `Terminated` when it stops. |
+| `unwatch(ActorRef<object> $target): void` | Cancels a death-watch registration. |
+| `scheduleOnce(Duration $delay, object $message): Cancellable` | Schedules a one-shot message to `self()` after `$delay`. |
+| `scheduleRepeatedly(Duration $initialDelay, Duration $interval, object $message): Cancellable` | Schedules a recurring message to `self()`. |
+| `sender(): ?ActorRef<object>` | Returns the sender of the current message, or `null` for fire-and-forget. |
+| `reply(object $message): void` | Sends a message back to the current envelope's sender, propagating `correlationId`. |
+| `stash(): void` | Stashes the current message for later replay. |
+| `unstashAll(): void` | Replays all stashed messages into the mailbox. |
+| `log(): LoggerInterface` | Returns the PSR-3 logger bound to this actor. |
+| `spawnTask(Closure $task): Cancellable` | Spawns a background task tied to this actor's lifecycle; cancelled automatically on stop. |
+
 ## Mailbox namespace
 
 `Monadial\Nexus\Core\Mailbox\`
