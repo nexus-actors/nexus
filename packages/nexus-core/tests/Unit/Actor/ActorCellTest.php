@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -581,13 +580,13 @@ final class ActorCellTest extends TestCase
         ));
 
         $childOpt = $cell->child('worker');
-        self::assertTrue($childOpt->isSome());
+        self::assertNotNull($childOpt);
         self::assertTrue(
-            ActorPath::fromString('/user/parent/worker')->equals($childOpt->get()->path()),
+            ActorPath::fromString('/user/parent/worker')->equals($childOpt->path()),
         );
 
         $noChild = $cell->child('nonexistent');
-        self::assertTrue($noChild->isNone());
+        self::assertNull($noChild);
     }
 
     // ======================================================================
@@ -634,7 +633,6 @@ final class ActorCellTest extends TestCase
         ));
 
         self::assertNotNull($capturedSender);
-        self::assertTrue($capturedSender->isSome());
     }
 
     #[Test]
@@ -924,15 +922,12 @@ final class ActorCellTest extends TestCase
         $path ??= ActorPath::fromString('/user/test');
         $mailbox ??= TestMailbox::unbounded();
 
-        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
-        $noParent = Option::none();
-
         return new ActorCell(
             $behavior,
             $path,
             $mailbox,
             $this->runtime,
-            $noParent,
+            null,
             SupervisionStrategy::oneForOne(),
             $this->runtime->clock(),
             $this->logger,

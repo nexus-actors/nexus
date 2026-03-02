@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -224,15 +223,12 @@ final class SpawnTaskTest extends TestCase
         $path ??= ActorPath::fromString('/user/test');
         $mailbox ??= TestMailbox::unbounded();
 
-        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $noParent */
-        $noParent = Option::none();
-
         return new ActorCell(
             $behavior,
             $path,
             $mailbox,
             $this->runtime,
-            $noParent,
+            null,
             SupervisionStrategy::oneForOne(),
             $this->runtime->clock(),
             $this->logger,

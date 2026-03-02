@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Persistence\Tests\Unit\State;
 
 use DateTimeImmutable;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -606,15 +605,12 @@ final class DurableStateEngineTest extends TestCase
         $actorPath = ActorPath::fromString($path);
         $mailbox = TestMailbox::unbounded();
 
-        /** @var Option<ActorRef<object>> $noParent */
-        $noParent = Option::none();
-
         return new ActorCell(
             $behavior,
             $actorPath,
             $mailbox,
             $this->runtime,
-            $noParent,
+            null,
             SupervisionStrategy::oneForOne(),
             $this->runtime->clock(),
             $this->logger,

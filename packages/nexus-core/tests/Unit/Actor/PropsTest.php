@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
@@ -199,15 +198,12 @@ final class PropsTest extends TestCase
         $runtime = new TestRuntime();
         $mailbox = $runtime->createMailbox($props->mailbox);
 
-        /** @var Option<\Monadial\Nexus\Core\Actor\ActorRef<object>> $none */
-        $none = Option::none();
-
         $cell = new ActorCell(
             $props->behavior,
             ActorPath::fromString('/user/test'),
             $mailbox,
             $runtime,
-            $none,
+            null,
             SupervisionStrategy::oneForOne(),
             new TestClock(),
             new NullLogger(),

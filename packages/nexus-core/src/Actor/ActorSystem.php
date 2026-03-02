@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use DateTimeImmutable;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
@@ -234,15 +233,12 @@ final class ActorSystem
         /** @var SupervisionStrategy $typedSupervision */
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
-        /** @var Option<ActorRef<object>> $parentOpt */
-        $parentOpt = Option::none();
-
         $childCell = new ActorCell(
             $props->behavior,
             $childPath,
             $childMailbox,
             $this->runtime,
-            $parentOpt,
+            null,
             $typedSupervision,
             $this->clock,
             $this->logger,

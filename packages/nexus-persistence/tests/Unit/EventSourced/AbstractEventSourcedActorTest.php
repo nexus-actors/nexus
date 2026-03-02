@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Persistence\Tests\Unit\EventSourced;
 
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
@@ -306,15 +304,12 @@ final class AbstractEventSourcedActorTest extends TestCase
         $actorPath = ActorPath::fromString($path);
         $mailbox = TestMailbox::unbounded();
 
-        /** @var Option<ActorRef<object>> $noParent */
-        $noParent = Option::none();
-
         return new ActorCell(
             $behavior,
             $actorPath,
             $mailbox,
             $runtime,
-            $noParent,
+            null,
             SupervisionStrategy::oneForOne(),
             $runtime->clock(),
             $logger,
