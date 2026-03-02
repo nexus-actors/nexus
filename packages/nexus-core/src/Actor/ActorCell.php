@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
 use Error;
-use Fp\Functional\Option\Option;
 use LogicException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
@@ -80,14 +79,14 @@ final class ActorCell implements ActorContext
     /**
      * @param Behavior<T> $behavior
      * @param Mailbox<Envelope> $mailbox
-     * @param Option<ActorRef<object>> $parentRef
+     * @param ?ActorRef<object> $parentRef
      */
     public function __construct(
         Behavior $behavior,
         private readonly ActorPath $actorPath,
         private readonly Mailbox $mailbox,
         private readonly Runtime $runtime,
-        private readonly Option $parentRef,
+        private readonly ?ActorRef $parentRef,
         private readonly SupervisionStrategy $supervision,
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
@@ -204,9 +203,9 @@ final class ActorCell implements ActorContext
         return $this->selfRef;
     }
 
-    /** @return Option<ActorRef<object>> */
+    /** @return ?ActorRef<object> */
     #[Override]
-    public function parent(): Option
+    public function parent(): ?ActorRef
     {
         return $this->parentRef;
     }
@@ -238,15 +237,15 @@ final class ActorCell implements ActorContext
         /** @var SupervisionStrategy $typedSupervision */
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
-        /** @var Option<ActorRef<object>> $parentOpt fp4php returns Option<ActorRef<T>>, widen to Option<ActorRef<object>> */
-        $parentOpt = Option::some($this->selfRef);
+        /** @var ActorRef<object> $parentRef */
+        $parentRef = $this->selfRef;
 
         $childCell = new self(
             $props->behavior,
             $childPath,
             $childMailbox,
             $this->runtime,
-            $parentOpt,
+            $parentRef,
             $typedSupervision,
             $this->clock,
             $this->logger,
@@ -269,18 +268,11 @@ final class ActorCell implements ActorContext
         $child->tell(new PoisonPill());
     }
 
-    /** @return Option<ActorRef<object>> */
+    /** @return ?ActorRef<object> */
     #[Override]
-    public function child(string $name): Option
+    public function child(string $name): ?ActorRef
     {
-        if (isset($this->childrenMap[$name])) {
-            return Option::some($this->childrenMap[$name]);
-        }
-
-        /** @var Option<ActorRef<object>> $none */
-        $none = Option::none();
-
-        return $none;
+        return $this->childrenMap[$name] ?? null;
     }
 
     /** @return array<string, ActorRef<object>> */
@@ -362,41 +354,33 @@ final class ActorCell implements ActorContext
         return $this->logger;
     }
 
-    /** @return Option<ActorRef<object>> */
+    /** @return ?ActorRef<object> */
     #[Override]
-    public function sender(): Option
+    public function sender(): ?ActorRef
     {
         if ($this->currentEnvelope === null) {
-            /** @var Option<ActorRef<object>> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
         // If the envelope carries a direct ref (from ask()), use it
         if ($this->currentEnvelope->senderRef !== null) {
-            return Option::some($this->currentEnvelope->senderRef);
+            return $this->currentEnvelope->senderRef;
         }
 
         $senderPath = $this->currentEnvelope->sender;
 
         // Root path means no sender
         if ($senderPath->equals(ActorPath::root())) {
-            /** @var Option<ActorRef<object>> $none */
-            $none = Option::none();
-
-            return $none;
+            return null;
         }
 
         // Path-based reconstruction for cluster/remote senders
-        $senderRef = new LocalActorRef(
+        return new LocalActorRef(
             $senderPath,
             $this->mailbox, // placeholder — in full system would resolve actual mailbox
             static fn(): bool => true,
             $this->runtime,
         );
-
-        return Option::some($senderRef);
     }
 
     #[Override]
@@ -404,11 +388,11 @@ final class ActorCell implements ActorContext
     {
         $sender = $this->sender();
 
-        if ($sender->isNone()) {
+        if ($sender === null) {
             throw new NoSenderException('Cannot reply: no sender on current message');
         }
 
-        $sender->get()->tell($message);
+        $sender->tell($message);
     }
 
     /** @param Closure(TaskContext): void $task */

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Runtime\Duration;
@@ -22,8 +21,8 @@ interface ActorContext
     /** @return ActorRef<T> */
     public function self(): ActorRef;
 
-    /** @return Option<ActorRef<object>> */
-    public function parent(): Option;
+    /** @return ?ActorRef<object> */
+    public function parent(): ?ActorRef;
 
     public function path(): ActorPath;
 
@@ -38,8 +37,8 @@ interface ActorContext
     /** @param ActorRef<object> $child */
     public function stop(ActorRef $child): void;
 
-    /** @return Option<ActorRef<object>> */
-    public function child(string $name): Option;
+    /** @return ?ActorRef<object> */
+    public function child(string $name): ?ActorRef;
 
     /** @return array<string, ActorRef<object>> */
     public function children(): array;
@@ -62,8 +61,8 @@ interface ActorContext
 
     public function log(): LoggerInterface;
 
-    /** @return Option<ActorRef<object>> */
-    public function sender(): Option;
+    /** @return ?ActorRef<object> */
+    public function sender(): ?ActorRef;
 
     /**
      * Reply to the sender of the current message.
