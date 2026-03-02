@@ -8,7 +8,8 @@ title: Mailboxes
 Every actor has a mailbox -- a queue that buffers incoming messages until the actor
 is ready to process them. Nexus provides control over mailbox capacity and
 overflow behavior through `MailboxConfig`, and wraps every message in an
-`Envelope` that carries sender, target, and metadata alongside the payload.
+`Envelope` that carries sender, target, metadata, and distributed tracing
+identifiers alongside the payload.
 
 ## MailboxConfig
 
@@ -72,12 +73,12 @@ full and a new message arrives:
 | `OverflowStrategy::Backpressure` | Block the sender until space is available. |
 | `OverflowStrategy::ThrowException` | Throw a `MailboxOverflowException`. This is the default. |
 
-Choose a strategy based on your requirements:
+Strategy selection depends on the actor's requirements:
 
 - **DropNewest** -- acceptable when latest data supersedes older data (sensor
   readings, status updates).
-- **DropOldest** -- acceptable when you always want the most recent messages
-  processed.
+- **DropOldest** -- acceptable when the most recent messages must be processed
+  rather than older ones.
 - **Backpressure** -- the sender slows down to match the consumer's pace.
   Prevents message loss but may stall upstream actors.
 - **ThrowException** -- fail fast. Useful during development or when overflow
@@ -86,20 +87,13 @@ Choose a strategy based on your requirements:
 ## Envelope
 
 `Envelope` is a `final readonly class` that wraps every message with routing
-information and metadata.
+information, metadata, and distributed tracing identifiers.
 
 ```php
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Actor\ActorPath;
 
-$envelope = new Envelope(
-    message: $myMessage,
-    sender: $senderPath,
-    target: $targetPath,
-    metadata: ['traceId' => 'abc-123'],
-);
-
-// Or use the convenience factory (no metadata):
+// Root envelope -- all three tracing IDs are set to the same fresh value:
 $envelope = Envelope::of($myMessage, $senderPath, $targetPath);
 ```
 
@@ -110,22 +104,44 @@ $envelope = Envelope::of($myMessage, $senderPath, $targetPath);
 | `message` | `object` | The actual message payload |
 | `sender` | `ActorPath` | Path of the sending actor |
 | `target` | `ActorPath` | Path of the receiving actor |
-| `metadata` | `array<string, string>` | Arbitrary key-value metadata (trace IDs, timestamps, etc.) |
+| `requestId` | `string` (ULID) | Unique identifier for this specific message delivery |
+| `correlationId` | `string` (ULID) | Links all messages that belong to the same logical operation |
+| `causationId` | `string` (ULID) | Points to the `requestId` of the message that caused this one |
+| `metadata` | `array<string, string>` | Arbitrary key-value metadata |
+
+### Tracing identifiers
+
+Every `Envelope` carries three ULID string identifiers for distributed tracing:
+
+**`Envelope::of(object $message, ActorPath $sender, ActorPath $target)`** -- creates a
+root envelope where all three IDs (`requestId`, `correlationId`, `causationId`) are set
+to the same fresh ULID. Use this when starting a new operation with no prior context.
+
+The intended child-envelope pattern assigns a fresh `requestId`, inherits the parent's
+`correlationId`, and sets `causationId` to the parent's `requestId`. This links cause
+and effect across the message chain.
+
+`ActorContext::tell()` and `ActorContext::reply()` propagate tracing identifiers
+automatically. Calling `$ref->tell()` directly on an `ActorRef` creates a root envelope
+and breaks the trace chain.
 
 ### Immutable modifiers
 
 ```php
-$updated = $envelope->withMetadata(['traceId' => 'def-456']);
+$updated = $envelope->withMetadata(['key' => 'value']);
 $redirected = $envelope->withSender($newSenderPath);
+$reidentified = $envelope->withRequestId($newId);
+$reidentified = $envelope->withCorrelationId($correlationId);
+$reidentified = $envelope->withCausationId($causationId);
 ```
 
-Both return a new `Envelope` -- the original is unmodified.
+All modifiers return a new `Envelope` -- the original is unmodified.
 
 ## Mailbox interface
 
 The `Mailbox` interface defines the contract that runtime implementations must
-fulfill. You rarely interact with it directly, but understanding it helps when
-writing custom runtimes or debugging mailbox behavior.
+fulfill. Direct interaction is rare, but understanding it helps when writing
+custom runtimes or debugging mailbox behavior.
 
 ```php
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
@@ -146,7 +162,7 @@ interface Mailbox
 }
 ```
 
-- `enqueue()` is marked `#[NoDiscard]` -- you must inspect the `EnqueueResult`.
+- `enqueue()` is marked `#[NoDiscard]` -- the `EnqueueResult` must be inspected.
   Throws `MailboxClosedException` if the mailbox has been closed.
 - `dequeue()` returns `Option::none()` if the mailbox is empty, `Option::some($envelope)` otherwise.
 - `dequeueBlocking()` blocks the current fiber/coroutine until a message arrives
