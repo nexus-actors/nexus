@@ -231,7 +231,6 @@ final class ActorCell implements ActorContext
         /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        /** @var SupervisionStrategy $typedSupervision */
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
         /** @var ActorRef<object> $parentRef */

@@ -4,6 +4,7 @@
     "type": "psalm-plugin",
     "license": "MIT",
     "require": {
+        "nexus-actors/worker-pool": "dev-main",
         "php": ">=8.5",
         "vimeo/psalm": "^6.0"
     },

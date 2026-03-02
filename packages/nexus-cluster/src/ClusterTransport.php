@@ -9,7 +9,7 @@ namespace Monadial\Nexus\Cluster;
  *
  * TCP-based inter-node transport for multi-machine cluster communication.
  * Addresses nodes by NodeAddress (cluster/datacenter/application/node).
- * Implementations provided by nexus-cluster-swoole (future).
+ * Implementations are deferred to a future remote transport package.
  */
 interface ClusterTransport
 {

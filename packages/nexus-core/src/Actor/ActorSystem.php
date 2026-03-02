@@ -230,7 +230,6 @@ final class ActorSystem
         /** @var Mailbox<Envelope> $childMailbox */
         $childMailbox = $this->runtime->createMailbox($props->mailbox);
 
-        /** @var SupervisionStrategy $typedSupervision */
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
         $childCell = new ActorCell(
