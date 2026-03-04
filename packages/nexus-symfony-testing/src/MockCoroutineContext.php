@@ -1,12 +1,14 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Testing;
 
 use ArrayObject;
-use Monadial\Nexus\Symfony\Coroutine\CoroutineContextInterface;
+use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
+use Override;
 
-final class MockCoroutineContext implements CoroutineContextInterface
+final class MockCoroutineContext implements CoroutineContext
 {
     private readonly ArrayObject $context;
 
@@ -15,7 +17,7 @@ final class MockCoroutineContext implements CoroutineContextInterface
         $this->context = new ArrayObject();
     }
 
-    #[\Override]
+    #[Override]
     public function current(): ArrayObject
     {
         return $this->context;

@@ -4,12 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\DependencyInjection;
 
+use Override;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 
 final class Configuration implements ConfigurationInterface
 {
-    #[\Override]
+    #[Override]
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $tree = new TreeBuilder('nexus');

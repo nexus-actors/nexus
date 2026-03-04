@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\Tracing;
 
 use Monadial\Nexus\Symfony\Actor\EnvelopeContext;
-use Monadial\Nexus\Symfony\Coroutine\CoroutineContextInterface;
+use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
 use Monolog\LogRecord;
 use Monolog\Processor\ProcessorInterface;
 use Override;
@@ -13,7 +13,7 @@ use Override;
 final class NexusMonologProcessor implements ProcessorInterface
 {
     public function __construct(
-        private readonly CoroutineContextInterface $context,
+        private readonly CoroutineContext $context,
         private readonly EnvelopeContext $envelopeContext,
     ) {}
 

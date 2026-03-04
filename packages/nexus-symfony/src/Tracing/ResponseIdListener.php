@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Tracing;
 
-use Monadial\Nexus\Symfony\Coroutine\CoroutineContextInterface;
+use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\ResponseEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
@@ -12,7 +12,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 #[AsEventListener(event: KernelEvents::RESPONSE)]
 final class ResponseIdListener
 {
-    public function __construct(private readonly CoroutineContextInterface $context) {}
+    public function __construct(private readonly CoroutineContext $context) {}
 
     public function __invoke(ResponseEvent $event): void
     {

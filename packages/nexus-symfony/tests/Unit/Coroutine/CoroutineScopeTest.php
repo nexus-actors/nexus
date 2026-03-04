@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Tests\Unit\Coroutine;
@@ -9,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use stdClass;
 
 #[CoversClass(CoroutineScope::class)]
 final class CoroutineScopeTest extends TestCase
@@ -18,7 +20,7 @@ final class CoroutineScopeTest extends TestCase
     #[Test]
     public function getReturnsInitialisedService(): void
     {
-        $service = new \stdClass();
+        $service = new stdClass();
         $this->scope->initialize(['key' => static fn() => $service]);
 
         self::assertSame($service, $this->scope->get('key'));
@@ -40,7 +42,7 @@ final class CoroutineScopeTest extends TestCase
         $this->scope->initialize(['key' => static function () use (&$callCount): object {
             $callCount++;
 
-            return new \stdClass();
+            return new stdClass();
         }]);
 
         $this->scope->get('key');
@@ -52,8 +54,8 @@ final class CoroutineScopeTest extends TestCase
     #[Test]
     public function initializeOverwritesPreviousScope(): void
     {
-        $first  = new \stdClass();
-        $second = new \stdClass();
+        $first  = new stdClass();
+        $second = new stdClass();
 
         $this->scope->initialize(['key' => static fn() => $first]);
         $this->scope->initialize(['key' => static fn() => $second]);

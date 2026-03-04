@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Coroutine;
@@ -9,7 +10,7 @@ final class CoroutineScope
 {
     private const string CONTEXT_KEY = '__nexus_scope__';
 
-    public function __construct(private readonly CoroutineContextInterface $context) {}
+    public function __construct(private readonly CoroutineContext $context) {}
 
     /**
      * @param array<string, callable(): object> $factories

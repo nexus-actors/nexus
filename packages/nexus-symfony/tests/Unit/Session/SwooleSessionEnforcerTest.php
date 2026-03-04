@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Tests\Unit\Session;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Symfony\Session\SwooleSessionEnforcer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -18,7 +19,7 @@ final class SwooleSessionEnforcerTest extends TestCase
     {
         $container = $this->containerWithHandlerId('session.handler.native_file');
 
-        $this->expectException(\InvalidArgumentException::class);
+        $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('File sessions are not Swoole-compatible');
 
         SwooleSessionEnforcer::assertCompatible($container);

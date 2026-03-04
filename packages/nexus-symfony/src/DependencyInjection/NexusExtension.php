@@ -12,6 +12,7 @@ use Monadial\Nexus\Symfony\Coroutine\SwooleCoroutineContext;
 use Monadial\Nexus\Symfony\Tracing\NexusMonologProcessor;
 use Monadial\Nexus\Symfony\Tracing\RequestIdListener;
 use Monadial\Nexus\Symfony\Tracing\ResponseIdListener;
+use Override;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -19,7 +20,7 @@ use Symfony\Component\DependencyInjection\Reference;
 
 final class NexusExtension extends Extension
 {
-    #[\Override]
+    #[Override]
     public function load(array $configs, ContainerBuilder $container): void
     {
         $configuration = new Configuration();

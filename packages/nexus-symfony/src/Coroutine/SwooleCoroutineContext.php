@@ -1,14 +1,16 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Coroutine;
 
 use ArrayObject;
+use Override;
 use Swoole\Coroutine;
 
-final class SwooleCoroutineContext implements CoroutineContextInterface
+final class SwooleCoroutineContext implements CoroutineContext
 {
-    #[\Override]
+    #[Override]
     public function current(): ArrayObject
     {
         /** @var ArrayObject */

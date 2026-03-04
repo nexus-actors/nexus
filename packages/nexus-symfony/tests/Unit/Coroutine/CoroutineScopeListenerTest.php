@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\Tests\Unit\Coroutine;
@@ -10,6 +11,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use stdClass;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
@@ -21,7 +23,7 @@ final class CoroutineScopeListenerTest extends TestCase
     #[Test]
     public function initialisesServicesOnMainRequest(): void
     {
-        $service  = new \stdClass();
+        $service  = new stdClass();
         $context  = new MockCoroutineContext();
         $scope    = new CoroutineScope($context);
         $listener = new CoroutineScopeListener($scope, ['test.service' => static fn() => $service]);
@@ -36,7 +38,7 @@ final class CoroutineScopeListenerTest extends TestCase
     {
         $context  = new MockCoroutineContext();
         $scope    = new CoroutineScope($context);
-        $listener = new CoroutineScopeListener($scope, ['test.service' => static fn() => new \stdClass()]);
+        $listener = new CoroutineScopeListener($scope, ['test.service' => static fn() => new stdClass()]);
 
         $listener($this->makeRequestEvent(isMain: false));
 

@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Symfony\Attribute\AsActorHandler;
+use Override;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;
@@ -42,7 +43,7 @@ final class DelegatingActorHandler implements ActorHandler
         }
     }
 
-    #[\Override]
+    #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
         $class = $message::class;

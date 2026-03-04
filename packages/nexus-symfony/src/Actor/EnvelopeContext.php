@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\Actor;
 
 use Monadial\Nexus\Core\Mailbox\Envelope;
-use Monadial\Nexus\Symfony\Coroutine\CoroutineContextInterface;
+use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
 
 final class EnvelopeContext
 {
     private const string CONTEXT_KEY = '__nexus_envelope__';
 
-    public function __construct(private readonly CoroutineContextInterface $context) {}
+    public function __construct(private readonly CoroutineContext $context) {}
 
     public function set(Envelope $envelope): void
     {
