@@ -29,6 +29,7 @@
         "swoole/ide-helper": "^6.0",
         "symfony/cache": "^8.0",
         "symfony/http-foundation": "^8.0",
+        "symfony/http-kernel": "^8.0",
         "vimeo/psalm": "^6.0"
     },
     "autoload": {
