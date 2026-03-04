@@ -30,6 +30,7 @@
         "symfony/cache": "^8.0",
         "symfony/http-foundation": "^8.0",
         "symfony/http-kernel": "^8.0",
+        "symfony/runtime": "^8.0",
         "vimeo/psalm": "^6.0"
     },
     "autoload": {
@@ -90,7 +91,8 @@
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true,
             "infection/extension-installer": true,
-            "phpro/grumphp": true
+            "phpro/grumphp": true,
+            "symfony/runtime": true
         }
     },
     "minimum-stability": "stable",
