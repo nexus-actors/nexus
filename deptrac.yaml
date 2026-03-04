@@ -82,6 +82,31 @@ deptrac:
         - type: directory
           value: packages/nexus-persistence-doctrine/src/.*
 
+    - name: SymfonyBundle
+      collectors:
+        - type: directory
+          value: packages/nexus-symfony/src/.*
+
+    - name: SymfonyMessenger
+      collectors:
+        - type: directory
+          value: packages/nexus-symfony-messenger/src/.*
+
+    - name: SymfonyDoctrine
+      collectors:
+        - type: directory
+          value: packages/nexus-symfony-doctrine/src/.*
+
+    - name: SymfonyTesting
+      collectors:
+        - type: directory
+          value: packages/nexus-symfony-testing/src/.*
+
+    - name: SymfonyWorkerPool
+      collectors:
+        - type: directory
+          value: packages/nexus-symfony-worker-pool/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -130,3 +155,21 @@ deptrac:
       - PersistenceDbal
       - Core
       - Serialization
+    SymfonyBundle:
+      - Core
+      - Runtime
+      - App
+    SymfonyMessenger:
+      - SymfonyBundle
+      - Core
+    SymfonyDoctrine:
+      - SymfonyBundle
+      - Core
+    SymfonyTesting:
+      - SymfonyBundle
+      - Core
+      - RuntimeStep
+    SymfonyWorkerPool:
+      - SymfonyBundle
+      - WorkerPool
+      - WorkerPoolSwoole

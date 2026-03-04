@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/symfony-messenger",
+    "description": "Symfony Messenger bridge for Nexus actors — bidirectional routing.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": "*",
+        "nexus-actors/symfony": "dev-main",
+        "nexus-actors/core": "dev-main",
+        "symfony/messenger": "^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Messenger\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Messenger\\Tests\\": "tests/"
+        }
+    }
+}

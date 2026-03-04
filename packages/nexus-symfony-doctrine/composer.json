@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/symfony-doctrine",
+    "description": "Doctrine integration for Nexus — Swoole PDO pool and coroutine-scoped EntityManager.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "nexus-actors/symfony": "dev-main",
+        "nexus-actors/core": "dev-main",
+        "doctrine/orm": "^3.0",
+        "doctrine/dbal": "^4.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Doctrine\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Doctrine\\Tests\\": "tests/"
+        }
+    }
+}

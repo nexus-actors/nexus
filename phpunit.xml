@@ -22,6 +22,11 @@
             <directory>packages/nexus-persistence-dbal/tests/Unit</directory>
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
+            <directory>packages/nexus-symfony/tests/Unit</directory>
+            <directory>packages/nexus-symfony-messenger/tests/Unit</directory>
+            <directory>packages/nexus-symfony-doctrine/tests/Unit</directory>
+            <directory>packages/nexus-symfony-testing/tests/Unit</directory>
+            <directory>packages/nexus-symfony-worker-pool/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>

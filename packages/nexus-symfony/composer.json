@@ -1,0 +1,29 @@
+{
+    "name": "nexus-actors/symfony",
+    "description": "Symfony 8 integration for Nexus actors — bundle, runtime, coroutine-local DI.",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": "*",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/app": "dev-main",
+        "symfony/framework-bundle": "^8.0",
+        "symfony/runtime": "^8.0",
+        "monolog/monolog": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Tests\\": "tests/"
+        }
+    }
+}

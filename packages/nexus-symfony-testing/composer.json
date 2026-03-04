@@ -1,0 +1,23 @@
+{
+    "name": "nexus-actors/symfony-testing",
+    "description": "Testing helpers for Nexus Symfony integration — no ext-swoole required.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "nexus-actors/symfony": "dev-main",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime-step": "dev-main",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Testing\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Symfony\\Testing\\Tests\\": "tests/"
+        }
+    }
+}
