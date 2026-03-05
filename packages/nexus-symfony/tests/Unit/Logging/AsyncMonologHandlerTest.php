@@ -71,6 +71,17 @@ final class AsyncMonologHandlerTest extends TestCase
     }
 
     #[Test]
+    public function closeIsIdempotent(): void
+    {
+        $inner = $this->createMock(HandlerInterface::class);
+        $inner->expects($this->once())->method('close');
+
+        $handler = new AsyncMonologHandler($inner);
+        $handler->close();
+        $handler->close();
+    }
+
+    #[Test]
     public function stopIsNoopWhenNotStarted(): void
     {
         $inner   = $this->createStub(HandlerInterface::class);

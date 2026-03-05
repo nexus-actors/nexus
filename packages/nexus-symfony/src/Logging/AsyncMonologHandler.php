@@ -17,17 +17,20 @@ use Swoole\Coroutine\Channel;
  * via a long-running consumer coroutine. No actor dependency.
  *
  * Auto-starts the consumer on the first handle() call inside a Swoole coroutine
- * context. Call stop() during graceful shutdown to flush remaining records.
+ * context. Call stop() during graceful shutdown to flush remaining records —
+ * stop() blocks until the consumer has finished draining the channel.
  *
  * @psalm-api
  */
 final class AsyncMonologHandler implements HandlerInterface
 {
     private ?Channel $channel = null;
+    private ?Channel $done = null;
+    private bool $closed = false;
     private bool $started = false;
 
     /**
-     * @param int $capacity Channel capacity — 0 means unbounded.
+     * @param int $capacity Channel capacity. 0 means effectively unbounded (uses PHP_INT_MAX internally).
      */
     public function __construct(
         private readonly HandlerInterface $inner,
@@ -51,7 +54,9 @@ final class AsyncMonologHandler implements HandlerInterface
         }
 
         if ($this->channel !== null) {
-            $this->channel->push($record, 0.001);
+            if ($this->channel->push($record, 0.001) === false) {
+                return $this->inner->handle($record);
+            }
 
             return false;
         }
@@ -71,6 +76,11 @@ final class AsyncMonologHandler implements HandlerInterface
 
     public function close(): void
     {
+        if ($this->closed) {
+            return;
+        }
+
+        $this->closed = true;
         $this->stop();
         $this->inner->close();
     }
@@ -85,12 +95,18 @@ final class AsyncMonologHandler implements HandlerInterface
             return;
         }
 
-        $this->channel = new Channel($this->capacity);
-        $this->started = true;
-        $channel = $this->channel;
-        $inner = $this->inner;
+        $channelCapacity = $this->capacity > 0
+            ? $this->capacity
+            : PHP_INT_MAX;
+        $this->channel   = new Channel($channelCapacity);
+        $this->done      = new Channel(1);
+        $this->started   = true;
 
-        Coroutine::create(static function () use ($channel, $inner): void {
+        $channel = $this->channel;
+        $done    = $this->done;
+        $inner   = $this->inner;
+
+        Coroutine::create(static function () use ($channel, $done, $inner): void {
             while (true) {
                 $record = $channel->pop();
 
@@ -100,6 +116,8 @@ final class AsyncMonologHandler implements HandlerInterface
 
                 $inner->handle($record);
             }
+
+            $done->push(true);
         });
     }
 
@@ -108,12 +126,19 @@ final class AsyncMonologHandler implements HandlerInterface
      */
     public function stop(): void
     {
-        if (!$this->started || $this->channel === null) {
+        if (!$this->started || $this->channel === null || $this->done === null) {
             return;
         }
 
-        $this->channel->push(null);
+        $done    = $this->done;
+        $channel = $this->channel;
+
+        $this->channel = null;
+        $this->done    = null;
         $this->started = false;
+
+        $channel->push(null);
+        $done->pop();
     }
 
     public function isStarted(): bool
