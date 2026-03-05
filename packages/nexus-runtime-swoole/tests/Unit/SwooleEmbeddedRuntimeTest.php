@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Swoole\Tests\Unit;
 
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Swoole\SwooleEmbeddedRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -21,11 +22,11 @@ final class SwooleEmbeddedRuntimeTest extends TestCase
     }
 
     #[Test]
-    public function runIsNoOp(): void
+    public function runMarksRuntimeAsRunning(): void
     {
         $runtime = new SwooleEmbeddedRuntime();
-        $runtime->run(); // must not throw, must not start Co\run()
-        self::assertTrue(true);
+        $runtime->run();
+        self::assertTrue($runtime->isRunning());
     }
 
     #[Test]
@@ -41,6 +42,15 @@ final class SwooleEmbeddedRuntimeTest extends TestCase
         $runtime = new SwooleEmbeddedRuntime();
         $runtime->run();
         self::assertTrue($runtime->isRunning());
+    }
+
+    #[Test]
+    public function isRunningReturnsFalseAfterShutdown(): void
+    {
+        $runtime = new SwooleEmbeddedRuntime();
+        $runtime->run();
+        $runtime->shutdown(Duration::zero());
+        self::assertFalse($runtime->isRunning());
     }
 
     #[Test]

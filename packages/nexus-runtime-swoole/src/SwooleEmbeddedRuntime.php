@@ -105,6 +105,12 @@ final class SwooleEmbeddedRuntime implements Runtime
         $this->running = true;
     }
 
+    /**
+     * Clears all tracked timers.
+     *
+     * Unlike SwooleRuntime where $running is reset naturally when Co\run() returns,
+     * the embedded runtime must explicitly reset it here since run() is a no-op.
+     */
     #[Override]
     public function shutdown(Duration $timeout): void
     {
