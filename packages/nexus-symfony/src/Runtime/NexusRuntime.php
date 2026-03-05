@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Symfony\Runtime;
 use Closure;
 use Override;
 use ReflectionFunction;
+use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Runtime\Resolver\ClosureResolver;
 use Symfony\Component\Runtime\ResolverInterface;
 use Symfony\Component\Runtime\RunnerInterface;
@@ -23,12 +24,17 @@ final class NexusRuntime implements RuntimeInterface
     /**
      * Stored by getResolver() so getRunner() can boot a fresh kernel per worker.
      * If getResolver() is never called, getRunner() falls back to wrapping the application directly.
+     *
+     * @psalm-var null|(Closure(): HttpKernelInterface)
      */
     private ?Closure $kernelFactory = null;
 
     /** @param array<string, mixed> $options */
     public function __construct(private readonly array $options = []) {}
 
+    /**
+     * @psalm-suppress MixedPropertyTypeCoercion
+     */
     #[Override]
     public function getResolver(callable $callable, ?ReflectionFunction $reflector = null): ResolverInterface
     {
@@ -39,6 +45,9 @@ final class NexusRuntime implements RuntimeInterface
         return new ClosureResolver($closure, $arguments);
     }
 
+    /**
+     * @psalm-suppress MissingClosureReturnType
+     */
     #[Override]
     public function getRunner(mixed $application): RunnerInterface
     {
