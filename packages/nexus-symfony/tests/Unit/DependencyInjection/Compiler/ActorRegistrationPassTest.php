@@ -18,14 +18,20 @@ use Symfony\Component\DependencyInjection\Definition;
 final class StubOrderService
 {
     #[AsActorHandler]
-    public function handle(object $msg): void {}
+    public function handle(object $msg): void
+    {
+        // no-op stub
+    }
 }
 
 #[Actor(ActorType::Shared, 'global-catalog')]
 final class StubGlobalService
 {
     #[AsActorHandler]
-    public function handle(object $msg): void {}
+    public function handle(object $msg): void
+    {
+        // no-op stub
+    }
 }
 
 #[CoversClass(ActorRegistrationPass::class)]

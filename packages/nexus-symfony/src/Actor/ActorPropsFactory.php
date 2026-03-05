@@ -9,10 +9,7 @@ use Psr\Container\ContainerInterface;
 
 final class ActorPropsFactory
 {
-    public function __construct(
-        private readonly ContainerInterface $container,
-        private readonly string $actorClass,
-    ) {}
+    public function __construct(private readonly ContainerInterface $container, private readonly string $actorClass) {}
 
     public function create(): Props
     {

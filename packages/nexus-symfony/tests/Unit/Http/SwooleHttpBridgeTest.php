@@ -8,6 +8,8 @@ use Monadial\Nexus\Symfony\Http\SwooleHttpBridge;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Swoole\Http\Request;
+use Swoole\Http\Response as SwooleResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 #[CoversClass(SwooleHttpBridge::class)]
@@ -40,19 +42,20 @@ final class SwooleHttpBridgeTest extends TestCase
         $bridge   = new SwooleHttpBridge();
         $response = new Response('Hello', 201, ['X-Custom' => 'value']);
 
-        $swooleResponse = $this->createMock(\Swoole\Http\Response::class);
+        $swooleResponse = $this->createMock(SwooleResponse::class);
         $swooleResponse->expects($this->once())->method('status')->with(201);
         $swooleResponse->expects($this->once())->method('end')->with('Hello');
 
         $bridge->sendSymfonyResponse($response, $swooleResponse);
     }
 
-    private function createSwooleRequestStub(
-        array $server,
-        array $header,
-        string $body,
-    ): \Swoole\Http\Request {
-        $stub         = $this->createStub(\Swoole\Http\Request::class);
+    /**
+     * @param array<string, string> $server
+     * @param array<string, string> $header
+     */
+    private function createSwooleRequestStub(array $server, array $header, string $body): Request
+    {
+        $stub         = $this->createStub(Request::class);
         $stub->server = $server;
         $stub->header = $header;
         $stub->get    = [];

@@ -14,10 +14,7 @@ final class CoroutineScopeListener
     /**
      * @param array<string, callable(): object> $factories
      */
-    public function __construct(
-        private readonly CoroutineScope $scope,
-        private readonly array $factories,
-    ) {}
+    public function __construct(private readonly CoroutineScope $scope, private readonly array $factories) {}
 
     public function __invoke(RequestEvent $event): void
     {

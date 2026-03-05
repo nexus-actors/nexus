@@ -21,7 +21,7 @@ final class SwooleHttpBridge
             cookies: $req->cookie ?? [],
             files: $this->normaliseFiles($req->files ?? []),
             server: $this->normaliseServer($req->server ?? [], $req->header ?? []),
-            content: $req->rawContent() ?: null,
+            content: $req->rawContent() !== '' ? $req->rawContent() : null,
         );
     }
 

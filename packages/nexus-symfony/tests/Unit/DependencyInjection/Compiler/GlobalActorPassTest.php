@@ -19,14 +19,20 @@ use Symfony\Component\DependencyInjection\Definition;
 final class StubSharedPaymentSaga
 {
     #[AsActorHandler]
-    public function handle(object $msg): void {}
+    public function handle(object $msg): void
+    {
+        // no-op stub
+    }
 }
 
 #[Actor(ActorType::Isolated, 'local-orders')]
 final class StubIsolatedService
 {
     #[AsActorHandler]
-    public function handle(object $msg): void {}
+    public function handle(object $msg): void
+    {
+        // no-op stub
+    }
 }
 
 #[CoversClass(GlobalActorPass::class)]

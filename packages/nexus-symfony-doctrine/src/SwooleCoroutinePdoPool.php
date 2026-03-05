@@ -15,10 +15,7 @@ use PDO;
  */
 final class SwooleCoroutinePdoPool
 {
-    public function __construct(
-        private readonly Connection $connection,
-        private readonly int $size,
-    ) {}
+    public function __construct(private readonly Connection $connection, private readonly int $size) {}
 
     /**
      * @psalm-suppress InvalidReturnType, InvalidReturnStatement

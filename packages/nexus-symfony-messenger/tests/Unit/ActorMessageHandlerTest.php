@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-readonly class OrderMessage {}
+final readonly class OrderMessage {}
 
 #[CoversClass(ActorMessageHandler::class)]
 final class ActorMessageHandlerTest extends TestCase

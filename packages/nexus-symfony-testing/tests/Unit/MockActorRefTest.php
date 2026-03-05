@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\Testing\Tests\Unit;
 
 use Monadial\Nexus\Symfony\Testing\MockActorRef;
+use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-readonly class TestCmd {}
+final readonly class TestCmd {}
 
 #[CoversClass(MockActorRef::class)]
 final class MockActorRefTest extends TestCase
@@ -41,7 +42,7 @@ final class MockActorRefTest extends TestCase
     {
         $ref = new MockActorRef();
 
-        $this->expectException(\PHPUnit\Framework\AssertionFailedError::class);
+        $this->expectException(AssertionFailedError::class);
 
         $ref->assertToldOnce(TestCmd::class);
     }

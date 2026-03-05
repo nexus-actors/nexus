@@ -13,8 +13,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
-readonly class PingMessage {}
-readonly class PongMessage {}
+final readonly class PingMessage {}
+final readonly class PongMessage {}
 
 #[CoversClass(DelegatingActorHandler::class)]
 final class DelegatingActorHandlerTest extends TestCase
@@ -61,7 +61,10 @@ final class DelegatingActorHandlerTest extends TestCase
     {
         $service = new class {
             #[AsActorHandler]
-            public function onPing(PingMessage $msg): void {}
+            public function onPing(PingMessage $msg): void
+            {
+                // no-op: tests that void return maps to Behavior::same()
+            }
         };
 
         $ctx     = $this->createStub(ActorContext::class);

@@ -18,20 +18,15 @@ final class NexusRunner implements RunnerInterface
     private readonly SwooleHttpBridge $bridge;
 
     /** @param array<string, mixed> $options */
-    public function __construct(
-        private readonly HttpKernelInterface $kernel,
-        private readonly array $options,
-    ) {
+    public function __construct(private readonly HttpKernelInterface $kernel, private readonly array $options)
+    {
         $this->bridge = new SwooleHttpBridge();
     }
 
     #[Override]
     public function run(): int
     {
-        $server = new Server(
-            (string) $this->options['host'],
-            (int) $this->options['port'],
-        );
+        $server = new Server((string) $this->options['host'], (int) $this->options['port']);
 
         $server->set(['worker_num' => (int) $this->options['workers']]);
 

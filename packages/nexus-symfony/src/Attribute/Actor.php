@@ -9,8 +9,5 @@ use Attribute;
 #[Attribute(Attribute::TARGET_CLASS)]
 final class Actor
 {
-    public function __construct(
-        public readonly ActorType $type,
-        public readonly string $name,
-    ) {}
+    public function __construct(public readonly ActorType $type, public readonly string $name) {}
 }

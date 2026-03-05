@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Symfony\Testing;
 
 use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
 
-trait NexusTestTrait
+trait NexusTesting
 {
     private function mockActor(string $name): MockActorRef
     {
