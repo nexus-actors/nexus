@@ -15,7 +15,20 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 final class NexusRuntimeTest extends TestCase
 {
     #[Test]
-    public function getRunnerReturnsNexusRunner(): void
+    public function getRunnerReturnsNexusRunnerWhenFactoryStoredViaGetResolver(): void
+    {
+        $runtime = new NexusRuntime(['host' => '127.0.0.1', 'port' => 8080]);
+        $kernel  = $this->createStub(HttpKernelInterface::class);
+
+        $runtime->getResolver(static fn () => $kernel);
+
+        $runner = $runtime->getRunner($kernel);
+
+        self::assertInstanceOf(NexusRunner::class, $runner);
+    }
+
+    #[Test]
+    public function getRunnerReturnsNexusRunnerWithFallbackWhenNoResolverCalled(): void
     {
         $runtime = new NexusRuntime(['host' => '127.0.0.1', 'port' => 8080]);
         $kernel  = $this->createStub(HttpKernelInterface::class);
