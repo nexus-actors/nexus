@@ -12,6 +12,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 
 #[CoversClass(NexusRuntime::class)]
+#[CoversClass(NexusRunner::class)]
 final class NexusRuntimeTest extends TestCase
 {
     #[Test]
@@ -20,7 +21,7 @@ final class NexusRuntimeTest extends TestCase
         $runtime = new NexusRuntime(['host' => '127.0.0.1', 'port' => 8080]);
         $kernel  = $this->createStub(HttpKernelInterface::class);
 
-        $runtime->getResolver(static fn () => $kernel);
+        $runtime->getResolver(static fn() => $kernel);
 
         $runner = $runtime->getRunner($kernel);
 
@@ -39,10 +40,14 @@ final class NexusRuntimeTest extends TestCase
     }
 
     #[Test]
-    public function defaultOptionsAreApplied(): void
+    public function defaultOptionsAreMergedWithProvided(): void
     {
-        $runtime = new NexusRuntime([]);
+        $runtime = new NexusRuntime(['port' => 9090]);
+        $kernel  = $this->createStub(HttpKernelInterface::class);
 
-        self::assertInstanceOf(NexusRuntime::class, $runtime);
+        // getRunner() must not throw — default options (host, workers) merged with provided (port)
+        $runner = $runtime->getRunner($kernel);
+
+        self::assertInstanceOf(NexusRunner::class, $runner);
     }
 }

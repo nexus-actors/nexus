@@ -20,6 +20,10 @@ final class NexusRuntime implements RuntimeInterface
         'workers' => 4,
     ];
 
+    /**
+     * Stored by getResolver() so getRunner() can boot a fresh kernel per worker.
+     * If getResolver() is never called, getRunner() falls back to wrapping the application directly.
+     */
     private ?Closure $kernelFactory = null;
 
     /** @param array<string, mixed> $options */
@@ -28,9 +32,9 @@ final class NexusRuntime implements RuntimeInterface
     #[Override]
     public function getResolver(callable $callable, ?ReflectionFunction $reflector = null): ResolverInterface
     {
-        $closure             = $callable(...);
+        $closure = $callable(...);
         $this->kernelFactory = $closure;
-        $arguments           = static fn(): array => [];
+        $arguments = static fn(): array => [];
 
         return new ClosureResolver($closure, $arguments);
     }
