@@ -12,6 +12,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use stdClass;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
@@ -23,11 +24,12 @@ final class CoroutineScopeListenerTest extends TestCase
     #[Test]
     public function initialisesServicesOnMainRequest(): void
     {
-        $service  = new stdClass();
-        $context  = new MockCoroutineContext();
-        $scope    = new CoroutineScope($context);
-        $listener = new CoroutineScopeListener($scope, ['test.service' => static fn() => $service]);
+        $service = new stdClass();
+        $context = new MockCoroutineContext();
+        $scope   = new CoroutineScope($context);
+        $locator = new ServiceLocator(['test.service' => static fn() => $service]);
 
+        $listener = new CoroutineScopeListener($scope, $locator);
         $listener($this->makeRequestEvent(isMain: true));
 
         self::assertSame($service, $scope->get('test.service'));
@@ -36,10 +38,11 @@ final class CoroutineScopeListenerTest extends TestCase
     #[Test]
     public function skipsSubRequests(): void
     {
-        $context  = new MockCoroutineContext();
-        $scope    = new CoroutineScope($context);
-        $listener = new CoroutineScopeListener($scope, ['test.service' => static fn() => new stdClass()]);
+        $context = new MockCoroutineContext();
+        $scope   = new CoroutineScope($context);
+        $locator = new ServiceLocator(['test.service' => static fn() => new stdClass()]);
 
+        $listener = new CoroutineScopeListener($scope, $locator);
         $listener($this->makeRequestEvent(isMain: false));
 
         $this->expectException(RuntimeException::class);

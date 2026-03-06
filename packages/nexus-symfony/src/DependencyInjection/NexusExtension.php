@@ -9,6 +9,7 @@ use Monadial\Nexus\Symfony\Actor\EnvelopeContext;
 use Monadial\Nexus\Symfony\Coroutine\CoroutineScope;
 use Monadial\Nexus\Symfony\Coroutine\CoroutineScopeListener;
 use Monadial\Nexus\Symfony\Coroutine\SwooleCoroutineContext;
+use Monadial\Nexus\Symfony\Listener\FutureResponseListener;
 use Monadial\Nexus\Symfony\Tracing\NexusMonologProcessor;
 use Monadial\Nexus\Symfony\Tracing\RequestIdListener;
 use Monadial\Nexus\Symfony\Tracing\ResponseIdListener;
@@ -31,6 +32,7 @@ final class NexusExtension extends Extension
 
         $this->registerCoroutineServices($container);
         $this->registerTracingServices($container);
+        $this->registerListeners($container);
         $this->registerActorSystem($container);
     }
 
@@ -50,7 +52,10 @@ final class NexusExtension extends Extension
         $container->setDefinition(
             'nexus.coroutine_scope_listener',
             (new Definition(CoroutineScopeListener::class))
-                ->setArguments([new Reference('nexus.coroutine_scope'), []])
+                ->setArguments([
+                    new Reference('nexus.coroutine_scope'),
+                    new Reference('nexus.coroutine_scoped_locator'),
+                ])
                 ->addTag('kernel.event_listener'),
         );
 
@@ -85,6 +90,18 @@ final class NexusExtension extends Extension
             (new Definition(ResponseIdListener::class))
                 ->setArguments([new Reference('nexus.coroutine_context')])
                 ->addTag('kernel.event_listener'),
+        );
+    }
+
+    private function registerListeners(ContainerBuilder $container): void
+    {
+        $container->setDefinition(
+            'nexus.future_response_listener',
+            (new Definition(FutureResponseListener::class))
+                ->addTag('kernel.event_listener', [
+                    'event'    => 'kernel.view',
+                    'priority' => 100,
+                ]),
         );
     }
 
