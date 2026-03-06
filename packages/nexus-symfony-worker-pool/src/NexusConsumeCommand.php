@@ -41,7 +41,7 @@ final class NexusConsumeCommand extends Command
             $workerCount,
         ));
 
-        NexusSymfonyWorkerApp::run(kernel: $this->kernel, transport: $transport, workerCount: $workerCount);
+        NexusSymfonyWorkerApp::run(kernel: $this->kernel, workerCount: $workerCount);
 
         return Command::SUCCESS;
     }
