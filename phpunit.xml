@@ -71,6 +71,7 @@
         <include>
             <directory>packages/nexus-codegen/src</directory>
             <directory>packages/nexus-core/src</directory>
+            <directory>packages/nexus-observability/src</directory>
             <directory>packages/nexus-runtime-fiber/src</directory>
             <directory>packages/nexus-runtime/src</directory>
             <directory>packages/nexus-runtime-swoole/src</directory>
