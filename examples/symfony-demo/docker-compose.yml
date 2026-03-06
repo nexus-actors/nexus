@@ -1,0 +1,81 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+            target: php-full
+        volumes:
+            - .:/app
+            - /app/vendor
+        ports:
+            - "8080:8080"
+        environment:
+            APP_DEBUG: "1"
+            APP_ENV: dev
+            APP_RUNTIME: Monadial\Nexus\Symfony\Runtime\NexusRuntime
+            APP_SECRET: dev-secret
+            DATABASE_URL: mysql://app:app@mysql:3306/nexus_demo?serverVersion=8.0
+            NEXUS_HTTP_HOST: "0.0.0.0"
+            NEXUS_HTTP_PORT: "8080"
+            NEXUS_HTTP_WORKERS: "4"
+            REDIS_DSN: redis://redis:6379
+        command: php public/index.php
+        depends_on:
+            mysql:
+                condition: service_healthy
+            redis:
+                condition: service_started
+        networks:
+            - nexus
+
+    worker:
+        build:
+            context: .
+            dockerfile: docker/Dockerfile
+            target: php-swoole
+        volumes:
+            - .:/app
+            - /app/vendor
+        environment:
+            APP_DEBUG: "0"
+            APP_ENV: prod
+            APP_SECRET: dev-secret
+            DATABASE_URL: mysql://app:app@mysql:3306/nexus_demo?serverVersion=8.0
+            NEXUS_WORKER_THREADS: "4"
+            REDIS_DSN: redis://redis:6379
+        command: php bin/worker
+        depends_on:
+            mysql:
+                condition: service_healthy
+            redis:
+                condition: service_started
+        networks:
+            - nexus
+
+    mysql:
+        image: mysql:8.0
+        environment:
+            MYSQL_DATABASE: nexus_demo
+            MYSQL_PASSWORD: app
+            MYSQL_ROOT_PASSWORD: root
+            MYSQL_USER: app
+        healthcheck:
+            interval: 5s
+            retries: 10
+            test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uapp", "-papp"]
+            timeout: 3s
+        networks:
+            - nexus
+        volumes:
+            - mysql_data:/var/lib/mysql
+
+    redis:
+        image: redis:7-alpine
+        networks:
+            - nexus
+
+networks:
+    nexus:
+
+volumes:
+    mysql_data:
