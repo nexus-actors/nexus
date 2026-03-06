@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Error;
 use LogicException;
+use Monadial\Nexus\Core\Exception\ActorHandlerException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
@@ -22,12 +23,14 @@ use Monadial\Nexus\Core\Message\Suspend;
 use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Core\Message\Unwatch;
 use Monadial\Nexus\Core\Message\Watch;
+use Monadial\Nexus\Core\Actor\Telemetry\ActorSnapshot;
 use Monadial\Nexus\Core\Supervision\Directive;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
@@ -60,6 +63,9 @@ final class ActorCell implements ActorContext
     /** @var array<string, ActorRef<object>> */
     private array $childrenMap = [];
 
+    /** @var array<string, self<object>> */
+    private array $childCells = [];
+
     /** @var array<string, ActorRef<object>> */
     private array $watchers = [];
 
@@ -84,6 +90,7 @@ final class ActorCell implements ActorContext
         Behavior $behavior,
         private readonly ActorPath $actorPath,
         private readonly Mailbox $mailbox,
+        private readonly MailboxConfig $mailboxConfig,
         private readonly Runtime $runtime,
         private readonly ?ActorRef $parentRef,
         private readonly SupervisionStrategy $supervision,
@@ -240,6 +247,7 @@ final class ActorCell implements ActorContext
             $props->behavior,
             $childPath,
             $childMailbox,
+            $props->mailbox,
             $this->runtime,
             $parentRef,
             $typedSupervision,
@@ -253,6 +261,7 @@ final class ActorCell implements ActorContext
 
         $childRef = $childCell->self();
         $this->childrenMap[$name] = $childRef;
+        $this->childCells[$name] = $childCell;
 
         return $childRef;
     }
@@ -348,6 +357,24 @@ final class ActorCell implements ActorContext
     public function log(): LoggerInterface
     {
         return $this->logger;
+    }
+
+    public function snapshot(): ActorSnapshot
+    {
+        $children = [];
+
+        foreach ($this->childCells as $childCell) {
+            $children[] = $childCell->snapshot();
+        }
+
+        return new ActorSnapshot(
+            path: (string) $this->actorPath,
+            alive: $this->isAlive(),
+            mailboxDepth: $this->mailbox->count(),
+            mailboxCapacity: $this->mailboxConfig->capacity,
+            mailboxBounded: $this->mailboxConfig->bounded,
+            children: $children,
+        );
     }
 
     /** @return ?ActorRef<object> */
@@ -545,10 +572,13 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Handler threw NexusException: ' . $e->getMessage());
             $this->decideSupervisedAction($e);
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in handler: ' . $e->getMessage());
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in handler: ' . $e->getMessage());
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         }
     }
 
@@ -563,10 +593,13 @@ final class ActorCell implements ActorContext
         } catch (NexusException $e) {
             $this->logger->error('Stateful handler threw NexusException: ' . $e->getMessage());
             $this->decideSupervisedAction($e);
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in stateful handler: ' . $e->getMessage());
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in stateful handler: ' . $e->getMessage());
+            $this->failPendingAsk(new ActorHandlerException($e->getMessage(), $e));
         }
     }
 
@@ -689,6 +722,13 @@ final class ActorCell implements ActorContext
                 }
             }
         });
+    }
+
+    private function failPendingAsk(ActorHandlerException $e): void
+    {
+        if ($this->currentEnvelope !== null && $this->currentEnvelope->senderRef instanceof FutureRef) {
+            $this->currentEnvelope->senderRef->fail($e);
+        }
     }
 
     private function transitionTo(ActorState $target): void

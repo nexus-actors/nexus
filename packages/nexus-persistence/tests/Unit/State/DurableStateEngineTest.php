@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Persistence\State\DurableEffect;
 use Monadial\Nexus\Persistence\State\DurableStateEngine;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
@@ -609,6 +610,7 @@ final class DurableStateEngineTest extends TestCase
             $behavior,
             $actorPath,
             $mailbox,
+            MailboxConfig::unbounded(),
             $this->runtime,
             null,
             SupervisionStrategy::oneForOne(),

@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\EventSourced\PersistenceEngine;
@@ -1080,6 +1081,7 @@ final class PersistenceEngineTest extends TestCase
             $behavior,
             $actorPath,
             $mailbox,
+            MailboxConfig::unbounded(),
             $this->runtime,
             null,
             SupervisionStrategy::oneForOne(),

@@ -201,6 +201,7 @@ final class PropsTest extends TestCase
             $props->behavior,
             ActorPath::fromString('/user/test'),
             $mailbox,
+            $props->mailbox,
             $runtime,
             null,
             SupervisionStrategy::oneForOne(),

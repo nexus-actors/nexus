@@ -236,6 +236,7 @@ final class ActorSystem
             $props->behavior,
             $childPath,
             $childMailbox,
+            $props->mailbox,
             $this->runtime,
             null,
             $typedSupervision,

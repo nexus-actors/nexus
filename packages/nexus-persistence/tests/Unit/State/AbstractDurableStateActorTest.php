@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Persistence\State\AbstractDurableStateActor;
 use Monadial\Nexus\Persistence\State\DurableEffect;
 use Monadial\Nexus\Persistence\State\InMemoryDurableStateStore;
@@ -227,6 +228,7 @@ final class AbstractDurableStateActorTest extends TestCase
             $behavior,
             $actorPath,
             $mailbox,
+            MailboxConfig::unbounded(),
             $runtime,
             null,
             SupervisionStrategy::oneForOne(),
