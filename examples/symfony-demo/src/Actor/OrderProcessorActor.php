@@ -22,8 +22,8 @@ use Symfony\Contracts\Cache\TagAwareCacheInterface;
 final class OrderProcessorActor extends AbstractActor
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
         private readonly TagAwareCacheInterface $cache,
+        private readonly EntityManagerInterface $em,
         private readonly TransportInterface $transport,
     ) {}
 

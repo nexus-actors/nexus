@@ -37,7 +37,7 @@ final class OrderProcessorActorTest extends TestCase
                 self::isInstanceOf(Poll::class),
             );
 
-        $actor = new OrderProcessorActor($em, $cache, $transport);
+        $actor = new OrderProcessorActor($cache, $em, $transport);
         $actor->onPreStart($ctx);
     }
 
@@ -50,7 +50,7 @@ final class OrderProcessorActorTest extends TestCase
         $transport->method('get')->willReturn([]);
 
         $ctx      = $this->createStub(ActorContext::class);
-        $actor    = new OrderProcessorActor($em, $cache, $transport);
+        $actor    = new OrderProcessorActor($cache, $em, $transport);
         $behavior = $actor->handle($ctx, new Poll());
 
         self::assertSame(Behavior::same(), $behavior);
@@ -72,7 +72,7 @@ final class OrderProcessorActorTest extends TestCase
         $transport->expects(self::once())->method('ack')->with($envelope);
 
         $ctx   = $this->createStub(ActorContext::class);
-        $actor = new OrderProcessorActor($em, $cache, $transport);
+        $actor = new OrderProcessorActor($cache, $em, $transport);
         $actor->handle($ctx, new Poll());
     }
 
@@ -84,7 +84,7 @@ final class OrderProcessorActorTest extends TestCase
         $transport = $this->createStub(TransportInterface::class);
         $ctx       = $this->createStub(ActorContext::class);
 
-        $actor    = new OrderProcessorActor($em, $cache, $transport);
+        $actor    = new OrderProcessorActor($cache, $em, $transport);
         $behavior = $actor->handle($ctx, new \stdClass());
 
         self::assertSame(Behavior::unhandled(), $behavior);
