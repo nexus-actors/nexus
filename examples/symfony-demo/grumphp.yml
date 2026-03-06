@@ -1,0 +1,14 @@
+grumphp:
+    tasks:
+        phpcsfixer:
+            config: .php-cs-fixer.dist.php
+            triggered_by: [php]
+        phpcs:
+            standard: phpcs.xml
+            triggered_by: [php]
+        psalm:
+            config: psalm.xml
+            triggered_by: [php]
+        phpunit:
+            testsuite: unit
+            triggered_by: [php]
