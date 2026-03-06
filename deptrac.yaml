@@ -158,6 +158,7 @@ deptrac:
     SymfonyBundle:
       - Core
       - Runtime
+      - RuntimeSwoole
       - App
     SymfonyMessenger:
       - SymfonyBundle
