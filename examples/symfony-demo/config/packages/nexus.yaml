@@ -1,0 +1,3 @@
+nexus:
+    name: symfony-demo
+    shutdown_timeout: 30

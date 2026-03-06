@@ -1,0 +1,9 @@
+framework:
+    messenger:
+        transports:
+            orders:
+                dsn: '%env(REDIS_DSN)%'
+                options:
+                    stream: orders
+        routing:
+            'App\Message\PlaceOrder': orders
