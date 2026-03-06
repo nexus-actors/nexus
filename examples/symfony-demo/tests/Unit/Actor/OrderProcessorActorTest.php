@@ -9,7 +9,8 @@ use App\Actor\OrderProcessorActor;
 use App\Message\PlaceOrder;
 use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\SameBehavior;
+use Monadial\Nexus\Core\Actor\UnhandledBehavior;
 use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -46,14 +47,14 @@ final class OrderProcessorActorTest extends TestCase
     {
         $em        = $this->createStub(EntityManagerInterface::class);
         $cache     = $this->createStub(TagAwareCacheInterface::class);
-        $transport = $this->createMock(TransportInterface::class);
+        $transport = $this->createStub(TransportInterface::class);
         $transport->method('get')->willReturn([]);
 
         $ctx      = $this->createStub(ActorContext::class);
         $actor    = new OrderProcessorActor($cache, $em, $transport);
         $behavior = $actor->handle($ctx, new Poll());
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
@@ -87,6 +88,6 @@ final class OrderProcessorActorTest extends TestCase
         $actor    = new OrderProcessorActor($cache, $em, $transport);
         $behavior = $actor->handle($ctx, new \stdClass());
 
-        self::assertSame(Behavior::unhandled(), $behavior);
+        self::assertInstanceOf(UnhandledBehavior::class, $behavior);
     }
 }

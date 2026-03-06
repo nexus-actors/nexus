@@ -8,7 +8,8 @@ use App\Actor\InventoryActor;
 use App\Actor\Message\GetStock;
 use App\Actor\Message\StockLevel;
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\SameBehavior;
+use Monadial\Nexus\Core\Actor\UnhandledBehavior;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -21,7 +22,7 @@ final class InventoryActorTest extends TestCase
     #[Test]
     public function handleGetStock_repliesWithStockLevels(): void
     {
-        $cache = $this->createMock(CacheInterface::class);
+        $cache = $this->createStub(CacheInterface::class);
         $cache->method('get')->willReturnCallback(
             static function (string $key, callable $callback): int {
                 $item = new class implements ItemInterface {
@@ -31,7 +32,7 @@ final class InventoryActorTest extends TestCase
                     public function set(mixed $value): static { return $this; }
                     public function expiresAt(?\DateTimeInterface $expiration): static { return $this; }
                     public function expiresAfter(int|\DateInterval|null $time): static { return $this; }
-                    public function tag(array|string $tags): static { return $this; }
+                    public function tag(\Traversable|array|string $tags): static { return $this; }
                     public function getMetadata(): array { return []; }
                 };
 
@@ -50,7 +51,7 @@ final class InventoryActorTest extends TestCase
         $actor    = new InventoryActor($cache);
         $behavior = $actor->handle($ctx, new GetStock(['chair-001', 'desk-001']));
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
@@ -65,7 +66,7 @@ final class InventoryActorTest extends TestCase
         $actor    = new InventoryActor($cache);
         $behavior = $actor->handle($ctx, new GetStock([]));
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
@@ -76,6 +77,6 @@ final class InventoryActorTest extends TestCase
         $actor    = new InventoryActor($cache);
         $behavior = $actor->handle($ctx, new \stdClass());
 
-        self::assertSame(Behavior::unhandled(), $behavior);
+        self::assertInstanceOf(UnhandledBehavior::class, $behavior);
     }
 }

@@ -31,17 +31,17 @@ final class CatalogControllerTest extends TestCase
         $list    = new ProductList([$product]);
         $stock   = new StockLevel(['chair-001' => 10]);
 
-        $catalogSlot = $this->createMock(FutureSlot::class);
+        $catalogSlot = $this->createStub(FutureSlot::class);
         $catalogSlot->method('await')->willReturn($list);
         $catalogSlot->method('isResolved')->willReturn(false);
 
-        $inventorySlot = $this->createMock(FutureSlot::class);
+        $inventorySlot = $this->createStub(FutureSlot::class);
         $inventorySlot->method('await')->willReturn($stock);
 
-        $catalogActor = $this->createMock(ActorRef::class);
+        $catalogActor = $this->createStub(ActorRef::class);
         $catalogActor->method('ask')->willReturn(new Future($catalogSlot));
 
-        $inventoryActor = $this->createMock(ActorRef::class);
+        $inventoryActor = $this->createStub(ActorRef::class);
         $inventoryActor->method('ask')->willReturn(new Future($inventorySlot));
 
         $controller = new CatalogController($catalogActor, $inventoryActor);
@@ -63,11 +63,11 @@ final class CatalogControllerTest extends TestCase
         $product = new Product('A chair', 'chair-001', 'Chair', 99.99);
         $detail  = new ProductDetail($product);
 
-        $slot = $this->createMock(FutureSlot::class);
+        $slot = $this->createStub(FutureSlot::class);
         $slot->method('await')->willReturn($detail);
         $slot->method('isResolved')->willReturn(false);
 
-        $catalogActor = $this->createMock(ActorRef::class);
+        $catalogActor = $this->createStub(ActorRef::class);
         $catalogActor->method('ask')->willReturn(new Future($slot));
 
         $inventoryActor = $this->createStub(ActorRef::class);

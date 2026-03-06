@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\MessageBusInterface;
 
 #[CoversClass(OrderController::class)]
@@ -19,7 +20,7 @@ final class OrderControllerTest extends TestCase
     public function place_dispatchesToBusAndReturns202(): void
     {
         $bus = $this->createMock(MessageBusInterface::class);
-        $bus->expects(self::once())->method('dispatch');
+        $bus->expects(self::once())->method('dispatch')->willReturn(new Envelope(new \stdClass()));
 
         $request = Request::create(
             '/orders',

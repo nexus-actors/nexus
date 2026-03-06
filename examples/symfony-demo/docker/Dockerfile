@@ -4,6 +4,7 @@ FROM php:8.5-zts AS base-zts
 RUN apt-get update && apt-get install -y \
     libicu-dev \
     libonig-dev \
+    libssl-dev \
     libzip-dev \
     unzip \
     && rm -rf /var/lib/apt/lists/*
@@ -18,7 +19,7 @@ FROM base-zts AS swoole-build
 RUN apt-get update && apt-get install -y git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone --depth 1 --branch v6.2.0 https://github.com/swoole/swoole-src.git /tmp/swoole \
+RUN git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git /tmp/swoole \
     && cd /tmp/swoole \
     && phpize \
     && ./configure --enable-swoole-thread --enable-openssl \

@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<psalm
+    errorLevel="2"
+    resolveFromConfigFile="true"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="https://getpsalm.org/schema/config"
+    xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+    findUnusedBaselineEntry="false"
+    findUnusedCode="false"
+    ensureOverrideAttribute="false"
+    ignoreInternalFunctionFalseReturn="true"
+    ignoreInternalFunctionNullReturn="true"
+>
+    <projectFiles>
+        <directory name="src" />
+        <ignoreFiles>
+            <directory name="src/Test" />
+            <directory name="vendor" />
+            <directory name="test" />
+            <directory name="spec" />
+            <file name="src/Parser/Php/Visitor/AbstractVisitor.php" />
+        </ignoreFiles>
+    </projectFiles>
+    <issueHandlers>
+        <RiskyTruthyFalsyComparison>
+            <errorLevel type="suppress">
+                <directory name="src/" />
+            </errorLevel>
+        </RiskyTruthyFalsyComparison>
+        <ClassMustBeFinal>
+            <errorLevel type="suppress">
+                <directory name="src/" />
+            </errorLevel>
+        </ClassMustBeFinal>
+    </issueHandlers>
+</psalm>

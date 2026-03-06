@@ -7,7 +7,7 @@
         "php": ">=8.5",
         "ext-redis": "*",
         "ext-swoole": "*",
-        "doctrine/doctrine-bundle": "^2.13",
+        "doctrine/doctrine-bundle": "^3.2",
         "doctrine/orm": "^3.0",
         "nexus-actors/core": "dev-main",
         "nexus-actors/runtime": "dev-main",

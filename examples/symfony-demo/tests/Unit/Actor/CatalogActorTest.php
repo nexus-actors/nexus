@@ -10,7 +10,8 @@ use App\Actor\Message\GetProducts;
 use App\Actor\Message\ProductDetail;
 use App\Actor\Message\ProductList;
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\SameBehavior;
+use Monadial\Nexus\Core\Actor\UnhandledBehavior;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -23,7 +24,7 @@ final class CatalogActorTest extends TestCase
     #[Test]
     public function handleGetProducts_repliesWithProductList(): void
     {
-        $cache = $this->createMock(CacheInterface::class);
+        $cache = $this->createStub(CacheInterface::class);
         $cache->method('get')->willReturnCallback(
             static function (string $key, callable $callback): object {
                 $item = new class implements ItemInterface {
@@ -33,7 +34,7 @@ final class CatalogActorTest extends TestCase
                     public function set(mixed $value): static { return $this; }
                     public function expiresAt(?\DateTimeInterface $expiration): static { return $this; }
                     public function expiresAfter(int|\DateInterval|null $time): static { return $this; }
-                    public function tag(array|string $tags): static { return $this; }
+                    public function tag(\Traversable|array|string $tags): static { return $this; }
                     public function getMetadata(): array { return []; }
                 };
 
@@ -47,13 +48,13 @@ final class CatalogActorTest extends TestCase
         $actor    = new CatalogActor($cache);
         $behavior = $actor->handle($ctx, new GetProducts());
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
     public function handleGetProduct_knownId_repliesWithProductDetail(): void
     {
-        $cache = $this->createMock(CacheInterface::class);
+        $cache = $this->createStub(CacheInterface::class);
         $cache->method('get')->willReturnCallback(
             static function (string $key, callable $callback): object {
                 $item = new class implements ItemInterface {
@@ -63,7 +64,7 @@ final class CatalogActorTest extends TestCase
                     public function set(mixed $value): static { return $this; }
                     public function expiresAt(?\DateTimeInterface $expiration): static { return $this; }
                     public function expiresAfter(int|\DateInterval|null $time): static { return $this; }
-                    public function tag(array|string $tags): static { return $this; }
+                    public function tag(\Traversable|array|string $tags): static { return $this; }
                     public function getMetadata(): array { return []; }
                 };
 
@@ -77,7 +78,7 @@ final class CatalogActorTest extends TestCase
         $actor    = new CatalogActor($cache);
         $behavior = $actor->handle($ctx, new GetProduct('chair-001'));
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
@@ -90,7 +91,7 @@ final class CatalogActorTest extends TestCase
         $actor    = new CatalogActor($cache);
         $behavior = $actor->handle($ctx, new GetProduct('unknown-999'));
 
-        self::assertSame(Behavior::same(), $behavior);
+        self::assertInstanceOf(SameBehavior::class, $behavior);
     }
 
     #[Test]
@@ -102,6 +103,6 @@ final class CatalogActorTest extends TestCase
         $actor    = new CatalogActor($cache);
         $behavior = $actor->handle($ctx, new \stdClass());
 
-        self::assertSame(Behavior::unhandled(), $behavior);
+        self::assertInstanceOf(UnhandledBehavior::class, $behavior);
     }
 }

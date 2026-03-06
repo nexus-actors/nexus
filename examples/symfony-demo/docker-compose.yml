@@ -5,8 +5,8 @@ services:
             dockerfile: docker/Dockerfile
             target: php-full
         volumes:
-            - .:/app
-            - /app/vendor
+            - ../..:/monorepo
+        working_dir: /monorepo/examples/symfony-demo
         ports:
             - "8080:8080"
         environment:
@@ -34,8 +34,8 @@ services:
             dockerfile: docker/Dockerfile
             target: php-swoole
         volumes:
-            - .:/app
-            - /app/vendor
+            - ../..:/monorepo
+        working_dir: /monorepo/examples/symfony-demo
         environment:
             APP_DEBUG: "0"
             APP_ENV: prod
