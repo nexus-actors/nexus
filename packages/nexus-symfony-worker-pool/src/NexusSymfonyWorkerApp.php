@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Symfony\WorkerPool;
 
-use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Symfony\Actor\WorkerSupervisorActor;
+use Monadial\Nexus\Symfony\Actor\ActorPropsFactory;
 use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolBootstrap;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
@@ -22,7 +21,7 @@ use function Opis\Closure\serialize as opis_serialize;
  * Entry point for Nexus worker pool applications backed by a Symfony kernel.
  *
  * Boots N worker threads each with a fresh kernel instance. Each thread spawns
- * a WorkerSupervisorActor ready to handle HTTP or actor messages.
+ * any #[Actor(ActorType::Shared)] actors declared in the container.
  *
  * Usage from a console command:
  *   NexusSymfonyWorkerApp::run($kernel, workerCount: 4);
@@ -47,22 +46,28 @@ final class NexusSymfonyWorkerApp
 
             $k->boot();
 
-            $resetter  = null;
             $container = $k->getContainer();
 
             if ($container->has('services_resetter')) {
                 $service = $container->get('services_resetter');
                 assert($service instanceof ResetInterface);
-                $resetter = $service;
             }
 
-            $kRef = $k;
-            $rRef = $resetter;
+            /** @psalm-suppress MixedMethodCall */
+            if (!$container->hasParameter('nexus.shared_actors')) {
+                return;
+            }
 
-            $node->system()->spawn(
-                Props::fromFactory(static fn() => new WorkerSupervisorActor($kRef, $rRef)),
-                'http-supervisor',
-            );
+            /** @psalm-suppress MixedMethodCall */
+            /** @var array<string, string> $sharedActors */
+            $sharedActors = $container->getParameter('nexus.shared_actors');
+
+            foreach ($sharedActors as $name => $serviceId) {
+                /** @psalm-suppress MixedMethodCall */
+                /** @var ActorPropsFactory $propsFactory */
+                $propsFactory = $container->get($serviceId);
+                $node->spawn($propsFactory->create(), $name);
+            }
         };
 
         $config = WorkerPoolConfig::withThreads($workerCount);

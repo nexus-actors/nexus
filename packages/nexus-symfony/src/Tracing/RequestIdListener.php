@@ -8,6 +8,7 @@ use Monadial\Nexus\Symfony\Coroutine\CoroutineContext;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Symfony\Component\Uid\Ulid;
 
 #[AsEventListener(event: KernelEvents::REQUEST, priority: 900)]
 final class RequestIdListener
@@ -16,7 +17,7 @@ final class RequestIdListener
 
     private function generateId(): string
     {
-        return bin2hex(random_bytes(16));
+        return (string) new Ulid();
     }
 
     public function __invoke(RequestEvent $event): void
