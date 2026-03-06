@@ -78,4 +78,22 @@ final class ActorRegistrationPassTest extends TestCase
         // Shared actors are NOT handled by this pass
         self::assertFalse($container->hasDefinition('nexus.actor.global-catalog.props_factory'));
     }
+
+    #[Test]
+    public function propsFactoryIsPublicAndTagged(): void
+    {
+        $container  = new ContainerBuilder();
+        $definition = new Definition(StubOrderService::class);
+        $container->setDefinition(StubOrderService::class, $definition);
+
+        $pass = new ActorRegistrationPass();
+        $pass->process($container);
+
+        $factory = $container->getDefinition('nexus.actor.test-orders.props_factory');
+        self::assertTrue($factory->isPublic());
+        self::assertTrue($factory->hasTag('nexus.isolated_actor'));
+
+        $tag = $factory->getTag('nexus.isolated_actor')[0];
+        self::assertSame('test-orders', $tag['name']);
+    }
 }

@@ -51,7 +51,8 @@ final class ActorRegistrationPass implements CompilerPassInterface
                 "nexus.actor.{$name}.props_factory",
                 (new Definition(ActorPropsFactory::class))
                     ->setArguments([new Reference('service_container'), $class])
-                    ->setPublic(false),
+                    ->setPublic(true)
+                    ->addTag('nexus.isolated_actor', ['name' => $name]),
             );
 
             $actorRefDef = (new Definition(ActorRef::class))
