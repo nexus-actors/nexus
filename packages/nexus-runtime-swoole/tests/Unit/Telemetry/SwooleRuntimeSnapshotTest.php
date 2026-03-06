@@ -15,7 +15,13 @@ final class SwooleRuntimeSnapshotTest extends TestCase
     #[Test]
     public function round_trips_through_array(): void
     {
-        $snap     = new SwooleRuntimeSnapshot(12, 20, 4, 8_388_608, 12_582_912);
+        $snap = new SwooleRuntimeSnapshot(
+            coroutineNum: 12,
+            coroutinePeakNum: 20,
+            activeTimers: 4,
+            memoryBytes: 8_388_608,
+            memoryPeakBytes: 12_582_912,
+        );
         $restored = SwooleRuntimeSnapshot::fromArray($snap->toArray());
 
         self::assertSame(12, $restored->coroutineNum);

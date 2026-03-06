@@ -193,8 +193,11 @@ final class SwooleRuntime implements Runtime
 
     public function snapshot(): SwooleRuntimeSnapshot
     {
+        $rawStats = Coroutine::stats();
         /** @var array<string, int> $stats */
-        $stats = Coroutine::stats();
+        $stats = is_array($rawStats)
+            ? $rawStats
+            : [];
 
         return new SwooleRuntimeSnapshot(
             coroutineNum: $stats['coroutine_num'] ?? 0,

@@ -25,11 +25,11 @@ final readonly class SwooleRuntimeSnapshot
     public static function fromArray(array $data): self
     {
         return new self(
-            coroutineNum: $data['coroutine_num'],
-            coroutinePeakNum: $data['coroutine_peak_num'],
-            activeTimers: $data['active_timers'],
-            memoryBytes: $data['memory_bytes'],
-            memoryPeakBytes: $data['memory_peak_bytes'],
+            coroutineNum: $data['coroutine_num'] ?? 0,
+            coroutinePeakNum: $data['coroutine_peak_num'] ?? 0,
+            activeTimers: $data['active_timers'] ?? 0,
+            memoryBytes: $data['memory_bytes'] ?? 0,
+            memoryPeakBytes: $data['memory_peak_bytes'] ?? 0,
         );
     }
 
