@@ -21,7 +21,8 @@ final class GlobalActorPass implements CompilerPassInterface
     #[Override]
     public function process(ContainerBuilder $container): void
     {
-        $hasWorkerPool = $container->hasDefinition('nexus.worker_pool');
+        /** @var array<string, string> $map name → props_factory service ID */
+        $map = [];
 
         foreach ($container->getDefinitions() as $definition) {
             $class = $definition->getClass();
@@ -31,7 +32,7 @@ final class GlobalActorPass implements CompilerPassInterface
             }
 
             try {
-                $ref = new ReflectionClass($class);
+                $ref   = new ReflectionClass($class);
                 $attrs = $ref->getAttributes(Actor::class);
             } catch (ReflectionException) {
                 continue;
@@ -47,24 +48,26 @@ final class GlobalActorPass implements CompilerPassInterface
                 continue;
             }
 
-            $name = $attr->name;
+            $name      = $attr->name;
+            $serviceId = "nexus.actor.{$name}.props_factory";
 
             $container->setDefinition(
-                "nexus.actor.{$name}.props_factory",
+                $serviceId,
                 (new Definition(ActorPropsFactory::class))
                     ->setArguments([new Reference('service_container'), $class])
-                    ->setPublic(false),
+                    ->setPublic(true),
             );
 
-            $actorRefDef = (new Definition(ActorRef::class))
-                ->setSynthetic(true)
-                ->setPublic(true);
+            $container->setDefinition(
+                "nexus.actor_ref.{$name}",
+                (new Definition(ActorRef::class))
+                    ->setSynthetic(true)
+                    ->setPublic(true),
+            );
 
-            if ($hasWorkerPool) {
-                $actorRefDef->addTag('nexus.global_actor', ['name' => $name]);
-            }
-
-            $container->setDefinition("nexus.actor_ref.{$name}", $actorRefDef);
+            $map[$name] = $serviceId;
         }
+
+        $container->setParameter('nexus.shared_actors', $map);
     }
 }

@@ -11,7 +11,6 @@ use Monadial\Nexus\Symfony\DependencyInjection\Compiler\GlobalActorPass;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use stdClass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 
@@ -52,7 +51,7 @@ final class GlobalActorPassTest extends TestCase
     }
 
     #[Test]
-    public function degradesGracefullyWithoutWorkerPool(): void
+    public function registersActorRefServiceByName(): void
     {
         $container  = new ContainerBuilder();
         $definition = new Definition(StubSharedPaymentSaga::class);
@@ -62,31 +61,28 @@ final class GlobalActorPassTest extends TestCase
         $pass->process($container);
 
         self::assertTrue($container->hasDefinition('nexus.actor_ref.payment-saga'));
-        // Without worker pool, no tag
-        $actorRefDef = $container->getDefinition('nexus.actor_ref.payment-saga');
-        self::assertEmpty($actorRefDef->getTag('nexus.global_actor'));
     }
 
     #[Test]
-    public function tagsActorRefWhenWorkerPoolPresent(): void
+    public function storesSharedActorInParameter(): void
     {
         $container  = new ContainerBuilder();
         $definition = new Definition(StubSharedPaymentSaga::class);
         $container->setDefinition(StubSharedPaymentSaga::class, $definition);
-        // Simulate worker pool present
-        $container->setDefinition('nexus.worker_pool', new Definition(stdClass::class));
 
         $pass = new GlobalActorPass();
         $pass->process($container);
 
-        $actorRefDef = $container->getDefinition('nexus.actor_ref.payment-saga');
-        self::assertNotEmpty($actorRefDef->getTag('nexus.global_actor'));
+        /** @var array<string, string> $map */
+        $map = $container->getParameter('nexus.shared_actors');
+        self::assertArrayHasKey('payment-saga', $map);
+        self::assertSame('nexus.actor.payment-saga.props_factory', $map['payment-saga']);
     }
 
     #[Test]
     public function ignoresIsolatedActors(): void
     {
-        $container = new ContainerBuilder();
+        $container  = new ContainerBuilder();
         $definition = new Definition(StubIsolatedService::class);
         $container->setDefinition(StubIsolatedService::class, $definition);
 

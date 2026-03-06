@@ -40,7 +40,7 @@ final class ActorRegistrationPassTest extends TestCase
     #[Test]
     public function registersPropsFactoryForIsolatedActor(): void
     {
-        $container = new ContainerBuilder();
+        $container  = new ContainerBuilder();
         $definition = new Definition(StubOrderService::class);
         $container->setDefinition(StubOrderService::class, $definition);
 
@@ -68,7 +68,7 @@ final class ActorRegistrationPassTest extends TestCase
     #[Test]
     public function ignoresSharedActors(): void
     {
-        $container = new ContainerBuilder();
+        $container  = new ContainerBuilder();
         $definition = new Definition(StubGlobalService::class);
         $container->setDefinition(StubGlobalService::class, $definition);
 
@@ -80,7 +80,7 @@ final class ActorRegistrationPassTest extends TestCase
     }
 
     #[Test]
-    public function propsFactoryIsPublicAndTagged(): void
+    public function propsFactoryIsPublic(): void
     {
         $container  = new ContainerBuilder();
         $definition = new Definition(StubOrderService::class);
@@ -91,9 +91,21 @@ final class ActorRegistrationPassTest extends TestCase
 
         $factory = $container->getDefinition('nexus.actor.test-orders.props_factory');
         self::assertTrue($factory->isPublic());
-        self::assertTrue($factory->hasTag('nexus.isolated_actor'));
+    }
 
-        $tag = $factory->getTag('nexus.isolated_actor')[0];
-        self::assertSame('test-orders', $tag['name']);
+    #[Test]
+    public function storesIsolatedActorInParameter(): void
+    {
+        $container  = new ContainerBuilder();
+        $definition = new Definition(StubOrderService::class);
+        $container->setDefinition(StubOrderService::class, $definition);
+
+        $pass = new ActorRegistrationPass();
+        $pass->process($container);
+
+        /** @var array<string, string> $map */
+        $map = $container->getParameter('nexus.isolated_actors');
+        self::assertArrayHasKey('test-orders', $map);
+        self::assertSame('nexus.actor.test-orders.props_factory', $map['test-orders']);
     }
 }
