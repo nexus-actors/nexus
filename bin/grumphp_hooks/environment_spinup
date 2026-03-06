@@ -5,6 +5,12 @@ export PATH="/usr/local/bin:$PATH"
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(cd "$DIR/../.." && pwd)"
 
+# If running from a git worktree, use the main repo's docker-compose
+GIT_COMMON_DIR="$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)"
+if [[ -n "$GIT_COMMON_DIR" && "$GIT_COMMON_DIR" != ".git" ]]; then
+    PROJECT_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+fi
+
 cd "$PROJECT_ROOT" || exit 1
 
 if [[ -z $(docker compose ps -q php 2>/dev/null) ]] || [[ -z $(docker ps -q --no-trunc | grep "$(docker compose ps -q php 2>/dev/null)") ]]; then

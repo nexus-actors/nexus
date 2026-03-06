@@ -4,7 +4,7 @@ grumphp:
     stop_on_failure: true
     process_timeout: 300
     git_hook_variables:
-        EXEC_GRUMPHP_COMMAND: './bin/grumphp_hooks/environment_spinup && docker compose exec -T php'
+        EXEC_GRUMPHP_COMMAND: './bin/grumphp_hooks/environment_spinup && ./bin/grumphp_hooks/exec_in_container'
     tasks:
         phpcsfixer:
             config: .php-cs-fixer.dist.php

@@ -1,10 +1,28 @@
 #!/bin/bash
 
+# Run a command in the correct Docker container.
+# When called from a git worktree, uses the main repo's container.
+# This allows GrumPHP hooks to work from worktrees.
+
 export PATH="/usr/local/bin:$PATH"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(cd "$DIR/../.." && pwd)"
 
-cd "$PROJECT_ROOT" || exit 1
-
-docker compose exec -T php "$@"
+# Detect if running from a git worktree; if so, use the main repo's docker-compose
+GIT_COMMON_DIR="$(git -C "$PROJECT_ROOT" rev-parse --git-common-dir 2>/dev/null)"
+if [[ -n "$GIT_COMMON_DIR" && "$GIT_COMMON_DIR" != ".git" ]]; then
+    REPO_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+    # Translate any host file path arguments to container paths (/app prefix)
+    TRANSLATED_ARGS=()
+    for arg in "$@"; do
+        if [[ "$arg" == "$REPO_ROOT/"* ]]; then
+            TRANSLATED_ARGS+=("/app/${arg#$REPO_ROOT/}")
+        else
+            TRANSLATED_ARGS+=("$arg")
+        fi
+    done
+    exec docker compose -f "$REPO_ROOT/docker-compose.yml" --project-directory "$REPO_ROOT" exec -T php "${TRANSLATED_ARGS[@]}"
+else
+    exec docker compose exec -T php "$@"
+fi
