@@ -29,6 +29,7 @@
             <directory>packages/nexus-symfony-worker-pool/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
+            <directory>packages/nexus-observability/tests/Unit</directory>
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-worker-pool-swoole/tests/Unit</directory>
         </testsuite>
