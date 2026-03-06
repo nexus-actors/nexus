@@ -87,8 +87,10 @@ final class CatalogActorTest extends TestCase
         $ctx   = $this->createMock(ActorContext::class);
         $ctx->expects(self::never())->method('reply');
 
-        $actor = new CatalogActor($cache);
-        $actor->handle($ctx, new GetProduct('unknown-999'));
+        $actor    = new CatalogActor($cache);
+        $behavior = $actor->handle($ctx, new GetProduct('unknown-999'));
+
+        self::assertSame(Behavior::same(), $behavior);
     }
 
     #[Test]

@@ -89,6 +89,7 @@ final class CatalogActor implements ActorHandler
     private function findSeed(string $id): ?Product
     {
         foreach ($this->seeds() as $product) {
+
             if ($product->id === $id) {
                 return $product;
             }

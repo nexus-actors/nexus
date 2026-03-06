@@ -62,8 +62,10 @@ final class InventoryActorTest extends TestCase
             self::callback(static fn(StockLevel $s): bool => $s->levels === []),
         );
 
-        $actor = new InventoryActor($cache);
-        $actor->handle($ctx, new GetStock([]));
+        $actor    = new InventoryActor($cache);
+        $behavior = $actor->handle($ctx, new GetStock([]));
+
+        self::assertSame(Behavior::same(), $behavior);
     }
 
     #[Test]
