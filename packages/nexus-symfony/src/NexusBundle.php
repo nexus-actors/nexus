@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony;
 
 use Monadial\Nexus\Symfony\DependencyInjection\Compiler\ActorRegistrationPass;
+use Monadial\Nexus\Symfony\DependencyInjection\Compiler\CoroutineScopedPass;
 use Monadial\Nexus\Symfony\DependencyInjection\Compiler\GlobalActorPass;
 use Monadial\Nexus\Symfony\DependencyInjection\NexusExtension;
 use Override;
@@ -19,6 +20,7 @@ final class NexusBundle extends Bundle
         parent::build($container);
 
         $container->addCompilerPass(new ActorRegistrationPass());
+        $container->addCompilerPass(new CoroutineScopedPass());
         $container->addCompilerPass(new GlobalActorPass());
     }
 
