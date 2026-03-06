@@ -5,7 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\StoppedBehavior;
+use Monadial\Nexus\Core\Actor\UnhandledBehavior;
 use Monadial\Nexus\Symfony\Actor\RequestActor;
 use Monadial\Nexus\Symfony\Message\HandleHttpRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -46,7 +47,7 @@ final class RequestActorTest extends TestCase
             $actor   = new RequestActor($kernel, null);
             $result  = $actor->handle($ctx, new HandleHttpRequest($symfonyRequest, $channel));
 
-            self::assertInstanceOf(Behavior::class, $result);
+            self::assertInstanceOf(StoppedBehavior::class, $result);
             $captured = $channel->pop(0.1);
         });
 
@@ -94,7 +95,7 @@ final class RequestActorTest extends TestCase
         $actor  = new RequestActor($kernel, null);
         $result = $actor->handle($ctx, new \stdClass());
 
-        self::assertInstanceOf(Behavior::class, $result);
+        self::assertInstanceOf(UnhandledBehavior::class, $result);
     }
 
     #[Test]
@@ -108,6 +109,17 @@ final class RequestActorTest extends TestCase
 
         $actor = new RequestActor($kernel, $resetter);
         $actor->onPostStop($ctx);
+    }
+
+    #[Test]
+    public function onPostStopIsNoOpWhenResetterIsNull(): void
+    {
+        $kernel = $this->createStub(HttpKernelInterface::class);
+        $ctx    = $this->createStub(ActorContext::class);
+
+        $actor = new RequestActor($kernel, null);
+        $actor->onPostStop($ctx); // must not throw
+        self::assertTrue(true);
     }
 }
 
