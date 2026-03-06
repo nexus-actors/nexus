@@ -1,0 +1,15 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Kernel;
+use Monadial\Nexus\Symfony\WorkerPool\NexusSymfonyWorkerApp;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$env     = $_SERVER['APP_ENV'] ?? 'prod';
+$debug   = (bool) ($_SERVER['APP_DEBUG'] ?? false);
+$threads = (int) ($_SERVER['NEXUS_WORKER_THREADS'] ?? 4);
+
+NexusSymfonyWorkerApp::run(new Kernel($env, $debug), $threads);
