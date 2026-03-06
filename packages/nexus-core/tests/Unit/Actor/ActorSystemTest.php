@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Actor\Telemetry\ActorSystemSnapshot;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
@@ -226,6 +227,26 @@ final class ActorSystemTest extends TestCase
         $system1 = ActorSystem::create('test-1', $this->runtime);
         $system2 = ActorSystem::create('test-2', $this->runtime);
         self::assertNotSame($system1->writerId(), $system2->writerId());
+    }
+
+    #[Test]
+    public function snapshot_returns_full_actor_hierarchy(): void
+    {
+        $system = ActorSystem::create('snap-test', $this->runtime);
+        $props  = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+
+        $system->spawn($props, 'orders');
+        $system->spawn($props, 'payments');
+
+        $snap = $system->snapshot();
+
+        self::assertSame('snap-test', $snap->systemName);
+        self::assertCount(2, $snap->actors);
+        self::assertSame(0, $snap->deadLettersCount);
+
+        $paths = array_map(static fn($a) => $a->path, $snap->actors);
+        self::assertContains('/user/orders', $paths);
+        self::assertContains('/user/payments', $paths);
     }
 
     protected function setUp(): void

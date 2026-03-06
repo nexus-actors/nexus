@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use DateTimeImmutable;
+use Monadial\Nexus\Core\Actor\Telemetry\ActorSystemSnapshot;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
@@ -34,6 +35,9 @@ final class ActorSystem
 {
     /** @var array<string, ActorRef<object>> */
     private array $children;
+
+    /** @var array<string, ActorCell<object>> */
+    private array $childCells = [];
 
     private int $anonymousCounter = 0;
 
@@ -101,10 +105,11 @@ final class ActorSystem
             throw new ActorNameExistsException($this->userGuardianPath, $name);
         }
 
-        $ref = $this->createActorCell($props, $name);
-        $this->children[$name] = $ref;
+        $cell                    = $this->createActorCell($props, $name);
+        $this->children[$name]   = $cell->self();
+        $this->childCells[$name] = $cell;
 
-        return $ref;
+        return $cell->self();
     }
 
     /**
@@ -117,11 +122,12 @@ final class ActorSystem
      */
     public function spawnAnonymous(Props $props): ActorRef
     {
-        $name = 'auto-' . $this->anonymousCounter++;
-        $ref = $this->createActorCell($props, $name);
-        $this->children[$name] = $ref;
+        $name                    = 'auto-' . $this->anonymousCounter++;
+        $cell                    = $this->createActorCell($props, $name);
+        $this->children[$name]   = $cell->self();
+        $this->childCells[$name] = $cell;
 
-        return $ref;
+        return $cell->self();
     }
 
     /**
@@ -221,10 +227,10 @@ final class ActorSystem
     /**
      * @template T of object
      * @param Props<T> $props
-     * @return ActorRef<T>
+     * @return ActorCell<T>
      * @throws ActorInitializationException
      */
-    private function createActorCell(Props $props, string $name): ActorRef
+    private function createActorCell(Props $props, string $name): ActorCell
     {
         $childPath = $this->userGuardianPath->child($name);
         /** @var Mailbox<Envelope> $childMailbox */
@@ -232,7 +238,8 @@ final class ActorSystem
 
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
-        $childCell = new ActorCell(
+        /** @var ActorCell<T> $cell */
+        $cell = new ActorCell(
             $props->behavior,
             $childPath,
             $childMailbox,
@@ -244,11 +251,11 @@ final class ActorSystem
             $this->logger,
             $this->deadLetters,
         );
-        $childCell->start();
+        $cell->start();
 
-        $this->spawnMessageLoop($childCell, $childMailbox);
+        $this->spawnMessageLoop($cell, $childMailbox);
 
-        return $childCell->self();
+        return $cell;
     }
 
     /**
@@ -271,6 +278,26 @@ final class ActorSystem
                 }
             }
         });
+    }
+
+    /**
+     * Returns an immutable snapshot of the full actor hierarchy.
+     */
+    public function snapshot(): ActorSystemSnapshot
+    {
+        $actors = [];
+
+        foreach ($this->childCells as $cell) {
+            $actors[] = $cell->snapshot();
+        }
+
+        return new ActorSystemSnapshot(
+            systemName: $this->systemName,
+            writerId: (string) $this->writerId,
+            isRunning: $this->isRunning(),
+            actors: $actors,
+            deadLettersCount: count($this->deadLetters->captured()),
+        );
     }
 
     /**
