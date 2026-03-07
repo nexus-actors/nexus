@@ -15,6 +15,7 @@ final readonly class WorkerPoolAggregation
      * @param WorkerTelemetryEntry[] $entries
      */
     public function __construct(
+        /** @var WorkerTelemetryEntry[] */
         public array $entries,
         public int $totalCoroutines,
         public int $totalDeadLetters,
