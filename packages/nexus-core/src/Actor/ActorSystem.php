@@ -225,6 +225,26 @@ final class ActorSystem
     }
 
     /**
+     * Returns an immutable snapshot of the full actor hierarchy.
+     */
+    public function snapshot(): ActorSystemSnapshot
+    {
+        $actors = [];
+
+        foreach ($this->childCells as $cell) {
+            $actors[] = $cell->snapshot();
+        }
+
+        return new ActorSystemSnapshot(
+            systemName: $this->systemName,
+            writerId: (string) $this->writerId,
+            isRunning: $this->isRunning(),
+            actors: $actors,
+            deadLettersCount: count($this->deadLetters->captured()),
+        );
+    }
+
+    /**
      * @template T of object
      * @param Props<T> $props
      * @return ActorCell<T>
@@ -238,7 +258,6 @@ final class ActorSystem
 
         $typedSupervision = $props->supervision ?? SupervisionStrategy::oneForOne();
 
-        /** @var ActorCell<T> $cell */
         $cell = new ActorCell(
             $props->behavior,
             $childPath,
@@ -278,26 +297,6 @@ final class ActorSystem
                 }
             }
         });
-    }
-
-    /**
-     * Returns an immutable snapshot of the full actor hierarchy.
-     */
-    public function snapshot(): ActorSystemSnapshot
-    {
-        $actors = [];
-
-        foreach ($this->childCells as $cell) {
-            $actors[] = $cell->snapshot();
-        }
-
-        return new ActorSystemSnapshot(
-            systemName: $this->systemName,
-            writerId: (string) $this->writerId,
-            isRunning: $this->isRunning(),
-            actors: $actors,
-            deadLettersCount: count($this->deadLetters->captured()),
-        );
     }
 
     /**

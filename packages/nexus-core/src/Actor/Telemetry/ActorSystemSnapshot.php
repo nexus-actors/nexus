@@ -12,7 +12,7 @@ namespace Monadial\Nexus\Core\Actor\Telemetry;
 final readonly class ActorSystemSnapshot
 {
     /**
-     * @param ActorSnapshot[] $actors
+     * @param array<ActorSnapshot> $actors
      */
     public function __construct(
         public string $systemName,
@@ -27,15 +27,16 @@ final readonly class ActorSystemSnapshot
      */
     public static function fromArray(array $data): self
     {
+        /** @var list<array<string, mixed>> $actors */
+        $actors = is_array($data['actors'] ?? null)
+            ? $data['actors']
+            : [];
+
         return new self(
             systemName: (string) $data['name'],
             writerId: (string) $data['writer_id'],
             isRunning: (bool) $data['is_running'],
-            actors: array_map(
-                static fn(array $a): ActorSnapshot => ActorSnapshot::fromArray($a),
-                /** @var array<int, array<string, mixed>> */
-                $data['actors'] ?? [],
-            ),
+            actors: array_map(static fn(array $a): ActorSnapshot => ActorSnapshot::fromArray($a), $actors),
             deadLettersCount: (int) $data['dead_letters_count'],
         );
     }
