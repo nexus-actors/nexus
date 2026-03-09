@@ -16,7 +16,9 @@ final class ServiceAnalyzerTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->analyzer = new ServiceAnalyzer();
+        /** @var \Composer\Autoload\ClassLoader $loader */
+        $loader = require 'vendor/autoload.php';
+        $this->analyzer = new ServiceAnalyzer($loader);
     }
 
     #[Test]
