@@ -15,14 +15,11 @@ use PhpParser\Parser;
 
 final class InterfaceParser
 {
-    public function __construct(
-        private readonly Parser $parser,
-        private readonly TypeResolver $typeResolver,
-    ) {}
+    public function __construct(private readonly Parser $parser, private readonly TypeResolver $typeResolver,) {}
 
     /**
      * @param array<string, array{mutates: bool, noAsync: bool}> $methodFlags
-     * @return MethodDefinition[]
+     * @return array<MethodDefinition>
      */
     public function parse(string $filePath, array $methodFlags): array
     {
@@ -70,7 +67,7 @@ final class InterfaceParser
         return $iface ?? throw new AnalysisException("No interface found in {$filePath}");
     }
 
-    /** @return ParameterDefinition[] */
+    /** @return array<ParameterDefinition> */
     private function parseParameters(ClassMethod $method): array
     {
         return array_map(

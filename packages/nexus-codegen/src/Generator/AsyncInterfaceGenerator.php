@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Codegen\Generator;
 
 use Monadial\Nexus\Codegen\Definition\MethodDefinition;
 use Monadial\Nexus\Codegen\Definition\ServiceDefinition;
+use Nette\PhpGenerator\InterfaceType;
 use Nette\PhpGenerator\PhpFile;
 use Nette\PhpGenerator\PsrPrinter;
 
@@ -38,7 +39,7 @@ final class AsyncInterfaceGenerator
         return (new PsrPrinter())->printFile($file);
     }
 
-    private function addAsyncMethod(\Nette\PhpGenerator\InterfaceType $iface, MethodDefinition $method): void
+    private function addAsyncMethod(InterfaceType $iface, MethodDefinition $method): void
     {
         $returnType = $method->returnType ?? 'mixed';
 

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Codegen\Tests\Fixture;
 
-interface ProductServiceInterface
+interface ProductServicePort
 {
     public function getProduct(string $id): Product;
 

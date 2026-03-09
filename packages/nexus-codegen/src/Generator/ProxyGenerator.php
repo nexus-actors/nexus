@@ -9,6 +9,8 @@ use Monadial\Nexus\Codegen\Definition\ServiceDefinition;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Duration;
 use Nette\PhpGenerator\ClassType;
+use Nette\PhpGenerator\Literal;
+use Nette\PhpGenerator\Method;
 use Nette\PhpGenerator\PhpFile;
 use Nette\PhpGenerator\PsrPrinter;
 
@@ -39,7 +41,7 @@ final class ProxyGenerator
             ->setType(Duration::class)
             ->setPrivate()
             ->setReadOnly()
-            ->setDefaultValue(new \Nette\PhpGenerator\Literal("new Duration({$timeoutNs})"));
+            ->setDefaultValue(new Literal("new Duration({$timeoutNs})"));
 
         foreach ($definition->methods as $method) {
             $this->addSyncMethod($class, $method);
@@ -91,7 +93,7 @@ final class ProxyGenerator
         );
     }
 
-    private function addParameters(\Nette\PhpGenerator\Method $m, MethodDefinition $method): void
+    private function addParameters(Method $m, MethodDefinition $method): void
     {
         foreach ($method->parameters as $param) {
             $m->addParameter($param->name)
@@ -100,7 +102,7 @@ final class ProxyGenerator
         }
     }
 
-    /** @return string[] */
+    /** @return array<string> */
     private function buildParamList(MethodDefinition $method): array
     {
         return array_map(

@@ -16,25 +16,6 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(ProxyGenerator::class)]
 final class ProxyGeneratorTest extends TestCase
 {
-    private function makeDefinition(): ServiceDefinition
-    {
-        return new ServiceDefinition(
-            className: 'App\\Service\\ProductService',
-            shortName: 'Product',
-            interfaceName: 'App\\Service\\ProductServiceInterface',
-            outputNamespace: 'App\\Generated\\Actor\\Product',
-            outputPath: 'src/Generated/Actor/Product',
-            methods: [
-                new MethodDefinition('getProduct', 'GetProduct', [new ParameterDefinition('id', 'string', false)], '\\App\\Entity\\Product', false, false, false),
-                new MethodDefinition('deleteProduct', 'DeleteProduct', [new ParameterDefinition('id', 'string', false)], null, true, true, false),
-            ],
-            async: true,
-            timeout: 5,
-            supervision: StrategyType::OneForOne,
-            reset: null,
-        );
-    }
-
     #[Test]
     public function generates_proxy_class(): void
     {
@@ -71,5 +52,40 @@ final class ProxyGeneratorTest extends TestCase
 
         self::assertStringContainsString('getProductAsync(', $code);
         self::assertStringContainsString('Future', $code);
+    }
+
+    private function makeDefinition(): ServiceDefinition
+    {
+        return new ServiceDefinition(
+            className: 'App\\Service\\ProductService',
+            shortName: 'Product',
+            interfaceName: 'App\\Service\\ProductServiceInterface',
+            outputNamespace: 'App\\Generated\\Actor\\Product',
+            outputPath: 'src/Generated/Actor/Product',
+            methods: [
+                new MethodDefinition(
+                    'getProduct',
+                    'GetProduct',
+                    [new ParameterDefinition('id', 'string', false)],
+                    '\\App\\Entity\\Product',
+                    false,
+                    false,
+                    false,
+                ),
+                new MethodDefinition(
+                    'deleteProduct',
+                    'DeleteProduct',
+                    [new ParameterDefinition('id', 'string', false)],
+                    null,
+                    true,
+                    true,
+                    false,
+                ),
+            ],
+            async: true,
+            timeout: 5,
+            supervision: StrategyType::OneForOne,
+            reset: null,
+        );
     }
 }

@@ -28,7 +28,13 @@ final class ActorizeTest extends TestCase
     #[Test]
     public function values_are_set(): void
     {
-        $attr = new Actorize(async: false, supervision: StrategyType::ExponentialBackoff, timeout: 10, reset: true, namespace: 'App\\Gen');
+        $attr = new Actorize(
+            async: false,
+            supervision: StrategyType::ExponentialBackoff,
+            timeout: 10,
+            reset: true,
+            namespace: 'App\\Gen',
+        );
 
         self::assertFalse($attr->async);
         self::assertSame(StrategyType::ExponentialBackoff, $attr->supervision);

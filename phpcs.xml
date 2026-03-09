@@ -32,6 +32,8 @@
     <file>packages/nexus-persistence-dbal/tests</file>
     <file>packages/nexus-persistence-doctrine/src</file>
     <file>packages/nexus-persistence-doctrine/tests</file>
+    <file>packages/nexus-codegen/src</file>
+    <file>packages/nexus-codegen/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->
@@ -122,6 +124,8 @@
         <exclude name="SlevomatCodingStandard.ControlStructures.NewWithoutParentheses" />
         <!-- Early exit is not always clearer -->
         <exclude name="SlevomatCodingStandard.ControlStructures.EarlyExit" />
+        <!-- RequireNullSafeObjectOperator already enforces ?-> use; these two conflict -->
+        <exclude name="SlevomatCodingStandard.ControlStructures.DisallowNullSafeObjectOperator" />
     </rule>
 
     <!-- Slevomat: Operators -->

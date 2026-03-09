@@ -6,9 +6,5 @@ namespace Monadial\Nexus\Codegen\Definition;
 
 final readonly class ParameterDefinition
 {
-    public function __construct(
-        public string $name,
-        public string $type,
-        public bool $nullable,
-    ) {}
+    public function __construct(public string $name, public string $type, public bool $nullable,) {}
 }

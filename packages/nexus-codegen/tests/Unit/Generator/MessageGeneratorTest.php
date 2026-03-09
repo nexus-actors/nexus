@@ -16,11 +16,6 @@ final class MessageGeneratorTest extends TestCase
 {
     private MessageGenerator $generator;
 
-    protected function setUp(): void
-    {
-        $this->generator = new MessageGenerator();
-    }
-
     #[Test]
     public function generates_input_message(): void
     {
@@ -74,5 +69,10 @@ final class MessageGeneratorTest extends TestCase
         );
 
         self::assertNull($this->generator->generateResponse('App\\Generated\\Actor\\Product', $method));
+    }
+
+    protected function setUp(): void
+    {
+        $this->generator = new MessageGenerator();
     }
 }

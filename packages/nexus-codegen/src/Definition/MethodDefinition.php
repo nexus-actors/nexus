@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Codegen\Definition;
 
 final readonly class MethodDefinition
 {
-    /** @param ParameterDefinition[] $parameters */
+    /** @param array<ParameterDefinition> $parameters */
     public function __construct(
         public string $name,
         public string $pascalName,

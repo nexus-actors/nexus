@@ -8,7 +8,7 @@ use Monadial\Nexus\Core\Supervision\StrategyType;
 
 final readonly class ServiceDefinition
 {
-    /** @param MethodDefinition[] $methods */
+    /** @param array<MethodDefinition> $methods */
     public function __construct(
         public string $className,
         public string $shortName,

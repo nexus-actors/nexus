@@ -82,8 +82,11 @@ final class ServiceAnalyzer
         /** @var Node\Stmt\Class_|null $classNode */
         $classNode = (new NodeFinder())->findFirst($ast, static fn(Node $n) => $n instanceof Node\Stmt\Class_);
 
-        return $classNode?->namespacedName?->toString()
-            ?? throw AnalysisException::noActorizeAttribute($filePath);
+        if ($classNode?->namespacedName === null) {
+            throw AnalysisException::noActorizeAttribute($filePath);
+        }
+
+        return $classNode->namespacedName->toString();
     }
 
     private function readActorizeAttribute(ReflectionClass $reflection, string $filePath): Actorize

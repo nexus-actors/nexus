@@ -12,13 +12,13 @@ final class FileWatcher
     /** @var callable(string): void */
     private $callback;
 
-    /** @param string[] $files */
-    public function __construct(
-        private readonly array $files,
-        private readonly int $intervalMs = 500,
-    ) {
+    /** @param array<string> $files */
+    public function __construct(private readonly array $files, private readonly int $intervalMs = 500,) {
         foreach ($files as $file) {
-            $this->mtimes[$file] = filemtime($file) ?: 0;
+            $mtime = filemtime($file);
+            $this->mtimes[$file] = $mtime !== false
+                ? $mtime
+                : 0;
         }
 
         $this->callback = static function (string $_file): void {};
@@ -33,7 +33,10 @@ final class FileWatcher
     public function tick(): void
     {
         foreach ($this->files as $file) {
-            $mtime = filemtime($file) ?: 0;
+            $raw = filemtime($file);
+            $mtime = $raw !== false
+                ? $raw
+                : 0;
 
             if ($mtime > ($this->mtimes[$file] ?? 0)) {
                 $this->mtimes[$file] = $mtime;

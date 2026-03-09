@@ -21,7 +21,7 @@ final class FileWatcherTest extends TestCase
         $watcher = new FileWatcher([$file], intervalMs: 10);
 
         $changed = [];
-        $watcher->onChange(function (string $path) use (&$changed): void {
+        $watcher->onChange(static function (string $path) use (&$changed): void {
             $changed[] = $path;
         });
 
@@ -43,7 +43,7 @@ final class FileWatcherTest extends TestCase
         $watcher = new FileWatcher([$file], intervalMs: 10);
 
         $changed = [];
-        $watcher->onChange(function (string $path) use (&$changed): void {
+        $watcher->onChange(static function (string $path) use (&$changed): void {
             $changed[] = $path;
         });
 

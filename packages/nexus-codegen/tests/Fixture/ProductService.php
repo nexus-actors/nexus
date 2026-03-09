@@ -8,7 +8,7 @@ use Monadial\Nexus\Codegen\Attribute\Actorize;
 use Monadial\Nexus\Codegen\Attribute\Mutates;
 
 #[Actorize(async: true, timeout: 5, namespace: 'Monadial\\Nexus\\Codegen\\Tests\\Fixture\\Generated')]
-final class ProductService implements ProductServiceInterface
+final class ProductService implements ProductServicePort
 {
     public function getProduct(string $id): Product
     {
@@ -22,5 +22,8 @@ final class ProductService implements ProductServiceInterface
     }
 
     #[Mutates]
-    public function deleteProduct(string $id): void {}
+    public function deleteProduct(string $id): void
+    {
+        // no-op in fixture
+    }
 }

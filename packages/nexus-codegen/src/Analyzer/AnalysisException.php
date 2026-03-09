@@ -20,7 +20,9 @@ final class AnalysisException extends RuntimeException
 
     public static function multipleInterfaces(string $class): self
     {
-        return new self("Class {$class} implements multiple interfaces — specify one using #[Actorize(interface: X::class)]");
+        return new self(
+            "Class {$class} implements multiple interfaces — specify one using #[Actorize(interface: X::class)]",
+        );
     }
 
     public static function interfaceFileNotFound(string $interface): self

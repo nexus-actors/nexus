@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Codegen\Tests\Unit\Analyzer;
 
+use Monadial\Nexus\Codegen\Analyzer\AnalysisException;
 use Monadial\Nexus\Codegen\Analyzer\InterfaceParser;
 use Monadial\Nexus\Codegen\Analyzer\ServiceAnalyzer;
 use Monadial\Nexus\Codegen\Analyzer\TypeResolver;
@@ -17,14 +18,6 @@ final class ServiceAnalyzerTest extends TestCase
 {
     private ServiceAnalyzer $analyzer;
 
-    protected function setUp(): void
-    {
-        /** @var \Composer\Autoload\ClassLoader $loader */
-        $loader = require 'vendor/autoload.php';
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $this->analyzer = new ServiceAnalyzer($loader, new InterfaceParser($parser, new TypeResolver()));
-    }
-
     #[Test]
     public function analyzes_service_class_into_definition(): void
     {
@@ -33,7 +26,7 @@ final class ServiceAnalyzerTest extends TestCase
         $definition = $this->analyzer->analyze($file);
 
         self::assertSame('Monadial\\Nexus\\Codegen\\Tests\\Fixture\\ProductService', $definition->className);
-        self::assertSame('Monadial\\Nexus\\Codegen\\Tests\\Fixture\\ProductServiceInterface', $definition->interfaceName);
+        self::assertSame('Monadial\\Nexus\\Codegen\\Tests\\Fixture\\ProductServicePort', $definition->interfaceName);
         self::assertSame('Product', $definition->shortName);
         self::assertCount(3, $definition->methods);
     }
@@ -67,8 +60,16 @@ final class ServiceAnalyzerTest extends TestCase
     #[Test]
     public function throws_when_no_actorize_attribute(): void
     {
-        $this->expectException(\Monadial\Nexus\Codegen\Analyzer\AnalysisException::class);
+        $this->expectException(AnalysisException::class);
 
-        $this->analyzer->analyze(__DIR__ . '/../../Fixture/ProductServiceInterface.php');
+        $this->analyzer->analyze(__DIR__ . '/../../Fixture/ProductServicePort.php');
+    }
+
+    protected function setUp(): void
+    {
+        /** @var \Composer\Autoload\ClassLoader $loader */
+        $loader = require 'vendor/autoload.php';
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $this->analyzer = new ServiceAnalyzer($loader, new InterfaceParser($parser, new TypeResolver()));
     }
 }
