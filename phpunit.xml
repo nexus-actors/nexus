@@ -8,6 +8,7 @@
 >
     <testsuites>
         <testsuite name="unit">
+            <directory>packages/nexus-codegen/tests/Unit</directory>
             <directory>packages/nexus-core/tests/Unit</directory>
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
@@ -59,6 +60,7 @@
     </testsuites>
     <source>
         <include>
+            <directory>packages/nexus-codegen/src</directory>
             <directory>packages/nexus-core/src</directory>
             <directory>packages/nexus-runtime-fiber/src</directory>
             <directory>packages/nexus-runtime/src</directory>

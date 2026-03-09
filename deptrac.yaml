@@ -22,6 +22,11 @@ deptrac:
         - type: directory
           value: packages/nexus-app/src/.*
 
+    - name: Codegen
+      collectors:
+        - type: directory
+          value: packages/nexus-codegen/src/.*
+
     - name: Serialization
       collectors:
         - type: directory
@@ -83,6 +88,9 @@ deptrac:
     Runtime:
       - Core
     App:
+      - Core
+      - Runtime
+    Codegen:
       - Core
       - Runtime
     Serialization:

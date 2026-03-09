@@ -9,6 +9,8 @@
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.0",
+        "nette/php-generator": "^4.0",
+        "nikic/php-parser": "^5.0",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -33,6 +35,7 @@
             "packages/nexus-core/src/Actor/Functions/functions.php"
         ],
         "psr-4": {
+            "Monadial\\Nexus\\Codegen\\": "packages/nexus-codegen/src/",
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
             "Monadial\\Nexus\\Runtime\\": "packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "packages/nexus-runtime-fiber/src/",
@@ -64,6 +67,7 @@
             "Monadial\\Nexus\\WorkerPool\\Tests\\": "packages/nexus-worker-pool/tests/",
             "Monadial\\Nexus\\WorkerPool\\Swoole\\Tests\\": "packages/nexus-worker-pool-swoole/tests/",
             "Monadial\\Nexus\\App\\Tests\\": "packages/nexus-app/tests/",
+            "Monadial\\Nexus\\Codegen\\Tests\\": "packages/nexus-codegen/tests/",
             "Monadial\\Nexus\\Persistence\\Tests\\": "packages/nexus-persistence/tests/",
             "Monadial\\Nexus\\Persistence\\Dbal\\Tests\\": "packages/nexus-persistence-dbal/tests/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\Tests\\": "packages/nexus-persistence-doctrine/tests/"

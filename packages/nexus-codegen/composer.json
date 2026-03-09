@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/codegen",
+    "description": "AST-based code generator — actorizes PHP services automatically",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nikic/php-parser": "^5.0",
+        "nette/php-generator": "^4.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Codegen\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Codegen\\Tests\\": "tests/"
+        }
+    }
+}
