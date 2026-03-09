@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Codegen;
 
 use Composer\Autoload\ClassLoader;
+use Monadial\Nexus\Codegen\Analyzer\InterfaceParser;
 use Monadial\Nexus\Codegen\Analyzer\ServiceAnalyzer;
+use Monadial\Nexus\Codegen\Analyzer\TypeResolver;
+use PhpParser\ParserFactory;
 use Monadial\Nexus\Codegen\Generator\ActorGenerator;
 use Monadial\Nexus\Codegen\Generator\AsyncInterfaceGenerator;
 use Monadial\Nexus\Codegen\Generator\MessageGenerator;
@@ -23,7 +26,8 @@ final class Actorizer
         private readonly string $outputBaseDir,
         ClassLoader $loader,
     ) {
-        $this->analyzer = new ServiceAnalyzer($loader);
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $this->analyzer = new ServiceAnalyzer($loader, new InterfaceParser($parser, new TypeResolver()));
         $this->messageGenerator = new MessageGenerator();
         $this->actorGenerator = new ActorGenerator();
         $this->asyncInterfaceGenerator = new AsyncInterfaceGenerator();

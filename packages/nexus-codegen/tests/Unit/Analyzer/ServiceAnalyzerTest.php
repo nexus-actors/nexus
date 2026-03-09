@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Codegen\Tests\Unit\Analyzer;
 
+use Monadial\Nexus\Codegen\Analyzer\InterfaceParser;
 use Monadial\Nexus\Codegen\Analyzer\ServiceAnalyzer;
+use Monadial\Nexus\Codegen\Analyzer\TypeResolver;
+use PhpParser\ParserFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -18,7 +21,8 @@ final class ServiceAnalyzerTest extends TestCase
     {
         /** @var \Composer\Autoload\ClassLoader $loader */
         $loader = require 'vendor/autoload.php';
-        $this->analyzer = new ServiceAnalyzer($loader);
+        $parser = (new ParserFactory())->createForNewestSupportedVersion();
+        $this->analyzer = new ServiceAnalyzer($loader, new InterfaceParser($parser, new TypeResolver()));
     }
 
     #[Test]
