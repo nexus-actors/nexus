@@ -54,7 +54,7 @@ final class ActorGenerator
         );
 
         foreach ($definition->methods as $method) {
-            $this->addHandler($class, $method);
+            $this->addHandler($class, $method, $ns);
         }
 
         $class->addMethod('resetIfNeeded')
@@ -65,7 +65,7 @@ final class ActorGenerator
         return (new PsrPrinter())->printFile($file);
     }
 
-    private function addHandler(ClassType $class, MethodDefinition $method): void
+    private function addHandler(ClassType $class, MethodDefinition $method, string $ns): void
     {
         $args = implode(', ', array_map(static fn($p) => "\$msg->{$p->name}", $method->parameters));
 
@@ -75,7 +75,7 @@ final class ActorGenerator
 
         $m = $class->addMethod('handle' . $method->pascalName)->setPrivate()->setReturnType(Behavior::class);
         $m->addParameter('ctx')->setType(ActorContext::class);
-        $m->addParameter('msg')->setType('Message\\' . $method->pascalName);
+        $m->addParameter('msg')->setType('\\' . $ns . '\\Message\\' . $method->pascalName);
         $m->setBody("try {\n    {$body}\n} finally {\n    \$this->resetIfNeeded();\n}\n\nreturn Behavior::same();");
     }
 }
