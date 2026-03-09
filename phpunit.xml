@@ -7,6 +7,9 @@
          failOnWarning="true"
 >
     <testsuites>
+        <testsuite name="integration-codegen">
+            <directory>packages/nexus-codegen/tests/Integration</directory>
+        </testsuite>
         <testsuite name="unit">
             <directory>packages/nexus-codegen/tests/Unit</directory>
             <directory>packages/nexus-core/tests/Unit</directory>
