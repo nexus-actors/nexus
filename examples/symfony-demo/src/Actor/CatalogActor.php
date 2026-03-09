@@ -46,7 +46,6 @@ final class CatalogActor implements ActorHandler
                     "catalog.product.{$p->id}",
                     static function (ItemInterface $item) use ($p): Product {
                         $item->expiresAfter(self::PRODUCT_TTL);
-                        $item->tag(['catalog']);
 
                         return $p;
                     },
@@ -75,7 +74,6 @@ final class CatalogActor implements ActorHandler
             "catalog.product.{$message->id}",
             static function (ItemInterface $item) use ($seed): Product {
                 $item->expiresAfter(self::PRODUCT_TTL);
-                $item->tag(['catalog']);
 
                 return $seed;
             },

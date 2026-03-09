@@ -35,7 +35,6 @@ final class InventoryActor implements ActorHandler
                 "inventory.stock.{$id}",
                 static function (ItemInterface $item): int {
                     $item->expiresAfter(self::STOCK_TTL);
-                    $item->tag(['inventory']);
 
                     return random_int(5, 50);
                 },

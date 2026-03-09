@@ -12,3 +12,17 @@ services:
     App\Actor\OrderProcessorActor:
         arguments:
             $transport: '@messenger.transport.orders'
+
+    # Coroutine-safe Redis cache: borrows from SwooleRedisPool per coroutine,
+    # falls back to FilesystemAdapter outside Swoole worker context (CLI, tests).
+    App\Cache\CoroutineLocalRedisCache: ~
+
+    # Wire CacheInterface (including actors) to the pooled Redis adapter.
+    Symfony\Contracts\Cache\CacheInterface:
+        alias: App\Cache\CoroutineLocalRedisCache
+
+    # Register DBAL middleware via doctrine.middleware tag.
+    # SwoolePoolDriver swaps the real PDO connection for a coroutine-local pooled one.
+    App\Doctrine\SwoolePoolMiddleware:
+        tags:
+            - { name: doctrine.middleware }

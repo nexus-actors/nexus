@@ -1,7 +1,5 @@
 framework:
     cache:
-        default_redis_provider: '%env(REDIS_DSN)%'
-        pools:
-            cache.app:
-                adapter: cache.adapter.redis_tag_aware
-                default_lifetime: 300
+        # Used as fallback for CLI and tests. In Swoole workers CoroutineLocalRedisCache
+        # takes over via the CacheInterface alias in services.yaml.
+        app: cache.adapter.filesystem
