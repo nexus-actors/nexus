@@ -14,14 +14,16 @@ final class SwooleHttpBridge
 {
     public function toSymfonyRequest(SwooleRequest $req): Request
     {
+        $rawContent = $req->rawContent() ?: null;
+
         return Request::create(
             uri: $req->server['request_uri'] ?? '/',
             method: $req->server['request_method'] ?? 'GET',
             parameters: $req->get ?? [],
             cookies: $req->cookie ?? [],
-            files: $this->normaliseFiles($req->files ?? []),
+            files: $req->files ?? [],
             server: $this->normaliseServer($req->server ?? [], $req->header ?? []),
-            content: $req->rawContent() !== '' ? $req->rawContent() : null,
+            content: $rawContent,
         );
     }
 
@@ -47,15 +49,6 @@ final class SwooleHttpBridge
     }
 
     /**
-     * @param array<string, mixed> $files
-     * @return array<string, mixed>
-     */
-    private function normaliseFiles(array $files): array
-    {
-        return $files;
-    }
-
-    /**
      * @param array<string, mixed> $server
      * @param array<string, mixed> $headers
      * @return array<string, mixed>
@@ -69,7 +62,7 @@ final class SwooleHttpBridge
         }
 
         foreach ($headers as $key => $value) {
-            $normalised['HTTP_' . strtoupper(str_replace('-', '_', $key))] = $value;
+            $normalised['HTTP_' . strtoupper(strtr($key, '-', '_'))] = $value;
         }
 
         return $normalised;

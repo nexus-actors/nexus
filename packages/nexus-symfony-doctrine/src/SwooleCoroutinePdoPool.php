@@ -17,13 +17,13 @@ final class SwooleCoroutinePdoPool
 {
     public function __construct(private readonly Connection $connection, private readonly int $size) {}
 
-    /**
-     * @psalm-suppress InvalidReturnType, InvalidReturnStatement
-     */
     public function get(): PDO
     {
         /** @psalm-suppress InternalMethod */
-        return $this->connection->getNativeConnection();
+        $connection = $this->connection->getNativeConnection();
+        assert($connection instanceof PDO);
+
+        return $connection;
     }
 
     public function put(PDO $pdo): void

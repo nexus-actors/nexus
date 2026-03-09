@@ -5,23 +5,29 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\Runtime;
 
 use Closure;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Swoole\SwooleEmbeddedRuntime;
 use Monadial\Nexus\Symfony\Actor\ActorPropsFactory;
 use Monadial\Nexus\Symfony\Http\SwooleHttpBridge;
+use Monadial\Nexus\Symfony\KernelPool\KernelPoolActor;
+use Monadial\Nexus\Symfony\KernelPool\Message\HandleRequest;
+use Monadial\Nexus\Symfony\KernelPool\Message\KernelResponse;
 use Monadial\Nexus\Symfony\Shutdown\GracefulShutdownHandler;
 use Override;
 use RuntimeException;
+use SplFixedArray;
 use Swoole\Coroutine;
 use Swoole\Http\Request as SwooleRequest;
 use Swoole\Http\Response as SwooleResponse;
 use Swoole\Http\Server;
 use Swoole\Process;
+use Symfony\Component\DependencyInjection\Container;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\KernelInterface;
-use Symfony\Component\HttpKernel\TerminableInterface;
 use Symfony\Component\Runtime\RunnerInterface;
-use Symfony\Contracts\Service\ResetInterface;
 
 final class NexusRunner implements RunnerInterface
 {
@@ -31,31 +37,47 @@ final class NexusRunner implements RunnerInterface
     #[Override]
     public function run(): int
     {
-        $bridge  = new SwooleHttpBridge();
-        $host    = (string) $this->options['host'];
-        $port    = (int) $this->options['port'];
-        $workers = (int) $this->options['workers'];
+        $bridge     = new SwooleHttpBridge();
+        $host       = (string) $this->options['host'];
+        $port       = (int) $this->options['port'];
+        $workers    = (int) $this->options['workers'];
+        $poolSize   = (int) $this->options['kernel_pool_size'];
+        $maxPending = (int) $this->options['kernel_pool_max_pending'];
 
-        $server = new Server($host, $port);
+        // Swoole thread workers re-execute the entry script using
+        // $_SERVER['SCRIPT_FILENAME']. Make it absolute so threads with a
+        // different CWD can still find the file.
+        if (!empty($_SERVER['SCRIPT_FILENAME']) && $_SERVER['SCRIPT_FILENAME'][0] !== '/') {
+            $_SERVER['SCRIPT_FILENAME'] = getcwd() . '/' . $_SERVER['SCRIPT_FILENAME'];
+        }
+
+        $server = new Server($host, $port, SWOOLE_THREAD);
         $server->set([
             'enable_coroutine' => true,
             'hook_flags'       => SWOOLE_HOOK_ALL,
             'worker_num'       => $workers,
         ]);
 
-        /** @var HttpKernelInterface|null $localKernel */
-        $localKernel = null;
-        /** @var ResetInterface|null $localResetter */
-        $localResetter = null;
+        /**
+         * Per-worker pool refs, indexed by worker ID.
+         * Only worker N writes to slot N (workerStart) and reads from slot N (request).
+         * No concurrent access to the same slot — no locking needed.
+         *
+         * @var SplFixedArray<ActorRef<object>|null>
+         */
+        $poolRefs = SplFixedArray::fromArray(array_fill(0, $workers, null));
 
         $factory = $this->kernelFactory;
 
         $server->on(
             'workerStart',
-            function (Server $server, int $workerId) use ($factory, &$localKernel, &$localResetter): void {
+            function (Server $server, int $workerId) use ($factory, $poolSize, $maxPending, $poolRefs): void {
                 Coroutine::create(
-                    function () use ($workerId, $factory, &$localKernel, &$localResetter): void {
-                        $kernel = ($factory)();
+                    function () use ($factory, $workerId, $poolSize, $maxPending, $poolRefs): void {
+                        /** @var array<string, mixed> $env */
+                        $env = $_SERVER + $_ENV;
+
+                        $kernel = ($factory)($env);
 
                         if (!$kernel instanceof HttpKernelInterface) {
                             throw new RuntimeException(sprintf(
@@ -76,19 +98,20 @@ final class NexusRunner implements RunnerInterface
                         $system  = ActorSystem::create("nexus-worker-{$workerId}", $runtime);
 
                         if ($container !== null) {
+                            $this->callWorkerStartBootstrappers($container, $workerId);
                             $container->set('nexus.actor_system', $system);
+                            $container->set('nexus.runtime', $runtime);
                             $this->bootIsolatedActors($container, $system);
                             $this->wireShutdown($container, $system);
-
-                            if ($container->has('services_resetter')) {
-                                $service = $container->get('services_resetter');
-                                assert($service instanceof ResetInterface);
-                                $localResetter = $service;
-                            }
                         }
 
+                        $poolRef             = $system->spawn(
+                            KernelPoolActor::props($factory, $system, $runtime, $poolSize, $maxPending),
+                            'kernel-pool',
+                        );
+                        $poolRefs[$workerId] = $poolRef;
+
                         $runtime->run();
-                        $localKernel = $kernel;
                     },
                 );
             },
@@ -96,24 +119,25 @@ final class NexusRunner implements RunnerInterface
 
         $server->on(
             'request',
-            static function (SwooleRequest $req, SwooleResponse $res) use ($bridge, &$localKernel, &$localResetter): void {
-                if ($localKernel === null) {
+            static function (SwooleRequest $req, SwooleResponse $res) use ($bridge, $server, $poolRefs): void {
+                $workerId = $server->getWorkerId();
+
+                /** @var ActorRef<object>|null $poolRef */
+                $poolRef = $poolRefs[$workerId];
+
+                if ($poolRef === null) {
                     $res->status(503);
                     $res->end('Worker initializing');
 
                     return;
                 }
 
-                $kernel          = $localKernel;
                 $symfonyRequest  = $bridge->toSymfonyRequest($req);
-                $symfonyResponse = $kernel->handle($symfonyRequest);
+                $future          = $poolRef->ask(new HandleRequest($symfonyRequest), Duration::seconds(30));
+                $kernelResponse  = $future->await();
 
-                if ($kernel instanceof TerminableInterface) {
-                    $kernel->terminate($symfonyRequest, $symfonyResponse);
-                }
-
-                $localResetter?->reset();
-                $bridge->sendSymfonyResponse($symfonyResponse, $res);
+                assert($kernelResponse instanceof KernelResponse);
+                $bridge->sendSymfonyResponse($kernelResponse->response, $res);
             },
         );
 
@@ -122,46 +146,61 @@ final class NexusRunner implements RunnerInterface
         return 0;
     }
 
+    private function callWorkerStartBootstrappers(ContainerInterface $container, int $workerId): void
+    {
+        if (!$container instanceof Container) {
+            return;
+        }
+
+        if (!$container->hasParameter('nexus.worker_start_bootstrappers')) {
+            return;
+        }
+
+        /** @var list<string> $ids */
+        $ids = $container->getParameter('nexus.worker_start_bootstrappers');
+
+        foreach ($ids as $id) {
+            $bootstrapper = $container->get($id);
+            assert($bootstrapper instanceof WorkerStartBootstrapper);
+            $bootstrapper->onWorkerStart($container, $workerId);
+        }
+    }
+
     /**
      * Boot isolated actors using the compile-time service ID map.
      *
      * ActorRegistrationPass stores the map as `nexus.isolated_actors` at compile time.
      * This avoids calling findTaggedServiceIds() on the compiled container (which lacks
      * that method).
-     *
-     * @param \Psr\Container\ContainerInterface $container
      */
-    private function bootIsolatedActors(mixed $container, ActorSystem $system): void
+    private function bootIsolatedActors(ContainerInterface $container, ActorSystem $system): void
     {
-        /** @psalm-suppress MixedMethodCall */
+        if (!$container instanceof Container) {
+            return;
+        }
+
         if (!$container->hasParameter('nexus.isolated_actors')) {
             return;
         }
 
-        /** @psalm-suppress MixedMethodCall */
         /** @var array<string, string> $map */
         $map = $container->getParameter('nexus.isolated_actors');
 
         foreach ($map as $name => $serviceId) {
-            /** @psalm-suppress MixedMethodCall */
             /** @var ActorPropsFactory $factory */
             $factory = $container->get($serviceId);
             $ref     = $system->spawn($factory->create(), $name);
 
-            /** @psalm-suppress MixedMethodCall */
             $container->set("nexus.actor_ref.{$name}", $ref);
         }
     }
 
-    /** @param \Psr\Container\ContainerInterface $container */
-    private function wireShutdown(mixed $container, ActorSystem $system): void
+    private function wireShutdown(ContainerInterface $container, ActorSystem $system): void
     {
-        /** @psalm-suppress MixedMethodCall */
         if (!$container->has(GracefulShutdownHandler::class)) {
             return;
         }
 
-        /** @psalm-suppress MixedMethodCall */
         $handler = $container->get(GracefulShutdownHandler::class);
         assert($handler instanceof GracefulShutdownHandler);
 

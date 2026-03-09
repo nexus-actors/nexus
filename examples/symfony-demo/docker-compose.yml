@@ -3,23 +3,22 @@ services:
         build:
             context: .
             dockerfile: docker/Dockerfile
-            target: php-full
+            target: php-swoole
         volumes:
             - ../..:/monorepo
         working_dir: /monorepo/examples/symfony-demo
         ports:
             - "8080:8080"
         environment:
-            APP_DEBUG: "1"
+            APP_DEBUG: "0"
             APP_ENV: dev
             APP_RUNTIME: Monadial\Nexus\Symfony\Runtime\NexusRuntime
+            APP_RUNTIME_OPTIONS: '{"workers":1,"kernel_pool_size":20,"kernel_pool_max_pending":200}'
             APP_SECRET: dev-secret
             DATABASE_URL: mysql://app:app@mysql:3306/nexus_demo?serverVersion=8.0
-            NEXUS_HTTP_HOST: "0.0.0.0"
-            NEXUS_HTTP_PORT: "8080"
-            NEXUS_HTTP_WORKERS: "4"
+            DB_POOL_SIZE: "32"
             REDIS_DSN: redis://redis:6379
-        command: php public/index.php
+        command: php -d memory_limit=2G /monorepo/examples/symfony-demo/public/index.php
         depends_on:
             mysql:
                 condition: service_healthy
@@ -54,6 +53,15 @@ services:
 
     mysql:
         image: mysql:8.0
+        command: >
+            --innodb-flush-log-at-trx-commit=2
+            --innodb-flush-method=O_DIRECT
+            --innodb-buffer-pool-size=512M
+            --innodb-log-file-size=256M
+            --innodb-io-capacity=2000
+            --innodb-io-capacity-max=4000
+            --sync-binlog=0
+            --skip-log-bin
         environment:
             MYSQL_DATABASE: nexus_demo
             MYSQL_PASSWORD: app

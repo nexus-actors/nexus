@@ -9,6 +9,7 @@ use Monadial\Nexus\WorkerPool\Swoole\WorkerPoolBootstrap;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
 use RuntimeException;
+use Symfony\Component\DependencyInjection\Container;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\KernelInterface;
 use Symfony\Contracts\Service\ResetInterface;
@@ -53,17 +54,18 @@ final class NexusSymfonyWorkerApp
                 assert($service instanceof ResetInterface);
             }
 
-            /** @psalm-suppress MixedMethodCall */
+            if (!$container instanceof Container) {
+                return;
+            }
+
             if (!$container->hasParameter('nexus.shared_actors')) {
                 return;
             }
 
-            /** @psalm-suppress MixedMethodCall */
             /** @var array<string, string> $sharedActors */
             $sharedActors = $container->getParameter('nexus.shared_actors');
 
             foreach ($sharedActors as $name => $serviceId) {
-                /** @psalm-suppress MixedMethodCall */
                 /** @var ActorPropsFactory $propsFactory */
                 $propsFactory = $container->get($serviceId);
                 $node->spawn($propsFactory->create(), $name);

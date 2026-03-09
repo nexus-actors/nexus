@@ -20,10 +20,10 @@ final class DoctrineCompilerPass implements CompilerPassInterface
             return;
         }
 
-        /** @psalm-suppress InvalidCast */
-        $connectionsPerWorker = $container->hasParameter('nexus.doctrine.connections_per_worker')
-            ? (int) $container->getParameter('nexus.doctrine.connections_per_worker')
+        $raw = $container->hasParameter('nexus.doctrine.connections_per_worker')
+            ? $container->getParameter('nexus.doctrine.connections_per_worker')
             : 2;
+        $connectionsPerWorker = is_int($raw) ? $raw : (int) (string) $raw;
 
         $container->setDefinition(
             'nexus.doctrine.pdo_pool',
