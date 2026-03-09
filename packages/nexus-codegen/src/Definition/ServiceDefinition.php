@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Codegen\Definition;
 
+use Monadial\Nexus\Core\Supervision\StrategyType;
+
 final readonly class ServiceDefinition
 {
     /** @param MethodDefinition[] $methods */
@@ -16,7 +18,7 @@ final readonly class ServiceDefinition
         public array $methods,
         public bool $async,
         public int $timeout,
-        public string $supervision,
+        public StrategyType $supervision,
         public ?bool $reset,
     ) {}
 }

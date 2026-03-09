@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Codegen\Tests\Unit\Definition;
 use Monadial\Nexus\Codegen\Definition\MethodDefinition;
 use Monadial\Nexus\Codegen\Definition\ParameterDefinition;
 use Monadial\Nexus\Codegen\Definition\ServiceDefinition;
+use Monadial\Nexus\Core\Supervision\StrategyType;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -38,7 +39,7 @@ final class ServiceDefinitionTest extends TestCase
             methods: [$method],
             async: true,
             timeout: 5,
-            supervision: 'one-for-one',
+            supervision: StrategyType::OneForOne,
             reset: null,
         );
 

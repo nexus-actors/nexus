@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Codegen\Tests\Unit\Attribute;
 
 use Monadial\Nexus\Codegen\Attribute\Actorize;
+use Monadial\Nexus\Core\Supervision\StrategyType;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -18,7 +19,7 @@ final class ActorizeTest extends TestCase
         $attr = new Actorize();
 
         self::assertTrue($attr->async);
-        self::assertSame('one-for-one', $attr->supervision);
+        self::assertSame(StrategyType::OneForOne, $attr->supervision);
         self::assertSame(5, $attr->timeout);
         self::assertNull($attr->reset);
         self::assertNull($attr->namespace);
@@ -27,10 +28,10 @@ final class ActorizeTest extends TestCase
     #[Test]
     public function values_are_set(): void
     {
-        $attr = new Actorize(async: false, supervision: 'backoff', timeout: 10, reset: true, namespace: 'App\\Gen');
+        $attr = new Actorize(async: false, supervision: StrategyType::ExponentialBackoff, timeout: 10, reset: true, namespace: 'App\\Gen');
 
         self::assertFalse($attr->async);
-        self::assertSame('backoff', $attr->supervision);
+        self::assertSame(StrategyType::ExponentialBackoff, $attr->supervision);
         self::assertSame(10, $attr->timeout);
         self::assertTrue($attr->reset);
         self::assertSame('App\\Gen', $attr->namespace);
