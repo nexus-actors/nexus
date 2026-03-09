@@ -228,26 +228,6 @@ final class ActorSystemTest extends TestCase
         self::assertNotSame($system1->writerId(), $system2->writerId());
     }
 
-    #[Test]
-    public function snapshot_returns_full_actor_hierarchy(): void
-    {
-        $system = ActorSystem::create('snap-test', $this->runtime);
-        $props  = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
-
-        $system->spawn($props, 'orders');
-        $system->spawn($props, 'payments');
-
-        $snap = $system->snapshot();
-
-        self::assertSame('snap-test', $snap->systemName);
-        self::assertCount(2, $snap->actors);
-        self::assertSame(0, $snap->deadLettersCount);
-
-        $paths = array_map(static fn($a) => $a->path, $snap->actors);
-        self::assertContains('/user/orders', $paths);
-        self::assertContains('/user/payments', $paths);
-    }
-
     protected function setUp(): void
     {
         $this->clock = new TestClock();

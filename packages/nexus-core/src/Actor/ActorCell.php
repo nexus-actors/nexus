@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Error;
 use LogicException;
-use Monadial\Nexus\Core\Actor\Telemetry\ActorSnapshot;
+
 use Monadial\Nexus\Core\Exception\ActorHandlerException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
@@ -62,9 +62,6 @@ final class ActorCell implements ActorContext
 
     /** @var array<string, ActorRef<object>> */
     private array $childrenMap = [];
-
-    /** @var array<string, self<object>> */
-    private array $childCells = [];
 
     /** @var array<string, ActorRef<object>> */
     private array $watchers = [];
@@ -261,7 +258,6 @@ final class ActorCell implements ActorContext
 
         $childRef = $childCell->self();
         $this->childrenMap[$name] = $childRef;
-        $this->childCells[$name] = $childCell;
 
         return $childRef;
     }
@@ -357,24 +353,6 @@ final class ActorCell implements ActorContext
     public function log(): LoggerInterface
     {
         return $this->logger;
-    }
-
-    public function snapshot(): ActorSnapshot
-    {
-        $children = [];
-
-        foreach ($this->childCells as $childCell) {
-            $children[] = $childCell->snapshot();
-        }
-
-        return new ActorSnapshot(
-            path: (string) $this->actorPath,
-            alive: $this->isAlive(),
-            mailboxDepth: $this->mailbox->count(),
-            mailboxCapacity: $this->mailboxConfig->capacity,
-            mailboxBounded: $this->mailboxConfig->bounded,
-            children: $children,
-        );
     }
 
     /** @return ?ActorRef<object> */

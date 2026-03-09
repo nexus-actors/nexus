@@ -133,7 +133,6 @@ See [getting-started.md](getting-started.md) for bundle registration, full confi
 | [kernel-pool.md](kernel-pool.md)                           | `KernelPoolActor` and `KernelActor` internals, backpressure, crash recovery |
 | [actors-in-symfony.md](actors-in-symfony.md)               | Declaring actors with `#[Actor]`, injecting `ActorRef`, `ask()` vs `tell()` |
 | [coroutine-scoped-services.md](coroutine-scoped-services.md) | Per-request isolation under Swoole using `#[CoroutineScoped]`             |
-| [observability.md](observability.md)                       | Request ID propagation, Monolog processor, tracing integration              |
 | [performance.md](performance.md)                           | Benchmark results, tuning workers and kernel pool size, MySQL tips          |
 
 ---

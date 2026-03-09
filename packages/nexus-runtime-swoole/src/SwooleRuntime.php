@@ -10,7 +10,7 @@ use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
-use Monadial\Nexus\Runtime\Swoole\Telemetry\SwooleRuntimeSnapshot;
+
 use Override;
 use Swoole\Coroutine;
 use Swoole\Timer;
@@ -189,24 +189,6 @@ final class SwooleRuntime implements Runtime
     public function isRunning(): bool
     {
         return $this->running;
-    }
-
-    public function snapshot(): SwooleRuntimeSnapshot
-    {
-        /** @var mixed $rawStats */
-        $rawStats = Coroutine::stats();
-        /** @var array<string, int> $stats */
-        $stats = is_array($rawStats)
-            ? $rawStats
-            : [];
-
-        return new SwooleRuntimeSnapshot(
-            coroutineNum: $stats['coroutine_num'] ?? 0,
-            coroutinePeakNum: $stats['coroutine_peak_num'] ?? 0,
-            activeTimers: count($this->timerIds),
-            memoryBytes: memory_get_usage(),
-            memoryPeakBytes: memory_get_peak_usage(),
-        );
     }
 
     private function createOnceTimer(Duration $delay, callable $callback): SwooleCancellable
