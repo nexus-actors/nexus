@@ -13,7 +13,7 @@ services:
             APP_DEBUG: "0"
             APP_ENV: dev
             APP_RUNTIME: Monadial\Nexus\Symfony\Runtime\NexusRuntime
-            APP_RUNTIME_OPTIONS: '{"workers":1,"kernel_pool_size":20,"kernel_pool_max_pending":200}'
+            APP_RUNTIME_OPTIONS: '{"workers":8,"kernel_pool_size":8,"kernel_pool_max_pending":200}'
             APP_SECRET: dev-secret
             DATABASE_URL: mysql://app:app@mysql:3306/nexus_demo?serverVersion=8.0
             DB_POOL_SIZE: "32"
