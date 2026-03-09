@@ -9,8 +9,12 @@ use Monadial\Nexus\Codegen\Tests\Fixture\Product;
 use Monadial\Nexus\Codegen\Tests\Fixture\ProductService;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Actor\SameBehavior;
 use Monadial\Nexus\Core\Actor\UnhandledBehavior;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Override;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
@@ -96,6 +100,69 @@ final class GeneratedActorRuntimeTest extends TestCase
         $result = $actor->handle($ctx, new stdClass());
 
         self::assertInstanceOf(UnhandledBehavior::class, $result);
+    }
+
+    #[Test]
+    public function generated_actor_answers_query_via_ask_in_actor_system(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('codegen-query-test', $runtime);
+
+        $actorClass = self::$actorClass;
+        $ref = $system->spawn(Props::fromFactory(static fn() => new $actorClass(new ProductService())), 'product');
+
+        /** @var object|null $result */
+        $result = null;
+        $getProductClass = self::$getProductClass;
+
+        $runtime->spawn(static function () use ($ref, $getProductClass, &$result): void {
+            $result = $ref->ask(new $getProductClass('item-42'), Duration::seconds(5))->await();
+        });
+
+        $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
+            $system->shutdown(Duration::seconds(1));
+        });
+
+        $system->run();
+
+        self::assertInstanceOf(self::$getProductResponseClass, $result);
+
+        /** @var object{result: Product} $result */
+        self::assertSame('item-42', $result->result->id);
+        self::assertSame('Test', $result->result->name);
+        self::assertSame(9.99, $result->result->price);
+    }
+
+    #[Test]
+    public function generated_actor_processes_void_method_via_tell_in_actor_system(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('codegen-void-test', $runtime);
+
+        $actorClass = self::$actorClass;
+        $ref = $system->spawn(Props::fromFactory(static fn() => new $actorClass(new ProductService())), 'product');
+
+        $deleteProductClass = self::$deleteProductClass;
+        $ref->tell(new $deleteProductClass('item-1'));
+
+        // Use ask to confirm the actor processed the tell (actor replies to subsequent ask)
+        $getProductClass = self::$getProductClass;
+
+        /** @var object|null $result */
+        $result = null;
+
+        $runtime->spawn(static function () use ($ref, $getProductClass, &$result): void {
+            $result = $ref->ask(new $getProductClass('after-delete'), Duration::seconds(5))->await();
+        });
+
+        $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
+            $system->shutdown(Duration::seconds(1));
+        });
+
+        $system->run();
+
+        // Actor responded to query after processing void message — still running
+        self::assertInstanceOf(self::$getProductResponseClass, $result);
     }
 
     #[Override]
