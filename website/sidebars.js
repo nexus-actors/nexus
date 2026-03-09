@@ -80,6 +80,25 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Symfony Integration',
+      items: [
+        'symfony/README',
+        'symfony/getting-started',
+        'symfony/actors-in-symfony',
+        'symfony/actor-lifecycle',
+        'symfony/kernel-pool',
+        'symfony/runtime',
+        'symfony/coroutine-scoped-services',
+        'symfony/doctrine-database',
+        'symfony/configuration-reference',
+        'symfony/performance',
+        'symfony/testing',
+        'symfony/deployment',
+        'symfony/troubleshooting',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Contributing',
       items: [
         'contributing/development',

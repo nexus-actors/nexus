@@ -29,7 +29,6 @@
             <directory>packages/nexus-symfony-worker-pool/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
-            <directory>packages/nexus-observability/tests/Unit</directory>
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-worker-pool-swoole/tests/Unit</directory>
         </testsuite>
@@ -71,7 +70,6 @@
         <include>
             <directory>packages/nexus-codegen/src</directory>
             <directory>packages/nexus-core/src</directory>
-            <directory>packages/nexus-observability/src</directory>
             <directory>packages/nexus-runtime-fiber/src</directory>
             <directory>packages/nexus-runtime/src</directory>
             <directory>packages/nexus-runtime-swoole/src</directory>

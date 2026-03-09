@@ -102,11 +102,6 @@ deptrac:
         - type: directory
           value: packages/nexus-symfony-testing/src/.*
 
-    - name: Observability
-      collectors:
-        - type: directory
-          value: packages/nexus-observability/src/.*
-
     - name: SymfonyWorkerPool
       collectors:
         - type: directory
@@ -176,11 +171,6 @@ deptrac:
       - Core
       - Runtime
       - RuntimeStep
-    Observability:
-      - Core
-      - Runtime
-      - RuntimeSwoole
-      - WorkerPool
       - WorkerPoolSwoole
     SymfonyWorkerPool:
       - SymfonyBundle

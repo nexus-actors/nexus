@@ -12,7 +12,6 @@
         "nette/php-generator": "^4.0",
         "nikic/php-parser": "^5.0",
         "opis/closure": "^4.0",
-        "promphp/prometheus_client_php": "^2.10",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
@@ -42,7 +41,6 @@
         "psr-4": {
             "Monadial\\Nexus\\Codegen\\": "packages/nexus-codegen/src/",
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
-            "Monadial\\Nexus\\Observability\\": "packages/nexus-observability/src/",
             "Monadial\\Nexus\\Runtime\\": "packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "packages/nexus-runtime-fiber/src/",
             "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
@@ -66,7 +64,6 @@
     "autoload-dev": {
         "psr-4": {
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
-            "Monadial\\Nexus\\Observability\\Tests\\": "packages/nexus-observability/tests/",
             "Monadial\\Nexus\\Runtime\\Tests\\": "packages/nexus-runtime/tests/",
             "Monadial\\Nexus\\Runtime\\Fiber\\Tests\\": "packages/nexus-runtime-fiber/tests/",
             "Monadial\\Nexus\\Runtime\\Step\\Tests\\": "packages/nexus-runtime-step/tests/",
