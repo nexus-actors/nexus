@@ -26,8 +26,8 @@ final class ActorGeneratorTest extends TestCase
 
         self::assertStringContainsString('final class ProductServiceActor implements ActorHandler', $code);
         self::assertStringContainsString('ProductServiceInterface $service', $code);
-        self::assertStringContainsString('$message instanceof GetProduct', $code);
-        self::assertStringContainsString('$message instanceof DeleteProduct', $code);
+        self::assertStringContainsString('$message instanceof Message\GetProduct', $code);
+        self::assertStringContainsString('$message instanceof Message\DeleteProduct', $code);
         self::assertStringContainsString('$ctx->reply(new Message\\GetProductResponse', $code);
         self::assertStringContainsString('resetIfNeeded', $code);
     }

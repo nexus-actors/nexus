@@ -6,6 +6,13 @@ namespace Monadial\Nexus\Codegen\Generator;
 
 use Monadial\Nexus\Codegen\Definition\MethodDefinition;
 use Monadial\Nexus\Codegen\Definition\ServiceDefinition;
+use Monadial\Nexus\Codegen\Resettable;
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorHandler;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Nette\PhpGenerator\ClassType;
+use Nette\PhpGenerator\PhpFile;
+use Nette\PhpGenerator\PsrPrinter;
 
 final class ActorGenerator
 {
@@ -13,77 +20,62 @@ final class ActorGenerator
     {
         $ns = $definition->outputNamespace;
         $actorClass = $definition->shortName . 'ServiceActor';
-        $serviceIface = '\\' . ltrim($definition->interfaceName, '\\');
 
-        $matchArms = '';
-        $handlers = '';
+        $file = new PhpFile();
+        $file->setStrictTypes();
+        $file->addComment('Generated — do not edit. Re-run bin/console nexus:actorize to regenerate.');
+
+        $namespace = $file->addNamespace($ns);
+        $namespace->addUse(Resettable::class);
+        $namespace->addUse(ActorContext::class);
+        $namespace->addUse(ActorHandler::class);
+        $namespace->addUse(Behavior::class);
+        $namespace->addUse($definition->interfaceName);
+
+        $class = $namespace->addClass($actorClass);
+        $class->setFinal()->addImplement(ActorHandler::class);
+
+        $class->addMethod('__construct')
+            ->addPromotedParameter('service')
+            ->setType($definition->interfaceName)
+            ->setPrivate()
+            ->setReadOnly();
+
+        $matchArms = implode("\n", array_map(
+            static fn(MethodDefinition $m) => "            \$message instanceof Message\\{$m->pascalName} => \$this->handle{$m->pascalName}(\$ctx, \$message),",
+            $definition->methods,
+        ));
+
+        $handleMethod = $class->addMethod('handle')->setPublic()->setReturnType(Behavior::class);
+        $handleMethod->addParameter('ctx')->setType(ActorContext::class);
+        $handleMethod->addParameter('message')->setType('object');
+        $handleMethod->setBody(
+            "return match (true) {\n{$matchArms}\n            default => Behavior::unhandled(),\n        };",
+        );
 
         foreach ($definition->methods as $method) {
-            $inputClass = $method->pascalName;
-            $matchArms .= "            \$message instanceof {$inputClass} => \$this->handle{$method->pascalName}(\$ctx, \$message),\n";
-            $handlers .= $this->renderHandler($method);
+            $this->addHandler($class, $method);
         }
 
-        $matchArms = rtrim($matchArms);
+        $class->addMethod('resetIfNeeded')
+            ->setPrivate()
+            ->setReturnType('void')
+            ->setBody("if (\$this->service instanceof Resettable) {\n    \$this->service->reset();\n}");
 
-        return <<<PHP
-            <?php
-
-            declare(strict_types=1);
-
-            namespace {$ns};
-
-            use Monadial\\Nexus\\Codegen\\Resettable;
-            use Monadial\\Nexus\\Core\\Actor\\ActorContext;
-            use Monadial\\Nexus\\Core\\Actor\\ActorHandler;
-            use Monadial\\Nexus\\Core\\Actor\\Behavior;
-            use {$ns}\\Message;
-
-            // Generated — do not edit. Re-run bin/console nexus:actorize to regenerate.
-            final class {$actorClass} implements ActorHandler
-            {
-                public function __construct(private readonly {$serviceIface} \$service) {}
-
-                public function handle(ActorContext \$ctx, object \$message): Behavior
-                {
-                    return match (true) {
-            {$matchArms}
-                        default => Behavior::unhandled(),
-                    };
-                }
-            {$handlers}
-                private function resetIfNeeded(): void
-                {
-                    if (\$this->service instanceof Resettable) {
-                        \$this->service->reset();
-                    }
-                }
-            }
-            PHP;
+        return (new PsrPrinter())->printFile($file);
     }
 
-    private function renderHandler(MethodDefinition $method): string
+    private function addHandler(ClassType $class, MethodDefinition $method): void
     {
-        $inputClass = $method->pascalName;
-        $args = implode(', ', array_map(fn($p) => "\$msg->{$p->name}", $method->parameters));
+        $args = implode(', ', array_map(static fn($p) => "\$msg->{$p->name}", $method->parameters));
 
         $body = $method->isVoid
-            ? "        \$this->service->{$method->name}({$args});"
-            : "        \$ctx->reply(new Message\\{$inputClass}Response(\$this->service->{$method->name}({$args})));";
+            ? "\$this->service->{$method->name}({$args});"
+            : "\$ctx->reply(new Message\\{$method->pascalName}Response(\$this->service->{$method->name}({$args})));";
 
-        return <<<PHP
-
-
-                private function handle{$method->pascalName}(ActorContext \$ctx, Message\\{$inputClass} \$msg): Behavior
-                {
-                    try {
-            {$body}
-                    } finally {
-                        \$this->resetIfNeeded();
-                    }
-
-                    return Behavior::same();
-                }
-            PHP;
+        $m = $class->addMethod('handle' . $method->pascalName)->setPrivate()->setReturnType(Behavior::class);
+        $m->addParameter('ctx')->setType(ActorContext::class);
+        $m->addParameter('msg')->setType('Message\\' . $method->pascalName);
+        $m->setBody("try {\n    {$body}\n} finally {\n    \$this->resetIfNeeded();\n}\n\nreturn Behavior::same();");
     }
 }
