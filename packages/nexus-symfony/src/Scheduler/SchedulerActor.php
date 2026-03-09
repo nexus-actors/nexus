@@ -30,15 +30,11 @@ final class SchedulerActor implements ActorHandler
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
-        if ($message instanceof RegisterSchedule) {
-            return $this->register($ctx, $message->entry);
-        }
-
-        if ($message instanceof CancelSchedule) {
-            return $this->cancel($message->name);
-        }
-
-        return Behavior::unhandled();
+        return match (true) {
+            $message instanceof RegisterSchedule => $this->register($ctx, $message->entry),
+            $message instanceof CancelSchedule   => $this->cancel($message->name),
+            default                              => Behavior::unhandled(),
+        };
     }
 
     private function register(ActorContext $ctx, ScheduleEntry $entry): Behavior

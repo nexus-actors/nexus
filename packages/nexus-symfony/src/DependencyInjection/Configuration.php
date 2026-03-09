@@ -18,6 +18,13 @@ final class Configuration implements ConfigurationInterface
 
         $root
             ->children()
+                ->arrayNode('kernel_pool')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->integerNode('max_pending')->defaultValue(100)->end()
+                        ->integerNode('size')->defaultValue(8)->end()
+                    ->end()
+                ->end()
                 ->scalarNode('name')->defaultValue('app')->end()
                 ->integerNode('shutdown_timeout')->defaultValue(30)->end()
             ->end();

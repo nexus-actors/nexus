@@ -136,7 +136,7 @@ final class WorkerPoolBootstrap
         if ($onStart !== null) {
             $this->runWithOnStart($directory, $queues, $workerIdCounter, $handlerClass, $onStart);
         } else {
-            $this->runWithPool($directory, $queues, $workerIdCounter, $handlerClass);
+            $this->runWithPool($directory, $queues, $handlerClass);
         }
     }
 
@@ -144,7 +144,7 @@ final class WorkerPoolBootstrap
      * @param array<int, Queue>                $queues
      * @param class-string<WorkerStartHandler> $handlerClass
      */
-    private function runWithPool(Map $directory, array $queues, Atomic $workerIdCounter, string $handlerClass): void
+    private function runWithPool(Map $directory, array $queues, string $handlerClass): void
     {
         /** @psalm-suppress UndefinedClass, MissingDependency, MixedAssignment */
         $pool = new Pool(
@@ -152,7 +152,6 @@ final class WorkerPoolBootstrap
             $this->config->workerCount,
             $directory,
             $queues,
-            $workerIdCounter,
             $this->config,
             $handlerClass,
             $this->serializedConfigure ?? '',

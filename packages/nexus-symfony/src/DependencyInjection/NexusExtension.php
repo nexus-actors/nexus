@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Symfony\DependencyInjection;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Symfony\Actor\EnvelopeContext;
 use Monadial\Nexus\Symfony\Coroutine\CoroutineScope;
 use Monadial\Nexus\Symfony\Coroutine\CoroutineScopeListener;
 use Monadial\Nexus\Symfony\Coroutine\SwooleCoroutineContext;
 use Monadial\Nexus\Symfony\Listener\FutureResponseListener;
+use Monadial\Nexus\Symfony\Runtime\WorkerStartBootstrapper;
 use Monadial\Nexus\Symfony\Tracing\NexusMonologProcessor;
 use Monadial\Nexus\Symfony\Tracing\RequestIdListener;
 use Monadial\Nexus\Symfony\Tracing\ResponseIdListener;
@@ -29,6 +31,9 @@ final class NexusExtension extends Extension
 
         $container->setParameter('nexus.app_name', $config['name']);
         $container->setParameter('nexus.shutdown_timeout', $config['shutdown_timeout']);
+
+        $container->registerForAutoconfiguration(WorkerStartBootstrapper::class)
+            ->addTag('nexus.worker_start');
 
         $this->registerCoroutineServices($container);
         $this->registerTracingServices($container);
@@ -112,5 +117,11 @@ final class NexusExtension extends Extension
         $definition->setPublic(true);
         $container->setDefinition('nexus.actor_system', $definition);
         $container->setAlias(ActorSystem::class, 'nexus.actor_system');
+
+        $runtimeDefinition = new Definition(Runtime::class);
+        $runtimeDefinition->setSynthetic(true);
+        $runtimeDefinition->setPublic(true);
+        $container->setDefinition('nexus.runtime', $runtimeDefinition);
+        $container->setAlias(Runtime::class, 'nexus.runtime');
     }
 }

@@ -51,6 +51,10 @@ final class ActorRegistrationPass implements CompilerPassInterface
             $name      = $attr->name;
             $serviceId = "nexus.actor.{$name}.props_factory";
 
+            if ($container->hasDefinition($class)) {
+                $container->getDefinition($class)->setPublic(true);
+            }
+
             $container->setDefinition(
                 $serviceId,
                 (new Definition(ActorPropsFactory::class))

@@ -27,60 +27,82 @@ use function Swoole\Coroutine\run;
  *
  * Thread entrypoint for each worker in the pool.
  *
- * Receives shared Thread\Map (directory) and Thread\Queue[] (inboxes) plus
- * optional serialized configure closure and logger factory from WorkerPoolBootstrap.
+ * In Swoole 6.2+, Thread\Pool generates thread_runner.php which calls:
+ *   new WorkerRunnable($running, $index)
+ *   $runnable->run($extraArgs)
+ *
+ * where $extraArgs are the arguments beyond (class, count) passed to new Pool().
  *
  * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency, UnusedProperty
  */
 final class WorkerRunnable extends Runnable
 {
     /**
-     * @param array<int, Queue>                $queues
-     * @param class-string<WorkerStartHandler> $handlerClass
+     * Swoole 6.2+ Thread\Pool passes (Atomic $running, int $index) to the constructor.
+     * $index is the 0-based thread index used as the worker ID.
      */
     public function __construct(
-        private readonly Map $directory,
-        private readonly array $queues,
-        private readonly Atomic $workerIdCounter,
-        private readonly WorkerPoolConfig $config,
-        private readonly string $handlerClass,
-        private readonly string $serializedConfigure,
-        private readonly string $loggerClass,
-        private readonly string $serializedLoggerFactory,
+        private readonly Atomic $running,
+        private readonly int $index,
     ) {}
 
+    /**
+     * Called by Swoole with the extra args from new Pool(class, count, ...$args).
+     *
+     * @param array{
+     *     0: Map,
+     *     1: array<int, Queue>,
+     *     2: WorkerPoolConfig,
+     *     3: class-string<WorkerStartHandler>,
+     *     4: string,
+     *     5: string,
+     *     6: string,
+     * } $args
+     */
     public function run(array $args = []): void
     {
-        $workerId = $this->workerIdCounter->add(1) - 1;
+        /** @var Map $directory */
+        $directory = $args[0];
+        /** @var array<int, Queue> $queues */
+        $queues = $args[1];
+        /** @var WorkerPoolConfig $config */
+        $config = $args[2];
+        /** @var class-string<WorkerStartHandler> $handlerClass */
+        $handlerClass = $args[3];
+        $serializedConfigure = (string) ($args[4] ?? '');
+        $loggerClass = (string) ($args[5] ?? '');
+        $serializedLoggerFactory = (string) ($args[6] ?? '');
+
+        $workerId = $this->index;
 
         Coroutine::enableScheduler();
 
         /** @psalm-suppress UnusedFunctionCall */
-        run(function () use ($workerId): void {
-            $logger     = $this->createLogger();
+        run(function () use ($workerId, $directory, $queues, $config, $handlerClass, $serializedConfigure, $loggerClass, $serializedLoggerFactory): void {
+            $logger     = $this->createLogger($loggerClass, $serializedLoggerFactory);
             $runtime    = new SwooleRuntime();
-            $systemName = "{$this->config->systemNamePrefix}-{$workerId}";
+            $systemName = "{$config->systemNamePrefix}-{$workerId}";
             $system     = ActorSystem::create($systemName, $runtime, null, $logger);
 
-            $directory = new ThreadMapDirectory($this->directory);
-            $transport = new ThreadQueueTransport($this->queues, $workerId);
-            $ring      = new ConsistentHashRing($this->config->workerCount);
+            $dir       = new ThreadMapDirectory($directory);
+            $transport = new ThreadQueueTransport($queues, $workerId);
+            $ring      = new ConsistentHashRing($config->workerCount);
             $node      = new WorkerNode(
                 $workerId,
                 $system,
                 $transport,
                 $ring,
-                $directory,
+                $dir,
             );
 
             $node->start();
 
-            if ($this->serializedConfigure !== '') {
+            if ($serializedConfigure !== '') {
                 /** @psalm-suppress MixedFunctionCall */
-                $configure = opis_unserialize($this->serializedConfigure);
+                $configure = opis_unserialize($serializedConfigure);
                 $configure($node);
             } else {
-                $handler = new $this->handlerClass();
+                $handler = new $handlerClass();
                 $handler->onWorkerStart($node);
             }
 
@@ -88,17 +110,16 @@ final class WorkerRunnable extends Runnable
         });
     }
 
-    /** @psalm-suppress UnusedMethod */
-    private function createLogger(): ?LoggerInterface
+    private function createLogger(string $loggerClass, string $serializedLoggerFactory): ?LoggerInterface
     {
-        if ($this->loggerClass !== '') {
+        if ($loggerClass !== '') {
             /** @psalm-suppress MixedReturnStatement, MixedInferredReturnType */
-            return new $this->loggerClass();
+            return new $loggerClass();
         }
 
-        if ($this->serializedLoggerFactory !== '') {
+        if ($serializedLoggerFactory !== '') {
             /** @psalm-suppress MixedFunctionCall, MixedReturnStatement, MixedInferredReturnType */
-            $factory = opis_unserialize($this->serializedLoggerFactory);
+            $factory = opis_unserialize($serializedLoggerFactory);
 
             return $factory();
         }

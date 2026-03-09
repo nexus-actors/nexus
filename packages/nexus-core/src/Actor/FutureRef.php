@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Exception\FutureException;
 use NoDiscard;
 use Override;
 use RuntimeException;
@@ -30,6 +31,11 @@ final readonly class FutureRef implements ActorRef
     public function tell(object $message): void
     {
         $this->slot->resolve($message);
+    }
+
+    public function fail(FutureException $e): void
+    {
+        $this->slot->fail($e);
     }
 
     /**
