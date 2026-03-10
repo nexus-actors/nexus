@@ -16,11 +16,9 @@ use Symfony\Component\Runtime\RuntimeInterface;
 final class NexusRuntime implements RuntimeInterface
 {
     private const array DEFAULT_OPTIONS = [
-        'host'              => '0.0.0.0',
-        'kernel_pool_max_pending' => 100,
-        'kernel_pool_size'  => 8,
-        'port'              => 8080,
-        'workers'           => 4,
+        'host'    => '0.0.0.0',
+        'port'    => 8080,
+        'workers' => 4,
     ];
 
     /**
@@ -39,11 +37,19 @@ final class NexusRuntime implements RuntimeInterface
     {
         $closure = $callable(...);
         assert($closure instanceof Closure);
-        /** @var Closure(): HttpKernelInterface $closure */
-        $this->kernelFactory = $closure;
-        $arguments = static fn(): array => [$_SERVER + $_ENV];
 
-        return new ClosureResolver($closure, $arguments);
+        // Wrap so NexusRunner can call $factory() with no args per worker.
+        // The env is captured at resolver-time (once per process, before forking).
+        /** @var array<string, mixed> $env */
+        $env = $_SERVER + $_ENV;
+        $this->kernelFactory = static function () use ($closure, $env): HttpKernelInterface {
+            $kernel = $closure($env);
+            assert($kernel instanceof HttpKernelInterface);
+
+            return $kernel;
+        };
+
+        return new ClosureResolver($closure, static fn(): array => [$env]);
     }
 
     #[Override]
