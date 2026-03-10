@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Error;
 use LogicException;
-
 use Monadial\Nexus\Core\Exception\ActorHandlerException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
@@ -87,7 +86,7 @@ final class ActorCell implements ActorContext
         Behavior $behavior,
         private readonly ActorPath $actorPath,
         private readonly Mailbox $mailbox,
-        private readonly MailboxConfig $mailboxConfig,
+        MailboxConfig $mailboxConfig,
         private readonly Runtime $runtime,
         private readonly ?ActorRef $parentRef,
         private readonly SupervisionStrategy $supervision,

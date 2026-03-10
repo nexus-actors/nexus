@@ -41,7 +41,7 @@ final class WorkerRunnable extends Runnable
      * Swoole 6.2+ Thread\Pool passes (Atomic $running, int $index) to the constructor.
      * $index is the 0-based thread index used as the worker ID.
      */
-    public function __construct(private readonly Atomic $running, private readonly int $index,) {}
+    public function __construct(private readonly Atomic $running, private readonly int $index) {}
 
     /**
      * Called by Swoole with the extra args from new Pool(class, count, ...$args).
@@ -83,7 +83,7 @@ final class WorkerRunnable extends Runnable
                 $runtime    = new SwooleRuntime();
                 $systemName = "{$config->systemNamePrefix}-{$workerId}";
                 $system     = ActorSystem::create($systemName, $runtime, null, $logger);
-    
+
                 $dir       = new ThreadMapDirectory($directory);
                 $transport = new ThreadQueueTransport($queues, $workerId);
                 $ring      = new ConsistentHashRing($config->workerCount);
@@ -94,9 +94,9 @@ final class WorkerRunnable extends Runnable
                     $ring,
                     $dir,
                 );
-    
+
                 $node->start();
-    
+
                 if ($serializedConfigure !== '') {
                     /** @psalm-suppress MixedFunctionCall */
                     $configure = opis_unserialize($serializedConfigure);
@@ -105,7 +105,7 @@ final class WorkerRunnable extends Runnable
                     $handler = new $handlerClass();
                     $handler->onWorkerStart($node);
                 }
-    
+
                 $system->run();
             },
         );

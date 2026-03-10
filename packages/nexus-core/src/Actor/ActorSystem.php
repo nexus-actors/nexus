@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use DateTimeImmutable;
-
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
