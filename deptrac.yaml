@@ -77,6 +77,11 @@ deptrac:
         - type: directory
           value: packages/nexus-persistence-doctrine/src/.*
 
+    - name: Ddd
+      collectors:
+        - type: directory
+          value: packages/nexus-ddd/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -122,3 +127,4 @@ deptrac:
       - PersistenceDbal
       - Core
       - Serialization
+    Ddd: []

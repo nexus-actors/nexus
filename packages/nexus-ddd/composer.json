@@ -1,0 +1,23 @@
+{
+    "name": "nexus-actors/ddd",
+    "description": "Nexus DDD — domain-driven design primitives: value objects, aggregates, command and event buses.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "symfony/uid": "^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Ddd\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Ddd\\Tests\\": "tests/"
+        }
+    }
+}

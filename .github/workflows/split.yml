@@ -34,6 +34,7 @@ jobs:
           - { local: 'nexus-cluster',              remote: 'cluster' }
           - { local: 'nexus-worker-pool',          remote: 'worker-pool' }
           - { local: 'nexus-worker-pool-swoole',   remote: 'worker-pool-swoole' }
+          - { local: 'nexus-ddd',                  remote: 'ddd' }
     steps:
       - uses: actions/checkout@v4
         with:
