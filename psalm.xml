@@ -20,6 +20,7 @@
         <directory name="packages/nexus-app/src" />
         <directory name="packages/nexus-persistence/src" />
         <directory name="packages/nexus-persistence-dbal/src" />
+        <directory name="packages/nexus-ddd/src" />
         <directory name="packages/nexus-persistence-doctrine/src" />
         <ignoreFiles>
             <directory name="vendor" />
