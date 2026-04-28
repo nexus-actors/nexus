@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\Marshalling\Marshaller;
 use Monadial\Nexus\Http\Marshalling\MarshallerRegistry;
 use Monadial\Nexus\Http\Marshalling\MediaType;
+use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
 use Psr\Http\Message\ServerRequestInterface;
@@ -61,23 +62,21 @@ final readonly class DefaultRequestCtx implements RequestCtx
 
     /**
      * @return ActorRef<object>|null
-     *
-     * @psalm-suppress UndefinedMethod ActorSystem::actorFor() will be added in a follow-up task.
      */
     #[Override]
     public function actorFor(string $path): ?ActorRef
     {
-        /** @var ActorRef<object>|null $ref */
-        $ref = $this->system->actorFor($path);
-
-        return $ref;
+        return $this->system->actorFor($path);
     }
 
-    /**
-     * @psalm-suppress NoValue actorFor() depends on ActorSystem::actorFor() landing in a follow-up.
-     */
     #[Override]
     public function ask(string $path, object $message, ?Duration $timeout = null): mixed
+    {
+        return $this->askFuture($path, $message, $timeout)->await();
+    }
+
+    #[Override]
+    public function askFuture(string $path, object $message, ?Duration $timeout = null): Future
     {
         $ref = $this->actorFor($path);
 
@@ -85,7 +84,10 @@ final readonly class DefaultRequestCtx implements RequestCtx
             throw new RuntimeException("no actor at path '{$path}'");
         }
 
-        return $ref->ask($message, $timeout ?? Duration::seconds(5))->await();
+        /** @var Future<object> $future */
+        $future = $ref->ask($message, $timeout ?? Duration::seconds(5));
+
+        return $future;
     }
 
     /**

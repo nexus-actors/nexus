@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Tests\Unit;
 
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Http\DefaultRequestCtx;
 use Monadial\Nexus\Http\Marshalling\MarshallerRegistry;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
@@ -53,6 +56,33 @@ final class DefaultRequestCtxTest extends TestCase
 
         self::assertNull($ctx->param('id'));
         self::assertSame('7', $next->param('id'));
+    }
+
+    #[Test]
+    public function actor_for_returns_a_spawned_actor(): void
+    {
+        $factory = new Psr17Factory();
+        $request = $factory->createServerRequest('GET', '/');
+        $system = ActorSystem::create('test', new StepRuntime());
+
+        $spawned = $system->spawn(
+            Props::fromBehavior(Behavior::receive(
+                static fn(ActorContext $ctx, object $msg) => Behavior::same(),
+            )),
+            'echo',
+        );
+
+        $ctx = new DefaultRequestCtx(
+            request: $request,
+            params: [],
+            system: $system,
+            registry: new MarshallerRegistry(),
+            logger: new NullLogger(),
+        );
+
+        self::assertSame($spawned, $ctx->actorFor('echo'));
+        self::assertSame($spawned, $ctx->actorFor('/echo'));
+        self::assertNull($ctx->actorFor('missing'));
     }
 
     #[Override]
