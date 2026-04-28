@@ -72,3 +72,50 @@ function reject(RouteRejection $rejection): Route
         throw $rejection;
     });
 }
+
+/**
+ * Generic HTTP method directive — matches the request method against $verb,
+ * delegates to the child route on match, rejects (returns null) otherwise.
+ */
+function method(string $verb, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($verb, $child): ?ResponseInterface {
+        if ($ctx->request()->getMethod() !== $verb) {
+            return null;
+        }
+
+        $next = $child();
+
+        return ($next->run)($ctx);
+    });
+}
+
+/** Match GET requests. */
+function get(Closure $child): Route
+{
+    return method('GET', $child);
+}
+
+/** Match POST requests. */
+function post(Closure $child): Route
+{
+    return method('POST', $child);
+}
+
+/** Match PUT requests. */
+function put(Closure $child): Route
+{
+    return method('PUT', $child);
+}
+
+/** Match DELETE requests. */
+function delete(Closure $child): Route
+{
+    return method('DELETE', $child);
+}
+
+/** Match PATCH requests. */
+function patch(Closure $child): Route
+{
+    return method('PATCH', $child);
+}
