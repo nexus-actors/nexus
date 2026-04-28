@@ -146,7 +146,7 @@ final class RouteTestKit
      */
     private function driveRuntime(Runtime $runtime, Fiber $routeFiber): void
     {
-        while (!$routeFiber->isTerminated()) {
+        while (!$routeFiber->isTerminated() && $routeFiber->isSuspended()) {
             if ($runtime instanceof StepRuntime) {
                 $runtime->drain();
             } else {
@@ -154,11 +154,7 @@ final class RouteTestKit
                 $runtime->run();
             }
 
-            if ($routeFiber->isSuspended()) {
-                $routeFiber->resume();
-            } else {
-                break;
-            }
+            $routeFiber->resume();
         }
     }
 }

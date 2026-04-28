@@ -53,11 +53,15 @@ $config->addRule(new FilteredCoverageRule(
         '#nexus-runtime-fiber/#',
         '#nexus-runtime-step/#',
         '#nexus-cluster-swoole/#',
+        // HTTP Swoole bootstrap is integration-tested only (live Swoole server)
+        '#nexus-http-swoole/#',
         // Test support classes are helpers, not production code
         '#/tests/Support/#',
         '#/tests/Fixture/#',
         // Doctrine entities are data objects with trivial constructors
         '#nexus-persistence-doctrine/src/Entity/#',
+        // Example app is reference code, not the library proper
+        '#/examples/#',
     ],
 ));
 
