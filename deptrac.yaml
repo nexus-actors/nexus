@@ -87,6 +87,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http/src/.*
 
+    - name: HttpTestKit
+      collectors:
+        - type: directory
+          value: packages/nexus-http-testkit/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -136,3 +141,7 @@ deptrac:
     Http:
       - Core
       - Serialization
+    HttpTestKit:
+      - Core
+      - Http
+      - RuntimeStep

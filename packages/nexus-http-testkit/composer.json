@@ -1,0 +1,27 @@
+{
+    "name": "nexus-actors/http-testkit",
+    "description": "Nexus HTTP test kit — pure-PHP route testing without booting a server.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/runtime-step": "dev-main",
+        "nyholm/psr7": "^1.8",
+        "psr/http-message": "^2.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\TestKit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\TestKit\\Tests\\": "tests/"
+        }
+    }
+}
