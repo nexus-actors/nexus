@@ -92,6 +92,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http-testkit/src/.*
 
+    - name: HttpSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-http-swoole/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -145,3 +150,8 @@ deptrac:
       - Core
       - Http
       - RuntimeStep
+    HttpSwoole:
+      - Core
+      - Http
+      - RuntimeSwoole
+      - WorkerPoolSwoole
