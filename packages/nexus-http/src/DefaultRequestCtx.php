@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\Marshalling\Marshaller;
 use Monadial\Nexus\Http\Marshalling\MarshallerRegistry;
 use Monadial\Nexus\Http\Marshalling\MediaType;
+use Monadial\Nexus\Http\Routing\PathState;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
@@ -19,15 +20,17 @@ use RuntimeException;
 /**
  * @psalm-suppress UndefinedClass MarshallerRegistry arrives in Task 9.
  */
-final readonly class DefaultRequestCtx implements RequestCtx
+final class DefaultRequestCtx implements RequestCtx
 {
+    private ?PathState $pathState = null;
+
     /** @param array<string, string> $params */
     public function __construct(
-        public ServerRequestInterface $request,
-        public array $params,
-        public ActorSystem $system,
-        public MarshallerRegistry $registry,
-        public LoggerInterface $logger,
+        public readonly ServerRequestInterface $request,
+        public readonly array $params,
+        public readonly ActorSystem $system,
+        public readonly MarshallerRegistry $registry,
+        public readonly LoggerInterface $logger,
     ) {}
 
     #[Override]
@@ -52,6 +55,21 @@ final readonly class DefaultRequestCtx implements RequestCtx
             $this->registry,
             $this->logger,
         );
+    }
+
+    #[Override]
+    public function pathState(): PathState
+    {
+        return $this->pathState ??= PathState::fromPath($this->request->getUri()->getPath());
+    }
+
+    #[Override]
+    public function withPathState(PathState $state): self
+    {
+        $next = clone $this;
+        $next->pathState = $state;
+
+        return $next;
     }
 
     #[Override]

@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\Marshalling\Marshaller;
 use Monadial\Nexus\Http\Marshalling\MediaType;
+use Monadial\Nexus\Http\Routing\PathState;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Psr\Http\Message\ServerRequestInterface;
@@ -20,6 +21,10 @@ interface RequestCtx
     public function param(string $name): ?string;
 
     public function withParam(string $name, string $value): self;
+
+    public function pathState(): PathState;
+
+    public function withPathState(PathState $state): self;
 
     public function system(): ActorSystem;
 

@@ -180,3 +180,41 @@ function concat(Route ...$routes): Route
         return null;
     });
 }
+
+/**
+ * Match a single literal path segment, then delegate to the child route.
+ *
+ * @param Closure(): Route $child
+ */
+function pathPrefix(string $literal, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($literal, $child): ?ResponseInterface {
+        $next = $ctx->pathState()->consume($literal);
+
+        if ($next === null) {
+            return null;
+        }
+
+        $route = $child();
+
+        return ($route->run)($ctx->withPathState($next));
+    });
+}
+
+/**
+ * Require the path to be fully consumed before delegating.
+ *
+ * @param Closure(): Route $child
+ */
+function pathEnd(Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($child): ?ResponseInterface {
+        if (!$ctx->pathState()->isEmpty()) {
+            return null;
+        }
+
+        $route = $child();
+
+        return ($route->run)($ctx);
+    });
+}
