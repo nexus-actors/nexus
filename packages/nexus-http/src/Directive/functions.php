@@ -16,6 +16,7 @@ use Monadial\Nexus\Runtime\Async\Future;
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\Stream;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
 use function array_pop;
 use function class_exists;
@@ -286,5 +287,118 @@ function path(mixed ...$args): Route
         $route = $child(...$extracted);
 
         return ($route->run)($ctx->withPathState($state));
+    });
+}
+
+/**
+ * Extract a required query parameter; rejects (returns null) when missing.
+ *
+ * @param ?class-string<Extractor> $extractorClass
+ * @param Closure(mixed): Route $child
+ *
+ * @psalm-suppress MixedAssignment $resolved is intentionally mixed
+ * @psalm-suppress MixedMethodCall extractor instantiation is class-string-validated
+ */
+function query(string $name, ?string $extractorClass, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($name, $extractorClass, $child): ?ResponseInterface {
+        $params = $ctx->request()->getQueryParams();
+
+        if (!isset($params[$name]) || !is_string($params[$name])) {
+            return null;
+        }
+
+        $value = $params[$name];
+        /** @var mixed $resolved */
+        $resolved = $extractorClass !== null
+            ? (new $extractorClass())->fromSegment($value)
+            : $value;
+
+        $route = $child($resolved);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Extract an optional query parameter; passes null to child when missing.
+ *
+ * @param ?class-string<Extractor> $extractorClass
+ * @param Closure(mixed): Route $child
+ *
+ * @psalm-suppress MixedAssignment $resolved is intentionally mixed
+ * @psalm-suppress MixedMethodCall extractor instantiation is class-string-validated
+ */
+function optionalQuery(string $name, ?string $extractorClass, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($name, $extractorClass, $child): ?ResponseInterface {
+        $params = $ctx->request()->getQueryParams();
+        $raw = isset($params[$name]) && is_string($params[$name])
+            ? $params[$name]
+            : null;
+
+        /** @var mixed $resolved */
+        $resolved = match (true) {
+            $raw === null => null,
+            $extractorClass === null => $raw,
+            default => (new $extractorClass())->fromSegment($raw),
+        };
+
+        $route = $child($resolved);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Extract a required header; rejects (returns null) when absent or empty.
+ *
+ * @param Closure(string): Route $child
+ */
+function header(string $name, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($name, $child): ?ResponseInterface {
+        $value = $ctx->request()->getHeaderLine($name);
+
+        if ($value === '') {
+            return null;
+        }
+
+        $route = $child($value);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Extract an optional header; passes null to child when absent or empty.
+ *
+ * @param Closure(?string): Route $child
+ */
+function optionalHeader(string $name, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($name, $child): ?ResponseInterface {
+        $value = $ctx->request()->getHeaderLine($name);
+        $resolved = $value === ''
+            ? null
+            : $value;
+
+        $route = $child($resolved);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Pass the raw PSR-7 ServerRequest to the child.
+ *
+ * @param Closure(ServerRequestInterface): Route $child
+ */
+function extractRequest(Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($child): ?ResponseInterface {
+        $route = $child($ctx->request());
+
+        return ($route->run)($ctx);
     });
 }
