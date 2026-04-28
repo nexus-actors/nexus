@@ -8,6 +8,8 @@ namespace Monadial\Nexus\Http;
 // All directives live in this single namespace and are autoloaded as composer "files".
 
 use Closure;
+use LogicException;
+use Monadial\Nexus\Http\Extract\Extractor;
 use Monadial\Nexus\Http\Rejection\RouteRejection;
 use Monadial\Nexus\Http\Routing\Route;
 use Monadial\Nexus\Runtime\Async\Future;
@@ -15,7 +17,10 @@ use Nyholm\Psr7\Response;
 use Nyholm\Psr7\Stream;
 use Psr\Http\Message\ResponseInterface;
 
+use function array_pop;
+use function class_exists;
 use function is_callable;
+use function is_string;
 
 /**
  * Complete a request with a value (auto-marshalled by the negotiated marshaller).
@@ -216,5 +221,70 @@ function pathEnd(Closure $child): Route
         $route = $child();
 
         return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Match a sequence of literal and/or extracted path segments.
+ *
+ * Last argument MUST be a callable that takes the extracted values (in order)
+ * and returns a Route. Earlier arguments are either string literals or
+ * class-strings of Extractor implementations.
+ *
+ * @psalm-suppress MixedAssignment $args is intentionally mixed
+ * @psalm-suppress MixedArgument segments and child are validated at runtime
+ * @psalm-suppress MixedFunctionCall $child is validated via is_callable
+ * @psalm-suppress MixedMethodCall $instance is validated via class_exists
+ * @psalm-suppress MixedPropertyFetch $route returned by $child is opaque to Psalm
+ * @psalm-suppress MixedReturnStatement $route returned by $child is opaque to Psalm
+ */
+function path(mixed ...$args): Route
+{
+    if ($args === []) {
+        throw new LogicException('path() requires at least one segment and a child callable');
+    }
+
+    /** @var mixed $child */
+    $child = array_pop($args);
+
+    if (!is_callable($child)) {
+        throw new LogicException('path() last argument must be callable');
+    }
+
+    /** @var list<mixed> $segments */
+    $segments = $args;
+
+    return new Route(static function (RequestCtx $ctx) use ($segments, $child): ?ResponseInterface {
+        $state = $ctx->pathState();
+        /** @var list<mixed> $extracted */
+        $extracted = [];
+
+        foreach ($segments as $segment) {
+            $consume = $state->consumeAny();
+
+            if ($consume === null) {
+                return null;
+            }
+
+            [$current, $next] = $consume;
+
+            if (is_string($segment) && !class_exists($segment)) {
+                if ($segment !== $current) {
+                    return null;
+                }
+            } else {
+                /** @var class-string<Extractor<mixed>> $segment */
+                $instance = new $segment();
+                /** @var mixed $value */
+                $value = $instance->fromSegment($current);
+                $extracted[] = $value;
+            }
+
+            $state = $next;
+        }
+
+        $route = $child(...$extracted);
+
+        return ($route->run)($ctx->withPathState($state));
     });
 }
