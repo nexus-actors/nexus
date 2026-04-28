@@ -29,7 +29,8 @@ final class RouteTest extends TestCase
         $response = ($route->run)($ctx);
 
         self::assertSame($ctx, $captured);
-        self::assertSame(200, $response?->getStatusCode());
+        self::assertInstanceOf(ResponseInterface::class, $response);
+        self::assertSame(200, $response->getStatusCode());
     }
 
     #[Test]
