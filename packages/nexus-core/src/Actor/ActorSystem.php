@@ -135,6 +135,24 @@ final class ActorSystem
     }
 
     /**
+     * Look up a previously-spawned top-level actor by name or path.
+     *
+     * Accepts either the bare name passed to spawn() (e.g. "orders") or
+     * a leading-slash form ("/orders"). Returns null when no actor is
+     * registered at that path.
+     *
+     * @return ActorRef<object>|null
+     */
+    public function actorFor(string $path): ?ActorRef
+    {
+        $name = $path !== '' && $path[0] === '/'
+            ? substr($path, 1)
+            : $path;
+
+        return $this->children[$name] ?? null;
+    }
+
+    /**
      * Returns the shared dead-letter reference.
      */
     public function deadLetters(): DeadLetterRef

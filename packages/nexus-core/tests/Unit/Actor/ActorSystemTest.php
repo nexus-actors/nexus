@@ -228,6 +228,41 @@ final class ActorSystemTest extends TestCase
         self::assertNotSame($system1->writerId(), $system2->writerId());
     }
 
+    #[Test]
+    public function actor_for_returns_spawned_actor_by_name(): void
+    {
+        $system = ActorSystem::create('test', $this->runtime);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+
+        $ref = $system->spawn($props, 'orders');
+
+        self::assertSame($ref, $system->actorFor('orders'));
+    }
+
+    #[Test]
+    public function actor_for_accepts_leading_slash(): void
+    {
+        $system = ActorSystem::create('test', $this->runtime);
+        $props = Props::fromBehavior(Behavior::receive(
+            static fn($ctx, $msg) => Behavior::same(),
+        ));
+
+        $ref = $system->spawn($props, 'orders');
+
+        self::assertSame($ref, $system->actorFor('/orders'));
+    }
+
+    #[Test]
+    public function actor_for_returns_null_for_missing_actor(): void
+    {
+        $system = ActorSystem::create('test', $this->runtime);
+
+        self::assertNull($system->actorFor('missing'));
+        self::assertNull($system->actorFor('/missing'));
+    }
+
     protected function setUp(): void
     {
         $this->clock = new TestClock();
