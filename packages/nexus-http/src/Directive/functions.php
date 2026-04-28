@@ -488,3 +488,42 @@ function useMiddlewares(array $middlewares, Closure $child): Route
         return $handler->handle($ctx->request());
     });
 }
+
+/**
+ * Transform the response from a child route. Pass-through when child rejects.
+ *
+ * @param Closure(ResponseInterface): ResponseInterface $transform
+ * @param Closure(): Route $child
+ */
+function mapResponse(Closure $transform, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($transform, $child): ?ResponseInterface {
+        $route = $child();
+        $response = ($route->run)($ctx);
+
+        if ($response === null) {
+            return null;
+        }
+
+        return $transform($response);
+    });
+}
+
+/**
+ * Catch RouteRejection thrown by the child and convert it to a response.
+ *
+ * @param Closure(RouteRejection): ResponseInterface $transform
+ * @param Closure(): Route $child
+ */
+function mapRejection(Closure $transform, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($transform, $child): ?ResponseInterface {
+        $route = $child();
+
+        try {
+            return ($route->run)($ctx);
+        } catch (RouteRejection $rejection) {
+            return $transform($rejection);
+        }
+    });
+}
