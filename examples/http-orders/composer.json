@@ -1,0 +1,17 @@
+{
+    "name": "examples/http-orders",
+    "description": "Demo of nexus-http directive DSL",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Examples\\HttpOrders\\": "src/"
+        }
+    },
+    "require": {
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/http-swoole": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main"
+    }
+}

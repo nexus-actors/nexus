@@ -63,6 +63,7 @@
     },
     "autoload-dev": {
         "psr-4": {
+            "Examples\\HttpOrders\\": "examples/http-orders/src/",
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
             "Monadial\\Nexus\\Ddd\\Tests\\": "packages/nexus-ddd/tests/",
             "Monadial\\Nexus\\Http\\Tests\\": "packages/nexus-http/tests/",
