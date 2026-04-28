@@ -82,6 +82,11 @@ deptrac:
         - type: directory
           value: packages/nexus-ddd/src/.*
 
+    - name: Http
+      collectors:
+        - type: directory
+          value: packages/nexus-http/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -128,3 +133,6 @@ deptrac:
       - Core
       - Serialization
     Ddd: []
+    Http:
+      - Core
+      - Serialization
