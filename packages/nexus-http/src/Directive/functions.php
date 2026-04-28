@@ -10,6 +10,7 @@ namespace Monadial\Nexus\Http;
 use Closure;
 use LogicException;
 use Monadial\Nexus\Http\Extract\Extractor;
+use Monadial\Nexus\Http\Marshalling\MediaType;
 use Monadial\Nexus\Http\Rejection\RouteRejection;
 use Monadial\Nexus\Http\Routing\Route;
 use Monadial\Nexus\Runtime\Async\Future;
@@ -22,6 +23,7 @@ use function array_pop;
 use function class_exists;
 use function is_callable;
 use function is_string;
+use function parse_str;
 
 /**
  * Complete a request with a value (auto-marshalled by the negotiated marshaller).
@@ -398,6 +400,62 @@ function extractRequest(Closure $child): Route
 {
     return new Route(static function (RequestCtx $ctx) use ($child): ?ResponseInterface {
         $route = $child($ctx->request());
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Pass the raw request body string to the child.
+ *
+ * @param Closure(string): Route $child
+ */
+function rawBody(Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($child): ?ResponseInterface {
+        $body = (string) $ctx->request()->getBody();
+        $route = $child($body);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Unmarshal the JSON body into the target type and pass to the child.
+ *
+ * @template T of object
+ * @param class-string<T> $targetType
+ * @param Closure(T): Route $child
+ *
+ * @psalm-suppress MixedArgument Marshaller::unmarshal returns T but Psalm widens it across the closure boundary
+ */
+function jsonBody(string $targetType, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($targetType, $child): ?ResponseInterface {
+        $body = (string) $ctx->request()->getBody();
+        $marshaller = $ctx->marshallerFor(MediaType::parse('application/json'));
+        $value = $marshaller->unmarshal($body, $targetType);
+        $route = $child($value);
+
+        return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Parse the application/x-www-form-urlencoded body and pass the resulting array to the child.
+ *
+ * @param Closure(array<string, mixed>): Route $child
+ *
+ * @psalm-suppress MixedArgumentTypeCoercion parse_str narrows $parsed at runtime to array<string, mixed>
+ */
+function formBody(Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($child): ?ResponseInterface {
+        $body = (string) $ctx->request()->getBody();
+        $parsed = [];
+        parse_str($body, $parsed);
+
+        $route = $child($parsed);
 
         return ($route->run)($ctx);
     });
