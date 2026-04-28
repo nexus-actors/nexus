@@ -9,6 +9,7 @@ namespace Monadial\Nexus\Http;
 
 use Closure;
 use LogicException;
+use Monadial\Nexus\Http\Directive\RouteHandler;
 use Monadial\Nexus\Http\Extract\Extractor;
 use Monadial\Nexus\Http\Marshalling\MediaType;
 use Monadial\Nexus\Http\Rejection\RouteRejection;
@@ -18,6 +19,7 @@ use Nyholm\Psr7\Response;
 use Nyholm\Psr7\Stream;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
 
 use function array_pop;
 use function class_exists;
@@ -458,5 +460,31 @@ function formBody(Closure $child): Route
         $route = $child($parsed);
 
         return ($route->run)($ctx);
+    });
+}
+
+/**
+ * Wrap the child route with a single PSR-15 middleware.
+ *
+ * @param Closure(): Route $child
+ */
+function useMiddleware(MiddlewareInterface $middleware, Closure $child): Route
+{
+    return useMiddlewares([$middleware], $child);
+}
+
+/**
+ * Wrap the child route with a stack of PSR-15 middlewares (applied in array order).
+ *
+ * @param list<MiddlewareInterface> $middlewares
+ * @param Closure(): Route $child
+ */
+function useMiddlewares(array $middlewares, Closure $child): Route
+{
+    return new Route(static function (RequestCtx $ctx) use ($middlewares, $child): ResponseInterface {
+        $route = $child();
+        $handler = new RouteHandler($route, $ctx, $middlewares);
+
+        return $handler->handle($ctx->request());
     });
 }
