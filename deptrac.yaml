@@ -145,13 +145,16 @@ deptrac:
     Ddd: []
     Http:
       - Core
+      - Runtime
       - Serialization
     HttpTestKit:
       - Core
       - Http
+      - Runtime
       - RuntimeStep
     HttpSwoole:
       - Core
       - Http
+      - Runtime
       - RuntimeSwoole
       - WorkerPoolSwoole
