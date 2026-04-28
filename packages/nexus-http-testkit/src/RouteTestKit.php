@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\TestKit;
 
+use Fiber;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\DefaultRequestCtx;
 use Monadial\Nexus\Http\Error\DefaultErrorMapper;
 use Monadial\Nexus\Http\Error\ErrorMapper;
 use Monadial\Nexus\Http\Marshalling\MarshallerRegistry;
 use Monadial\Nexus\Http\Routing\Route;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Nyholm\Psr7\Response;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -84,12 +88,77 @@ final class RouteTestKit
             logger: $this->logger,
         );
 
-        try {
-            $response = ($this->route->run)($ctx) ?? new Response(404);
-        } catch (Throwable $e) {
-            $response = $this->errorMapper->map($e, $ctx);
+        if ($this->system === null) {
+            return new RouteResult($this->execute($ctx));
         }
 
-        return new RouteResult($response);
+        return new RouteResult($this->executeWithSystem($ctx, $system));
+    }
+
+    private function execute(DefaultRequestCtx $ctx): ResponseInterface
+    {
+        try {
+            return ($this->route->run)($ctx) ?? new Response(404);
+        } catch (Throwable $e) {
+            return $this->errorMapper->map($e, $ctx);
+        }
+    }
+
+    /**
+     * Execute the route inside a fiber driven by the system's runtime so
+     * directives that await on actor replies (e.g. ask) can suspend.
+     *
+     * @psalm-suppress MixedAssignment $captured holds the produced response
+     */
+    private function executeWithSystem(DefaultRequestCtx $ctx, ActorSystem $system): ResponseInterface
+    {
+        $runtime = $system->runtime();
+
+        /** @var ResponseInterface|null $captured */
+        $captured = null;
+        /** @var Throwable|null $thrown */
+        $thrown = null;
+
+        $fiber = new Fiber(function () use ($ctx, &$captured, &$thrown): void {
+            try {
+                $captured = ($this->route->run)($ctx) ?? new Response(404);
+            } catch (Throwable $e) {
+                $thrown = $e;
+            }
+        });
+
+        $fiber->start();
+
+        if (!$fiber->isTerminated()) {
+            $this->driveRuntime($runtime, $fiber);
+        }
+
+        if ($thrown !== null) {
+            return $this->errorMapper->map($thrown, $ctx);
+        }
+
+        return $captured ?? new Response(404);
+    }
+
+    /**
+     * Pump the runtime so spawned actor fibers run, then resume the route fiber.
+     * Works for both StepRuntime (drain) and FiberRuntime (run).
+     */
+    private function driveRuntime(Runtime $runtime, Fiber $routeFiber): void
+    {
+        while (!$routeFiber->isTerminated()) {
+            if ($runtime instanceof StepRuntime) {
+                $runtime->drain();
+            } else {
+                $runtime->shutdown(Duration::zero());
+                $runtime->run();
+            }
+
+            if ($routeFiber->isSuspended()) {
+                $routeFiber->resume();
+            } else {
+                break;
+            }
+        }
     }
 }
