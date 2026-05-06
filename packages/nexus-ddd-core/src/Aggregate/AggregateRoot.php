@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Ddd\Core\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
-use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 
 /**
@@ -19,32 +18,36 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  * state, then appends the event to the recorded buffer. pullRecordedEvents()
  * returns and clears the buffer (called by the repository at persist time).
  *
+ * AggregateRoot is `Entity` only — NOT `EventSourceable`. Event-sourcing
+ * semantics (replaying events to rebuild state) are specific to
+ * EventSourcedAggregateRoot. StatefulAggregateRoot records events for the
+ * EventBus but doesn't replay — its persistence is state-based, not
+ * event-based.
+ *
  * Aggregates are NOT readonly — they have mutable internal state ($version,
  * $recordedEvents). Concrete subclasses are typically `final class` (not
  * readonly). Properties that should be immutable (e.g., the id) use the
  * property-level `readonly` modifier.
  */
-abstract class AggregateRoot implements Entity, EventSourceable
+abstract class AggregateRoot implements Entity
 {
     private static ?ApplyDispatcher $dispatcher = null;
 
     /** @var array<int, object> */
     private array $recordedEvents = [];
 
-    private int $version = 0;
+    protected int $version = 0;
 
     protected function __construct(protected readonly Identifier $id) {}
 
     #[\Override]
     abstract public function id(): Identifier;
 
-    #[\Override]
     final public function version(): int
     {
         return $this->version;
     }
 
-    #[\Override]
     public function stateVersion(): int
     {
         return 1;
@@ -58,7 +61,6 @@ abstract class AggregateRoot implements Entity, EventSourceable
     }
 
     /** @return array<int, object> */
-    #[\Override]
     final public function pullRecordedEvents(): array
     {
         $events = $this->recordedEvents;
@@ -67,25 +69,13 @@ abstract class AggregateRoot implements Entity, EventSourceable
         return $events;
     }
 
-    /** @param iterable<int, object> $events */
-    #[\Override]
-    final public function replay(iterable $events): void
-    {
-        $dispatcher = self::dispatcher();
-
-        foreach ($events as $event) {
-            $dispatcher->dispatch($this, $event);
-            $this->version++;
-        }
-    }
-
     #[\Override]
     final public function equals(Entity $other): bool
     {
         return $other instanceof static && $other->id->equals($this->id);
     }
 
-    private static function dispatcher(): ApplyDispatcher
+    protected static function dispatcher(): ApplyDispatcher
     {
         return self::$dispatcher ??= new ApplyDispatcher();
     }

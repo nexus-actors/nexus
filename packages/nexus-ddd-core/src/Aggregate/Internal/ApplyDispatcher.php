@@ -10,7 +10,8 @@ use ReflectionClass;
 use ReflectionMethod;
 
 /**
- * @psalm-internal Monadial\Nexus\Ddd\Core
+ * @internal Used by AggregateRoot/EventSourcedAggregateRoot in the parent namespace;
+ *           framework-internal — apps should not instantiate or call directly.
  *
  * Resolves and invokes the `applyXxx` method on an entity for a given event.
  * Convention: method name = `apply` + event class short name (case-sensitive).

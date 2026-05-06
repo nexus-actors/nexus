@@ -39,11 +39,12 @@ final class AggregateRootTest extends TestCase
     }
 
     #[Test]
-    public function aggregateIsBothEntityAndEventSourceable(): void
+    public function aggregateIsEntityButNotEventSourceableAtBaseLevel(): void
     {
         $a = TestAggregate::create(self::ulid());
         self::assertInstanceOf(Entity::class, $a);
-        self::assertInstanceOf(EventSourceable::class, $a);
+        // EventSourceable applies only to EventSourcedAggregateRoot, not the base.
+        self::assertNotInstanceOf(EventSourceable::class, $a);
     }
 
     #[Test]

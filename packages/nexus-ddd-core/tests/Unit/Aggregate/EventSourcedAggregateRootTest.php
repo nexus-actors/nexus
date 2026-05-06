@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -15,6 +16,13 @@ use Symfony\Component\Uid\Ulid;
 #[CoversClass(EventSourcedAggregateRoot::class)]
 final class EventSourcedAggregateRootTest extends TestCase
 {
+    #[Test]
+    public function eventSourcedAggregateIsEventSourceable(): void
+    {
+        $a = EsAggregate::create(new UlidValue((new Ulid())->toBase32()));
+        self::assertInstanceOf(EventSourceable::class, $a);
+    }
+
     #[Test]
     public function replayReconstructsStateFromEvents(): void
     {
