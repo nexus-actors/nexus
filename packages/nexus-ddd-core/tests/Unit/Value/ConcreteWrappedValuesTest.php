@@ -81,19 +81,27 @@ final class ConcreteWrappedValuesTest extends TestCase
     }
 
     #[Test]
-    public function arrayValueWrapsArray(): void
+    public function arrayValueWrapsArrayWithTemplatedKeyAndValueTypes(): void
     {
+        /** @extends ArrayValue<int, int> */
         $v = new readonly class([1, 2, 3]) extends ArrayValue {
-            /** @return array<array-key, mixed> */
+            /** @return array<int, int> */
             public function asArray(): array
             {
-                /** @var array<array-key, mixed> $v */
-                $v = $this->getValue();
-
-                return $v;
+                return $this->getValue();
             }
         };
         self::assertSame([1, 2, 3], $v->asArray());
+
+        /** @extends ArrayValue<string, string> */
+        $named = new readonly class(['first' => 'Ada', 'last' => 'Lovelace']) extends ArrayValue {
+            /** @return array<string, string> */
+            public function asArray(): array
+            {
+                return $this->getValue();
+            }
+        };
+        self::assertSame(['first' => 'Ada', 'last' => 'Lovelace'], $named->asArray());
     }
 
     #[Test]
