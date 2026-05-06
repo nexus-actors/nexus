@@ -7,6 +7,9 @@ namespace Monadial\Nexus\Ddd\Core\Exception;
 /** @psalm-api */
 final class OptimisticLockException extends NexusDddException
 {
+    /**
+     * @param class-string $entityClass tightened to class-string<EventSourceable> in Task 12
+     */
     public function __construct(
         public readonly string $entityClass,
         public readonly string $entityId,

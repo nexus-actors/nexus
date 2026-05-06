@@ -7,7 +7,10 @@ namespace Monadial\Nexus\Ddd\Core\Exception;
 /** @psalm-api */
 final class ApplyMethodAmbiguousException extends NexusDddException
 {
-    /** @param array<string> $eventClasses */
+    /**
+     * @param class-string $aggregateClass tightened to class-string<AggregateRoot> in Task 15
+     * @param array<class-string> $eventClasses
+     */
     public static function for(string $aggregateClass, string $shortName, array $eventClasses): self
     {
         return new self(

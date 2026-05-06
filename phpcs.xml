@@ -32,6 +32,8 @@
     <file>packages/nexus-persistence-dbal/tests</file>
     <file>packages/nexus-persistence-doctrine/src</file>
     <file>packages/nexus-persistence-doctrine/tests</file>
+    <file>packages/nexus-ddd-core/src</file>
+    <file>packages/nexus-ddd-core/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->

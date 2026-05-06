@@ -21,6 +21,7 @@
         <directory name="packages/nexus-persistence/src" />
         <directory name="packages/nexus-persistence-dbal/src" />
         <directory name="packages/nexus-persistence-doctrine/src" />
+        <directory name="packages/nexus-ddd-core/src" />
         <ignoreFiles>
             <directory name="vendor" />
         </ignoreFiles>

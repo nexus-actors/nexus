@@ -7,6 +7,10 @@ namespace Monadial\Nexus\Ddd\Core\Exception;
 /** @psalm-api */
 final class ApplyMethodNotFoundException extends NexusDddException
 {
+    /**
+     * @param class-string $aggregateClass tightened to class-string<AggregateRoot> in Task 15
+     * @param class-string $eventClass tightened to class-string<DomainEvent> when DomainEvent exists
+     */
     public static function for(string $aggregateClass, string $eventClass): self
     {
         return new self(
@@ -19,6 +23,7 @@ final class ApplyMethodNotFoundException extends NexusDddException
         );
     }
 
+    /** @param class-string $fqn */
     private static function shortName(string $fqn): string
     {
         $parts = explode('\\', $fqn);
