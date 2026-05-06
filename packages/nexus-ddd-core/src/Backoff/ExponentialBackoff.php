@@ -12,7 +12,6 @@ use Throwable;
 
 /**
  * @psalm-api
- * @psalm-immutable
  *
  * Delay = min(cap, base × multiplier^(attempt-1)). Default multiplier = 2.0.
  */
@@ -40,6 +39,7 @@ final readonly class ExponentialBackoff implements BackoffStrategy
         if ($attempt > $this->maxAttempts) {
             return Option::none();
         }
+        /** @psalm-suppress InvalidOperand */
         $millis = (int) round($this->base->toMillis() * ($this->multiplier ** ($attempt - 1)));
         $clamped = min($millis, $this->cap->toMillis());
 

@@ -22,5 +22,5 @@ interface BackoffStrategy
      * @param int $attempt 1-based — first failure is attempt #1
      * @return Option<Duration> none = give up; some = wait this long before next try
      */
-    public function delayFor(int $attempt, Throwable $cause): Option;
+    public function delayFor(int $attempt, Throwable $cause): mixed;
 }

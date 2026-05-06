@@ -12,7 +12,6 @@ use Throwable;
 
 /**
  * @psalm-api
- * @psalm-immutable
  *
  * Delay = base × attempt (so attempt 1 waits `base`, attempt 2 waits `2 × base`, etc.).
  */

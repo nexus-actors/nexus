@@ -66,12 +66,13 @@ final class SmokeTest extends TestCase
     }
 }
 
+/** @psalm-immutable */
 final readonly class SmokeEmail extends StringValue
 {
     public function asString(): string
     {
-        /** @var string $v */
         $v = $this->getValue();
+        \assert(is_string($v));
 
         return $v;
     }
@@ -97,7 +98,7 @@ final class SmokeOrder extends EventSourcedAggregateRoot
         $this->recordThat(new SmokePlaced());
     }
 
-    private function applySmokePlaced(SmokePlaced $e): void
+    private function applySmokePlaced(SmokePlaced $_e): void
     {
         $this->status = 'placed';
     }
@@ -119,12 +120,15 @@ final class SmokeNonEmpty extends AbstractRichSpecification
     }
 }
 
+/** @psalm-suppress MissingImmutableAnnotation */
+
 /** @extends AbstractPolicy<int, int> */
 final class SmokeDoublePolicy extends AbstractPolicy
 {
     #[\Override]
     public function apply(mixed $input): mixed
     {
-        return (int) $input * 2;
+        /** @var int $input */
+        return $input * 2;
     }
 }

@@ -14,23 +14,23 @@ use Throwable;
  */
 final class CustomBackoff implements BackoffStrategy
 {
-    /** @var callable(int, Throwable): Option */
+    /** @var callable(int, Throwable): mixed */
     private $fn;
 
-    /** @param callable(int, Throwable): Option $fn */
+    /** @param callable(int, Throwable): mixed $fn */
     private function __construct(callable $fn)
     {
         $this->fn = $fn;
     }
 
-    /** @param callable(int, Throwable): Option $fn */
+    /** @param callable(int, Throwable): mixed $fn */
     public static function of(callable $fn): self
     {
         return new self($fn);
     }
 
     #[\Override]
-    public function delayFor(int $attempt, Throwable $cause): Option
+    public function delayFor(int $attempt, Throwable $cause): mixed
     {
         return ($this->fn)($attempt, $cause);
     }

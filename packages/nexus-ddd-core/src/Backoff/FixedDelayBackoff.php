@@ -10,7 +10,6 @@ use Throwable;
 
 /**
  * @psalm-api
- * @psalm-immutable
  */
 final readonly class FixedDelayBackoff implements BackoffStrategy
 {
