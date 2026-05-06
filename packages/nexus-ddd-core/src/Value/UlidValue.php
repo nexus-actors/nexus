@@ -26,17 +26,13 @@ readonly class UlidValue extends WrappedValue implements Identifier // phpcs:ign
 
     /**
      * Identifier::value() — public accessor for canonical-string storage form.
-     * Delegates to inherited protected WrappedValue::getValue().
-     *
-     * @psalm-pure
+     * Delegates to inherited protected WrappedValue::getValue(). Class-level
+     * `@psalm-immutable` keeps this implicitly pure.
      */
     #[\Override]
     public function value(): string
     {
-        /** @var string $v */
-        $v = $this->getValue();
-
-        return $v;
+        return $this->getValue();
     }
 
     #[\Override]

@@ -24,14 +24,13 @@ readonly class UuidValue extends WrappedValue implements Identifier // phpcs:ign
         parent::__construct($value);
     }
 
-    /** @psalm-pure */
+    /**
+     * Class-level `@psalm-immutable` keeps this implicitly pure.
+     */
     #[\Override]
     public function value(): string
     {
-        /** @var string $v */
-        $v = $this->getValue();
-
-        return $v;
+        return $this->getValue();
     }
 
     #[\Override]

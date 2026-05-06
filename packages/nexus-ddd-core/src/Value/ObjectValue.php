@@ -18,7 +18,9 @@ use ReflectionObject;
  */
 abstract readonly class ObjectValue
 {
-    /** @psalm-suppress ImpureMethodCall */
+    /**
+     * @psalm-suppress ImpureMethodCall,MixedAssignment
+     */
     public function equals(ObjectValue $other): bool
     {
         if (static::class !== $other::class) {
