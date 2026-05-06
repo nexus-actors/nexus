@@ -14,6 +14,7 @@ use Monadial\Nexus\Ddd\Core\Exception\ReplayFailedException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use RuntimeException;
 
 #[CoversClass(NexusDddException::class)]
@@ -28,7 +29,7 @@ final class ExceptionHierarchyTest extends TestCase
     #[Test]
     public function nexusDddExceptionIsAbstractRuntimeException(): void
     {
-        $reflection = new \ReflectionClass(NexusDddException::class);
+        $reflection = new ReflectionClass(NexusDddException::class);
         self::assertTrue($reflection->isAbstract());
         self::assertTrue($reflection->isSubclassOf(RuntimeException::class));
     }
@@ -44,6 +45,7 @@ final class ExceptionHierarchyTest extends TestCase
             InvalidIdentifierException::class,
             NoEventsRecordedException::class,
         ];
+
         foreach ($concretes as $cls) {
             self::assertTrue(
                 is_subclass_of($cls, NexusDddException::class),

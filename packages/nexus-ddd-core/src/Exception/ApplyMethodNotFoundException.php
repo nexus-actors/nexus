@@ -22,6 +22,7 @@ final class ApplyMethodNotFoundException extends NexusDddException
     private static function shortName(string $fqn): string
     {
         $parts = explode('\\', $fqn);
+
         return end($parts);
     }
 }
