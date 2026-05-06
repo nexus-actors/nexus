@@ -4,24 +4,23 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Identity;
 
-use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
-
 /**
  * @psalm-api
  * @psalm-immutable
  *
- * Default canonical format: components joined by `:`, with values URL-encoded.
- * Subclasses pass their components to the constructor; fromString reconstructs.
+ * Composite identifier whose components are themselves Identifier instances.
  *
- * Override `canonicalize`/`parseComponents` for custom formats; the round-trip
- * MUST be deterministic.
+ * Default canonical format: components joined by `:`, each component's
+ * `value()` URL-encoded. Subclasses pass typed Identifier components to the
+ * constructor and MUST implement their own `fromString` (the abstract base
+ * cannot know which concrete Identifier type each component is).
  */
 abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifier
 {
-    /** @param array<string, scalar> $components */
+    /** @param array<string, Identifier> $components */
     protected function __construct(private array $components) {}
 
-    /** @return array<string, scalar> */
+    /** @return array<string, Identifier> */
     #[\Override]
     final public function components(): array
     {
@@ -34,7 +33,7 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
         return implode(
             ':',
             array_map(
-                static fn(mixed $v): string => rawurlencode((string) $v),
+                static fn(Identifier $id): string => rawurlencode($id->value()),
                 array_values($this->components),
             ),
         );
@@ -51,27 +50,29 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
             return false;
         }
 
-        return $other->components() === $this->components;
+        $otherComponents = $other->components();
+
+        if (array_keys($otherComponents) !== array_keys($this->components)) {
+            return false;
+        }
+
+        foreach ($this->components as $key => $component) {
+            if (! $component->equals($otherComponents[$key])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
-     * Default reconstruction: subclasses MUST override if their constructor signature
-     * cannot accept positional values from the canonical string parsed in declaration order.
+     * Subclasses MUST implement: parse $value, instantiate each component's
+     * concrete Identifier via its own ::fromString, then call the subclass
+     * constructor with typed components.
      *
-     * @psalm-suppress UnsafeInstantiation,InvalidArgument
+     * The abstract base cannot provide a default — it doesn't know which
+     * concrete Identifier types each component should be.
      */
     #[\Override]
-    public static function fromString(string $value): static
-    {
-        $parts = array_map(
-            static fn(string $p): string => rawurldecode($p),
-            explode(':', $value),
-        );
-        try {
-            // Subclass constructors typically accept positional args matching component declaration order
-            return new static(...$parts);
-        } catch (\Throwable $e) {
-            throw InvalidIdentifierException::malformed(static::class, $value, $e->getMessage());
-        }
-    }
+    abstract public static function fromString(string $value): static;
 }
