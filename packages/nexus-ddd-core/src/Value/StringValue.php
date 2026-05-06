@@ -10,7 +10,7 @@ namespace Monadial\Nexus\Ddd\Core\Value;
  *
  * @extends WrappedValue<string>
  */
-abstract class StringValue extends WrappedValue
+abstract readonly class StringValue extends WrappedValue
 {
     public function __construct(string $value)
     {

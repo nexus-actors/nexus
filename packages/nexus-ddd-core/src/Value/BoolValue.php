@@ -10,7 +10,7 @@ namespace Monadial\Nexus\Ddd\Core\Value;
  *
  * @extends WrappedValue<bool>
  */
-abstract class BoolValue extends WrappedValue
+abstract readonly class BoolValue extends WrappedValue
 {
     public function __construct(bool $value)
     {

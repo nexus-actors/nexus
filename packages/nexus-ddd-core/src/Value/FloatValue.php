@@ -10,7 +10,7 @@ namespace Monadial\Nexus\Ddd\Core\Value;
  *
  * @extends WrappedValue<float>
  */
-abstract class FloatValue extends WrappedValue
+abstract readonly class FloatValue extends WrappedValue
 {
     public function __construct(float $value)
     {

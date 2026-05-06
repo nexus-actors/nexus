@@ -10,7 +10,7 @@ namespace Monadial\Nexus\Ddd\Core\Value;
  *
  * @extends WrappedValue<array>
  */
-abstract class ArrayValue extends WrappedValue
+abstract readonly class ArrayValue extends WrappedValue
 {
     /**
      * @param array<array-key, mixed> $value

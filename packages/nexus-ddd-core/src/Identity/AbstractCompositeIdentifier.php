@@ -16,17 +16,19 @@ use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
  * Override `canonicalize`/`parseComponents` for custom formats; the round-trip
  * MUST be deterministic.
  */
-abstract class AbstractCompositeIdentifier implements CompositeIdentifier
+abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifier
 {
     /** @param array<string, scalar> $components */
-    protected function __construct(private readonly array $components) {}
+    protected function __construct(private array $components) {}
 
     /** @return array<string, scalar> */
+    #[\Override]
     final public function components(): array
     {
         return $this->components;
     }
 
+    #[\Override]
     public function value(): string
     {
         return implode(
@@ -38,19 +40,27 @@ abstract class AbstractCompositeIdentifier implements CompositeIdentifier
         );
     }
 
+    #[\Override]
     public function equals(Identifier $other): bool
     {
-        if (! $other instanceof static) {
+        if (! $other instanceof self) {
             return false;
         }
 
-        return $other->components === $this->components;
+        if ($other::class !== static::class) {
+            return false;
+        }
+
+        return $other->components() === $this->components;
     }
 
     /**
      * Default reconstruction: subclasses MUST override if their constructor signature
      * cannot accept positional values from the canonical string parsed in declaration order.
+     *
+     * @psalm-suppress UnsafeInstantiation,InvalidArgument
      */
+    #[\Override]
     public static function fromString(string $value): static
     {
         $parts = array_map(
@@ -59,7 +69,6 @@ abstract class AbstractCompositeIdentifier implements CompositeIdentifier
         );
         try {
             // Subclass constructors typically accept positional args matching component declaration order
-            // @psalm-suppress UnsafeInstantiation
             return new static(...$parts);
         } catch (\Throwable $e) {
             throw InvalidIdentifierException::malformed(static::class, $value, $e->getMessage());

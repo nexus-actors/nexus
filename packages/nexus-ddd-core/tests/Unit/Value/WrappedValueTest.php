@@ -13,10 +13,10 @@ use PHPUnit\Framework\TestCase;
 final class WrappedValueTest extends TestCase
 {
     #[Test]
-    public function valueReturnsConstructedInner(): void
+    public function asIntReturnsConstructedInner(): void
     {
         $v = new IntStub(42);
-        self::assertSame(42, $v->value());
+        self::assertSame(42, $v->asInt());
     }
 
     #[Test]
@@ -24,9 +24,9 @@ final class WrappedValueTest extends TestCase
     {
         $v = new IntStub(2);
         $mapped = $v->map(static fn(int $i): int => $i * 3);
-        self::assertSame(6, $mapped->value());
+        self::assertSame(6, $mapped->asInt());
         self::assertNotSame($v, $mapped);
-        self::assertSame(2, $v->value());           // original unchanged
+        self::assertSame(2, $v->asInt());           // original unchanged
     }
 
     #[Test]
@@ -34,7 +34,7 @@ final class WrappedValueTest extends TestCase
     {
         $v = new IntStub(2);
         $result = $v->flatMap(static fn(int $i): IntStub => new IntStub($i + 100));
-        self::assertSame(102, $result->value());
+        self::assertSame(102, $result->asInt());
     }
 
     #[Test]
@@ -52,10 +52,18 @@ final class WrappedValueTest extends TestCase
  * @extends WrappedValue<int>
  * @psalm-immutable
  */
-final class IntStub extends WrappedValue
+final readonly class IntStub extends WrappedValue
 {
     public function __construct(int $value)
     {
         parent::__construct($value);
+    }
+
+    public function asInt(): int
+    {
+        /** @var int $v */
+        $v = $this->getValue();
+
+        return $v;
     }
 }

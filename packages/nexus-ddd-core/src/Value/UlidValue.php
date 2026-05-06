@@ -14,9 +14,9 @@ use Symfony\Component\Uid\Ulid;
  *
  * Minimal ULID-backed Identifier. Will be enriched in Task 10 to extend WrappedValue.
  */
-class UlidValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
+readonly class UlidValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
 {
-    final public function __construct(private readonly string $value)
+    final public function __construct(private string $value)
     {
         if (! Ulid::isValid($value)) {
             throw InvalidIdentifierException::malformed(static::class, $value, 'not a valid ULID');

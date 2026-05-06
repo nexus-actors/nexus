@@ -12,14 +12,19 @@ namespace Monadial\Nexus\Ddd\Core\Value;
  *
  * Functor-style abstract for primitive-wrapping value objects.
  * Subclasses get equals(), map(), flatMap() for free.
+ *
+ * `getValue()` is protected — value objects encapsulate their inner value;
+ * subclasses expose typed domain accessors (e.g. `asString()`, `domain()`)
+ * built on top. Infrastructure layers that need raw extraction use a separate
+ * `ValueExtractor` (introduced in nexus-ddd-messaging / nexus-ddd-aggregate).
  */
-abstract class WrappedValue
+abstract readonly class WrappedValue
 {
     /** @param T $value */
-    protected function __construct(private readonly mixed $value) {}
+    protected function __construct(private mixed $value) {}
 
     /** @return T */
-    public function value(): mixed
+    protected function getValue(): mixed
     {
         return $this->value;
     }

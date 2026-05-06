@@ -46,7 +46,7 @@ final class CompositeIdentifierTest extends TestCase
 }
 
 /** @psalm-suppress MissingConstructor */
-final class TenantOrderId extends AbstractCompositeIdentifier
+final readonly class TenantOrderId extends AbstractCompositeIdentifier
 {
     public function __construct(string $tenant, string $order)
     {

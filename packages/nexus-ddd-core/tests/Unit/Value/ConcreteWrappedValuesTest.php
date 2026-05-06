@@ -23,44 +23,93 @@ final class ConcreteWrappedValuesTest extends TestCase
     #[Test]
     public function stringValueWrapsString(): void
     {
-        $v = new class('hello') extends StringValue {};
-        self::assertSame('hello', $v->value());
+        $v = new readonly class('hello') extends StringValue {
+            public function asString(): string
+            {
+                /** @var string $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
+        self::assertSame('hello', $v->asString());
     }
 
     #[Test]
     public function intValueWrapsInt(): void
     {
-        $v = new class(42) extends IntValue {};
-        self::assertSame(42, $v->value());
+        $v = new readonly class(42) extends IntValue {
+            public function asInt(): int
+            {
+                /** @var int $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
+        self::assertSame(42, $v->asInt());
     }
 
     #[Test]
     public function floatValueWrapsFloat(): void
     {
-        $v = new class(3.14) extends FloatValue {};
-        self::assertSame(3.14, $v->value());
+        $v = new readonly class(3.14) extends FloatValue {
+            public function asFloat(): float
+            {
+                /** @var float $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
+        self::assertSame(3.14, $v->asFloat());
     }
 
     #[Test]
     public function boolValueWrapsBool(): void
     {
-        $v = new class(true) extends BoolValue {};
-        self::assertSame(true, $v->value());
+        $v = new readonly class(true) extends BoolValue {
+            public function asBool(): bool
+            {
+                /** @var bool $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
+        self::assertTrue($v->asBool());
     }
 
     #[Test]
     public function arrayValueWrapsArray(): void
     {
-        $v = new class([1, 2, 3]) extends ArrayValue {};
-        self::assertSame([1, 2, 3], $v->value());
+        $v = new readonly class([1, 2, 3]) extends ArrayValue {
+            /** @return array<array-key, mixed> */
+            public function asArray(): array
+            {
+                /** @var array<array-key, mixed> $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
+        self::assertSame([1, 2, 3], $v->asArray());
     }
 
     #[Test]
     public function stringValueMapPreservesType(): void
     {
-        $v = new class('abc') extends StringValue {};
+        $v = new readonly class('abc') extends StringValue {
+            public function asString(): string
+            {
+                /** @var string $v */
+                $v = $this->getValue();
+
+                return $v;
+            }
+        };
         $mapped = $v->map(strtoupper(...));
-        self::assertSame('ABC', $mapped->value());
+        self::assertSame('ABC', $mapped->asString());
         self::assertInstanceOf($v::class, $mapped);
     }
 }
