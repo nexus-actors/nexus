@@ -8,42 +8,14 @@
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
 >
     <projectFiles>
-        <directory name="packages/nexus-core/src" />
-        <directory name="packages/nexus-runtime-fiber/src" />
-        <directory name="packages/nexus-runtime-step/src" />
-        <directory name="packages/nexus-runtime-swoole/src" />
-        <directory name="packages/nexus-serialization/src" />
-        <directory name="packages/nexus-psalm/src" />
-        <directory name="packages/nexus-cluster/src" />
-        <directory name="packages/nexus-worker-pool/src" />
-        <directory name="packages/nexus-worker-pool-swoole/src" />
-        <directory name="packages/nexus-app/src" />
-        <directory name="packages/nexus-persistence/src" />
-        <directory name="packages/nexus-persistence-dbal/src" />
-        <directory name="packages/nexus-persistence-doctrine/src" />
+        <directory name="packages/nexus-ddd-core/src" />
         <ignoreFiles>
             <directory name="vendor" />
         </ignoreFiles>
     </projectFiles>
 
-    <plugins>
-        <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
-    </plugins>
-
     <issueHandlers>
         <!-- PHP Fiber<T1,T2,T3,T4> has 4 template params which Psalm sees as excessive -->
         <TooManyTemplateParams errorLevel="suppress" />
-
-        <!-- nexus-psalm necessarily uses Psalm's internal APIs as a plugin -->
-        <InternalMethod>
-            <errorLevel type="suppress">
-                <directory name="packages/nexus-psalm/src" />
-            </errorLevel>
-        </InternalMethod>
-        <InternalClass>
-            <errorLevel type="suppress">
-                <directory name="packages/nexus-psalm/src" />
-            </errorLevel>
-        </InternalClass>
     </issueHandlers>
 </psalm>

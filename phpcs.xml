@@ -6,32 +6,8 @@
     <arg name="colors" />
     <arg value="sp" />
 
-    <file>packages/nexus-core/src</file>
-    <file>packages/nexus-core/tests</file>
-    <file>packages/nexus-runtime-fiber/src</file>
-    <file>packages/nexus-runtime-fiber/tests</file>
-    <file>packages/nexus-runtime-step/src</file>
-    <file>packages/nexus-runtime-step/tests</file>
-    <file>packages/nexus-runtime-swoole/src</file>
-    <file>packages/nexus-runtime-swoole/tests</file>
-    <file>packages/nexus-serialization/src</file>
-    <file>packages/nexus-serialization/tests</file>
-    <file>packages/nexus-psalm/src</file>
-    <file>packages/nexus-psalm/tests</file>
-    <file>packages/nexus-cluster/src</file>
-    <file>packages/nexus-cluster/tests</file>
-    <file>packages/nexus-worker-pool/src</file>
-    <file>packages/nexus-worker-pool/tests</file>
-    <file>packages/nexus-worker-pool-swoole/src</file>
-    <file>packages/nexus-worker-pool-swoole/tests</file>
-    <file>packages/nexus-app/src</file>
-    <file>packages/nexus-app/tests</file>
-    <file>packages/nexus-persistence/src</file>
-    <file>packages/nexus-persistence/tests</file>
-    <file>packages/nexus-persistence-dbal/src</file>
-    <file>packages/nexus-persistence-dbal/tests</file>
-    <file>packages/nexus-persistence-doctrine/src</file>
-    <file>packages/nexus-persistence-doctrine/tests</file>
+    <file>packages/nexus-ddd-core/src</file>
+    <file>packages/nexus-ddd-core/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->
