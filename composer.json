@@ -9,6 +9,8 @@
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.0",
+        "fp4php/functional": "^6.0",
+        "monadial/php-duration": "^1.0",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -34,6 +36,7 @@
         ],
         "psr-4": {
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
+            "Monadial\\Nexus\\Ddd\\Core\\": "packages/nexus-ddd-core/src/",
             "Monadial\\Nexus\\Runtime\\": "packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "packages/nexus-runtime-fiber/src/",
             "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
@@ -52,6 +55,7 @@
     "autoload-dev": {
         "psr-4": {
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
+            "Monadial\\Nexus\\Ddd\\Core\\Tests\\": "packages/nexus-ddd-core/tests/",
             "Monadial\\Nexus\\Runtime\\Tests\\": "packages/nexus-runtime/tests/",
             "Monadial\\Nexus\\Runtime\\Fiber\\Tests\\": "packages/nexus-runtime-fiber/tests/",
             "Monadial\\Nexus\\Runtime\\Step\\Tests\\": "packages/nexus-runtime-step/tests/",

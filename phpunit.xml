@@ -9,6 +9,7 @@
     <testsuites>
         <testsuite name="unit">
             <directory>packages/nexus-core/tests/Unit</directory>
+            <directory>packages/nexus-ddd-core/tests/Unit</directory>
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
