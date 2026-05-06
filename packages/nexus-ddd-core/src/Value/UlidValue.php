@@ -12,27 +12,31 @@ use Symfony\Component\Uid\Ulid;
  * @psalm-api
  * @psalm-immutable
  *
- * Minimal ULID-backed Identifier. Will be enriched in Task 10 to extend WrappedValue.
+ * @extends WrappedValue<string>
  */
-readonly class UlidValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
+readonly class UlidValue extends WrappedValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
 {
-    final public function __construct(private string $value)
+    final public function __construct(string $value)
     {
         if (! Ulid::isValid($value)) {
             throw InvalidIdentifierException::malformed(static::class, $value, 'not a valid ULID');
         }
+        parent::__construct($value);
     }
 
+    /**
+     * Identifier::value() — public accessor for canonical-string storage form.
+     * Delegates to inherited protected WrappedValue::getValue().
+     *
+     * @psalm-pure
+     */
     #[\Override]
     public function value(): string
     {
-        return $this->value;
-    }
+        /** @var string $v */
+        $v = $this->getValue();
 
-    #[\Override]
-    public function equals(Identifier $other): bool
-    {
-        return $other instanceof static && $other->value === $this->value;
+        return $v;
     }
 
     #[\Override]
@@ -40,4 +44,7 @@ readonly class UlidValue implements Identifier // phpcs:ignore SlevomatCodingSta
     {
         return new static($value);
     }
+
+    // equals(object $other): bool — inherited from WrappedValue; satisfies Identifier::equals(Identifier)
+    // because object is a supertype of Identifier (parameter contravariance).
 }

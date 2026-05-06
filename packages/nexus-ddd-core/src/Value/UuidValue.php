@@ -12,27 +12,26 @@ use Symfony\Component\Uid\Uuid;
  * @psalm-api
  * @psalm-immutable
  *
- * Minimal UUID-backed Identifier. Will be enriched in Task 10 to extend WrappedValue.
+ * @extends WrappedValue<string>
  */
-readonly class UuidValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
+readonly class UuidValue extends WrappedValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
 {
-    final public function __construct(private string $value)
+    final public function __construct(string $value)
     {
         if (! Uuid::isValid($value)) {
             throw InvalidIdentifierException::malformed(static::class, $value, 'not a valid UUID');
         }
+        parent::__construct($value);
     }
 
+    /** @psalm-pure */
     #[\Override]
     public function value(): string
     {
-        return $this->value;
-    }
+        /** @var string $v */
+        $v = $this->getValue();
 
-    #[\Override]
-    public function equals(Identifier $other): bool
-    {
-        return $other instanceof static && $other->value === $this->value;
+        return $v;
     }
 
     #[\Override]
