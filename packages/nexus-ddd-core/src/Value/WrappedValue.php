@@ -51,7 +51,7 @@ abstract readonly class WrappedValue
         return $fn($this->value);
     }
 
-    public function equals(WrappedValue $other): bool
+    public function equals(object $other): bool
     {
         return $other instanceof static && $other->value === $this->value;
     }
