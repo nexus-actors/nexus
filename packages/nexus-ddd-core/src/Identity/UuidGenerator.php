@@ -10,6 +10,7 @@ use Symfony\Component\Uid\Uuid;
 /** @psalm-api */
 final class UuidGenerator implements IdGenerator
 {
+    #[\Override]
     public function next(): Identifier
     {
         return new UuidValue((string) Uuid::v7());
