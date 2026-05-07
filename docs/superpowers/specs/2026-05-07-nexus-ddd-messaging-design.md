@@ -217,7 +217,7 @@ Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is
  *   public function __invoke(ConcreteCommand $command, MessageContext $ctx): void
  *
  * The second parameter is **optional** — declare it only if the handler
- * actually needs to read metadata (audit logging, branching on actor
+ * actually needs to read metadata (audit logging, observability,
  * kind, observability). Most domain handlers omit it; metadata threading
  * for nested dispatch happens implicitly via `CurrentMessageContext` (§5).
  *
@@ -260,7 +260,7 @@ interface EventListener {}
 
 **Why marker-only.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
 
-**Why optional `MessageContext` second parameter.** Domain handlers that don't need metadata stay clean — `__invoke(ConcreteCommand): void`, one argument, no framework noise. Handlers that legitimately need metadata (saga that decides based on actor kind; audit listener that logs the causation chain; observability handler that emits a span with trace context) declare the second parameter and read what they need without calling `CurrentMessageContext::current()` at every site.
+**Why optional `MessageContext` second parameter.** Domain handlers that don't need metadata stay clean — `__invoke(ConcreteCommand): void`, one argument, no framework noise. Handlers that legitimately need metadata (audit listener that logs the causation chain; observability handler that emits a span with trace context; saga that branches on the upstream conversation id) declare the second parameter and read what they need without calling `CurrentMessageContext::current()` at every site.
 
 Both forms are equivalent for *implicit propagation*: when the handler dispatches a nested command, the framework's `CurrentMessageContext` propagates causation/correlation/conversation/trace whether or not the handler took the second parameter. The MessageContext arg is purely a *read-side* convenience.
 
@@ -275,15 +275,16 @@ final class PlaceOrderHandler implements CommandHandler {
     }
 }
 
-// Audit listener — needs the actor for logging.
+// Audit listener — needs the causation chain for logging.
 final class OrderPlacedAuditListener implements EventListener {
     public function __construct(private readonly LoggerInterface $log) {}
 
     public function __invoke(OrderPlaced $event, MessageContext $ctx): void {
         $this->log->info('OrderPlaced', [
-            'orderId'  => $event->orderId->value(),
-            'actor'    => $ctx->metadata->actor->map(fn(ActorRef $a) => $a->id)->getOrElse(fn() => 'system'),
-            'causedBy' => $ctx->metadata->causationId->map(fn(MessageId $id) => $id->value())->getOrElse(fn() => 'root'),
+            'orderId'        => $event->orderId->value(),
+            'messageId'      => $ctx->metadata->id->value(),
+            'causedBy'       => $ctx->metadata->causationId->map(fn(MessageId $id) => $id->value())->getOrElse(fn() => 'root'),
+            'correlationId'  => $ctx->metadata->correlationId->map(fn(MessageId $id) => $id->value())->getOrElse(fn() => 'root'),
         ]);
     }
 }
@@ -297,7 +298,7 @@ This mirrors the Symfony Messenger handler convention exactly (Symfony allows `_
 
 > **Audience for this section: bus implementers and framework contributors.** Domain handlers do NOT interact with `CurrentMessageContext` directly except through the boundary helper `within()`. If you're writing aggregates / PMs / handlers, this section is informational; if you're writing a bus adapter or runtime integration, this is your contract.
 
-The metadata-threading discipline (causation, correlation, conversation, trace context, actor) is a **framework concern**, not a domain concern. Handlers shouldn't have to remember to call `forCausedMessage()` on every nested dispatch — the framework knows which message is currently being processed and propagates automatically.
+The metadata-threading discipline (causation, correlation, conversation, trace context) is a **framework concern**, not a domain concern. Handlers shouldn't have to remember to call `forCausedMessage()` on every nested dispatch — the framework knows which message is currently being processed and propagates automatically.
 
 ### The ambient-context primitive
 
@@ -417,7 +418,7 @@ final class CurrentMessageContext {
     /**
      * Application-boundary helper: run $callback with $ctx as the root
      * context, then restore. Use this in HTTP middleware / CLI bootstrap
-     * to establish the actor and trace identity for an incoming request.
+     * to establish the trace identity for an incoming request.
      *
      * Discipline: ambient stack is read at *dispatch time*, not at
      * handler-invocation time. For an async dispatch (queued bus), what
@@ -513,7 +514,7 @@ The `nexus-ddd-bus-actor` adapter spec MUST document its per-fiber/per-coroutine
 
 ### Top-level orphan-dispatch policy
 
-When `dispatchCommand` is called with no surrounding `within()` (no in-flight context), the bus falls back to `MessageMetadata::root()` with `actor: null`. Bus implementations MUST log this fallback at WARNING level — silent root-fallback is how production systems end up with messages that have no audit trail. Teams that legitimately dispatch from a non-boundary context (e.g., test setup, ops scripts) opt in via an explicit `MessageMetadata::root(actor: ActorRef::system('ops-cli'))` inside `within()`.
+When `dispatchCommand` is called with no surrounding `within()` (no in-flight context), the bus falls back to `MessageMetadata::root()` with all optional fields `Option::none()`. Bus implementations MUST log this fallback at WARNING level — silent root-fallback is how production systems end up with messages that have no traceable origin. Teams that legitimately dispatch from a non-boundary context (e.g., test setup, ops scripts) opt in via an explicit `CurrentMessageContext::within()` block; the warning is the canary that this wasn't done.
 
 ### How a bus implementation uses it
 
@@ -556,11 +557,11 @@ Code at the application boundary establishes the root context:
 ```php
 // HTTP controller — extract authenticated user, propagate trace context, dispatch.
 public function placeOrder(Request $request, CommandBus $bus): Response {
-    $rootMeta = MessageMetadata::root(
-        actor: ActorRef::user($request->user()->id),
-        traceParent: $request->headers->get('traceparent'),
-        traceState:  $request->headers->get('tracestate'),
-    );
+    $rootMeta = MessageMetadata::root($this->clock)
+        ->withTrace(
+            $request->headers->get('traceparent'),
+            Option::fromNullable($request->headers->get('tracestate')),
+        );
 
     CurrentMessageContext::within(new MessageContext($rootMeta), function () use ($bus, $request) {
         $bus->dispatchCommand(new PlaceOrder(
@@ -614,37 +615,6 @@ final readonly class MessageId extends UlidValue {
 }
 ```
 
-### `ActorRef`
-
-`MessageMetadata` carries a typed actor reference, not a free string. The kind/id split makes audit trails machine-readable and prevents the "is `'system'` a username?" ambiguity that plagues string-based audit fields.
-
-```php
-namespace Monadial\Nexus\Ddd\Messaging\Identity;
-
-/**
- * @psalm-api
- * @psalm-immutable
- *
- * Identifier of the actor responsible for a message. `kind` is the
- * actor category (`'user'`, `'system'`, `'service'`); `id` is the
- * stable identifier within that kind.
- *
- *   ActorRef::user('01HK...')             // human user, ULID id
- *   ActorRef::system('payments-worker')   // background process
- *   ActorRef::service('shipping-svc')     // external service
- */
-final readonly class ActorRef {
-    public function __construct(
-        public string $kind,
-        public string $id,
-    ) {}
-
-    public static function user(string $id): self    { return new self('user', $id); }
-    public static function system(string $id): self  { return new self('system', $id); }
-    public static function service(string $id): self { return new self('service', $id); }
-}
-```
-
 ### `MessageMetadata`
 
 ```php
@@ -655,7 +625,7 @@ final readonly class ActorRef {
  * Required metadata on every Envelope. The fields are non-negotiable
  * because they're load-bearing for audit trails (causation), tracing
  * (correlation/conversation/W3C trace context), idempotency (id), schema
- * evolution (schemaVersion), and security/audit (actor).
+ * evolution (schemaVersion), and observability (W3C trace context).
  *
  * Anything *not* in this list lives in a Stamp.
  *
@@ -679,7 +649,6 @@ final readonly class MessageMetadata {
      * @param Option<MessageId> $causationId
      * @param Option<MessageId> $correlationId
      * @param Option<MessageId> $conversationId
-     * @param Option<ActorRef> $actor
      * @param Option<string> $traceParent           W3C traceparent header value
      * @param Option<string> $traceState            W3C tracestate header value
      * @param Option<DateTimeImmutable> $expiresAt  optional TTL — bus impls SHOULD drop expired
@@ -690,7 +659,6 @@ final readonly class MessageMetadata {
         public Option $causationId,
         public Option $correlationId,
         public Option $conversationId,
-        public Option $actor,
         public int $schemaVersion,
         public Option $traceParent,
         public Option $traceState,
@@ -711,17 +679,12 @@ final readonly class MessageMetadata {
             causationId: Option::none(),
             correlationId: Option::none(),
             conversationId: Option::none(),
-            actor: Option::none(),
             schemaVersion: 1,
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
         );
     }
-
-    /** @return self with the actor set. */
-    #[\NoDiscard(...)]
-    public function withActor(ActorRef $actor): self;
 
     /** @return self with W3C trace context set. */
     #[\NoDiscard(...)]
@@ -736,7 +699,7 @@ final readonly class MessageMetadata {
      * message becomes the new message's causation; correlation and
      * conversation propagate (initialized to the original id if absent —
      * the very first message in a chain is its own correlation root);
-     * actor and trace context flow forward unchanged.
+     * trace context flows forward unchanged.
      *
      * **@internal — called by the framework, not by domain code.** Bus
      * implementations call this when reading `CurrentMessageContext` to
@@ -752,7 +715,6 @@ final readonly class MessageMetadata {
             // root and the new message's correlation is our own id.
             correlationId: $this->correlationId->orElse(fn() => Option::some($this->id)),
             conversationId: $this->conversationId->orElse(fn() => Option::some($this->id)),
-            actor: $this->actor,
             schemaVersion: $this->schemaVersion,
             traceParent: $this->traceParent,
             traceState: $this->traceState,
@@ -802,11 +764,11 @@ A 3-hop chain showing how the framework threads metadata automatically. Domain h
 ```
 Hop 1 — outside the system, HTTP controller (the only place metadata is named):
   CurrentMessageContext::within(
-      new MessageContext(MessageMetadata::root(actor: ActorRef::user('alice'), traceParent: $tp)),
+      new MessageContext(MessageMetadata::root($clock)->withTrace($tp, Option::none())),
       fn() => $commandBus->dispatchCommand(new PlaceOrder(...))
   );
   // Bus reads CurrentMessageContext::current()
-  // Effective envelope metadata: id=R, causation=null, correlation=R, conversation=R, actor=alice, traceParent=$tp
+  // Effective envelope metadata: id=R, causation=null, correlation=R, conversation=R, traceParent=$tp
 
 Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
   public function __invoke(PlaceOrder $cmd): void {
@@ -815,14 +777,14 @@ Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
                                      // Staging flush -> EventBus.publishEvent(new OrderPlaced(...))
                                      // EventBus reads CurrentMessageContext::current() -> derives:
                                      // Effective envelope metadata for OrderPlaced:
-                                     //   id=E1, causation=R, correlation=R, conversation=R, actor=alice
+                                     //   id=E1, causation=R, correlation=R, conversation=R, traceParent=$tp
   }
 
 Hop 3 — OrderFulfillmentProcess saga consumes OrderPlaced (no MessageContext arg):
   public function __invoke(OrderPlaced $event): void {
       $this->dispatchCommand(new ChargePayment(...));
       // Bus reads CurrentMessageContext::current() (which is the OrderPlaced context)
-      // Derives: id=C1, causation=E1, correlation=R, conversation=R, actor=alice
+      // Derives: id=C1, causation=E1, correlation=R, conversation=R, traceParent=$tp
   }
 ```
 
@@ -959,7 +921,7 @@ final class RegisterUserHandler implements CommandHandler {
 // 3. Dispatch from the application boundary (HTTP controller, CLI, etc.).
 //    The boundary code is the only place that names metadata.
 CurrentMessageContext::within(
-    new MessageContext(MessageMetadata::root(actor: ActorRef::user($currentUserId))),
+    new MessageContext(MessageMetadata::root($clock)),
     fn() => $commandBus->dispatchCommand(new RegisterUser($newUserId, $email, $displayName))
 );
 
@@ -972,7 +934,7 @@ final class RegisterUserHandlerTest extends TestCase {
 
         $cmd = new RegisterUser($id, 'a@b.c', 'Alice');
         CurrentMessageContext::within(
-            new MessageContext(MessageMetadata::root(actor: ActorRef::user('test-user'))),
+            new MessageContext(MessageMetadata::root($clock)),
             fn() => $handler($cmd)
         );
 
@@ -1721,7 +1683,7 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 - **Bus interface signature snapshot test** — pins the public method signatures of `CommandBus`, `QueryBus`, `EventBus` (return types, parameter types, exception annotations) into a fixture file; fails CI if any signature drifts without a coordinated fixture update. Five downstream packages will compile against these three interfaces; one quietly-added parameter breaks every adapter.
 - **Three-root exception disjointness test** — `NexusDddException`, `DomainException`, `MessagingException` extend `RuntimeException` directly and not each other.
 - **TransientFailure ∩ TerminalFailure = ∅ test** — every concrete exception in the package implements at most one of the markers (`assertFalse($e instanceof TransientFailure && $e instanceof TerminalFailure)` for each). Otherwise a fundamentally terminal failure could escape into the retry loop.
-- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `actor`, `traceParent`, `traceState` correctly across hops; `expiresAt` does NOT propagate.
+- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `traceParent`, `traceState` correctly across hops; `expiresAt` does NOT propagate.
 - `Envelope::with()` / `get()` round-trip stamps.
 - `RetryPolicy` first-match-wins and `giveUpSet` precedence.
 - **`MessageStagingContractTest`** — both `InMemoryMessageStaging` and any future impl pass; pins discard/flush/FIFO/producer-supplied-id semantics.
@@ -1747,7 +1709,7 @@ Beyond code:
 - **`InMemoryMessageInbox`** with full test coverage
 - **`StaticStackContextStorage`** + **`ReplayingContextStorage`** with full test coverage
 - **Test doubles** (`RecordingCommandBus`, `RecordingEventBus`, `RecordingQueryBus`) in `tests/Support/`
-- **`withRootContext(ActorRef $actor, callable $fn)` test helper** in `tests/Support/` — wraps `CurrentMessageContext::within(new MessageContext(MessageMetadata::root(actor: $actor)), $fn)` so handler unit tests stay one line
+- **`withRootContext(callable $fn)` test helper** in `tests/Support/` — wraps `CurrentMessageContext::within(new MessageContext(MessageMetadata::root($clock)), $fn)` so handler unit tests stay one line
 
 ---
 
@@ -1788,7 +1750,6 @@ The locked design (all 13 round-2/EIP patches applied):
 | Three exception roots disjoint, each extends `RuntimeException` directly | All reviewers |
 | `MessageId extends UlidValue`, producer-supplied authoritative (§6.1) | Greg |
 | `MessageMetadata::forCausedMessage()` canonical propagation | Vaughn |
-| `ActorRef` typed VO for actor (kind/id split) | Vaughn |
 | `traceParent` / `traceState` core metadata (W3C Trace Context) | Udi |
 | `schemaVersion` is wire-payload-version | Greg |
 | Locator contracts ship in v1 | Udi |
