@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Aggregate\Internal;
 
+use Closure;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
 use ReflectionClass;
-use ReflectionMethod;
 
 /**
  * @internal Used by AggregateRoot/EventSourcedAggregateRoot in the parent namespace;
@@ -15,14 +15,18 @@ use ReflectionMethod;
  *
  * Resolves and invokes the `applyXxx` method on an entity for a given event.
  * Convention: method name = `apply` + event class short name (case-sensitive).
- * Per-class resolution is cached (one ReflectionMethod per (entityClass, eventClass)).
+ *
+ * Per (entityClass, eventClass) pair the dispatcher caches a class-scoped Closure
+ * (bound via Closure::bind to the entity's class scope) so subsequent dispatches
+ * skip ReflectionMethod::invoke and use direct dynamic dispatch — only the first
+ * resolution touches reflection.
  *
  * Cross-namespace short-name collisions throw ApplyMethodAmbiguousException at
  * resolution time.
  */
 final class ApplyDispatcher
 {
-    /** @var array<class-string, array<class-string, ReflectionMethod>> */
+    /** @var array<class-string, array<class-string, Closure(object, object): void>> */
     private array $cache = [];
 
     /** @var array<class-string, array<string, list<class-string>>> */
@@ -30,20 +34,22 @@ final class ApplyDispatcher
 
     public function dispatch(object $entity, object $event): void
     {
-        $method = $this->resolve($entity::class, $event::class);
-        $method->invoke($entity, $event);
+        $entityClass = $entity::class;
+        $eventClass = $event::class;
+
+        $invoker = $this->cache[$entityClass][$eventClass]
+            ?? $this->resolve($entityClass, $eventClass);
+
+        $invoker($entity, $event);
     }
 
     /**
      * @param class-string $entityClass
      * @param class-string $eventClass
+     * @return Closure(object, object): void
      */
-    public function resolve(string $entityClass, string $eventClass): ReflectionMethod
+    private function resolve(string $entityClass, string $eventClass): Closure
     {
-        if (isset($this->cache[$entityClass][$eventClass])) {
-            return $this->cache[$entityClass][$eventClass];
-        }
-
         $shortName = $this->shortName($eventClass);
         $methodName = 'apply' . $shortName;
 
@@ -53,8 +59,17 @@ final class ApplyDispatcher
             throw ApplyMethodNotFoundException::for($entityClass, $eventClass);
         }
 
-        $method = $reflection->getMethod($methodName);
-        $this->cache[$entityClass][$eventClass] = $method;
+        /** @var Closure(object, object): void $invoker */
+        $invoker = Closure::bind(
+            static function (object $entity, object $event) use ($methodName): void {
+                /** @psalm-suppress MixedMethodCall */
+                $entity->$methodName($event);
+            },
+            null,
+            $entityClass,
+        );
+
+        $this->cache[$entityClass][$eventClass] = $invoker;
         $this->shortNameIndex[$entityClass][$shortName][] = $eventClass;
 
         if (count($this->shortNameIndex[$entityClass][$shortName]) > 1) {
@@ -65,7 +80,7 @@ final class ApplyDispatcher
             );
         }
 
-        return $method;
+        return $invoker;
     }
 
     /** @param class-string $fqn */
