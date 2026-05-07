@@ -87,6 +87,53 @@ All four must pass. The hooks execute through `docker compose exec -T php`.
 - Trailing commas in all multiline contexts
 - Psalm runs in strict mode (level 1) — explicit `(float)` casts don't satisfy `InvalidOperand` for int/float mixing; use `@psalm-suppress InvalidOperand` on the **method docblock** instead
 
+## Never use null — use `Option<T>` (REQUIRED)
+
+**Hard rule across all packages.** Absent values are modeled with `Fp\Functional\Option\Option<T>` (from `fp4php/functional`), never with `null`, `?T` types, or `mixed|null` returns.
+
+Why: null forces every consumer to remember a runtime check; Option lifts the absence to the type system where Psalm + the `Option::isSome()` / `Option::map()` / `Option::flatMap()` / `Option::getOrElse()` API force the consumer to handle both branches. PHP's `?T` on a return type is silent — Option is loud.
+
+Conventions:
+
+- **Field types on value objects** — `Option<T>` for optional fields:
+  ```php
+  /** @var Option<ActorRef> */
+  public Option $actor;       // good
+
+  public ?ActorRef $actor;    // FORBIDDEN
+  ```
+
+- **Return types** — `Option<T>` when "may be absent":
+  ```php
+  public function current(): Option;   // /** @return Option<MessageContext> */
+
+  public function current(): ?MessageContext;   // FORBIDDEN
+  ```
+
+- **Method parameters** — `Option<T>` when the parameter is optional-by-meaning. PHP's `Option::none()` is not a const expression so it cannot be a default value; callers pass `Option::none()` explicitly:
+  ```php
+  /** @param Option<MessageId> $producerId */
+  public function appendCommand(Command $command, Option $producerId): void;
+
+  // caller:
+  $staging->appendCommand($cmd, Option::none());
+  $staging->appendCommand($cmd, Option::some($id));
+  ```
+
+- **Mutators on read-mostly state** — instead of `set(null)` to clear, ship a `clear()` method:
+  ```php
+  public static function setStorage(ContextStorage $s): void;
+  public static function resetStorage(): void;       // no nullable setter
+
+  public static function setStorage(?ContextStorage $s): void;   // FORBIDDEN
+  ```
+
+Existing nullable types in code that predate this rule are tech debt — convert them when you touch the file. New code MUST follow the rule. The `nexus-psalm` plugin will (in a future phase) ship a rule that flags `?T` in package code under `packages/nexus-ddd-*/src/`.
+
+Two exceptions, narrowly scoped:
+- `?ClockInterface $clock = null` constructor parameters where the implementation falls back to a default clock — defensible only because PSR-20 uses null-default itself, and the body immediately replaces it (`$clock ?? new SystemClock()`). Prefer requiring the clock explicitly when you can.
+- Third-party type signatures we don't own (PSR contracts, Symfony/Doctrine return types). Wrap them at the boundary: `Option::fromNullable($possiblyNull)` immediately after the call.
+
 ## PSR Contracts (REQUIRED — prefer over framework-specific deps)
 
 **Always depend on PSR contracts when one exists for the concern, never on a framework-specific implementation.** Framework dispatchers/loggers/clocks/containers (Symfony, Laravel, Monolog, etc.) all implement the PSR interface; consumers wire whichever implementation suits their stack. Hard-coding the framework dep in our packages forces every consumer to bring it in — that's contamination.

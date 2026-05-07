@@ -102,27 +102,26 @@ interface Query {}
 
 `DomainEvent` and `PublishableDomainEvent` already live in `nexus-ddd-core` — this package does not redeclare them.
 
-### Bus interfaces — type-specialized; user-facing single argument
+### Bus interfaces — strictly single-argument
 
 ```php
 interface CommandBus {
     /**
      * Dispatch a command to its (single) handler. The bus internally
-     * wraps the message in an Envelope using the ambient
-     * `CurrentMessageContext` (§5) for causation/correlation propagation;
-     * domain code passes only the raw command.
+     * wraps the message in an Envelope, generating a fresh `MessageId`
+     * and reading metadata from the ambient `CurrentMessageContext` (§5)
+     * for causation/correlation propagation.
+     *
+     * `MessageId` is generated when the message is *created* (here, at
+     * dispatch — the moment the framework first sees a fresh raw
+     * Command) or *deserialized* (when an envelope comes back from the
+     * wire — see `EnvelopedCommandBus` below). Domain code never thinks
+     * about `MessageId`; the bus owns its lifecycle.
      *
      * Returns void — the post-handler outcome flows out via events;
      * idempotency and retry are bus-impl concerns.
-     *
-     * **Producer-supplied id** (`$id` parameter, optional). Framework
-     * code — `MessageStaging` flush, DLQ replay, transport recovery —
-     * passes a deterministic `MessageId` here when the producer (PM,
-     * aggregate) computed it for crash-replay safety (§6.1). The bus
-     * MUST honor this id and MUST NOT regenerate. Domain code passes
-     * nothing; the bus generates a fresh id.
      */
-    public function dispatchCommand(Command $command, ?MessageId $id = null): void;
+    public function dispatchCommand(Command $command): void;
 }
 
 interface QueryBus {
@@ -131,7 +130,7 @@ interface QueryBus {
      * @param Query<TResult> $query
      * @return TResult
      */
-    public function dispatchQuery(Query $query, ?MessageId $id = null): mixed;
+    public function dispatchQuery(Query $query): mixed;
 }
 
 interface EventBus {
@@ -140,13 +139,69 @@ interface EventBus {
      * "Publish" verb (not "dispatch") matches the broadcast semantics —
      * the publisher does not know who listens.
      */
-    public function publishEvent(DomainEvent $event, ?MessageId $id = null): void;
+    public function publishEvent(DomainEvent $event): void;
 }
 ```
 
-**Single argument for domain code.** Domain handlers and application code call `$bus->dispatchCommand($cmd)` — one argument. The optional `?MessageId` second parameter is for framework-internal callers (staging flush, DLQ replay) that supply a producer-deterministic id; user code never passes it. The Envelope (§6) is the *transport-layer* wrapper; the bus constructs it internally before crossing the transport boundary, reading metadata from the ambient `CurrentMessageContext`. Domain code never instantiates an `Envelope`.
+**Strictly single-argument for everyone.** Domain code, application code, framework code — every caller passes only the raw message. No `MessageId` parameter, no `Envelope` parameter. The Envelope (§6) is constructed *inside* the bus at the moment the message is first seen. Domain code never instantiates an `Envelope` or thinks about `MessageId`.
 
-**Why an optional parameter (not a separate `EnvelopedDispatcher` interface).** Two interfaces would force every adapter to implement both, double the contract surface, and double the Psalm rules. One interface with an optional argument is Symfony-Messenger-shaped (`MessageBusInterface::dispatch($message, $stamps = [])`) and keeps the surface minimal.
+### `EnvelopedCommandBus` / `EnvelopedQueryBus` / `EnvelopedEventBus` — framework-internal re-dispatch
+
+For paths where the message has *already* been enveloped (staging flush after a producer-deterministic id was minted at staging time; DLQ replay; transport recovery), the bus exposes a framework-internal extension that accepts the existing `Envelope` instead of constructing a fresh one. The envelope already carries its `MessageId`; the bus respects it (per §6.1's producer-supplied-id-authoritative rule).
+
+```php
+/**
+ * @psalm-api
+ *
+ * @internal Framework-facing — used by `MessageStaging` flush, DLQ replay,
+ *           and transport recovery. Domain code uses `CommandBus` directly
+ *           and never sees this interface.
+ */
+interface EnvelopedCommandBus extends CommandBus {
+    /**
+     * Dispatch a command via an envelope that already exists — the
+     * envelope's `MessageId`, metadata, and stamps are honored verbatim.
+     * Used when re-dispatching a previously-staged or previously-failed
+     * message; never call this for fresh dispatches.
+     *
+     * @param Envelope<Command> $envelope
+     */
+    public function dispatchEnveloped(Envelope $envelope): void;
+}
+
+/** @internal */
+interface EnvelopedQueryBus extends QueryBus {
+    /**
+     * @template TResult
+     * @param Envelope<Query<TResult>> $envelope
+     * @return TResult
+     */
+    public function dispatchEnveloped(Envelope $envelope): mixed;
+}
+
+/** @internal */
+interface EnvelopedEventBus extends EventBus {
+    /** @param Envelope<DomainEvent> $envelope */
+    public function publishEnveloped(Envelope $envelope): void;
+}
+```
+
+Bus implementations implement the `Enveloped*` subinterface; they get the simple `*Bus` contract for free (the public `dispatchCommand($cmd)` method delegates internally to `dispatchEnveloped(new Envelope($cmd, $freshMetadata))`).
+
+**Why a subinterface and not an optional argument.** The user-facing API stays *strictly* one-argument — no MessageId param to confuse domain authors, no temptation to thread metadata manually. The framework-internal pathway is explicit and discoverable (`@internal`, distinct interface, distinct method name). Two-interfaces-one-implementation costs less than one-interface-with-domain-pollution.
+
+### When is `MessageId` generated?
+
+Only at two moments, never as a parameter to anything:
+
+1. **Creation** — when the framework first sees a fresh raw message:
+   - User code calls `$bus->dispatchCommand($cmd)` → bus generates `MessageId` and constructs `Envelope`
+   - PM/aggregate code calls `$staging->appendCommand($cmd, Option::some($producerId))` → staging uses `$producerId` (deterministic, for crash-replay safety) and constructs `Envelope` immediately at staging time
+   - PM/aggregate calls `$staging->appendCommand($cmd, Option::none())` → staging generates `MessageId` at staging time
+
+2. **Deserialization** — when an `Envelope` is reconstituted from the wire (transport recovery, DLQ replay, outbox dispatcher, queue consumer): the `MessageId` is *restored* from the serialized form, never regenerated.
+
+`MessageId` lives on the `Envelope`. The Envelope lives on the wire. Domain messages stay clean.
 
 Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is greppable, distinct from `$bus->publishEvent(...)`. Adapters that wrap a single underlying transport (e.g., a Symfony Messenger adapter) implement all three by holding the configured-bus instance and casting at the seam.
 
@@ -236,7 +291,9 @@ interface ContextStorage {
     public function snapshot(): array;
     public function push(MessageContext $ctx): void;
     public function pop(): void;
-    public function current(): ?MessageContext;
+
+    /** @return Option<MessageContext> */
+    public function current(): Option;
 
     /**
      * Replace the entire stack with the given snapshot. Used by
@@ -260,7 +317,9 @@ final class StaticStackContextStorage implements ContextStorage {
     public function snapshot(): array { return $this->stack; }
     public function push(MessageContext $ctx): void { $this->stack[] = $ctx; }
     public function pop(): void { array_pop($this->stack); }
-    public function current(): ?MessageContext { return array_last($this->stack); }
+
+    /** @return Option<MessageContext> */
+    public function current(): Option { return Option::fromNullable(array_last($this->stack)); }
     public function restore(array $stack): void { $this->stack = $stack; }
 }
 
@@ -298,12 +357,17 @@ final class CurrentMessageContext {
      * (e.g., the Swoole adapter installs a coroutine-keyed storage).
      * Tests use this to install a fresh storage per test for isolation.
      */
-    public static function setStorage(?ContextStorage $storage): void {
+    public static function setStorage(ContextStorage $storage): void {
         self::$storage = $storage;
     }
 
-    /** @return MessageContext|null  null at top-level (no in-flight message). */
-    public static function current(): ?MessageContext {
+    /** Reset to the default `StaticStackContextStorage`. Used at end of test. */
+    public static function resetStorage(): void {
+        self::$storage = null;
+    }
+
+    /** @return Option<MessageContext>  Option::none() at top-level (no in-flight message). */
+    public static function current(): Option {
         return self::storage()->current();
     }
 
@@ -386,7 +450,9 @@ final class ReplayingContextStorage implements ContextStorage {
         );
     }
     public function pop(): void { /* no-op — push throws first */ }
-    public function current(): ?MessageContext { return null; }
+
+    /** @return Option<MessageContext> */
+    public function current(): Option { return Option::none(); }
     public function restore(array $stack): void { /* no-op during replay */ }
 }
 ```
@@ -576,40 +642,61 @@ final readonly class ActorRef {
  * production needs them within six months of go-live.
  */
 final readonly class MessageMetadata {
+    /**
+     * @param Option<MessageId> $causationId
+     * @param Option<MessageId> $correlationId
+     * @param Option<MessageId> $conversationId
+     * @param Option<ActorRef> $actor
+     * @param Option<string> $traceParent           W3C traceparent header value
+     * @param Option<string> $traceState            W3C tracestate header value
+     * @param Option<DateTimeImmutable> $expiresAt  optional TTL — bus impls SHOULD drop expired
+     */
     public function __construct(
         public MessageId $id,
         public DateTimeImmutable $occurredAt,
-        public ?MessageId $causationId = null,
-        public ?MessageId $correlationId = null,
-        public ?MessageId $conversationId = null,
-        public ?ActorRef $actor = null,
-        public int $schemaVersion = 1,
-        public ?string $traceParent = null,    // W3C traceparent header value
-        public ?string $traceState = null,     // W3C tracestate header value
-        public ?DateTimeImmutable $expiresAt = null,   // optional TTL — bus impls SHOULD drop expired
+        public Option $causationId,
+        public Option $correlationId,
+        public Option $conversationId,
+        public Option $actor,
+        public int $schemaVersion,
+        public Option $traceParent,
+        public Option $traceState,
+        public Option $expiresAt,
     ) {}
 
     /**
      * Application-boundary factory: synthesize a root MessageMetadata for
      * the first message in a chain (HTTP controller, CLI, scheduled job).
+     * All optional fields default to `Option::none()`; use the `with*`
+     * builder methods to attach them.
      */
     #[\NoDiscard('the constructed metadata is the entire point of this call')]
-    public static function root(
-        ?ActorRef $actor = null,
-        ?string $traceParent = null,
-        ?string $traceState = null,
-        ?ClockInterface $clock = null,
-        ?DateTimeImmutable $expiresAt = null,
-    ): self {
+    public static function root(ClockInterface $clock): self {
         return new self(
             id: MessageId::generate(),
-            occurredAt: ($clock ?? new SystemClock())->now(),
-            actor: $actor,
-            traceParent: $traceParent,
-            traceState: $traceState,
-            expiresAt: $expiresAt,
+            occurredAt: $clock->now(),
+            causationId: Option::none(),
+            correlationId: Option::none(),
+            conversationId: Option::none(),
+            actor: Option::none(),
+            schemaVersion: 1,
+            traceParent: Option::none(),
+            traceState: Option::none(),
+            expiresAt: Option::none(),
         );
     }
+
+    /** @return self with the actor set. */
+    #[\NoDiscard(...)]
+    public function withActor(ActorRef $actor): self;
+
+    /** @return self with W3C trace context set. */
+    #[\NoDiscard(...)]
+    public function withTrace(string $traceParent, Option $traceState): self;
+
+    /** @return self with the TTL set. */
+    #[\NoDiscard(...)]
+    public function withExpiresAt(DateTimeImmutable $expiresAt): self;
 
     /**
      * Derive metadata for a message *caused by* this one. The current
@@ -627,14 +714,17 @@ final readonly class MessageMetadata {
         return new self(
             id: $newId,
             occurredAt: $now,
-            causationId: $this->id,
-            correlationId: $this->correlationId ?? $this->id,
-            conversationId: $this->conversationId ?? $this->id,
+            causationId: Option::some($this->id),
+            // If we already have a correlation, propagate it; else this is the
+            // root and the new message's correlation is our own id.
+            correlationId: $this->correlationId->orElse(fn() => Option::some($this->id)),
+            conversationId: $this->conversationId->orElse(fn() => Option::some($this->id)),
             actor: $this->actor,
             schemaVersion: $this->schemaVersion,
             traceParent: $this->traceParent,
             traceState: $this->traceState,
             // expiresAt does NOT propagate — TTL is per-message, not per-chain
+            expiresAt: Option::none(),
         );
     }
 }
@@ -753,10 +843,10 @@ final readonly class Envelope {
     /**
      * @template S of Stamp
      * @param class-string<S> $stampClass
-     * @return S|null
+     * @return Option<S>
      */
-    public function get(string $stampClass): ?Stamp {
-        return $this->stamps[$stampClass] ?? null;
+    public function get(string $stampClass): Option {
+        return Option::fromNullable($this->stamps[$stampClass] ?? null);
     }
 }
 ```
@@ -790,10 +880,10 @@ final readonly class MessageContext {
     /**
      * @template S of Stamp
      * @param class-string<S> $stampClass
-     * @return S|null
+     * @return Option<S>
      */
-    public function stamp(string $stampClass): ?Stamp {
-        return $this->stamps[$stampClass] ?? null;
+    public function stamp(string $stampClass): Option {
+        return Option::fromNullable($this->stamps[$stampClass] ?? null);
     }
 }
 ```
@@ -1161,22 +1251,28 @@ interface MessageStaging {
     /**
      * Stage a command for post-commit dispatch.
      *
-     * Producers (PMs, ES aggregates) that need crash-replay-safe
-     * deterministic MessageIds supply $id explicitly — the bus will
-     * honor it via §6.1's producer-supplied-id-authoritative rule.
-     * If $id is null, the bus generates one at flush time.
+     * Producers (PMs, ES aggregates) supply a deterministic `MessageId`
+     * via `Option::some($id)` for crash-replay safety; staging respects
+     * it. Application code (HTTP controller, CLI) passes `Option::none()`
+     * and staging generates a fresh id at staging time.
      *
-     * @param ?MessageId $id  Optional producer-supplied deterministic id.
-     *                        For PM-emitted commands: hash(pmId, baseStreamSeq, ordinal).
-     *                        For aggregate-emitted: hash(aggregateId, eventStreamSequence).
-     *                        For one-off application commands: null.
+     * Either way, the `MessageId` is set the moment the message is
+     * staged — i.e., at *creation* (per the §6.1 rule "MessageId is
+     * generated when the message is created or deserialized"). Staging
+     * builds the `Envelope` immediately and dispatches via
+     * `EnvelopedCommandBus::dispatchEnveloped()` at flush time.
+     *
+     * @param Option<MessageId> $producerId
+     *        For PM-emitted commands: Option::some(hash(pmId, baseStreamSeq, ordinal)).
+     *        For aggregate-emitted: Option::some(hash(aggregateId, eventStreamSequence)).
+     *        For one-off application commands: Option::none().
      */
-    public function appendCommand(Command $command, ?MessageId $id = null): void;
+    public function appendCommand(Command $command, Option $producerId): void;
 
-    /** @param ?MessageId $id  Same producer-supplied-id semantics as appendCommand. */
-    public function appendEvent(DomainEvent $event, ?MessageId $id = null): void;
+    /** @param Option<MessageId> $producerId  Same producer-id semantics as appendCommand. */
+    public function appendEvent(DomainEvent $event, Option $producerId): void;
 
-    public function flush(): void;     // post-commit — buses invoked
+    public function flush(): void;     // post-commit — EnvelopedXxxBus.dispatchEnveloped invoked
     public function discard(): void;   // post-rollback — buffer cleared
 }
 
@@ -1206,24 +1302,40 @@ Ship `InMemoryMessageStaging` + `InMemoryUnitOfWork` in this package. They're su
 
 ```php
 final class InMemoryMessageStaging implements MessageStaging {
-    /** @var list<array{0: Command, 1: ?MessageId}> */
-    private array $commands = [];
+    /** @var list<Envelope<Command>> */
+    private array $commandEnvelopes = [];
 
-    /** @var list<array{0: DomainEvent, 1: ?MessageId}> */
-    private array $events = [];
+    /** @var list<Envelope<DomainEvent>> */
+    private array $eventEnvelopes = [];
 
     public function __construct(
-        private readonly CommandBus $commandBus,
-        private readonly EventBus $eventBus,
+        private readonly EnvelopedCommandBus $commandBus,
+        private readonly EnvelopedEventBus $eventBus,
+        private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
-    public function appendCommand(Command $command, ?MessageId $id = null): void {
-        $this->commands[] = [$command, $id];
+    /** @param Option<MessageId> $producerId */
+    public function appendCommand(Command $command, Option $producerId): void {
+        // Build the Envelope NOW — at staging time, the message is "created"
+        // (per §6.1's rule). MessageId is either producer-supplied or freshly
+        // generated. Subsequent flush dispatches the existing envelope.
+        $this->commandEnvelopes[] = new Envelope($command, $this->buildMetadata($producerId));
     }
 
-    public function appendEvent(DomainEvent $event, ?MessageId $id = null): void {
-        $this->events[] = [$event, $id];
+    /** @param Option<MessageId> $producerId */
+    public function appendEvent(DomainEvent $event, Option $producerId): void {
+        $this->eventEnvelopes[] = new Envelope($event, $this->buildMetadata($producerId));
+    }
+
+    /** @param Option<MessageId> $producerId */
+    private function buildMetadata(Option $producerId): MessageMetadata {
+        $id = $producerId->getOrElse(fn() => MessageId::generate());
+
+        // Read ambient context to derive child metadata; if absent, root.
+        return CurrentMessageContext::current()
+            ->map(fn(MessageContext $parent) => $parent->metadata->forCausedMessage($id, $this->clock->now()))
+            ->getOrElse(fn() => MessageMetadata::root($this->clock)->forCausedMessage($id, $this->clock->now()));
     }
 
     /**
@@ -1234,10 +1346,6 @@ final class InMemoryMessageStaging implements MessageStaging {
      * (record state change as event AFTER coordinating commands
      * that depend on the state change).
      *
-     * Document this choice prominently — consumers that accidentally
-     * depend on flush ordering and then swap to OutboxMessageStaging
-     * will not break only if the outbox preserves the same order.
-     *
      * **Production warning** logged on every flush — see class docblock.
      */
     public function flush(): void {
@@ -1247,19 +1355,19 @@ final class InMemoryMessageStaging implements MessageStaging {
             . 'Use a persistent staging implementation (OutboxMessageStaging) in production.',
         );
 
-        foreach ($this->commands as [$cmd, $id]) {
-            $this->commandBus->dispatchCommand($cmd, $id);
+        foreach ($this->commandEnvelopes as $envelope) {
+            $this->commandBus->dispatchEnveloped($envelope);
         }
-        foreach ($this->events as [$evt, $id]) {
-            $this->eventBus->publishEvent($evt, $id);
+        foreach ($this->eventEnvelopes as $envelope) {
+            $this->eventBus->publishEnveloped($envelope);
         }
-        $this->commands = [];
-        $this->events = [];
+        $this->commandEnvelopes = [];
+        $this->eventEnvelopes = [];
     }
 
     public function discard(): void {
-        $this->commands = [];
-        $this->events = [];
+        $this->commandEnvelopes = [];
+        $this->eventEnvelopes = [];
     }
 }
 ```
