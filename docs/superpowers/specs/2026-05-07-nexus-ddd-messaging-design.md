@@ -205,24 +205,27 @@ Only at two moments, never as a parameter to anything:
 
 Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is greppable, distinct from `$bus->publishEvent(...)`. Adapters that wrap a single underlying transport (e.g., a Symfony Messenger adapter) implement all three by holding the configured-bus instance and casting at the seam.
 
-### Handler interfaces — marker only, single-argument `__invoke`
+### Handler interfaces — marker only; `__invoke` with optional `MessageContext`
 
 ```php
 /**
  * @psalm-api
  *
- * Marker for command handlers. Implementers declare:
+ * Marker for command handlers. Implementers declare ONE of:
  *
  *   public function __invoke(ConcreteCommand $command): void
+ *   public function __invoke(ConcreteCommand $command, MessageContext $ctx): void
  *
- * Single-argument `__invoke`. Handlers do NOT receive metadata as a
- * second parameter — the framework's `CurrentMessageContext` (§5) carries
- * in-flight metadata implicitly. Handlers that need to read metadata for
- * logging/audit call `CurrentMessageContext::current()`; the typical
- * domain handler doesn't read it at all.
+ * The second parameter is **optional** — declare it only if the handler
+ * actually needs to read metadata (audit logging, branching on actor
+ * kind, observability). Most domain handlers omit it; metadata threading
+ * for nested dispatch happens implicitly via `CurrentMessageContext` (§5).
  *
- * The `nexus-psalm` plugin's `CommandHandlerSignatureRule` enforces the
- * `__invoke` shape; PHP variance won't let us put it on the interface.
+ * The `nexus-psalm` plugin's `CommandHandlerSignatureRule` validates the
+ * shape: first parameter must be a concrete `Command` subtype; second
+ * parameter, if present, must be exactly `MessageContext`; return type
+ * must be `void`. PHP variance prevents putting this on the interface
+ * directly — that's what the Psalm rule is for.
  */
 interface CommandHandler {}
 
@@ -231,20 +234,23 @@ interface CommandHandler {}
  *
  * @template TResult
  *
- * Marker for query handlers. Implementers declare:
+ * Marker for query handlers. Implementers declare ONE of:
  *
  *   public function __invoke(ConcreteQuery $query): TResult
+ *   public function __invoke(ConcreteQuery $query, MessageContext $ctx): TResult
  *
- * Validated by `QueryHandlerSignatureRule`.
+ * Validated by `QueryHandlerSignatureRule`. Return type must match the
+ * `TResult` template parameter on `Query<TResult>`.
  */
 interface QueryHandler {}
 
 /**
  * @psalm-api
  *
- * Marker for event listeners. Implementers declare:
+ * Marker for event listeners. Implementers declare ONE of:
  *
  *   public function __invoke(ConcreteEvent $event): void
+ *   public function __invoke(ConcreteEvent $event, MessageContext $ctx): void
  *
  * Validated by `EventListenerSignatureRule`. Multiple listeners per event
  * type are allowed (broadcast semantics).
@@ -252,11 +258,38 @@ interface QueryHandler {}
 interface EventListener {}
 ```
 
-**Why marker-only + single-argument.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
+**Why marker-only.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
 
-The single-argument shape (no `MessageContext` parameter) keeps domain handlers focused on their message. Metadata threading happens automatically via the framework's `CurrentMessageContext` (§5) — when a handler dispatches a nested command, the framework reads in-flight metadata and propagates causation/correlation/conversation/trace context onto the new envelope without the handler doing anything.
+**Why optional `MessageContext` second parameter.** Domain handlers that don't need metadata stay clean — `__invoke(ConcreteCommand): void`, one argument, no framework noise. Handlers that legitimately need metadata (saga that decides based on actor kind; audit listener that logs the causation chain; observability handler that emits a span with trace context) declare the second parameter and read what they need without calling `CurrentMessageContext::current()` at every site.
 
-This mirrors the Symfony Messenger handler convention exactly, so a future Symfony adapter is straightforward.
+Both forms are equivalent for *implicit propagation*: when the handler dispatches a nested command, the framework's `CurrentMessageContext` propagates causation/correlation/conversation/trace whether or not the handler took the second parameter. The MessageContext arg is purely a *read-side* convenience.
+
+**The bus implementation reads the handler's `__invoke` signature via reflection** at handler-resolution time and decides whether to pass one or two arguments. No runtime cost on the hot path (cached after first resolution, like core's `ApplyDispatcher`).
+
+```php
+// Domain handler — single argument, the canonical shape.
+final class PlaceOrderHandler implements CommandHandler {
+    public function __invoke(PlaceOrder $cmd): void {
+        // Implicit causation/correlation when this dispatches further commands;
+        // framework reads CurrentMessageContext::current() at dispatch.
+    }
+}
+
+// Audit listener — needs the actor for logging.
+final class OrderPlacedAuditListener implements EventListener {
+    public function __construct(private readonly LoggerInterface $log) {}
+
+    public function __invoke(OrderPlaced $event, MessageContext $ctx): void {
+        $this->log->info('OrderPlaced', [
+            'orderId'  => $event->orderId->value(),
+            'actor'    => $ctx->metadata->actor->map(fn(ActorRef $a) => $a->id)->getOrElse(fn() => 'system'),
+            'causedBy' => $ctx->metadata->causationId->map(fn(MessageId $id) => $id->value())->getOrElse(fn() => 'root'),
+        ]);
+    }
+}
+```
+
+This mirrors the Symfony Messenger handler convention exactly (Symfony allows `__invoke($message)` or `__invoke($message, Envelope $env)`), so a future Symfony adapter is straightforward.
 
 ---
 
@@ -1678,9 +1711,9 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 
 | Rule | Enforces |
 |---|---|
-| `CommandHandlerSignatureRule` | Implementers of `CommandHandler` declare `__invoke(ConcreteCommand): void` (single-argument; no `MessageContext` parameter — implicit via `CurrentMessageContext`) |
-| `QueryHandlerSignatureRule` | Implementers of `QueryHandler` declare `__invoke(ConcreteQuery): TResult` matching `Query<TResult>` |
-| `EventListenerSignatureRule` | Implementers of `EventListener` declare `__invoke(ConcreteEvent): void` |
+| `CommandHandlerSignatureRule` | Implementers of `CommandHandler` declare `__invoke(ConcreteCommand): void` OR `__invoke(ConcreteCommand, MessageContext): void` — second parameter optional, must be exactly `MessageContext` if present |
+| `QueryHandlerSignatureRule` | Implementers of `QueryHandler` declare `__invoke(ConcreteQuery): TResult` OR `__invoke(ConcreteQuery, MessageContext): TResult` matching `Query<TResult>` |
+| `EventListenerSignatureRule` | Implementers of `EventListener` declare `__invoke(ConcreteEvent): void` OR `__invoke(ConcreteEvent, MessageContext): void` |
 | `ReadonlyMessageBodyRule` | Concrete `Command` and `Query` classes are `final readonly class` (mirrors core's `ReadonlyMessageRule` for `DomainEvent`) |
 | `OneCommandHandlerRule` | A given concrete `Command` class has exactly one implementer of `CommandHandler` (commands are point-to-point) |
 
