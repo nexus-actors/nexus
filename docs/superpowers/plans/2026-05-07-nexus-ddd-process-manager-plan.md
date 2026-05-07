@@ -7004,8 +7004,6 @@ final class SmokeTest extends TestCase
     }
 }
 
-// -------- Worked-example PM fixtures (mirror spec §10) --------
-
 #[ProcessManager(deleteOnComplete: false)]
 #[LateArrivalPolicy(Policy::DeadLetter)]
 /** @extends EventSourcedProcessManager<TestProcessManagerId, DomainEvent> */

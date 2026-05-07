@@ -87,6 +87,26 @@ All four must pass. The hooks execute through `docker compose exec -T php`.
 - Trailing commas in all multiline contexts
 - Psalm runs in strict mode (level 1) — explicit `(float)` casts don't satisfy `InvalidOperand` for int/float mixing; use `@psalm-suppress InvalidOperand` on the **method docblock** instead
 
+## Comments (REQUIRED — write less)
+
+**Comments belong in three places, nowhere else:**
+
+1. **Docblocks on classes / methods / properties** — the standard PHPDoc location. Use these for `@param`, `@return`, `@template`, `@psalm-*`, `@throws`, and prose that explains *why* a class exists, *what invariants* a method protects, or *how* a non-obvious algorithm works. Docblocks are tooling-aware (Psalm, IDE) and travel with the symbol.
+
+2. **Algorithm explanations on non-obvious code** — a multi-step traversal, a tricky bit twiddle, a workaround for a specific PHP quirk. The comment explains the *intent* the code can't show on its own. One sentence usually; never paragraphs.
+
+3. **Class-level or method-level prose docblocks** — for "why this exists" / "load-bearing invariants" / "see also: spec §6". These live in the docblock above the symbol, not as a free-floating comment block.
+
+**Forbidden:**
+
+- **Section-divider comments** like `// ──── Builders ────`, `// === Predicates ===`, `// --- Helpers ---`. PHP has class structure; the IDE has navigation; readers don't need ASCII art to find methods. They are noise.
+- **Restating-the-code comments** like `// increment counter` next to `$counter++`. The code says it.
+- **Status-of-task comments** like `// existing`, `// new`, `// added in v2`. Git tells the timeline.
+- **Author-attribution comments** like `// added by X for ticket Y`. `git blame` and the PR description own this.
+- **Commented-out code**. Delete it. If it might be needed, the commit history is the record.
+
+**Default to writing no comments.** Only add one when the WHY is non-obvious: a hidden constraint, a subtle invariant, a workaround for a specific bug, behavior that would surprise a reader. If removing the comment wouldn't confuse a future reader, don't write it.
+
 ## Never use null — use `Option<T>` (REQUIRED)
 
 **Hard rule across all packages.** Absent values are modeled with `Fp\Functional\Option\Option<T>` (from `fp4php/functional`), never with `null`, `?T` types, or `mixed|null` returns.

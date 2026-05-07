@@ -795,7 +795,6 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
         $this->dispatchCommand(new RefundPayment($event->orderId));
     }
 
-    // ---- State-mutation handlers (event-sourced replay invokes ONLY these) ----
 
     private function applyPmOrderRegistered(PmOrderRegistered $e): void
     {
