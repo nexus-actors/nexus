@@ -838,6 +838,8 @@ final readonly class MessageMetadata {
         );
     }
 
+    // ───── Builder methods (immutable; each returns a fresh instance) ─────
+
     /** @return self with W3C trace context set. */
     #[\NoDiscard(...)]
     public function withTrace(string $traceParent, Option $traceState): self;
@@ -849,6 +851,106 @@ final readonly class MessageMetadata {
     /** @return self with the vector clock set. */
     #[\NoDiscard(...)]
     public function withVectorClock(VectorClock $clock): self;
+
+    /** @return self with the wire-payload schema version set. */
+    #[\NoDiscard(...)]
+    public function withSchemaVersion(int $version): self;
+
+    // ───── Lifecycle / origin predicates ─────
+
+    /** True when this is the first message in its chain (no causationId). */
+    public function isRoot(): bool {
+        return $this->causationId->isNone();
+    }
+
+    /** True when this message was directly caused by the given message id. */
+    public function isCausedBy(MessageId $id): bool {
+        return $this->causationId->map(fn(MessageId $c) => $c->equals($id))->getOrElse(fn() => false);
+    }
+
+    /** True when this message belongs to the given correlation chain. */
+    public function correlatesTo(MessageId $id): bool {
+        return $this->correlationId->map(fn(MessageId $c) => $c->equals($id))->getOrElse(fn() => false);
+    }
+
+    /** True when this message belongs to the given conversation root. */
+    public function isPartOfConversation(MessageId $id): bool {
+        return $this->conversationId->map(fn(MessageId $c) => $c->equals($id))->getOrElse(fn() => false);
+    }
+
+    // ───── Trace / expiry predicates ─────
+
+    public function hasTrace(): bool {
+        return $this->traceParent->isSome();
+    }
+
+    public function hasExpiry(): bool {
+        return $this->expiresAt->isSome();
+    }
+
+    /** True when the TTL is past `$now`. False when no expiry is set. */
+    public function isExpired(DateTimeImmutable $now): bool {
+        return $this->expiresAt
+            ->map(fn(DateTimeImmutable $at) => $at <= $now)
+            ->getOrElse(fn() => false);
+    }
+
+    /** Time remaining until expiry; None when no expiry is set or already expired. */
+    #[\NoDiscard(...)]
+    public function timeUntilExpiry(DateTimeImmutable $now): Option {
+        return $this->expiresAt
+            ->filter(fn(DateTimeImmutable $at) => $at > $now)
+            ->map(fn(DateTimeImmutable $at) => FiniteDuration::between($now, $at));
+    }
+
+    /** Time elapsed since `$occurredAt`. Always available. */
+    #[\NoDiscard(...)]
+    public function ageAt(DateTimeImmutable $now): FiniteDuration {
+        return FiniteDuration::between($this->occurredAt, $now);
+    }
+
+    // ───── Vector clock predicates ─────
+
+    public function hasVectorClock(): bool {
+        return $this->vectorClock->isSome();
+    }
+
+    /**
+     * True when this message's vector clock causally precedes the other's.
+     * False when either lacks a clock or when the relation is reversed
+     * or concurrent. For nuanced cases use compareCausalityWith().
+     */
+    public function happensBefore(self $other): bool {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensBefore)
+            ->getOrElse(fn() => false);
+    }
+
+    public function happensAfter(self $other): bool {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensAfter)
+            ->getOrElse(fn() => false);
+    }
+
+    public function isConcurrentWith(self $other): bool {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::Concurrent)
+            ->getOrElse(fn() => false);
+    }
+
+    /**
+     * Compare causality via vector clocks. Returns None when either side
+     * lacks a clock — partial order is undefined without both.
+     *
+     * @return Option<VectorClockOrdering>
+     */
+    public function compareCausalityWith(self $other): Option {
+        return $this->vectorClock->flatMap(
+            fn(VectorClock $a) => $other->vectorClock->map(
+                fn(VectorClock $b) => $a->compareTo($b),
+            ),
+        );
+    }
 
     /**
      * Derive metadata for a message *caused by* this one. The current
