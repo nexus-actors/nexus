@@ -29,6 +29,13 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
     /**
      * Record + apply: dispatch through applyXxx so state moves in lock-step
      * with the recorded stream, then append the event and bump version.
+     *
+     * **Ordering matters.** Dispatch runs *before* parent::recordThat. If
+     * `applyXxx` throws, the event is NOT appended and version is NOT
+     * bumped — the aggregate is left in its prior state, and
+     * `pullRecordedEvents()` will not surface the failed event. This is
+     * the "event-not-applied means event-not-recorded" semantic from
+     * akka-typed; do not reorder these two lines without revisiting it.
      */
     #[\Override]
     final protected function recordThat(DomainEvent $event): void

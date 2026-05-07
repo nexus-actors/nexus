@@ -4,11 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Aggregate;
 
-use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
-use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
+use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 
 /**
  * @psalm-api
@@ -87,8 +86,19 @@ abstract class AggregateRoot implements Entity
 
     /**
      * Invariant guard. Use inside command methods to assert a domain rule
-     * holds before recording the event. Pass an exception instance for a
-     * typed failure (preferred) or a plain string for ad-hoc rules.
+     * holds before recording the event.
+     *
+     * **Prefer the typed branch.** Pass a concrete `DomainException`
+     * subclass — e.g., `OrderAlreadyShipped`, `InsufficientFunds` — so the
+     * rule has a name in the ubiquitous language and can be caught
+     * specifically by interested handlers.
+     *
+     * The string branch is for **prototyping only**. It throws an
+     * anonymous `DomainException` subclass: catchable as `DomainException`,
+     * but not by a specific type because each call site mints a fresh
+     * anonymous class. Once the rule has a name in the team's vocabulary,
+     * promote it to a typed `DomainException` subclass and migrate the
+     * call site.
      *
      * @throws DomainException
      */
