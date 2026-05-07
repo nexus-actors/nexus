@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
-use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -18,7 +18,7 @@ final class StatefulAggregateRootTest extends TestCase
     #[Test]
     public function recordThatStillAppliesAndEmits(): void
     {
-        $id = new UlidValue((new Ulid())->toBase32());
+        $id = new TestUlidId((new Ulid())->toBase32());
         $a = StatefulSample::create($id);
         $a->setName('Ada');
 

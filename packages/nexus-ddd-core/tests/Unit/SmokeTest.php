@@ -16,6 +16,8 @@ use Monadial\Nexus\Ddd\Core\Identity\UlidGenerator;
 use Monadial\Nexus\Ddd\Core\Policy\AbstractPolicy;
 use Monadial\Nexus\Ddd\Core\Specification\AbstractRichSpecification;
 use Monadial\Nexus\Ddd\Core\Specification\Failure;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\StringExtractor;
 use Monadial\Nexus\Ddd\Core\Value\StringValue;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use PHPUnit\Framework\Attributes\Test;
@@ -27,16 +29,17 @@ final class SmokeTest extends TestCase
     #[Test]
     public function fullPackageIntegrationSmoke(): void
     {
-        // Identity
-        $gen = new UlidGenerator();
+        // Identity — generator parameterized by concrete domain Id class
+        $gen = new UlidGenerator(TestUlidId::class);
         self::assertInstanceOf(IdGenerator::class, $gen);
         $id = $gen->next();
         self::assertInstanceOf(UlidValue::class, $id);
+        self::assertInstanceOf(TestUlidId::class, $id);
 
-        // Value object — wrapped, mappable
+        // Value object — wrapped, mappable; raw value read via typed extractor
         $email = new SmokeEmail('alice@example.com');
         $upper = $email->map(strtoupper(...));
-        self::assertSame('ALICE@EXAMPLE.COM', $upper->asString());
+        self::assertSame('ALICE@EXAMPLE.COM', StringExtractor::extract($upper));
 
         // Aggregate — record-and-apply
         $order = SmokeOrder::create($id);
@@ -67,16 +70,7 @@ final class SmokeTest extends TestCase
 }
 
 /** @psalm-immutable */
-final readonly class SmokeEmail extends StringValue
-{
-    public function asString(): string
-    {
-        $v = $this->getValue();
-        \assert(is_string($v));
-
-        return $v;
-    }
-}
+final readonly class SmokeEmail extends StringValue {}
 
 final class SmokeOrder extends EventSourcedAggregateRoot
 {

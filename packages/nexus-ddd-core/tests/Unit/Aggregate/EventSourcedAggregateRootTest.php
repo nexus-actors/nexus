@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
-use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -19,14 +19,14 @@ final class EventSourcedAggregateRootTest extends TestCase
     #[Test]
     public function eventSourcedAggregateIsEventSourceable(): void
     {
-        $a = EsAggregate::create(new UlidValue((new Ulid())->toBase32()));
+        $a = EsAggregate::create(new TestUlidId((new Ulid())->toBase32()));
         self::assertInstanceOf(EventSourceable::class, $a);
     }
 
     #[Test]
     public function replayReconstructsStateFromEvents(): void
     {
-        $id = new UlidValue((new Ulid())->toBase32());
+        $id = new TestUlidId((new Ulid())->toBase32());
         $a = EsAggregate::create($id);
         $a->incrementBy(5);
         $a->incrementBy(7);
@@ -42,7 +42,7 @@ final class EventSourcedAggregateRootTest extends TestCase
     #[Test]
     public function replayDoesNotRecord(): void
     {
-        $id = new UlidValue((new Ulid())->toBase32());
+        $id = new TestUlidId((new Ulid())->toBase32());
         $a = EsAggregate::create($id);
         $a->replay([new Incremented(3), new Incremented(2)]);
 

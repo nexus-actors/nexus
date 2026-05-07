@@ -6,6 +6,11 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Value;
 
 use Monadial\Nexus\Ddd\Core\Value\ArrayValue;
 use Monadial\Nexus\Ddd\Core\Value\BoolValue;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\ArrayExtractor;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\BoolExtractor;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\FloatExtractor;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\IntExtractor;
+use Monadial\Nexus\Ddd\Core\Value\Extractor\StringExtractor;
 use Monadial\Nexus\Ddd\Core\Value\FloatValue;
 use Monadial\Nexus\Ddd\Core\Value\IntValue;
 use Monadial\Nexus\Ddd\Core\Value\StringValue;
@@ -23,101 +28,49 @@ final class ConcreteWrappedValuesTest extends TestCase
     #[Test]
     public function stringValueWrapsString(): void
     {
-        $v = new readonly class('hello') extends StringValue {
-            public function asString(): string
-            {
-                /** @var string $v */
-                $v = $this->getValue();
-
-                return $v;
-            }
-        };
-        self::assertSame('hello', $v->asString());
+        $v = new readonly class('hello') extends StringValue {};
+        self::assertSame('hello', StringExtractor::extract($v));
     }
 
     #[Test]
     public function intValueWrapsInt(): void
     {
-        $v = new readonly class(42) extends IntValue {
-            public function asInt(): int
-            {
-                /** @var int $v */
-                $v = $this->getValue();
-
-                return $v;
-            }
-        };
-        self::assertSame(42, $v->asInt());
+        $v = new readonly class(42) extends IntValue {};
+        self::assertSame(42, IntExtractor::extract($v));
     }
 
     #[Test]
     public function floatValueWrapsFloat(): void
     {
-        $v = new readonly class(3.14) extends FloatValue {
-            public function asFloat(): float
-            {
-                /** @var float $v */
-                $v = $this->getValue();
-
-                return $v;
-            }
-        };
-        self::assertSame(3.14, $v->asFloat());
+        $v = new readonly class(3.14) extends FloatValue {};
+        self::assertSame(3.14, FloatExtractor::extract($v));
     }
 
     #[Test]
     public function boolValueWrapsBool(): void
     {
-        $v = new readonly class(true) extends BoolValue {
-            public function asBool(): bool
-            {
-                /** @var bool $v */
-                $v = $this->getValue();
-
-                return $v;
-            }
-        };
-        self::assertTrue($v->asBool());
+        $v = new readonly class(true) extends BoolValue {};
+        self::assertTrue(BoolExtractor::extract($v));
     }
 
     #[Test]
     public function arrayValueWrapsArrayWithTemplatedKeyAndValueTypes(): void
     {
         /** @extends ArrayValue<int, int> */
-        $v = new readonly class([1, 2, 3]) extends ArrayValue {
-            /** @return array<int, int> */
-            public function asArray(): array
-            {
-                return $this->getValue();
-            }
-        };
-        self::assertSame([1, 2, 3], $v->asArray());
+        $v = new readonly class([1, 2, 3]) extends ArrayValue {};
+        self::assertSame([1, 2, 3], ArrayExtractor::extract($v));
 
         /** @extends ArrayValue<string, string> */
-        $named = new readonly class(['first' => 'Ada', 'last' => 'Lovelace']) extends ArrayValue {
-            /** @return array<string, string> */
-            public function asArray(): array
-            {
-                return $this->getValue();
-            }
-        };
-        self::assertSame(['first' => 'Ada', 'last' => 'Lovelace'], $named->asArray());
+        $named = new readonly class(['first' => 'Ada', 'last' => 'Lovelace']) extends ArrayValue {};
+        self::assertSame(['first' => 'Ada', 'last' => 'Lovelace'], ArrayExtractor::extract($named));
     }
 
     #[Test]
     public function stringValueMapPreservesType(): void
     {
-        $v = new readonly class('abc') extends StringValue {
-            public function asString(): string
-            {
-                /** @var string $v */
-                $v = $this->getValue();
-
-                return $v;
-            }
-        };
+        $v = new readonly class('abc') extends StringValue {};
         $mapped = $v->map(strtoupper(...));
-        self::assertSame('ABC', $mapped->asString());
+        self::assertSame('ABC', StringExtractor::extract($mapped));
         self::assertInstanceOf($v::class, $mapped);
     }
 }

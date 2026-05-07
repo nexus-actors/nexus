@@ -8,6 +8,7 @@ use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -67,7 +68,7 @@ final class AggregateRootTest extends TestCase
 
     private static function ulid(): UlidValue
     {
-        return new UlidValue((new Ulid())->toBase32());
+        return new TestUlidId((new Ulid())->toBase32());
     }
 }
 

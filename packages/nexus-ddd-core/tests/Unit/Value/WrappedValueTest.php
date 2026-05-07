@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Value;
 
+use Monadial\Nexus\Ddd\Core\Value\Extractor\ValueExtractor;
 use Monadial\Nexus\Ddd\Core\Value\WrappedValue;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -13,10 +14,10 @@ use PHPUnit\Framework\TestCase;
 final class WrappedValueTest extends TestCase
 {
     #[Test]
-    public function asIntReturnsConstructedInner(): void
+    public function extractReturnsConstructedInner(): void
     {
         $v = new IntStub(42);
-        self::assertSame(42, $v->asInt());
+        self::assertSame(42, ValueExtractor::extract($v));
     }
 
     #[Test]
@@ -24,9 +25,9 @@ final class WrappedValueTest extends TestCase
     {
         $v = new IntStub(2);
         $mapped = $v->map(static fn(int $i): int => $i * 3);
-        self::assertSame(6, $mapped->asInt());
+        self::assertSame(6, ValueExtractor::extract($mapped));
         self::assertNotSame($v, $mapped);
-        self::assertSame(2, $v->asInt());           // original unchanged
+        self::assertSame(2, ValueExtractor::extract($v));   // original unchanged
     }
 
     #[Test]
@@ -34,7 +35,7 @@ final class WrappedValueTest extends TestCase
     {
         $v = new IntStub(2);
         $result = $v->flatMap(static fn(int $i): IntStub => new IntStub($i + 100));
-        self::assertSame(102, $result->asInt());
+        self::assertSame(102, ValueExtractor::extract($result));
     }
 
     #[Test]
@@ -57,13 +58,5 @@ final readonly class IntStub extends WrappedValue
     public function __construct(int $value)
     {
         parent::__construct($value);
-    }
-
-    public function asInt(): int
-    {
-        /** @var int $v */
-        $v = $this->getValue();
-
-        return $v;
     }
 }

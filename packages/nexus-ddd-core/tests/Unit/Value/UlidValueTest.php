@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Value;
 
 use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use Monadial\Nexus\Ddd\Core\Value\WrappedValue;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -20,17 +21,19 @@ final class UlidValueTest extends TestCase
     public function ulidValueIsBothWrappedValueAndIdentifier(): void
     {
         $ulid = (new Ulid())->toBase32();
-        $v = new UlidValue($ulid);
+        $v = new TestUlidId($ulid);
         self::assertInstanceOf(WrappedValue::class, $v);
         self::assertInstanceOf(Identifier::class, $v);
+        self::assertInstanceOf(UlidValue::class, $v);
         self::assertSame($ulid, $v->value());
     }
 
     #[Test]
-    public function fromStringRehydratesUlidValue(): void
+    public function fromStringRehydratesConcreteSubclass(): void
     {
         $ulid = (new Ulid())->toBase32();
-        $rehydrated = UlidValue::fromString($ulid);
+        $rehydrated = TestUlidId::fromString($ulid);
+        self::assertInstanceOf(TestUlidId::class, $rehydrated);
         self::assertSame($ulid, $rehydrated->value());
     }
 
@@ -38,15 +41,15 @@ final class UlidValueTest extends TestCase
     public function malformedValueThrows(): void
     {
         $this->expectException(InvalidIdentifierException::class);
-        new UlidValue('not-a-ulid');
+        new TestUlidId('not-a-ulid');
     }
 
     #[Test]
     public function equalsByTypeAndValue(): void
     {
         $ulid = (new Ulid())->toBase32();
-        $a = new UlidValue($ulid);
-        $b = new UlidValue($ulid);
+        $a = new TestUlidId($ulid);
+        $b = new TestUlidId($ulid);
         self::assertTrue($a->equals($b));
     }
 }

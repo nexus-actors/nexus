@@ -12,9 +12,17 @@ use Symfony\Component\Uid\Ulid;
  * @psalm-api
  * @psalm-immutable
  *
+ * Abstract ULID-backed identifier base. Domain code defines concrete identifiers
+ * by extending this class:
+ *
+ *   final readonly class OrderId extends UlidValue {}
+ *   final readonly class CustomerId extends UlidValue {}
+ *
+ * Direct instantiation is impossible — `UlidValue` itself is abstract.
+ *
  * @extends WrappedValue<string>
  */
-readonly class UlidValue extends WrappedValue implements Identifier // phpcs:ignore SlevomatCodingStandard.Classes.RequireAbstractOrFinal.ClassNeitherAbstractNorFinal
+abstract readonly class UlidValue extends WrappedValue implements Identifier
 {
     final public function __construct(string $value)
     {
