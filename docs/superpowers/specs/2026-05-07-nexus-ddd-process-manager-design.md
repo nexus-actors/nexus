@@ -83,9 +83,12 @@ abstract class AbstractProcessManager
     public function isTerminated(): bool;
     public function terminationReason(): ?Reason;
 
-    // Domain-message emission (staged; flushed post-commit)
-    protected function dispatch(Command $command): void;
-    protected function publish(DomainEvent $event): void;
+    // Domain-message emission (staged; flushed post-commit).
+    // Method names spell out the *kind* of message — at the call site the
+    // reader sees `$this->dispatchCommand(...)` vs `$this->publishEvent(...)`
+    // unambiguously, and the type system is doubly enforced.
+    protected function dispatchCommand(Command $command): void;
+    protected function publishEvent(DomainEvent $event): void;
 
     // Deadline API — name-based, no tokens
     protected function scheduleDeadline(DeadlineName $name, FiniteDuration $after): void;
@@ -284,12 +287,16 @@ The PM declares completion/termination; the framework declares failure (Vernon).
 
 ### Event arriving for a completed/terminated PM
 
-Default: route to a `LateArrivalHandler` if one is registered on the PM class via `#[OnLateArrival]` attribute, otherwise log and drop.
+If the PM class declares an `#[OnLateArrival]` method, the framework routes the event to it. **If no `#[OnLateArrival]` handler is declared, the event is dead-lettered** — pushed to the framework's structured DLQ with the original event payload, the correlation key, the resolved PM id, and a routing-decision marker.
+
+Late-arrival events are NEVER silently dropped or logged-and-forgotten. The DLQ is the single off-ramp for messages the framework cannot route, and ops investigates from there. This is intentionally stricter than v1's earlier "log and drop" — silent drops produce production mysteries that survive postmortems.
 
 ### Event arriving for a non-existent PM
 
 - If a matching `#[StartsOn]` exists on any registered PM class → start a new instance.
 - Otherwise → dead-letter (do not silently drop, do not auto-create empty PMs).
+
+The DLQ entry includes: original event, the correlation key the framework computed, the list of PM classes the framework checked, and the reason for non-routing ("no instance + no `#[StartsOn]`" vs "instance completed/terminated + no `#[OnLateArrival]`"). Ops must be able to answer "why didn't this event fire?" in under five minutes (Udi's on-call ask).
 
 ### Replay (event-sourced PMs)
 
@@ -415,8 +422,8 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
     public function onPaymentReceived(PaymentReceived $event, MessageContext $ctx): void
     {
         $this->recordThat(new PmPaymentRecorded($this->orderId));
-        $this->dispatch(new ShipOrder($this->orderId));
-        $this->publish(new OrderFulfillmentPaymentConfirmed($this->orderId));   // PM-emitted event for projections
+        $this->dispatchCommand(new ShipOrder($this->orderId));
+        $this->publishEvent(new OrderFulfillmentPaymentConfirmed($this->orderId));   // PM-emitted event for projections
     }
 
     #[OnEvent(OrderShipped::class, correlateBy: 'orderId')]
@@ -431,9 +438,18 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
     public function onPaymentDeadline(MessageContext $ctx): void
     {
         if (!$this->paid) {
-            $this->dispatch(new CancelOrder($this->orderId));
+            $this->dispatchCommand(new CancelOrder($this->orderId));
             $this->terminate(Reason::of('payment-not-received-within-24h'));
         }
+    }
+
+    #[OnLateArrival]
+    public function onLateEvent(DomainEvent $event, MessageContext $ctx): void
+    {
+        // Optional. If present, late-arrival events route here instead of
+        // hitting the DLQ. Useful for workflows where late events are
+        // expected (e.g., "PaymentReceived after timeout-cancellation —
+        // refund the payment").
     }
 
     // State-mutation handlers (event-sourced replay invokes only these)
@@ -451,7 +467,22 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
 
 ---
 
-## 11. Fitness functions (CI-enforced)
+## 11. PSR-first dependency policy
+
+This package uses **PSR contracts wherever a relevant PSR exists**, and never depends on framework-specific implementations:
+
+| Concern | Contract used | Reason |
+|---|---|---|
+| Event dispatch (lifecycle events) | `Psr\EventDispatcher\EventDispatcherInterface` (PSR-14) | Symfony's dispatcher implements PSR-14; consumers wire whatever |
+| Logger (handler diagnostics) | `Psr\Log\LoggerInterface` (PSR-3) | Already used across nexus packages |
+| Clock (timestamps in `MessageMetadata`) | `Psr\Clock\ClockInterface` (PSR-20) | Test-injectable; production wires `\DateTimeImmutable`-backed |
+| Container (handler resolution in bus impls — relevant downstream, not in this package directly) | `Psr\Container\ContainerInterface` (PSR-11) | Framework-agnostic |
+
+**No `symfony/*`, `laravel/*`, or other framework-specific runtime deps in this package.** Implementations of the PSR contracts (Symfony's dispatcher, Monolog's logger, etc.) are wired by consumers at composition time. This rule is encoded in CLAUDE.md and enforced via Deptrac.
+
+---
+
+## 12. Fitness functions (CI-enforced)
 
 **Deptrac layer `DddProcessManager`:**
 - Allowed deps: `DddCore`, `DddMessaging`, `psr/event-dispatcher`, `monadial/php-duration`
@@ -471,15 +502,19 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
 
 ---
 
-## 12. Open items & risks
+## 13. Open items & risks
 
-### Open (need user confirmation before plan)
+### Open items resolved (user-confirmed 2026-05-07)
 
-1. **Default implementation depth in this package.** `InMemoryMessageStaging` + `InMemoryUnitOfWork` are runnable scaffolds; `InMemoryDeadlineScheduler` (timer-based, suitable for tests and single-process Fiber runtime) is also natural to ship here. Confirm the in-memory family ships in this package vs. a sibling `nexus-ddd-process-manager-inmemory`?
-
-2. **`ProcessManagerRepository<T extends AbstractProcessManager>` contract.** Belongs in this package (the load/save abstraction PMs use), implementations in persistence packages. Confirm the contract lives here?
-
-3. **`OnLateArrival` handler attribute.** Vernon's recipe gap — events arriving after `complete()`/`terminate()`. Default behavior is "log and drop"; override via `#[OnLateArrival]` on a method. Worth shipping in v1 or defer?
+| # | Question | Resolution |
+|---|---|---|
+| 1 | In-memory `MessageStaging`/`UnitOfWork` ship here? | Yes — alongside `InMemoryDeadlineScheduler` |
+| 2 | `ProcessManagerRepository<T>` contract here? | Yes — implementations in persistence packages |
+| 3 | `#[OnLateArrival]` ships in v1? | Yes; default policy when no handler is declared = **dead-letter to DLQ** (NOT log+drop) |
+| 4 | PSR-14 dispatcher (override of original Symfony request)? | Yes — full PSR-everywhere policy in §11 |
+| 5 | Attributes-only configuration for v1? | Yes — DSL deferred until real use case forces it |
+| 6 | Method names spell out kind: `dispatchCommand` / `publishEvent`? | Yes — clearer at the call site |
+| 7 | Two-class hierarchy mirroring aggregates? | Yes |
 
 ### Risks for downstream packages
 
@@ -493,7 +528,7 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
 
 ---
 
-## 13. Out of scope for v1
+## 14. Out of scope for v1
 
 - Outbox table schema and DB-backed staging (downstream package)
 - Saga compensation primitives (compensation = a `Command` dispatch; no separate `compensate()` API)
@@ -505,16 +540,8 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
 
 ---
 
-## 14. Sign-off
+## 15. Sign-off
 
-User must confirm:
+All seven items in §13 confirmed by user 2026-05-07.
 
-- [ ] Two-class hierarchy (`StatefulProcessManager` + `EventSourcedProcessManager`) is correct
-- [ ] In-memory implementations of `MessageStaging` + `UnitOfWork` ship in this package
-- [ ] `ProcessManagerRepository` contract lives here, implementations downstream
-- [ ] `#[OnLateArrival]` attribute ships in v1 (or defer)
-- [ ] PSR-14 dispatcher is final (override of original Symfony-specific request)
-- [ ] Attributes-only configuration for v1 (DSL deferred)
-- [ ] `publish(DomainEvent)` is a peer of `dispatch(Command)` on the PM API
-
-After sign-off → invoke `superpowers:writing-plans` to produce the implementation plan.
+Next step: re-run the four-expert review board against this updated spec. After board approval → invoke `superpowers:writing-plans` to produce the implementation plan.

@@ -87,6 +87,21 @@ All four must pass. The hooks execute through `docker compose exec -T php`.
 - Trailing commas in all multiline contexts
 - Psalm runs in strict mode (level 1) — explicit `(float)` casts don't satisfy `InvalidOperand` for int/float mixing; use `@psalm-suppress InvalidOperand` on the **method docblock** instead
 
+## PSR Contracts (REQUIRED — prefer over framework-specific deps)
+
+**Always depend on PSR contracts when one exists for the concern, never on a framework-specific implementation.** Framework dispatchers/loggers/clocks/containers (Symfony, Laravel, Monolog, etc.) all implement the PSR interface; consumers wire whichever implementation suits their stack. Hard-coding the framework dep in our packages forces every consumer to bring it in — that's contamination.
+
+| Concern | Contract | Notes |
+|---|---|---|
+| Logger | `Psr\Log\LoggerInterface` (PSR-3) | Already used — actor logging via `$ctx->log()` |
+| Container / DI | `Psr\Container\ContainerInterface` (PSR-11) | Used by `Props::fromContainer()`; will be used by bus impls for handler resolution |
+| Event dispatcher | `Psr\EventDispatcher\EventDispatcherInterface` (PSR-14) | System-level dispatch + future PM lifecycle events |
+| Clock | `Psr\Clock\ClockInterface` (PSR-20) | Time abstraction; `TestClock` for deterministic tests; production wires `\DateTimeImmutable`-backed |
+
+**Never** add `symfony/event-dispatcher`, `monolog/monolog`, `symfony/clock` or similar as runtime deps in any nexus package. If a feature needs a behavior that isn't covered by an existing PSR, bring it in via a small abstraction layer with one PSR-shaped contract and ship the framework-specific adapter as a separate `nexus-*-adapter-*` package. Apps choose adapters; libraries do not.
+
+When considering a new dependency, ask: *does a PSR cover this?* If yes, depend on the PSR. If no, define your own contract and let adapters live elsewhere.
+
 ## PHP 8.5+ Language Features (REQUIRED)
 
 The composer constraint is `php: >=8.5`, so PHP 8.4 and 8.5 features are available across the codebase. **Always prefer modern syntax/features over older equivalents** when writing or modifying code:
