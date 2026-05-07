@@ -128,6 +128,8 @@ final readonly class Reason {
 
 `code` is a stable machine-readable identifier (`'payment-not-received-within-24h'`); `detail` is optional human-friendly context. Reasons go into the persisted `PmTerminated(Reason)` event, so changing `code` values for already-terminated PMs is a schema migration.
 
+**`code` vs `detail` recipe.** Include `detail` only when dynamic context cannot be encoded into the `code` itself. `Reason::of('payment-not-received-within-24h')` — code is fully self-describing, no detail needed. `Reason::of('shipping-failed', detail: $event->reason)` — the upstream system supplied a string the PM could not have known statically; detail captures it. Default to no-detail; reach for detail only when the runtime context adds genuine information ops or auditors will need.
+
 ### `ProcessManagerEventStore` — stream contract
 
 For ES PMs, persistence adapters must satisfy this contract. Per-PM-type physical tables are the user's chosen layout; the *contract* below is what every adapter implements regardless:
@@ -165,6 +167,38 @@ interface ProcessManagerEventStore {
 - Each row is exactly one `DomainEvent` (internal to the PM)
 - Writer-id stamping (`WriterId` from core's single-writer principle) on every row
 - Optimistic concurrency on `(stream_id, expected_version)` at append
+
+### `ProcessManagerSnapshotPayload`
+
+For ES PMs that ship snapshots, the snapshot payload MUST round-trip the full PM state — not just the user-defined fields, but everything replay would have rebuilt. A snapshot loaded at version 42 plus events 43..N MUST produce identical state to a full replay from event 1.
+
+```php
+final readonly class ProcessManagerSnapshotPayload {
+    public function __construct(
+        public ProcessManagerId $id,
+        public string $pmClass,
+        public int $version,                                          // last applied event's seq
+        public array $userState,                                      // serialized public properties
+        public bool $isCompleted,
+        public bool $isTerminated,
+        public ?Reason $terminationReason,
+        public ?DomainEvent $startedBy,                               // first event reference
+        /** @var array<string, true> */ public array $consumedEventIds, // dedup set rebuilt on replay
+        /** @var array<string, mixed> */ public array $correlations,    // secondary correlation index
+        /** @var array<int, ScheduledDeadlineSnapshot> */
+        public array $scheduledDeadlines,                             // name + fireAt for each
+    ) {}
+}
+
+final readonly class ScheduledDeadlineSnapshot {
+    public function __construct(
+        public DeadlineName $name,
+        public DateTimeImmutable $fireAt,
+    ) {}
+}
+```
+
+A snapshot store implementation reads/writes this payload; the adapter is free to serialize it however (JSON, MessagePack, native PHP) but the *shape* is invariant across adapters so two implementations can interoperate.
 
 **Recommended physical schema** (informative, not normative):
 
@@ -469,14 +503,16 @@ The trace + canonical reason code MUST allow ops to answer "why didn't this even
 Inputs: persisted internal event stream + optional snapshot.
 Outputs: fully-rehydrated state object. **Nothing else.**
 
-During replay (`isReplaying() === true`):
+During replay (`isReplaying() === true`) the PM behaves as a **pure state-rebuilder** — it touches its own in-memory state and *only* its own in-memory state:
+
 - `applyXxx` methods run (driven by core's `ApplyDispatcher`)
-- `dispatchCommand()` is a no-op
-- `publishEvent()` is a no-op
-- `scheduleDeadline()` / `rescheduleDeadline()` / `cancelDeadline()` update internal state (so `hasDeadline()` returns correct values) but do NOT enqueue physically with the deadline scheduler
-- `correlateOn()` / `removeCorrelation()` update the correlation index in memory but do NOT publish to any external correlation registry
-- `complete()` / `terminate()` set the flags but do not emit lifecycle events (those are already in the stream)
+- `dispatchCommand()` and `publishEvent()` are no-ops
+- `scheduleDeadline()` / `rescheduleDeadline()` / `cancelDeadline()` update the in-memory scheduled-deadline set (so `hasDeadline()` returns correct values), do NOT enqueue with the physical scheduler, AND do NOT emit `PmDeadlineScheduled`/`PmDeadlineCancelled` events (those events are already in the stream being replayed; re-emitting would corrupt it)
+- `correlateOn()` / `removeCorrelation()` update the in-memory secondary index, do NOT publish to any external registry, AND do NOT emit `PmCorrelationAdded`/`PmCorrelationRemoved` events
+- `complete()` / `terminate()` set the flags, do NOT emit `PmCompleted`/`PmTerminated` events
 - `#[OnEvent]` / `#[StartsOn]` / `#[OnLateArrival]` handlers do NOT run — only `applyXxx`
+
+The rule is: during replay, every method that would emit an internal event during live execution emits NOTHING. The events are already on disk and being walked. Live-mode wrappers around `correlateOn`, `scheduleDeadline`, `complete`, etc. check `isReplaying()` and bypass the emit step.
 
 **Internal event categories persisted in the stream** for ES PMs:
 
@@ -490,6 +526,35 @@ During replay (`isReplaying() === true`):
 | 6 | `PmCompleted` / `PmTerminated(Reason)` | Framework | Framework wraps `complete()` / `terminate()` and emits these as the LAST event |
 
 Categories 2–6 are framework-emitted under the `Monadial\Nexus\Ddd\ProcessManager\Internal\Event` namespace. Subclasses MUST NOT `recordThat` events from that namespace directly — enforced by `PmInternalEventNamespaceRule` Psalm rule. The framework supplies `applyXxx` for all category 2–6 events on `EventSourcedProcessManager`.
+
+### Per-instance serialization (MUST)
+
+Each PM instance MUST process at most one external event at a time. The actor-adapter package supplies this serialization via mailbox-per-instance (one inbox per `ProcessManagerId`). Without single-event-at-a-time per instance, the deterministic `MessageId(pmId, sequenceNo)` contract for outbound commands is unenforceable, and concurrent state mutations would race.
+
+This is a runtime guarantee, not a code-level constraint — the framework cannot enforce it via Psalm. Adapters that do not provide per-instance serialization (e.g., a hand-rolled bus that delivers in parallel) violate the contract; teams using them are on their own for outbound dedup.
+
+### Gate ordering (MUST)
+
+When an external event arrives for an existing PM correlation key, the framework checks gates in this order:
+
+1. **Live-redelivery dedup gate** — is `event.id` in the consumed set rebuilt during PM load? If yes, ack and stop.
+2. **Multi-`#[StartsOn]` race resolution** — only checked for genuinely new event ids. A redelivered starting event hits the dedup gate above and is absorbed without re-running race resolution; this is correct because the original delivery already won the race.
+3. **Late-arrival routing** — only for completed/terminated PMs.
+4. **Handler dispatch** — `#[StartsOn]` / `#[OnEvent]` / `#[OnLateArrival]`.
+
+The dedup gate firing first is the property that makes the deterministic `MessageId(pmId, sequenceNo)` contract self-consistent across redeliveries — the same external event id never produces a second handler run, so the same command sequence number is never re-issued.
+
+### Crash semantics
+
+If the transaction commit fails after the handler ran (DB error after the bus already published, or after the `PmConsumedExternalEvent` row was prepared but before the COMMIT statement returned):
+
+- The rolled-back `PmConsumedExternalEvent` is NOT persisted.
+- The external broker never gets `ack`'d (because `staging.flush()` is post-commit and ack is post-flush).
+- Redelivery causes the handler to re-run.
+- The redelivery's commands carry the **same** `MessageId(pmId, sequenceNo)` as the failed run's commands (because `sequenceNo` is determined by the next-available stream slot, which the failed commit didn't advance).
+- The downstream command bus dedups on `MessageId` — duplicate effects from the failed run are absorbed.
+
+The deterministic command-id is what protects downstream from duplicate effects in the crash-before-ack case. Without it, a crash between handler-run and commit produces silent duplicates downstream.
 
 ### Idempotency: live in-flight redelivery vs replay
 
@@ -548,11 +613,26 @@ A PM dispatches a command. The transaction commits. The bus publishes. Ops retri
 
 **Failure mode**: the handler dispatched the command, but the transaction commit failed (DB error AFTER the bus already published). The external event is unacked, redelivered, the handler runs again — but the dedup set wasn't updated (transaction rolled back), so the handler dispatches the command **a second time**.
 
-To make this safe, **commands emitted by a PM carry a deterministic `MessageId` derived from `(pmId, sequenceNo)`** — where `sequenceNo` is the position in the PM's stream where the command was first staged. The runtime stamps this id on the command's metadata at staging time. Downstream command handlers MUST dedup on `MessageId` (the messaging layer's idempotency contract).
+To make this safe, commands emitted by a PM carry a deterministic `MessageId` computed as:
 
-This means: even if the bus publishes the same command twice due to crash-before-ack, the downstream handler sees the same `MessageId` and dedups.
+```
+MessageId = hash(pmId, baseStreamSeq, withinStagingOrdinal)
+```
 
-`publishEvent()` follows the same pattern — events get a deterministic id from `(pmId, sequenceNo)`. Downstream subscribers dedup on `MessageId` if they care about exactly-once.
+where:
+- `pmId` — the PM instance's identifier
+- `baseStreamSeq` — the next-available sequence number in the PM's stream at the moment the surrounding handler began (the seq where the next persisted event would land if commit succeeds)
+- `withinStagingOrdinal` — 0-indexed position of this command within the staging buffer for the current handler invocation. The first `dispatchCommand()` call gets ordinal 0, the second gets 1, etc. Reset per handler invocation.
+
+This composite is stable across crash-replay because:
+- The same external event redelivered hits the dedup gate (above) — the handler does not re-run.
+- For the crash-before-commit case where the handler does re-run: the `baseStreamSeq` is the same (the failed commit didn't advance it), and the ordinals within the handler are reproducible (the handler is deterministic given its input event), so commands get the same composite id.
+
+The runtime stamps this id on the command's `MessageMetadata` at staging time. Downstream command handlers MUST dedup on `MessageId` (the messaging layer's idempotency contract).
+
+`publishEvent()` follows the same pattern — events get a deterministic id from the same composite. Downstream subscribers dedup on `MessageId` if they care about exactly-once.
+
+The per-instance serialization MUST (above) is what makes `withinStagingOrdinal` meaningful — without it, two parallel handlers staging commands would race, and the same logical command could land at different ordinals across redeliveries.
 
 ---
 
@@ -631,6 +711,9 @@ namespace App\Order\Process;
 interface OrderFulfillmentEvent extends DomainEvent {}
 
 // Internal events the PM owns (event-sourced state mutations)
+final readonly class PmOrderRegistered implements OrderFulfillmentEvent {
+    public function __construct(public OrderId $orderId) {}
+}
 final readonly class PmPaymentRecorded implements OrderFulfillmentEvent {
     public function __construct(public OrderId $orderId) {}
 }
