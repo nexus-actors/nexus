@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Aggregate\Internal;
 
 use Closure;
+use Monadial\Nexus\Ddd\Core\Aggregate\Attribute\AppliesTo;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
@@ -15,7 +16,13 @@ use ReflectionClass;
  *           framework-internal — apps should not instantiate or call directly.
  *
  * Resolves and invokes the `applyXxx` method on an entity for a given event.
- * Convention: method name = `apply` + event class short name (case-sensitive).
+ *
+ * **Resolution order** (first match wins):
+ *   1. `#[AppliesTo('explicitMethodName')]` attribute on the event class.
+ *      Use this for versioned events (V1 / V2 in different namespaces that
+ *      would otherwise short-name-collide).
+ *   2. Convention: method name = `apply` + event class short name
+ *      (case-sensitive).
  *
  * Per (entityClass, eventClass) pair the dispatcher caches a class-scoped Closure
  * (bound via Closure::bind to the entity's class scope) so subsequent dispatches
@@ -23,14 +30,21 @@ use ReflectionClass;
  * resolution touches reflection.
  *
  * Cross-namespace short-name collisions throw ApplyMethodAmbiguousException at
- * resolution time.
+ * resolution time. Resolve them by adding `#[AppliesTo(...)]` to one or both
+ * events.
  */
 final class ApplyDispatcher
 {
     /** @var array<class-string, array<class-string, Closure(object, DomainEvent): void>> */
     private array $cache = [];
 
-    /** @var array<class-string, array<string, list<class-string>>> */
+    /**
+     * @var array<class-string, array<string, array<class-string, true>>>
+     *
+     * Indexed-by-eventClass-as-key so concurrent first-dispatches from
+     * cooperating coroutines that hit the same (entity, event) pair don't
+     * spuriously inflate the count and produce a false collision.
+     */
     private array $shortNameIndex = [];
 
     public function dispatch(object $entity, DomainEvent $event): void
@@ -51,33 +65,34 @@ final class ApplyDispatcher
      */
     private function resolve(string $entityClass, string $eventClass): Closure
     {
-        $shortName = $this->shortName($eventClass);
-        $methodName = 'apply' . $shortName;
+        $eventReflection = new ReflectionClass($eventClass);
+        $explicit = $this->explicitMethodName($eventReflection);
+        $methodName = $explicit ?? 'apply' . $this->shortName($eventClass);
 
-        $reflection = new ReflectionClass($entityClass);
+        $entityReflection = new ReflectionClass($entityClass);
 
-        if (! $reflection->hasMethod($methodName)) {
+        if (! $entityReflection->hasMethod($methodName)) {
             throw ApplyMethodNotFoundException::for($entityClass, $eventClass);
         }
 
-        // Detect cross-namespace short-name collision BEFORE building or
-        // caching the closure. If two event classes resolve to the same
-        // applyXxx method, throw consistently — and invalidate any prior
-        // cache entry for events in the colliding short-name group so that
-        // earlier-dispatched events stop succeeding silently. This makes
-        // the failure deterministic from the second dispatch onward.
-        $this->shortNameIndex[$entityClass][$shortName][] = $eventClass;
+        // Short-name collision detection ONLY applies to convention-based
+        // resolution. Events with explicit `#[AppliesTo(...)]` opt out of
+        // the index — that is precisely the escape hatch's purpose.
+        if ($explicit === null) {
+            $shortName = $this->shortName($eventClass);
+            $this->shortNameIndex[$entityClass][$shortName][$eventClass] = true;
 
-        if (count($this->shortNameIndex[$entityClass][$shortName]) > 1) {
-            foreach ($this->shortNameIndex[$entityClass][$shortName] as $colliding) {
-                unset($this->cache[$entityClass][$colliding]);
+            if (count($this->shortNameIndex[$entityClass][$shortName]) > 1) {
+                foreach (array_keys($this->shortNameIndex[$entityClass][$shortName]) as $colliding) {
+                    unset($this->cache[$entityClass][$colliding]);
+                }
+
+                throw ApplyMethodAmbiguousException::for(
+                    $entityClass,
+                    $shortName,
+                    array_keys($this->shortNameIndex[$entityClass][$shortName]),
+                );
             }
-
-            throw ApplyMethodAmbiguousException::for(
-                $entityClass,
-                $shortName,
-                $this->shortNameIndex[$entityClass][$shortName],
-            );
         }
 
         /** @var Closure(object, DomainEvent): void $invoker */
@@ -93,6 +108,21 @@ final class ApplyDispatcher
         $this->cache[$entityClass][$eventClass] = $invoker;
 
         return $invoker;
+    }
+
+    /**
+     * @param ReflectionClass<DomainEvent> $eventReflection
+     * @psalm-suppress MoreSpecificImplementedParamType
+     */
+    private function explicitMethodName(ReflectionClass $eventReflection): ?string
+    {
+        $attributes = $eventReflection->getAttributes(AppliesTo::class);
+
+        if ($attributes === []) {
+            return null;
+        }
+
+        return $attributes[0]->newInstance()->methodName;
     }
 
     /** @param class-string $fqn */
