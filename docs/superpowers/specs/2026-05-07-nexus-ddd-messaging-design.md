@@ -207,6 +207,37 @@ final readonly class MessageId extends UlidValue {
 }
 ```
 
+### `ActorRef`
+
+`MessageMetadata` carries a typed actor reference, not a free string. The kind/id split makes audit trails machine-readable and prevents the "is `'system'` a username?" ambiguity that plagues string-based audit fields.
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Identity;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * Identifier of the actor responsible for a message. `kind` is the
+ * actor category (`'user'`, `'system'`, `'service'`); `id` is the
+ * stable identifier within that kind.
+ *
+ *   ActorRef::user('01HK...')             // human user, ULID id
+ *   ActorRef::system('payments-worker')   // background process
+ *   ActorRef::service('shipping-svc')     // external service
+ */
+final readonly class ActorRef {
+    public function __construct(
+        public string $kind,
+        public string $id,
+    ) {}
+
+    public static function user(string $id): self    { return new self('user', $id); }
+    public static function system(string $id): self  { return new self('system', $id); }
+    public static function service(string $id): self { return new self('service', $id); }
+}
+```
+
 ### `MessageMetadata`
 
 ```php
@@ -216,10 +247,25 @@ final readonly class MessageId extends UlidValue {
  *
  * Required metadata on every Envelope. The fields are non-negotiable
  * because they're load-bearing for audit trails (causation), tracing
- * (correlation/conversation), idempotency (id), schema evolution
- * (schemaVersion), and security/audit (actor).
+ * (correlation/conversation/W3C trace context), idempotency (id), schema
+ * evolution (schemaVersion), and security/audit (actor).
  *
  * Anything *not* in this list lives in a Stamp.
+ *
+ * **`schemaVersion` semantics.** This is the *wire-payload version* of
+ * the message — the format of the serialized payload, NOT the event
+ * class version. A producer running with `OrderPlaced` v3 may still emit
+ * `schemaVersion: 1` if the v3 class serializes to the v1 wire shape (no
+ * field changes). Consumers use this to drive upcaster selection without
+ * relying on the class name alone, which can lie across deserialization
+ * round-trips. Upcasting itself is implementation-detail of the future
+ * `nexus-serialization`/`nexus-ddd-eventsourcing` packages; this package
+ * only carries the version field.
+ *
+ * **`traceParent` / `traceState`.** W3C Trace Context propagation —
+ * non-negotiable for distributed CQRS observability. They live as core
+ * metadata (not stamps) because every operator running this in
+ * production needs them within six months of go-live.
  */
 final readonly class MessageMetadata {
     public function __construct(
@@ -228,13 +274,28 @@ final readonly class MessageMetadata {
         public ?MessageId $causationId = null,
         public ?MessageId $correlationId = null,
         public ?MessageId $conversationId = null,
-        public ?string $actor = null,
+        public ?ActorRef $actor = null,
         public int $schemaVersion = 1,
+        public ?string $traceParent = null,    // W3C traceparent header value
+        public ?string $traceState = null,     // W3C tracestate header value
     ) {}
 
-    /** Derive a new metadata for a *caused* message. Causation propagates. */
+    /**
+     * Derive metadata for a message *caused by* this one. The current
+     * message becomes the new message's causation; correlation and
+     * conversation propagate (initialized to the original id if absent —
+     * the very first message in a chain is its own correlation root);
+     * actor and trace context flow forward unchanged.
+     *
+     * Used at every nested-dispatch site:
+     *
+     *   public function __invoke(OrderPlaced $event, MessageContext $ctx): void {
+     *       $childMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
+     *       $this->commandBus->dispatchCommand(new ChargePayment(..., $childMeta));
+     *   }
+     */
     #[\NoDiscard('the derived metadata is the entire point of this call')]
-    public function deriveCaused(MessageId $newId, DateTimeImmutable $now): self {
+    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now): self {
         return new self(
             id: $newId,
             occurredAt: $now,
@@ -243,12 +304,41 @@ final readonly class MessageMetadata {
             conversationId: $this->conversationId ?? $this->id,
             actor: $this->actor,
             schemaVersion: $this->schemaVersion,
+            traceParent: $this->traceParent,
+            traceState: $this->traceState,
         );
     }
 }
 ```
 
-`deriveCaused()` is the canonical way to thread metadata through nested dispatches: a saga that receives `OrderPlaced` (id=A) and dispatches `ChargePayment` calls `$incomingMeta->deriveCaused($newCmdId, $clock->now())` so causation = A, correlation = the original conversation root.
+### Causation propagation — worked example
+
+A 3-hop chain showing how `forCausedMessage` threads metadata across producer/consumer boundaries:
+
+```
+Hop 1 — outside the system, user runs CLI:
+  $rootId = MessageId::generate();
+  $rootMeta = new MessageMetadata(
+      id: $rootId, occurredAt: $now, actor: ActorRef::user('alice'),
+      // causationId, correlationId, conversationId all null
+  );
+  $commandBus->dispatchCommand(new PlaceOrder(...), envelope: new Envelope(..., $rootMeta));
+
+  // Effective: id=R, causation=null, correlation=R (lazy-init), conversation=R, actor=alice
+
+Hop 2 — PlaceOrderHandler runs, aggregate emits OrderPlaced:
+  // Inside the aggregate's pullPendingEvents, the staging code calls:
+  $eventMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $clock->now());
+  // Effective: id=E1, causation=R, correlation=R, conversation=R, actor=alice
+
+Hop 3 — OrderFulfillmentProcess saga consumes OrderPlaced, dispatches ChargePayment:
+  // In the saga's #[OnEvent] handler:
+  $cmdMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $clock->now());
+  $this->commandBus->dispatchCommand(new ChargePayment(...), envelope: new Envelope(..., $cmdMeta));
+  // Effective: id=C1, causation=E1, correlation=R, conversation=R, actor=alice
+```
+
+The full chain is reconstructable from any point: `causationId` walks back one hop; `conversationId` jumps to the root; `correlationId` groups every message in the workflow. Trace context (`traceParent`/`traceState`) propagates identically so the same chain shows up in your distributed tracer.
 
 ### `Stamp` + `Envelope`
 
@@ -316,7 +406,7 @@ final readonly class Envelope {
  * Pure value object — no behavior. Handlers that want to dispatch nested
  * messages inject the bus(es) they need via constructor; the metadata in
  * the context lets them propagate causation correctly via
- * `MessageMetadata::deriveCaused()`.
+ * `MessageMetadata::forCausedMessage()`.
  *
  * Stamps are passed through alongside metadata so middleware-aware
  * handlers can read transport-level information without coupling to the
@@ -339,6 +429,92 @@ final readonly class MessageContext {
     }
 }
 ```
+
+### Worked example — first command + handler
+
+A complete walkthrough for a developer writing their first command/handler/dispatch with this package:
+
+```php
+namespace App\Users;
+
+// 1. Define the command — final readonly class implementing Command marker.
+//    The ReadonlyMessageBodyRule Psalm rule enforces final+readonly.
+final readonly class RegisterUser implements Command {
+    public function __construct(
+        public UserId $id,
+        public string $email,
+        public string $displayName,
+    ) {}
+}
+
+// 2. Define the handler — implements CommandHandler marker, uses __invoke.
+//    The CommandHandlerSignatureRule Psalm rule enforces the __invoke shape.
+final class RegisterUserHandler implements CommandHandler {
+    public function __construct(
+        private readonly UserRepository $users,
+        private readonly EventBus $events,
+        private readonly ClockInterface $clock,
+    ) {}
+
+    public function __invoke(RegisterUser $cmd, MessageContext $ctx): void {
+        $user = User::register($cmd->id, $cmd->email, $cmd->displayName);
+        $this->users->save($user);
+
+        // Emit a domain event with causation propagated from the incoming command.
+        $eventMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
+        $this->events->publishEvent(new UserRegistered($user->id(), $eventMeta));
+    }
+}
+
+// 3. Dispatch from the application boundary (HTTP controller, CLI, etc.).
+$rootMeta = new MessageMetadata(
+    id: MessageId::generate(),
+    occurredAt: $clock->now(),
+    actor: ActorRef::user($currentUserId),
+);
+$commandBus->dispatchCommand(new RegisterUser($newUserId, $email, $displayName));
+
+// 4. Test using InMemoryMessageStaging + RecordingCommandBus (test fixture).
+final class RegisterUserHandlerTest extends TestCase {
+    public function testRegistersUserAndEmitsEvent(): void {
+        $users = new InMemoryUserRepository();
+        $events = new RecordingEventBus();
+        $clock = new MockClock(...);
+        $handler = new RegisterUserHandler($users, $events, $clock);
+
+        $cmd = new RegisterUser($id, 'a@b.c', 'Alice');
+        $handler($cmd, new MessageContext($metadata));
+
+        self::assertCount(1, $users->all());
+        self::assertEquals([new UserRegistered($id, ...)], $events->recorded());
+    }
+}
+```
+
+This is the canonical recipe. Every command/query/event/handler in the framework follows this shape — the only variations are the message kind (Command vs Query vs DomainEvent) and the bus interface used.
+
+### Test doubles
+
+This package ships test doubles in `tests/Support/`:
+
+```php
+final class RecordingCommandBus implements CommandBus {
+    /** @var array<int, Command> */
+    private array $recorded = [];
+
+    public function dispatchCommand(Command $command): void {
+        $this->recorded[] = $command;
+    }
+
+    /** @return array<int, Command> */
+    public function recorded(): array { return $this->recorded; }
+}
+
+final class RecordingEventBus implements EventBus { /* same shape */ }
+final class RecordingQueryBus implements QueryBus { /* + canned responses */ }
+```
+
+These let consumers (PMs, aggregates, application services) write fast unit tests without wiring a real bus. Tests assert on `recorded()`; production wires a real bus impl.
 
 ---
 
@@ -450,11 +626,69 @@ interface TransientFailure {}
 interface TerminalFailure {}
 ```
 
-`DomainException` (from core) does not implement either by default — domain rule violations are usually terminal but the bus impl decides per-policy. Concrete framework exceptions implement the appropriate marker.
+**Disjointness invariant.** A single exception class MUST NOT implement both `TransientFailure` and `TerminalFailure`. The disjointness is enforced by a contract test (`assertFalse($e instanceof TransientFailure && $e instanceof TerminalFailure)`) that runs against every concrete `MessagingException` subclass. Violating this would let a fundamentally terminal failure escape into the retry loop.
+
+**Default policy when neither marker is present.** An exception that implements neither is treated as **terminal** — fail-closed. The reasoning: silent retry-forever for unknown exceptions is the worst failure mode. New users will assume "no marker = retry forever"; the framework MUST contradict that assumption by routing unmarked exceptions to the DLQ on first failure unless the team explicitly opts into retry via a marker.
+
+**Where domain-rule recoverability lives.** A team writing `SeatTakenException extends DomainException` decides whether retry helps (it does — another seat may free up) and adds `implements TransientFailure`. The retry policy in §5 then maps the class to a backoff strategy. The recoverability decision is the **exception's** concern (the marker), not the bus's (the policy maps marker-bearers to strategies). `DomainException` from core implements neither marker — concrete subclasses opt in to transience explicitly when the rule is recoverable.
 
 ---
 
-## 6. `MessageStaging` & `UnitOfWork` — shared with PMs and aggregates
+## 6. Delivery semantics — the exactly-once contract
+
+This section is load-bearing for every ES consumer (PM, aggregate, future eventsourcing) of this package. The PM spec relies on these contracts; they belong here, in the messaging foundation, not buried in consumer specs.
+
+### 6.1 Producer-supplied `MessageId` is authoritative
+
+Bus implementations MUST honor a producer-supplied `MessageMetadata::id` and MUST NOT regenerate it. The producer (PM, aggregate, application service) decides the id; the bus accepts it untouched.
+
+For producers that need crash-replay safety — PMs and ES aggregates — the recipe is **deterministic id derivation** from producer state:
+
+```
+PM-emitted command:   MessageId = hash(pmId, baseStreamSeq, withinStagingOrdinal)
+Aggregate-emitted event: MessageId = hash(aggregateId, eventStreamSequence)
+```
+
+The deterministic composite is stable across crash-replay (the same handler invocation, on redelivery, computes the same id), which means downstream-side dedup absorbs duplicates.
+
+For producers that don't need crash-replay safety — application services dispatching one-off commands from a controller — `MessageId::generate()` is fine; the request is at-most-once at the application boundary anyway.
+
+### 6.2 At-least-once delivery
+
+Bus implementations MUST attempt delivery at least once. Network partitions, broker restarts, container redeploys may cause the same message to arrive at the handler twice or more.
+
+### 6.3 Handler idempotency
+
+Handlers SHOULD be idempotent — i.e., processing the same `MessageId` twice produces the same observable effect as processing it once.
+
+### 6.4 Exactly-once-effect recipe
+
+For exactly-once-*effect* semantics (the same money is not charged twice; the same email is not sent twice):
+
+1. **Producer determinism** (§6.1) — same input → same `MessageId`.
+2. **Consumer-side dedup** on `MessageId` — handler checks "have I processed this id before?" before doing work; if yes, ack and return.
+
+Bus implementations MAY provide a built-in dedup layer (recommended — middleware or interceptor that checks an inbox keyed on `MessageId`). If they don't, handlers MUST do it themselves.
+
+### 6.5 The `void` return semantics
+
+`CommandBus::dispatchCommand(Command): void` and `EventBus::publishEvent(DomainEvent): void` return after **delivery is accepted**, not after the handler completes. Sync implementations happen to give you handler-completion as a side effect, but consumers MUST NOT depend on that — async impls violate it, and code that relies on "if dispatchCommand returned, the handler has run" breaks the moment the team swaps to a queued bus.
+
+The exactly-once-effect contract (§6.4) is the only correctness mechanism. Don't lean on call-stack synchronicity.
+
+### 6.6 Async-safety contract for handlers
+
+Handlers MUST be async-safe:
+- No reliance on the call stack — the dispatching code may have returned long before the handler runs.
+- No leaking transactions through globals — every transaction is scoped to a single handler invocation.
+- No request-scoped framework state (e.g., Symfony's `RequestStack`) — handlers may run in worker processes that have no incoming HTTP request.
+- All required context arrives via the message + `MessageContext`; nothing else is reliable across the dispatch boundary.
+
+This is documented as a hard rule. Bus implementations that detect handlers violating it (e.g., by inspecting framework-state usage) SHOULD fail loudly.
+
+---
+
+## 7. `MessageStaging` & `UnitOfWork` — shared with PMs and aggregates
 
 **The architect's resolution from the PM spec is now executed:** these contracts live in `nexus-ddd-messaging` (shared), not in `nexus-ddd-process-manager`. Both PMs and aggregates need post-commit dispatch; both stage commands/events the same way; one shape avoids divergence.
 
@@ -486,9 +720,21 @@ interface UnitOfWork {
 }
 ```
 
+### Transactional participation invariant
+
+For **persistent** staging implementations (the future `OutboxMessageStaging` in downstream persistence package):
+- `appendCommand()` / `appendEvent()` operations MUST participate in the same transaction that owns the domain state change. The outbox row is written in the SAME DB transaction as the PM/aggregate state, OR the impl MUST refuse to be used in a transactional context that does not enroll it.
+- `flush()` is the post-commit dispatch step; the staged buffer is durable across crashes via the underlying transaction's commit guarantee.
+- A staging impl that writes to a DIFFERENT DB connection than the domain state is broken — it gives you neither at-least-once nor exactly-once-effect.
+
+For **in-memory** staging (`InMemoryMessageStaging`, this package):
+- No persistence. A crash between `flush()` and the bus's actual dispatch loses the messages. **At-most-once** delivery, NOT at-least-once.
+- This is **tests-only** and **single-process-Fiber-runtime-only**. Use in production at your own risk.
+- The `InMemoryMessageStaging` class docblock SHOULD warn explicitly: "Production deployments MUST use a persistent staging implementation (e.g., OutboxMessageStaging from nexus-ddd-aggregate); this in-memory impl provides at-most-once delivery."
+
 ### Default in-package implementations
 
-Ship `InMemoryMessageStaging` + `InMemoryUnitOfWork` in this package. They're sufficient for tests, single-process Fiber runtimes, and applications that don't need DB-backed outboxes. Both pass the abstract `MessageStagingContractTest`.
+Ship `InMemoryMessageStaging` + `InMemoryUnitOfWork` in this package. They're sufficient for tests, single-process Fiber runtimes, and applications that consciously accept at-most-once delivery. Both pass the abstract `MessageStagingContractTest`.
 
 ```php
 final class InMemoryMessageStaging implements MessageStaging {
@@ -506,6 +752,18 @@ final class InMemoryMessageStaging implements MessageStaging {
     public function appendCommand(Command $command): void { $this->commands[] = $command; }
     public function appendEvent(DomainEvent $event): void { $this->events[] = $event; }
 
+    /**
+     * Flush ordering: commands first, then events. Some workflows
+     * legitimately want events-first ("emit event, then dispatch
+     * compensating commands"); those must inject a custom staging
+     * impl. The default ordering reflects the more common case
+     * (record state change as event AFTER coordinating commands
+     * that depend on the state change).
+     *
+     * Document this choice prominently — consumers that accidentally
+     * depend on flush ordering and then swap to OutboxMessageStaging
+     * will not break only if the outbox preserves the same order.
+     */
     public function flush(): void {
         foreach ($this->commands as $cmd) {
             $this->commandBus->dispatchCommand($cmd);
@@ -550,7 +808,144 @@ abstract class MessageStagingContractTest extends TestCase {
 
 ---
 
-## 7. Exception taxonomy
+## 8. Handler resolution — locator contracts
+
+Per Udi's review, the static Psalm rule (`OneCommandHandlerRule`) and the dynamic resolution mechanism (each bus impl chooses container / registry / attribute scan) need a shared vocabulary. Without it, every adapter reinvents resolution and the static rule guards a contract the runtime doesn't actually express.
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Resolution;
+
+/**
+ * @psalm-api
+ *
+ * Locator contract for command handlers. Bus implementations consume this
+ * via container, registry, or reflection scan. The static `OneCommandHandlerRule`
+ * verifies "exactly one CommandHandler implementer per concrete Command";
+ * this interface is what the runtime side honors.
+ *
+ * @throws HandlerNotFoundException
+ *         when no handler is registered for the command's concrete class
+ */
+interface CommandHandlerLocator {
+    public function locate(Command $command): CommandHandler;
+}
+
+/**
+ * @psalm-api
+ *
+ * @throws HandlerNotFoundException
+ */
+interface QueryHandlerLocator {
+    /**
+     * @template TResult
+     * @param Query<TResult> $query
+     */
+    public function locate(Query $query): QueryHandler;
+}
+
+/**
+ * @psalm-api
+ *
+ * Listeners are 0..N per event class — broadcast semantics. An empty
+ * iterable is a valid response (no subscribers); not an error.
+ */
+interface EventListenerLocator {
+    /** @return iterable<int, EventListener> */
+    public function locate(DomainEvent $event): iterable;
+}
+```
+
+Bus implementations construct themselves with a locator; consumers wire the locator with whatever resolution mechanism their stack offers (PSR-11 container, custom registry, attribute scan).
+
+---
+
+## 9. Serialization — `MessageSerializer` contract
+
+Once the bus crosses a process boundary, every message must serialize. Without a contract here, every adapter reinvents its own `serialize`/`deserialize`. Define the contract centrally; let adapters bring their own format.
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Serialization;
+
+/**
+ * @psalm-api
+ *
+ * Round-trip a message + its envelope across a process boundary.
+ * Implementations: JSON, MessagePack, native PHP serialize, Valinor-mapped, etc.
+ */
+interface MessageSerializer {
+    /** @template TMessage of object */
+    public function serialize(Envelope $envelope): SerializedMessage;
+
+    /** @template TMessage of object */
+    public function deserialize(SerializedMessage $serialized): Envelope;
+}
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * The wire format. `body` carries the encoded message + metadata + stamps;
+ * `format` identifies the encoding for cross-version round-trip safety.
+ */
+final readonly class SerializedMessage {
+    public function __construct(
+        public string $body,
+        public string $format,         // 'json', 'msgpack', 'php-serialize', etc.
+        public string $messageClass,   // FQN of the message — for typed deserialization
+    ) {}
+}
+```
+
+Implementations (`PhpNativeMessageSerializer`, `JsonMessageSerializer`, etc.) live in adapter packages or in `nexus-serialization`. The contract here lets bus impls invoke serialization without coupling to a specific implementation.
+
+---
+
+## 10. Dead-letter store — `DeadLetterStore` contract
+
+When all retries are exhausted (or the failure is `TerminalFailure`), the message goes to a dead-letter store. Without a uniform contract, every adapter ships its own DLQ shape and ops admin surfaces diverge.
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\DeadLetter;
+
+/**
+ * @psalm-api
+ *
+ * Persistent record of messages the bus could not deliver. Operators
+ * inspect the DLQ to triage failures, and may re-inject messages back
+ * into the bus once the underlying issue is resolved.
+ */
+interface DeadLetterStore {
+    /** Record a failed message + the cause. */
+    public function record(DeadLetterEntry $entry): void;
+
+    /** Re-inject a previously-recorded message. The bus dedup gate
+     *  (per §6.4) prevents double-processing if the original eventually
+     *  succeeded. */
+    public function replay(MessageId $messageId): void;
+
+    /** @return iterable<int, DeadLetterEntry> */
+    public function pending(): iterable;
+}
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ */
+final readonly class DeadLetterEntry {
+    public function __construct(
+        public Envelope $envelope,
+        public Throwable $cause,
+        public DateTimeImmutable $deadLetteredAt,
+        public int $attemptsBeforeDeadLetter,
+    ) {}
+}
+```
+
+Implementations live downstream (DB-backed, file-backed, transport-native). The contract here gives ops a single admin vocabulary across adapters.
+
+---
+
+## 11. Exception taxonomy
 
 ```php
 namespace Monadial\Nexus\Ddd\Messaging\Exception;
@@ -569,10 +964,13 @@ abstract class MessagingException extends RuntimeException {}
 
 final class HandlerNotFoundException extends MessagingException implements TerminalFailure { ... }
 final class DuplicateCommandHandlerException extends MessagingException implements TerminalFailure { ... }
+final class HandlerSignatureMismatchException extends MessagingException implements TerminalFailure { ... }
 final class MessageDispatchException extends MessagingException { ... }
 final class MessageRejectedException extends MessagingException implements TerminalFailure { ... }
 final class StagingClosedException extends MessagingException { ... }
 ```
+
+`HandlerSignatureMismatchException` is the runtime counterpart to the static Psalm rules. Bus implementations resolve handlers dynamically (container, registry, attribute scan) and may encounter a handler whose `__invoke` shape doesn't match what the static rule would have required. The bus MUST throw this exception **at handler-resolution time, not at dispatch time** — discovering the mismatch when the handler is loaded prevents the message from being lost in a rejected envelope.
 
 Three roots are now disjoint by design:
 - `NexusDddException` — framework wiring (e.g. ApplyMethod-not-found in core)
@@ -583,7 +981,7 @@ Each root extends `RuntimeException` directly (not each other). Disjointness is 
 
 ---
 
-## 8. PSR-first dependency policy
+## 12. PSR-first dependency policy
 
 Same rule as `nexus-ddd-process-manager` (and the monorepo CLAUDE.md):
 
@@ -594,11 +992,13 @@ Same rule as `nexus-ddd-process-manager` (and the monorepo CLAUDE.md):
 | Event dispatcher | `Psr\EventDispatcher\EventDispatcherInterface` (PSR-14) | For framework-internal events (none in this package directly, but the contract is stable) |
 | Clock | `Psr\Clock\ClockInterface` (PSR-20) | `MessageMetadata` timestamps; test-injectable |
 
-**No `symfony/*`, `laravel/*`, `monolog/*`, `doctrine/*` runtime deps.** Adapters live in dedicated `nexus-*-adapter-*` packages. Build-failing Deptrac `forbidden_imports` rule.
+**No `symfony/*`, `laravel/*`, `monolog/*`, `doctrine/*` runtime deps as code dependencies.** Adapters live in dedicated `nexus-*-adapter-*` packages. Build-failing Deptrac `forbidden_imports` rule.
+
+**Single allowed exception: `Symfony\Component\Uid\Ulid`.** ULID standardization is in PHP-FIG draft; until it lands as PSR, Symfony's implementation is the de facto standard, and `nexus-ddd-core` already depends on `symfony/uid` for the same reason. The Deptrac `forbidden_imports` regex is narrowed accordingly: `^Symfony\\(?!Component\\Uid\\)`. This is the only Symfony namespace any nexus package imports directly; everything else is accessed via PSR contracts.
 
 ---
 
-## 9. Fitness functions (CI-enforced)
+## 13. Fitness functions (CI-enforced)
 
 **Deptrac layer `DddMessaging`:**
 
@@ -614,12 +1014,17 @@ ruleset:
 
 forbidden_imports:
   DddMessaging:
-    - regex: ^Symfony\\.*
+    - regex: ^Symfony\\(?!Component\\Uid\\).*
     - regex: ^Laravel\\.*
     - regex: ^Illuminate\\.*
     - regex: ^Monolog\\.*
     - regex: ^Doctrine\\.*
+    - regex: ^GuzzleHttp\\.*
+    - regex: ^React\\.*
+    - regex: ^Amp\\.*
 ```
+
+The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (justified in §12). The defensive additions for `GuzzleHttp\\`, `React\\`, `Amp\\` prevent async libraries from leaking into messaging code — they're cheap to add now, expensive to retrofit once 14 downstream packages compile against the loose constraint.
 
 **Psalm rules** (in `nexus-psalm` plugin):
 
@@ -632,48 +1037,61 @@ forbidden_imports:
 | `OneCommandHandlerRule` | A given concrete `Command` class has exactly one implementer of `CommandHandler` (commands are point-to-point) |
 
 **PHPUnit reflection / contract tests:**
-- Three-root exception disjointness test
-- `MessageMetadata::deriveCaused` propagates correlation/conversation correctly
-- `Envelope::with()`/`get()` round-trip stamps
-- `RetryPolicy` first-match-wins and giveUpSet precedence
-- `MessageStagingContractTest` — both `InMemoryMessageStaging` and any future impl pass
+- **Bus interface signature snapshot test** — pins the public method signatures of `CommandBus`, `QueryBus`, `EventBus` (return types, parameter types, exception annotations) into a fixture file; fails CI if any signature drifts without a coordinated fixture update. Five downstream packages will compile against these three interfaces; one quietly-added parameter breaks every adapter.
+- **Three-root exception disjointness test** — `NexusDddException`, `DomainException`, `MessagingException` extend `RuntimeException` directly and not each other.
+- **TransientFailure ∩ TerminalFailure = ∅ test** — every concrete exception in the package implements at most one of the markers (`assertFalse($e instanceof TransientFailure && $e instanceof TerminalFailure)` for each). Otherwise a fundamentally terminal failure could escape into the retry loop.
+- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `actor`, `traceParent`, `traceState` correctly across hops.
+- `Envelope::with()` / `get()` round-trip stamps.
+- `RetryPolicy` first-match-wins and `giveUpSet` precedence.
+- `MessageStagingContractTest` — both `InMemoryMessageStaging` and any future impl pass.
 
 ---
 
-## 10. v1 deliverables
+## 14. v1 deliverables
 
 Beyond code:
 
 - **Spec doc** (this file) committed to `docs/superpowers/specs/`
-- **All Psalm rules** in §9 added to the `nexus-psalm` plugin
-- **Deptrac layer + forbidden_imports** rule
+- **All Psalm rules** in §13 added to the `nexus-psalm` plugin
+- **Deptrac layer + forbidden_imports** rule with the `Symfony\Component\Uid` carve-out
+- **Bus interface signature snapshot test** as a contract test
 - **`MessageStagingContractTest`** abstract test class (Support/)
 - **`InMemoryMessageStaging`** + **`InMemoryUnitOfWork`** with full test coverage
+- **Test doubles** (`RecordingCommandBus`, `RecordingEventBus`, `RecordingQueryBus`) in `tests/Support/`
 
 ---
 
-## 11. Out of scope for v1
+## 15. Out of scope for v1
 
 - Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus — separate packages)
 - Outbox table schema and DB-backed staging (downstream persistence package)
 - Middleware abstraction (each bus impl decides)
-- Handler resolution mechanism (bus impl's concern)
-- Serialization of envelopes (when needed, via `nexus-serialization` integration in adapter packages)
-- DLQ implementation (each bus impl decides where DLQ lives)
+- Specific handler resolution mechanism implementations (locator *contracts* are in v1; container-backed / registry-backed locators ship in adapter packages)
+- Serialization implementations (`MessageSerializer` *contract* is in v1; concrete formats — JSON, MessagePack, native, Valinor — ship in adapters or `nexus-serialization`)
+- Specific dead-letter store implementations (`DeadLetterStore` *contract* is in v1; DB-backed / file-backed / transport-native impls ship downstream)
+- Circuit-breaker backoff strategy (defer; the six existing strategies cover v1 needs)
+- Per-handler / per-message-class retry granularity (compose from per-exception primitive + adapter wrapper if needed)
 
 ---
 
-## 12. Sign-off
+## 16. Sign-off
 
-All six brainstorm decisions (Q1–Q6) were locked during the 2026-05-07 conversation. This spec transcribes them into a contract document.
+All six brainstorm decisions (Q1–Q6) were locked during the 2026-05-07 conversation. This spec transcribes them into a contract document and addresses every gap surfaced by the four-expert round-1 review.
 
 Open items the user must confirm:
 
 - [ ] **`MessageStaging`/`UnitOfWork` here** (not in `nexus-ddd-process-manager`) — the architect's resolution from the PM-spec review. Confirm.
 - [ ] **In-memory staging implementations ship here** with `MessageStagingContractTest`. Confirm.
-- [ ] **`TransientFailure` / `TerminalFailure` markers** on exceptions to drive retry decisions. Udi flagged the axis; this spec adds the markers. Confirm.
+- [ ] **`TransientFailure` / `TerminalFailure` markers** as disjoint interfaces; default-when-neither = terminal. Confirm.
 - [ ] **Three exception roots** (`NexusDddException`, `DomainException`, `MessagingException`) — disjoint, each extends `RuntimeException` directly. Confirm.
-- [ ] **`MessageId extends UlidValue`** as the framework-internal id type. Confirm.
-- [ ] **`MessageMetadata::deriveCaused()`** as the canonical causation-propagation method on the metadata VO itself (rather than a separate helper). Confirm.
+- [ ] **`MessageId extends UlidValue`** as the framework-internal id type, with producer-supplied id authoritative (§6.1). Confirm.
+- [ ] **`MessageMetadata::forCausedMessage()`** as the canonical causation-propagation method on the metadata VO itself. Confirm.
+- [ ] **`ActorRef` typed value object** for the `actor` field (kind/id split). Confirm.
+- [ ] **`traceParent` / `traceState` core metadata fields** (W3C Trace Context). Confirm.
+- [ ] **`schemaVersion` is wire-payload-version**, distinct from event class version. Confirm.
+- [ ] **Locator contracts** (`CommandHandlerLocator`, `QueryHandlerLocator`, `EventListenerLocator`) ship in v1. Confirm.
+- [ ] **`MessageSerializer` and `DeadLetterStore` contracts** ship in v1; implementations defer. Confirm.
+- [ ] **`Symfony\Component\Uid` carve-out** in forbidden_imports; defensive `GuzzleHttp\\`, `React\\`, `Amp\\` additions. Confirm.
+- [ ] **Delivery semantics §6** — at-least-once delivery; producer-supplied MessageId authoritative; void return = delivery accepted; async-safety contract for handlers. Confirm.
 
 After sign-off → invoke `superpowers:writing-plans` to produce the implementation plan. After messaging plan is written and (optionally) executed, the `nexus-ddd-process-manager` plan's Phase 2 (temporary `Contract/Messaging` stubs) is replaced with a real `nexus-actors/ddd-messaging` composer dependency.
