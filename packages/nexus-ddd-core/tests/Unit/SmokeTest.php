@@ -56,6 +56,7 @@ final class SmokeTest extends TestCase
 /** @psalm-immutable */
 final readonly class SmokeEmail extends StringValue {}
 
+/** @extends EventSourcedAggregateRoot<SmokePlaced> */
 final class SmokeOrder extends EventSourcedAggregateRoot
 {
     public string $status = 'new';

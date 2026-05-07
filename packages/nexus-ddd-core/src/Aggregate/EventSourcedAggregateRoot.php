@@ -11,6 +11,10 @@ use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 /**
  * @psalm-api
  *
+ * @template TEvent of DomainEvent
+ * @extends AggregateRoot<TEvent>
+ * @implements EventSourceable<TEvent>
+ *
  * Base for event-sourced aggregates. State is reconstructed by replaying
  * the event stream via `replay()`. Subclasses define `applyXxx()` methods
  * that MUST be pure (no I/O, no recordThat(), no clock, no logging) — they
@@ -59,6 +63,8 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
      * `pullRecordedEvents()` will not surface the failed event. This is
      * the "event-not-applied means event-not-recorded" semantic from
      * akka-typed; do not reorder these two lines without revisiting it.
+     *
+     * @param TEvent $event
      */
     #[\Override]
     final protected function recordThat(DomainEvent $event): void
@@ -67,7 +73,7 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
         parent::recordThat($event);
     }
 
-    /** @param iterable<int, DomainEvent> $events */
+    /** @param iterable<int, TEvent> $events */
     #[\Override]
     final public function replay(iterable $events): void
     {

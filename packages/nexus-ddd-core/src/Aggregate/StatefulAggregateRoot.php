@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Aggregate;
 
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
+
 /**
  * @psalm-api
  *
@@ -50,5 +52,8 @@ namespace Monadial\Nexus\Ddd\Core\Aggregate;
  *             return $this->id;
  *         }
  *     }
+ *
+ * @template TEvent of DomainEvent
+ * @extends AggregateRoot<TEvent>
  */
 abstract class StatefulAggregateRoot extends AggregateRoot {}

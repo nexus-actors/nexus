@@ -86,6 +86,7 @@ final class EventSourcedAggregateRootTest extends TestCase
     }
 }
 
+/** @extends EventSourcedAggregateRoot<Incremented> */
 final class EsAggregate extends EventSourcedAggregateRoot
 {
     public int $total = 0;

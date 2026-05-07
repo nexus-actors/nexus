@@ -12,6 +12,8 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 /**
  * @psalm-api
  *
+ * @template TEvent of DomainEvent
+ *
  * Base for all aggregates — the consistency boundary that protects domain
  * invariants. Subclasses must implement `id()` and use `recordThat()` to
  * emit `DomainEvent`s when domain rules are exercised.
@@ -26,6 +28,18 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  *      events. `recordThat()` routes through an `applyXxx` convention so
  *      state stays in lock-step with the recorded stream.
  *
+ * **Constrain the event family.** Concrete aggregates declare the closed
+ * set of events they may emit via `@extends ...<MyAggregateEvent>`, where
+ * `MyAggregateEvent` is a sealed sub-interface of `DomainEvent`. Psalm
+ * then refuses `recordThat($e)` if `$e` is not a member of that family —
+ * the closest PHP gets to a sealed-event hierarchy.
+ *
+ *     interface OrderEvent extends DomainEvent {}
+ *     final readonly class OrderPlaced implements OrderEvent { ... }
+ *
+ *     /** @extends EventSourcedAggregateRoot<OrderEvent> *\/
+ *     final class Order extends EventSourcedAggregateRoot { ... }
+ *
  * Aggregates are NOT readonly — they have mutable internal state ($version,
  * $recordedEvents). Concrete subclasses are typically `final class` (not
  * readonly). The id is constructor-promoted with the property-level
@@ -37,7 +51,7 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  */
 abstract class AggregateRoot implements Entity
 {
-    /** @var array<int, DomainEvent> */
+    /** @var array<int, TEvent> */
     private array $recordedEvents = [];
 
     protected int $version = 0;
@@ -79,6 +93,8 @@ abstract class AggregateRoot implements Entity
      * Record that a domain event happened. State-stored aggregates simply
      * append; event-sourced aggregates override this to also dispatch the
      * event through the applyXxx convention.
+     *
+     * @param TEvent $event
      */
     protected function recordThat(DomainEvent $event): void
     {
@@ -86,7 +102,7 @@ abstract class AggregateRoot implements Entity
         $this->version++;
     }
 
-    /** @return array<int, DomainEvent> */
+    /** @return array<int, TEvent> */
     #[\NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
     final public function pullRecordedEvents(): array
     {

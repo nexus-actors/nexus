@@ -48,6 +48,7 @@ final class StatefulAggregateRootTest extends TestCase
     }
 }
 
+/** @extends StatefulAggregateRoot<CustomerRegistered> */
 final class StatefulCustomer extends StatefulAggregateRoot
 {
     public string $name = '';

@@ -9,20 +9,22 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifiable;
 /**
  * @psalm-api
  *
+ * @template TEvent of DomainEvent
+ *
  * Anything the framework persists by replaying its event stream implements
  * this. Implementations: `EventSourcedAggregateRoot` (and downstream
  * `AbstractProcessManager` once `nexus-ddd-aggregate` lands).
  *
  * State-stored aggregates do NOT implement this — they emit DomainEvents
  * to the bus but their state lives in a row, not a stream. See
- * `EventSourcedAggregateRoot` vs. extending `AggregateRoot` directly.
+ * `EventSourcedAggregateRoot` vs. `StatefulAggregateRoot`.
  */
 interface EventSourceable extends Identifiable
 {
-    /** @return array<int, DomainEvent> */
+    /** @return array<int, TEvent> */
     public function pullRecordedEvents(): array;
 
-    /** @param iterable<int, DomainEvent> $events */
+    /** @param iterable<int, TEvent> $events */
     public function replay(iterable $events): void;
 
     public function version(): int;

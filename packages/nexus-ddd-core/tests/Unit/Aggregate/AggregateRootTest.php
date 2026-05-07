@@ -102,6 +102,7 @@ final class AggregateRootTest extends TestCase
     }
 }
 
+/** @extends StatefulAggregateRoot<NameSet> */
 final class StatefulSample extends StatefulAggregateRoot
 {
     public string $name = '';
