@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
-use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -86,12 +85,12 @@ final class EventSourcedAggregateRootTest extends TestCase
     }
 }
 
-/** @extends EventSourcedAggregateRoot<Incremented> */
+/** @extends EventSourcedAggregateRoot<TestUlidId, Incremented> */
 final class EsAggregate extends EventSourcedAggregateRoot
 {
     public int $total = 0;
 
-    public static function create(Identifier $id): self
+    public static function create(TestUlidId $id): self
     {
         return new self($id);
     }
@@ -101,7 +100,7 @@ final class EsAggregate extends EventSourcedAggregateRoot
      * with state already populated, then sets version to the snapshot's
      * stream revision via the framework rehydration hook.
      */
-    public static function createWithSnapshotState(Identifier $id, int $total, int $atRevision): self
+    public static function createWithSnapshotState(TestUlidId $id, int $total, int $atRevision): self
     {
         $a = new self($id);
         $a->total = $total;
@@ -111,8 +110,9 @@ final class EsAggregate extends EventSourcedAggregateRoot
     }
 
     #[\Override]
-    public function id(): Identifier
+    public function id(): TestUlidId
     {
+        /** @var TestUlidId */
         return $this->id;
     }
 

@@ -10,7 +10,6 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
-use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -102,19 +101,20 @@ final class AggregateRootTest extends TestCase
     }
 }
 
-/** @extends StatefulAggregateRoot<NameSet> */
+/** @extends StatefulAggregateRoot<TestUlidId, NameSet> */
 final class StatefulSample extends StatefulAggregateRoot
 {
     public string $name = '';
 
-    public static function create(Identifier $id): self
+    public static function create(TestUlidId $id): self
     {
         return new self($id);
     }
 
     #[\Override]
-    public function id(): Identifier
+    public function id(): TestUlidId
     {
+        /** @var TestUlidId */
         return $this->id;
     }
 

@@ -49,11 +49,12 @@ final class StatefulAggregateRootTest extends TestCase
 }
 
 /** @extends StatefulAggregateRoot<CustomerRegistered> */
+/** @extends StatefulAggregateRoot<TestUlidId, CustomerRegistered> */
 final class StatefulCustomer extends StatefulAggregateRoot
 {
     public string $name = '';
 
-    public static function register(Identifier $id, string $name): self
+    public static function register(TestUlidId $id, string $name): self
     {
         $c = new self($id);
         $c->name = $name;
@@ -63,8 +64,9 @@ final class StatefulCustomer extends StatefulAggregateRoot
     }
 
     #[\Override]
-    public function id(): Identifier
+    public function id(): TestUlidId
     {
+        /** @var TestUlidId */
         return $this->id;
     }
 }

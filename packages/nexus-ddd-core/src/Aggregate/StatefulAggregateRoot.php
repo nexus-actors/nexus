@@ -53,7 +53,8 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
  *         }
  *     }
  *
+ * @template TId of \Monadial\Nexus\Ddd\Core\Identity\Identifier
  * @template TEvent of DomainEvent
- * @extends AggregateRoot<TEvent>
+ * @extends AggregateRoot<TId, TEvent>
  */
 abstract class StatefulAggregateRoot extends AggregateRoot {}

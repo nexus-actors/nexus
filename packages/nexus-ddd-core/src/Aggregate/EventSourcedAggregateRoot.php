@@ -11,8 +11,9 @@ use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 /**
  * @psalm-api
  *
+ * @template TId of \Monadial\Nexus\Ddd\Core\Identity\Identifier
  * @template TEvent of DomainEvent
- * @extends AggregateRoot<TEvent>
+ * @extends AggregateRoot<TId, TEvent>
  * @implements EventSourceable<TEvent>
  *
  * Base for event-sourced aggregates. State is reconstructed by replaying

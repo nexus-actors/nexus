@@ -12,6 +12,7 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 /**
  * @psalm-api
  *
+ * @template TId of Identifier
  * @template TEvent of DomainEvent
  *
  * Base for all aggregates — the consistency boundary that protects domain
@@ -28,17 +29,20 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  *      events. `recordThat()` routes through an `applyXxx` convention so
  *      state stays in lock-step with the recorded stream.
  *
- * **Constrain the event family.** Concrete aggregates declare the closed
- * set of events they may emit via `@extends ...<MyAggregateEvent>`, where
- * `MyAggregateEvent` is a sealed sub-interface of `DomainEvent`. Psalm
- * then refuses `recordThat($e)` if `$e` is not a member of that family —
- * the closest PHP gets to a sealed-event hierarchy.
+ * **Constrain identity AND event family.** Concrete aggregates declare
+ * both their identifier type and the closed set of events they may emit
+ * via `@extends ...<TheirIdType, TheirEventInterface>`. Psalm then
+ * refuses `new SomeAggregate($wrongId)` and `recordThat($strayEvent)` —
+ * the closest PHP gets to a sealed-aggregate definition.
  *
+ *     final readonly class OrderId extends UlidValue {}
  *     interface OrderEvent extends DomainEvent {}
  *     final readonly class OrderPlaced implements OrderEvent { ... }
  *
- *     /** @extends EventSourcedAggregateRoot<OrderEvent> *\/
- *     final class Order extends EventSourcedAggregateRoot { ... }
+ *     /** @extends EventSourcedAggregateRoot<OrderId, OrderEvent> *\/
+ *     final class Order extends EventSourcedAggregateRoot {
+ *         public function id(): OrderId { return $this->id; }
+ *     }
  *
  * Aggregates are NOT readonly — they have mutable internal state ($version,
  * $recordedEvents). Concrete subclasses are typically `final class` (not
@@ -56,8 +60,10 @@ abstract class AggregateRoot implements Entity
 
     protected int $version = 0;
 
+    /** @param TId $id */
     protected function __construct(protected readonly Identifier $id) {}
 
+    /** @return TId */
     #[\Override]
     abstract public function id(): Identifier;
 

@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit;
 use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Identity\IdGenerator;
-use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Identity\UlidGenerator;
 use Monadial\Nexus\Ddd\Core\Policy\AbstractPolicy;
 use Monadial\Nexus\Ddd\Core\Specification\AbstractRichSpecification;
@@ -56,19 +55,20 @@ final class SmokeTest extends TestCase
 /** @psalm-immutable */
 final readonly class SmokeEmail extends StringValue {}
 
-/** @extends EventSourcedAggregateRoot<SmokePlaced> */
+/** @extends EventSourcedAggregateRoot<TestUlidId, SmokePlaced> */
 final class SmokeOrder extends EventSourcedAggregateRoot
 {
     public string $status = 'new';
 
-    public static function create(Identifier $id): self
+    public static function create(TestUlidId $id): self
     {
         return new self($id);
     }
 
     #[\Override]
-    public function id(): Identifier
+    public function id(): TestUlidId
     {
+        /** @var TestUlidId */
         return $this->id;
     }
 
