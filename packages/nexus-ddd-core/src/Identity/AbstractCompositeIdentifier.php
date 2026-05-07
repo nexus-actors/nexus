@@ -27,17 +27,16 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
         return $this->components;
     }
 
+    /**
+     * Subclasses MUST implement: produce a canonical string that round-trips
+     * with their own `fromString`. The base does NOT ship a default format —
+     * a half-contract default would be a trap (one that the abstract
+     * `fromString` couldn't undo). Each composite identifier owns its
+     * canonical form *both ways* — encode in `value()`, decode in
+     * `fromString()` — so the encoding/decoding always agree.
+     */
     #[\Override]
-    public function value(): string
-    {
-        return implode(
-            ':',
-            array_map(
-                static fn(Identifier $id): string => rawurlencode($id->value()),
-                array_values($this->components),
-            ),
-        );
-    }
+    abstract public function value(): string;
 
     #[\Override]
     public function equals(Identifier $other): bool

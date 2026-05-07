@@ -77,6 +77,14 @@ final readonly class TenantOrderId extends AbstractCompositeIdentifier
     }
 
     #[\Override]
+    public function value(): string
+    {
+        $components = $this->components();
+
+        return $components['tenant']->value() . ':' . $components['order']->value();
+    }
+
+    #[\Override]
     public static function fromString(string $value): static
     {
         $parts = explode(':', $value);
@@ -88,8 +96,8 @@ final readonly class TenantOrderId extends AbstractCompositeIdentifier
         [$tenant, $order] = $parts;
 
         return new self(
-            TestUlidId::fromString(rawurldecode($tenant)),
-            TestUlidId::fromString(rawurldecode($order)),
+            TestUlidId::fromString($tenant),
+            TestUlidId::fromString($order),
         );
     }
 }
