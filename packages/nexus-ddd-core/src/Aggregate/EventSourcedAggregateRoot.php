@@ -18,13 +18,36 @@ use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
  * with the freshly-recorded event.
  *
  * `applyXxx` resolution is convention-based (method name = `apply` + event
- * class short name), cached as class-scoped Closures by `ApplyDispatcher`.
- * Cross-namespace short-name collisions raise
- * `ApplyMethodAmbiguousException` at first dispatch.
+ * class short name), with `#[AppliesTo(...)]` as an explicit override for
+ * versioned events. Resolution + invocation are handled by `ApplyDispatcher`
+ * (cached as class-scoped Closures after first dispatch).
+ *
+ * **Concurrency.** The dispatcher is held in a single static slot on this
+ * class. Under a single-process Fiber runtime that is safe; under multi-
+ * worker runtimes (e.g. Swoole's worker pool) the dispatcher is shared
+ * across coroutines within a worker but isolated across workers (each
+ * worker has its own PHP heap). Frameworks that want a per-context
+ * dispatcher (per worker, per test, per coroutine pool) replace the
+ * default via `setDispatcher()`. Tests reset between cases via the same
+ * hook.
  */
 abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventSourceable
 {
     private static ?ApplyDispatcher $dispatcher = null;
+
+    /**
+     * Replace the apply dispatcher. Returns the previous instance so the
+     * caller can restore it (typically used by tests for isolation, or by
+     * framework wiring code that scopes a dispatcher to a worker / test /
+     * coroutine context).
+     */
+    public static function setDispatcher(?ApplyDispatcher $dispatcher): ?ApplyDispatcher
+    {
+        $previous = self::$dispatcher;
+        self::$dispatcher = $dispatcher;
+
+        return $previous;
+    }
 
     /**
      * Record + apply: dispatch through applyXxx so state moves in lock-step

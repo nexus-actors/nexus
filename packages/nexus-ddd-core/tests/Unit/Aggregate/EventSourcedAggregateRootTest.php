@@ -50,6 +50,40 @@ final class EventSourcedAggregateRootTest extends TestCase
         self::assertCount(0, $a->pullRecordedEvents());
         self::assertSame(5, $a->total);
     }
+
+    #[Test]
+    public function rehydrateVersionSetsAggregateRevisionAndReplayContinuesFromThere(): void
+    {
+        // Simulates loading from a snapshot taken at revision 42, plus 3
+        // events written after the snapshot.
+        $id = new TestUlidId((new Ulid())->toBase32());
+        $a = EsAggregate::createWithSnapshotState($id, total: 100, atRevision: 42);
+
+        self::assertSame(42, $a->version());
+        self::assertSame(100, $a->total);
+
+        $a->replay([new Incremented(5), new Incremented(7), new Incremented(3)]);
+
+        self::assertSame(45, $a->version());        // 42 + 3 events
+        self::assertSame(115, $a->total);           // 100 + 5 + 7 + 3
+        self::assertCount(0, $a->pullRecordedEvents());
+    }
+
+    #[Test]
+    public function setDispatcherSwapsTheStaticDispatcherAndReturnsThePrevious(): void
+    {
+        $custom = new \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher();
+        $previous = EsAggregate::setDispatcher($custom);
+
+        try {
+            $id = new TestUlidId((new Ulid())->toBase32());
+            $a = EsAggregate::create($id);
+            $a->incrementBy(2);
+            self::assertSame(2, $a->total);
+        } finally {
+            EsAggregate::setDispatcher($previous);
+        }
+    }
 }
 
 final class EsAggregate extends EventSourcedAggregateRoot
@@ -59,6 +93,20 @@ final class EsAggregate extends EventSourcedAggregateRoot
     public static function create(Identifier $id): self
     {
         return new self($id);
+    }
+
+    /**
+     * Stand-in for a snapshot rehydration constructor: builds the aggregate
+     * with state already populated, then sets version to the snapshot's
+     * stream revision via the framework rehydration hook.
+     */
+    public static function createWithSnapshotState(Identifier $id, int $total, int $atRevision): self
+    {
+        $a = new self($id);
+        $a->total = $total;
+        $a->rehydrateVersion($atRevision);
+
+        return $a;
     }
 
     #[\Override]

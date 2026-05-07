@@ -53,6 +53,29 @@ abstract class AggregateRoot implements Entity
     }
 
     /**
+     * Rehydrate the aggregate version from a snapshot. Called by the
+     * snapshot store (or a `#[SnapshotConstructor]`-marked factory) after
+     * constructing the aggregate from its snapshotted state — sets the
+     * version to the stream revision at which the snapshot was taken.
+     *
+     * After this, `replay()` may be called with events written *after*
+     * that revision; each replayed event continues bumping version.
+     *
+     * Aggregate revision and stream position are the same number, set in
+     * exactly two places: `recordThat()`/`replay()` increment by one;
+     * `rehydrateVersion()` sets to a known absolute. There is no third
+     * mutation path — do not bypass these.
+     *
+     * @internal Framework wiring entry point. Domain code must NOT call
+     *           this — bypassing it will desync the aggregate from its
+     *           stream.
+     */
+    final protected function rehydrateVersion(int $revision): void
+    {
+        $this->version = $revision;
+    }
+
+    /**
      * Record that a domain event happened. State-stored aggregates simply
      * append; event-sourced aggregates override this to also dispatch the
      * event through the applyXxx convention.
