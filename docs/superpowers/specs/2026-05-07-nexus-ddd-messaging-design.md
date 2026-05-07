@@ -198,9 +198,13 @@ This mirrors the Symfony Messenger handler convention exactly, so a future Symfo
 
 ## 5. `CurrentMessageContext` — implicit metadata propagation
 
+> **Audience for this section: bus implementers and framework contributors.** Domain handlers do NOT interact with `CurrentMessageContext` directly except through the boundary helper `within()`. If you're writing aggregates / PMs / handlers, this section is informational; if you're writing a bus adapter or runtime integration, this is your contract.
+
 The metadata-threading discipline (causation, correlation, conversation, trace context, actor) is a **framework concern**, not a domain concern. Handlers shouldn't have to remember to call `forCausedMessage()` on every nested dispatch — the framework knows which message is currently being processed and propagates automatically.
 
 ### The ambient-context primitive
+
+`CurrentMessageContext` is a façade over a pluggable `ContextStorage`. The default storage uses a per-process static stack (correct for synchronous PHP and Fiber runtimes); coroutine-aware adapters (Swoole, ReactPHP) replace the storage with a per-coroutine implementation.
 
 ```php
 namespace Monadial\Nexus\Ddd\Messaging\Context;
@@ -208,48 +212,106 @@ namespace Monadial\Nexus\Ddd\Messaging\Context;
 /**
  * @psalm-api
  *
- * Stack of in-flight `MessageContext` entries — the framework's
- * implicit-propagation primitive.
+ * Pluggable storage for the in-flight context stack. Adapters that run
+ * on coroutine runtimes (Swoole, ReactPHP) MUST provide a coroutine-keyed
+ * implementation so concurrent handler chains do not see each other's
+ * state. Single-threaded / Fiber runtimes use the default static-array
+ * storage.
  *
- * Lifecycle:
- *   - At the application boundary (HTTP controller, CLI, scheduled job),
- *     code calls `CurrentMessageContext::within(MessageContext, callback)`
- *     to establish the root context for the boundary message.
- *   - When a bus dispatches a message and is about to invoke a handler,
- *     the bus middleware pushes the new context onto the stack.
- *   - Inside the handler, code that calls `dispatchCommand`/`publishEvent`/
- *     `dispatchQuery` triggers the bus to read `current()`, derive
- *     causation/correlation/etc. via `forCausedMessage()`, wrap the
- *     message in an Envelope, and send to transport.
- *   - When the handler returns (or throws), the bus pops the stack.
+ * The contract is enforced by `ContextStorageContractTest`: parallel
+ * `within()` calls in N coroutines, each pushing a distinct context,
+ * must each see only their own context's `current()`.
+ */
+interface ContextStorage {
+    /** @return list<MessageContext> */
+    public function snapshot(): array;
+    public function push(MessageContext $ctx): void;
+    public function pop(): void;
+    public function current(): ?MessageContext;
+
+    /**
+     * Replace the entire stack with the given snapshot. Used by
+     * coroutine-bridge code that hands off control across runtime
+     * boundaries (e.g., enqueueing work into a worker pool that
+     * needs the same logical context restored on the consumer side).
+     *
+     * @param list<MessageContext> $stack
+     */
+    public function restore(array $stack): void;
+}
+
+/**
+ * Default storage — per-process static stack. Correct for synchronous
+ * PHP, Fiber-based runtimes, and any setting where one logical request
+ * never yields control to another logical request mid-handler.
+ */
+final class StaticStackContextStorage implements ContextStorage {
+    /** @var list<MessageContext> */
+    private array $stack = [];
+    public function snapshot(): array { return $this->stack; }
+    public function push(MessageContext $ctx): void { $this->stack[] = $ctx; }
+    public function pop(): void { array_pop($this->stack); }
+    public function current(): ?MessageContext { return array_last($this->stack); }
+    public function restore(array $stack): void { $this->stack = $stack; }
+}
+
+/**
+ * @psalm-api
  *
- * The stack-shape supports nested dispatch within a single thread / fiber.
- * Cross-coroutine isolation is the bus implementation's responsibility
- * (typically: one stack per coroutine, swapped on yield).
+ * Façade over `ContextStorage`. Domain code interacts only with `current()`
+ * (read-only) and `within()` (boundary entry). Bus implementations
+ * additionally use `push()` / `pop()` and may install a custom storage
+ * via `setStorage()` for coroutine-aware runtimes.
+ *
+ * The static façade is intentional — making it injectable would force
+ * every handler to receive a `MessageContextProvider` parameter, which
+ * defeats the entire reason this design exists. The escape valve is
+ * `setStorage()`: framework integrations swap the backing once at boot.
  */
 final class CurrentMessageContext {
-    /** @var list<MessageContext> */
-    private static array $stack = [];
+    private static ?ContextStorage $storage = null;
+
+    private static function storage(): ContextStorage {
+        return self::$storage ??= new StaticStackContextStorage();
+    }
+
+    /**
+     * Replace the storage. Called by framework integrations once at boot
+     * (e.g., the Swoole adapter installs a coroutine-keyed storage).
+     * Tests use this to install a fresh storage per test for isolation.
+     */
+    public static function setStorage(?ContextStorage $storage): void {
+        self::$storage = $storage;
+    }
 
     /** @return MessageContext|null  null at top-level (no in-flight message). */
     public static function current(): ?MessageContext {
-        return array_last(self::$stack);
+        return self::storage()->current();
     }
 
     /** @internal Bus implementations call this when entering a handler. */
     public static function push(MessageContext $ctx): void {
-        self::$stack[] = $ctx;
+        self::storage()->push($ctx);
     }
 
     /** @internal Bus implementations call this when a handler returns. */
     public static function pop(): void {
-        array_pop(self::$stack);
+        self::storage()->pop();
     }
 
     /**
      * Application-boundary helper: run $callback with $ctx as the root
      * context, then restore. Use this in HTTP middleware / CLI bootstrap
      * to establish the actor and trace identity for an incoming request.
+     *
+     * Discipline: ambient stack is read at *dispatch time*, not at
+     * handler-invocation time. For an async dispatch (queued bus), what
+     * gets stamped onto the envelope is what's on the stack when the
+     * caller invokes `dispatchCommand`, NOT what's on the stack when the
+     * handler eventually runs (which may be in a different process).
+     * The serialized envelope carries the metadata across the boundary;
+     * the consumer-side bus rebuilds the context from the envelope before
+     * invoking the handler.
      *
      * @template T
      * @param callable(): T $callback
@@ -265,6 +327,76 @@ final class CurrentMessageContext {
     }
 }
 ```
+
+### Replay-mode sentinel
+
+During event-sourced replay (PMs, aggregates rebuilding state from streams), the framework MUST install a sentinel context that **rejects dispatch attempts**. Without it, a replay-suppression bug in a consumer package could silently corrupt causation chains by stamping replayed events with whatever ambient context happened to be active.
+
+```php
+/**
+ * @psalm-api
+ *
+ * Sentinel installed during ES replay. Throws on push/pop attempts —
+ * any code that tries to dispatch during replay fails loudly instead
+ * of silently corrupting the causation chain of an unrelated message.
+ *
+ * Consumer packages (PM, aggregate, eventsourcing) install this around
+ * `EventSourcedXxx::replay()` invocations:
+ *
+ *     $previous = CurrentMessageContext::storage();
+ *     CurrentMessageContext::setStorage(new ReplayingContextStorage());
+ *     try {
+ *         $aggregate->replay($events);
+ *     } finally {
+ *         CurrentMessageContext::setStorage($previous);
+ *     }
+ *
+ * Any `applyXxx` method that accidentally calls `dispatchCommand` /
+ * `publishEvent` / `scheduleDeadline` during replay throws
+ * `ReplayDispatchAttemptedException` — a `MessagingException`-rooted,
+ * `TerminalFailure`-marked exception that loudly surfaces the bug.
+ */
+final class ReplayingContextStorage implements ContextStorage {
+    public function snapshot(): array { return []; }
+    public function push(MessageContext $ctx): void {
+        throw new ReplayDispatchAttemptedException(
+            'Cannot dispatch during ES replay — a handler or applyXxx method '
+            . 'attempted to dispatch a message while the framework is rebuilding '
+            . 'state from a persisted event stream. This is a framework wiring '
+            . 'bug; the dispatch-suppression check on the consumer-side runtime '
+            . 'failed. Investigate the call site that triggered the dispatch.'
+        );
+    }
+    public function pop(): void { /* no-op — push throws first */ }
+    public function current(): ?MessageContext { return null; }
+    public function restore(array $stack): void { /* no-op during replay */ }
+}
+```
+
+### Coroutine-isolation contract (MUST)
+
+Bus implementations running on a coroutine runtime MUST provide a `ContextStorage` that partitions the stack by coroutine identity such that two concurrently-active handler chains never see each other's `current()`. The default `StaticStackContextStorage` does NOT satisfy this — it's safe under PHP Fibers (cooperatively scheduled within a single thread, no preemption between explicit yield points the framework controls) but unsafe under Swoole coroutines (which share static state across coroutines within a worker process).
+
+The `ContextStorageContractTest` (in `tests/Support/`) is the cross-implementation invariant pin:
+
+```php
+abstract class ContextStorageContractTest extends TestCase {
+    abstract protected function createStorage(): ContextStorage;
+
+    public function testIsolatesConcurrentHandlerChains(): void {
+        // Spawn N parallel coroutines/fibers, each pushing a distinct
+        // MessageContext, yielding random microseconds, then asserting
+        // current() returns its own context. Test FAILS with shared
+        // static storage; PASSES with coroutine-keyed storage.
+    }
+}
+```
+
+The `nexus-ddd-bus-actor` adapter spec MUST document its per-fiber/per-coroutine stack-swap discipline. An actor handler observing the wrong context across an `await` is a correctness bug, not a performance one.
+
+### Top-level orphan-dispatch policy
+
+When `dispatchCommand` is called with no surrounding `within()` (no in-flight context), the bus falls back to `MessageMetadata::root()` with `actor: null`. Bus implementations MUST log this fallback at WARNING level — silent root-fallback is how production systems end up with messages that have no audit trail. Teams that legitimately dispatch from a non-boundary context (e.g., test setup, ops scripts) opt in via an explicit `MessageMetadata::root(actor: ActorRef::system('ops-cli'))` inside `within()`.
 
 ### How a bus implementation uses it
 
@@ -436,6 +568,7 @@ final readonly class MessageMetadata {
         public int $schemaVersion = 1,
         public ?string $traceParent = null,    // W3C traceparent header value
         public ?string $traceState = null,     // W3C tracestate header value
+        public ?DateTimeImmutable $expiresAt = null,   // optional TTL — bus impls SHOULD drop expired
     ) {}
 
     /**
@@ -448,6 +581,7 @@ final readonly class MessageMetadata {
         ?string $traceParent = null,
         ?string $traceState = null,
         ?ClockInterface $clock = null,
+        ?DateTimeImmutable $expiresAt = null,
     ): self {
         return new self(
             id: MessageId::generate(),
@@ -455,6 +589,7 @@ final readonly class MessageMetadata {
             actor: $actor,
             traceParent: $traceParent,
             traceState: $traceState,
+            expiresAt: $expiresAt,
         );
     }
 
@@ -481,10 +616,43 @@ final readonly class MessageMetadata {
             schemaVersion: $this->schemaVersion,
             traceParent: $this->traceParent,
             traceState: $this->traceState,
+            // expiresAt does NOT propagate — TTL is per-message, not per-chain
         );
     }
 }
 ```
+
+**`expiresAt` semantics.** Optional message TTL. Producers MAY set it on time-sensitive messages (e.g., a `ChargePayment` that's only valid within 24h). Bus implementations SHOULD check `expiresAt` against the wall-clock at handler-invocation time and route expired messages to the DLQ via `InvalidMessageReason::Expired` (§10) without invoking the handler. The field does NOT propagate via `forCausedMessage` — each downstream message decides its own expiry.
+
+### Ordering acknowledgment (no guarantees by default)
+
+This package makes **no per-channel ordering guarantee**. Bus implementations are free to deliver messages in any order — including out-of-order across redeliveries. Consumers requiring ordering MUST self-serialize:
+
+- **Per-correlation-key serialization** (PMs and aggregates): the runtime ensures one PM/aggregate instance processes one external event at a time. PM spec §7 mandates this.
+- **Per-actor-mailbox serialization** (actor-bus adapter): the actor framework's mailbox-per-actor semantics provides this for free; the adapter wires PMs/aggregates as actors.
+- **Application-level locks** (last resort): if neither of the above applies, application code uses a distributed lock keyed on the correlation field.
+
+Producers that want a *hint* to an ordering-aware bus impl attach a `PerCorrelationKeyOrdered` stamp:
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Stamp;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * Hint to bus implementations that this message should be delivered in
+ * order with respect to other messages bearing the same `correlationKey`.
+ * Bus impls MAY honor it (Symfony Messenger via partition key, actor-bus
+ * via per-actor mailbox); they are not REQUIRED to. Consumers MUST NOT
+ * assume ordering is enforced just because the stamp is present.
+ */
+final readonly class PerCorrelationKeyOrdered implements Stamp {
+    public function __construct(public string $correlationKey) {}
+}
+```
+
+The EIP-classic theorem holds: with N parallel consumers and at-least-once redelivery, you get out-of-order processing unless the consumer self-serializes. This package is honest about that.
 
 ### Causation propagation — worked example (implicit, no manual threading)
 
@@ -840,18 +1008,91 @@ For producers that don't need crash-replay safety — application services dispa
 
 Bus implementations MUST attempt delivery at least once. Network partitions, broker restarts, container redeploys may cause the same message to arrive at the handler twice or more.
 
-### 6.3 Handler idempotency
+### 6.3 Handler idempotency — `MessageInbox` contract (MUST for production bus impls)
 
-Handlers SHOULD be idempotent — i.e., processing the same `MessageId` twice produces the same observable effect as processing it once.
+Handlers MUST be idempotent. At-least-once delivery without consumer-side dedup is a production-incident generator; this package ships the contract so adapters get it right.
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Inbox;
+
+/**
+ * @psalm-api
+ *
+ * Consumer-side dedup gate. The bus consults the inbox before invoking
+ * a handler; if the message id has been processed already, the bus
+ * acknowledges the delivery and returns without invoking the handler.
+ *
+ * Scoped per (handler, message-id) — the same message id may legitimately
+ * be processed by multiple distinct handlers (one event, three listeners).
+ *
+ * Implementations:
+ *   - `InMemoryMessageInbox` — process-local; ships in this package
+ *     for tests and single-process Fiber runtimes.
+ *   - DB-backed inbox (downstream `nexus-ddd-aggregate` or
+ *     `nexus-ddd-outbox`) — production-grade durable dedup.
+ */
+interface MessageInbox {
+    /**
+     * Returns true if the (handler, messageId) pair has not been
+     * processed before AND atomically reserves the id; false if it has
+     * been processed (the bus should ack and return without invoking
+     * the handler).
+     *
+     * @param class-string $handlerClass
+     */
+    public function tryReserve(string $handlerClass, MessageId $messageId): bool;
+
+    /**
+     * Mark a previously-reserved (handler, messageId) as fully processed.
+     * Called after the handler returns successfully and the surrounding
+     * transaction commits.
+     *
+     * @param class-string $handlerClass
+     */
+    public function markProcessed(
+        string $handlerClass,
+        MessageId $messageId,
+        ?DateTimeImmutable $at = null,
+    ): void;
+
+    /**
+     * Release a reservation (called on handler failure / rollback) so the
+     * next redelivery can retry. Without this, a transient failure would
+     * permanently block the message.
+     *
+     * @param class-string $handlerClass
+     */
+    public function release(string $handlerClass, MessageId $messageId): void;
+}
+```
+
+**Production bus implementations MUST integrate with `MessageInbox`.** The default flow:
+
+```
+1. bus receives Envelope from transport
+2. for each handler resolved by Locator:
+3.   if (!inbox.tryReserve(HandlerClass, envelope.metadata.id)) → ack + skip
+4.   begin transaction
+5.   invoke handler(message)
+6.   if success:
+7.     inbox.markProcessed(HandlerClass, id)
+8.     commit transaction
+9.   else:
+10.    inbox.release(HandlerClass, id)
+11.    rollback
+12.    bus retry policy decides next action
+```
+
+**`InMemoryMessageInbox` ships in this package** alongside `InMemoryMessageStaging`. Both are tests-only / single-process. Production teams wire the DB-backed inbox from a downstream package.
 
 ### 6.4 Exactly-once-effect recipe
 
 For exactly-once-*effect* semantics (the same money is not charged twice; the same email is not sent twice):
 
 1. **Producer determinism** (§6.1) — same input → same `MessageId`.
-2. **Consumer-side dedup** on `MessageId` — handler checks "have I processed this id before?" before doing work; if yes, ack and return.
+2. **Consumer-side dedup** via `MessageInbox` (§6.3) — bus skips already-processed ids.
 
-Bus implementations MAY provide a built-in dedup layer (recommended — middleware or interceptor that checks an inbox keyed on `MessageId`). If they don't, handlers MUST do it themselves.
+Together these give exactly-once-effect across at-least-once delivery + crash-replay. Both halves are mandatory; either alone is insufficient.
 
 ### 6.5 The `void` return semantics
 
@@ -889,8 +1130,24 @@ namespace Monadial\Nexus\Ddd\Messaging\Staging;
  * with their own appendXxx methods if they stage additional kinds.
  */
 interface MessageStaging {
-    public function appendCommand(Command $command): void;
-    public function appendEvent(DomainEvent $event): void;
+    /**
+     * Stage a command for post-commit dispatch.
+     *
+     * Producers (PMs, ES aggregates) that need crash-replay-safe
+     * deterministic MessageIds supply $id explicitly — the bus will
+     * honor it via §6.1's producer-supplied-id-authoritative rule.
+     * If $id is null, the bus generates one at flush time.
+     *
+     * @param ?MessageId $id  Optional producer-supplied deterministic id.
+     *                        For PM-emitted commands: hash(pmId, baseStreamSeq, ordinal).
+     *                        For aggregate-emitted: hash(aggregateId, eventStreamSequence).
+     *                        For one-off application commands: null.
+     */
+    public function appendCommand(Command $command, ?MessageId $id = null): void;
+
+    /** @param ?MessageId $id  Same producer-supplied-id semantics as appendCommand. */
+    public function appendEvent(DomainEvent $event, ?MessageId $id = null): void;
+
     public function flush(): void;     // post-commit — buses invoked
     public function discard(): void;   // post-rollback — buffer cleared
 }
@@ -1120,9 +1377,50 @@ final readonly class DeadLetterEntry {
         public Throwable $cause,
         public DateTimeImmutable $deadLetteredAt,
         public int $attemptsBeforeDeadLetter,
+        public DeadLetterReason $reason,    // distinguishes content-failure from delivery-failure
     ) {}
 }
+
+/**
+ * @psalm-api
+ *
+ * EIP distinguishes Dead Letter Channel (delivery failure — replayable
+ * once root cause is fixed) from Invalid Message Channel (content
+ * failure — never replayable, schema/validation issue). Operators
+ * need to triage these differently.
+ *
+ * `Invalid` reasons are NEVER replayed via `DeadLetterStore::replay()` —
+ * the bus throws if asked. `Delivery` reasons are replayable; ops fixes
+ * the upstream problem (downstream handler bug, infrastructure outage)
+ * and then triggers replay.
+ */
+enum DeadLetterReason: string {
+    // Delivery failures — replayable
+    case TransientFailureExhausted = 'transient-failure-exhausted';   // retry policy gave up
+    case TerminalFailure = 'terminal-failure';                         // exception marked TerminalFailure
+    case Timeout = 'timeout';                                          // handler timed out
+    case Expired = 'expired';                                          // MessageMetadata::expiresAt past
+
+    // Content failures — NOT replayable (would just dead-letter again)
+    case Invalid_DeserializationFailure = 'invalid-deserialization-failure';
+    case Invalid_SchemaValidationFailure = 'invalid-schema-validation-failure';
+    case Invalid_HandlerSignatureMismatch = 'invalid-handler-signature-mismatch';
+    case Invalid_NoHandlerRegistered = 'invalid-no-handler-registered';
+
+    public function isReplayable(): bool {
+        return match($this) {
+            self::TransientFailureExhausted, self::TerminalFailure,
+            self::Timeout, self::Expired => true,
+            self::Invalid_DeserializationFailure,
+            self::Invalid_SchemaValidationFailure,
+            self::Invalid_HandlerSignatureMismatch,
+            self::Invalid_NoHandlerRegistered => false,
+        };
+    }
+}
 ```
+
+`DeadLetterStore::replay()` MUST consult `$entry->reason->isReplayable()` and throw `NonReplayableDeadLetterException` if false.
 
 Implementations live downstream (DB-backed, file-backed, transport-native). The contract here gives ops a single admin vocabulary across adapters.
 
@@ -1223,10 +1521,14 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 - **Bus interface signature snapshot test** — pins the public method signatures of `CommandBus`, `QueryBus`, `EventBus` (return types, parameter types, exception annotations) into a fixture file; fails CI if any signature drifts without a coordinated fixture update. Five downstream packages will compile against these three interfaces; one quietly-added parameter breaks every adapter.
 - **Three-root exception disjointness test** — `NexusDddException`, `DomainException`, `MessagingException` extend `RuntimeException` directly and not each other.
 - **TransientFailure ∩ TerminalFailure = ∅ test** — every concrete exception in the package implements at most one of the markers (`assertFalse($e instanceof TransientFailure && $e instanceof TerminalFailure)` for each). Otherwise a fundamentally terminal failure could escape into the retry loop.
-- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `actor`, `traceParent`, `traceState` correctly across hops.
+- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `actor`, `traceParent`, `traceState` correctly across hops; `expiresAt` does NOT propagate.
 - `Envelope::with()` / `get()` round-trip stamps.
 - `RetryPolicy` first-match-wins and `giveUpSet` precedence.
-- `MessageStagingContractTest` — both `InMemoryMessageStaging` and any future impl pass.
+- **`MessageStagingContractTest`** — both `InMemoryMessageStaging` and any future impl pass; pins discard/flush/FIFO/producer-supplied-id semantics.
+- **`MessageInboxContractTest`** — both `InMemoryMessageInbox` and any future DB-backed impl pass; pins tryReserve/markProcessed/release semantics under concurrent reservation attempts.
+- **`ContextStorageContractTest`** — `StaticStackContextStorage` plus any coroutine-aware impl pass; spawns N parallel fibers/coroutines pushing distinct contexts and asserts no cross-leakage.
+- **Replay-sentinel test** — `ReplayingContextStorage` throws `ReplayDispatchAttemptedException` on push attempts.
+- **DLQ replay-policy test** — `replay()` rejects entries with `Invalid_*` reasons; accepts `Delivery` reasons.
 
 ---
 
@@ -1239,42 +1541,70 @@ Beyond code:
 - **Deptrac layer + forbidden_imports** rule with the `Symfony\Component\Uid` carve-out
 - **Bus interface signature snapshot test** as a contract test
 - **`MessageStagingContractTest`** abstract test class (Support/)
+- **`MessageInboxContractTest`** abstract test class (Support/)
+- **`ContextStorageContractTest`** abstract test class (Support/)
 - **`InMemoryMessageStaging`** + **`InMemoryUnitOfWork`** with full test coverage
+- **`InMemoryMessageInbox`** with full test coverage
+- **`StaticStackContextStorage`** + **`ReplayingContextStorage`** with full test coverage
 - **Test doubles** (`RecordingCommandBus`, `RecordingEventBus`, `RecordingQueryBus`) in `tests/Support/`
+- **`withRootContext(ActorRef $actor, callable $fn)` test helper** in `tests/Support/` — wraps `CurrentMessageContext::within(new MessageContext(MessageMetadata::root(actor: $actor)), $fn)` so handler unit tests stay one line
 
 ---
 
 ## 15. Out of scope for v1
 
+**Out-of-scope but explicitly acknowledged** (so they don't get rediscovered as "missing" three years in):
+
 - Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus — separate packages)
-- Outbox table schema and DB-backed staging (downstream persistence package)
+- DB-backed staging (`OutboxMessageStaging` in downstream persistence package)
+- DB-backed message inbox (`PersistentMessageInbox` in downstream persistence package)
+- Coroutine-aware `ContextStorage` (Swoole / ReactPHP impls in their respective adapter packages)
 - Middleware abstraction (each bus impl decides)
 - Specific handler resolution mechanism implementations (locator *contracts* are in v1; container-backed / registry-backed locators ship in adapter packages)
 - Serialization implementations (`MessageSerializer` *contract* is in v1; concrete formats — JSON, MessagePack, native, Valinor — ship in adapters or `nexus-serialization`)
 - Specific dead-letter store implementations (`DeadLetterStore` *contract* is in v1; DB-backed / file-backed / transport-native impls ship downstream)
+- **Async Request-Reply** — `QueryBus::dispatchQuery` is sync-only in v1. Future async query (Future/Promise-style) is reserved as a separate `AsyncQueryBus` interface in a future v2; sync `QueryBus` stays unchanged for backward compatibility.
+- **Control Bus** — admin/management messages (`pause-bus`, `replay-dlq`, `flush-stuck-pm`, `health-probe`). DLQ replay (§10) is a degenerate control-bus operation; full control-bus shipping deferred to a future ops-tooling package.
 - Circuit-breaker backoff strategy (defer; the six existing strategies cover v1 needs)
 - Per-handler / per-message-class retry granularity (compose from per-exception primitive + adapter wrapper if needed)
+- **Resequencer** (out-of-order recovery) — consumers requiring ordering self-serialize via per-correlation-key serialization (§6 Ordering acknowledgment) or actor-mailbox semantics
+- **Wire Tap** / **Smart Proxy** — addressable later via `Stamp` extension without breaking the contract; not first-class in v1
+- **Claim Check** (large-payload offload) — not addressed; deferred until events with blob payloads materialize
 
 ---
 
 ## 16. Sign-off
 
-All six brainstorm decisions (Q1–Q6) were locked during the 2026-05-07 conversation. This spec transcribes them into a contract document and addresses every gap surfaced by the four-expert round-1 review.
+All six brainstorm decisions (Q1–Q6) were locked during the 2026-05-07 conversation. This spec transcribes them into a contract document and addresses every gap surfaced by the four-expert round-1 + Hohpe-EIP reviews.
 
-Open items the user must confirm:
+The locked design (all 13 round-2/EIP patches applied):
 
-- [ ] **`MessageStaging`/`UnitOfWork` here** (not in `nexus-ddd-process-manager`) — the architect's resolution from the PM-spec review. Confirm.
-- [ ] **In-memory staging implementations ship here** with `MessageStagingContractTest`. Confirm.
-- [ ] **`TransientFailure` / `TerminalFailure` markers** as disjoint interfaces; default-when-neither = terminal. Confirm.
-- [ ] **Three exception roots** (`NexusDddException`, `DomainException`, `MessagingException`) — disjoint, each extends `RuntimeException` directly. Confirm.
-- [ ] **`MessageId extends UlidValue`** as the framework-internal id type, with producer-supplied id authoritative (§6.1). Confirm.
-- [ ] **`MessageMetadata::forCausedMessage()`** as the canonical causation-propagation method on the metadata VO itself. Confirm.
-- [ ] **`ActorRef` typed value object** for the `actor` field (kind/id split). Confirm.
-- [ ] **`traceParent` / `traceState` core metadata fields** (W3C Trace Context). Confirm.
-- [ ] **`schemaVersion` is wire-payload-version**, distinct from event class version. Confirm.
-- [ ] **Locator contracts** (`CommandHandlerLocator`, `QueryHandlerLocator`, `EventListenerLocator`) ship in v1. Confirm.
-- [ ] **`MessageSerializer` and `DeadLetterStore` contracts** ship in v1; implementations defer. Confirm.
-- [ ] **`Symfony\Component\Uid` carve-out** in forbidden_imports; defensive `GuzzleHttp\\`, `React\\`, `Amp\\` additions. Confirm.
-- [ ] **Delivery semantics §6** — at-least-once delivery; producer-supplied MessageId authoritative; void return = delivery accepted; async-safety contract for handlers. Confirm.
+| Decision | Source |
+|---|---|
+| `MessageStaging`/`UnitOfWork` here (not in PM) | Architect resolution |
+| In-memory staging + `MessageStagingContractTest` here | Architect |
+| `TransientFailure`/`TerminalFailure` disjoint markers; default-when-neither = terminal | Udi |
+| Three exception roots disjoint, each extends `RuntimeException` directly | All reviewers |
+| `MessageId extends UlidValue`, producer-supplied authoritative (§6.1) | Greg |
+| `MessageMetadata::forCausedMessage()` canonical propagation | Vaughn |
+| `ActorRef` typed VO for actor (kind/id split) | Vaughn |
+| `traceParent` / `traceState` core metadata (W3C Trace Context) | Udi |
+| `schemaVersion` is wire-payload-version | Greg |
+| Locator contracts ship in v1 | Udi |
+| `MessageSerializer` + `DeadLetterStore` contracts ship in v1 | Udi |
+| `Symfony\Component\Uid` carve-out in forbidden_imports | Vaughn |
+| Delivery semantics §6 (at-least-once + producer-id + void + async-safety) | Greg |
+| **`MessageInbox` consumer-side dedup contract MUST in v1** | Hohpe |
+| **Ordering acknowledgment + `PerCorrelationKeyOrdered` stamp** | Hohpe |
+| **`ContextStorage` indirection + `StaticStackContextStorage` default** | Hohpe + Mark |
+| **`ReplayingContextStorage` sentinel for ES replay** | Greg |
+| **Coroutine-isolation contract MUST + `ContextStorageContractTest`** | Mark |
+| **`appendCommand(Command, ?MessageId)` overload for producer-id pathway** | Greg + Udi |
+| **Top-level orphan-dispatch fallback logs WARNING** | Mark |
+| **`DeadLetterReason` enum distinguishing Invalid_* from Delivery** | Hohpe |
+| **`MessageMetadata::expiresAt` core metadata for TTL** | Hohpe |
+| **AsyncQueryBus + Control Bus explicitly noted in §15 out-of-scope** | Hohpe |
+| **`HandlerSignatureMismatchException` runtime counterpart to Psalm rules** | Vaughn |
+| **`withRootContext` test helper** | Vaughn |
 
-After sign-off → invoke `superpowers:writing-plans` to produce the implementation plan. After messaging plan is written and (optionally) executed, the `nexus-ddd-process-manager` plan's Phase 2 (temporary `Contract/Messaging` stubs) is replaced with a real `nexus-actors/ddd-messaging` composer dependency.
+After sign-off → re-run the architect board for round-3 verification. After board approves → invoke `superpowers:writing-plans` to produce the implementation plan. After messaging plan is written and executed, the `nexus-ddd-process-manager` plan's Phase 2 (temporary `Contract/Messaging` stubs) is replaced with a real `nexus-actors/ddd-messaging` composer dependency.
