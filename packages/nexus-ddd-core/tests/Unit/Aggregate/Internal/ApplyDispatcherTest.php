@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate\Internal;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -56,9 +57,9 @@ final class TargetAggregate
     }
 }
 
-final readonly class SomeEvent
+final readonly class SomeEvent implements DomainEvent
 {
     public function __construct(public string $payload) {}
 }
 
-final class UnhandledEvent {}
+final readonly class UnhandledEvent implements DomainEvent {}

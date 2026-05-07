@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Exception;
 
 /** @psalm-api */
-final class InvalidIdentifierException extends NexusDddException
+final class InvalidIdentifierException extends DomainException
 {
     /**
      * @param class-string $identifierClass tightened to class-string<Identifier> in Task 4

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
@@ -77,7 +78,7 @@ final class EsAggregate extends EventSourcedAggregateRoot
     }
 }
 
-final readonly class Incremented
+final readonly class Incremented implements DomainEvent
 {
     public function __construct(public int $by) {}
 }

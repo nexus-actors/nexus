@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Exception;
 
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
+use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
 use Monadial\Nexus\Ddd\Core\Exception\NexusDddException;
 use Monadial\Nexus\Ddd\Core\Exception\NoEventsRecordedException;
@@ -18,6 +19,7 @@ use ReflectionClass;
 use RuntimeException;
 
 #[CoversClass(NexusDddException::class)]
+#[CoversClass(DomainException::class)]
 #[CoversClass(ApplyMethodNotFoundException::class)]
 #[CoversClass(ApplyMethodAmbiguousException::class)]
 #[CoversClass(ReplayFailedException::class)]
@@ -35,22 +37,61 @@ final class ExceptionHierarchyTest extends TestCase
     }
 
     #[Test]
-    public function allConcreteExceptionsExtendNexusDddException(): void
+    public function domainExceptionIsAbstractRuntimeException(): void
     {
-        $concretes = [
-            ApplyMethodNotFoundException::class,
+        $reflection = new ReflectionClass(DomainException::class);
+        self::assertTrue($reflection->isAbstract());
+        self::assertTrue($reflection->isSubclassOf(RuntimeException::class));
+    }
+
+    #[Test]
+    public function frameworkExceptionsExtendNexusDddException(): void
+    {
+        $framework = [
             ApplyMethodAmbiguousException::class,
-            ReplayFailedException::class,
-            OptimisticLockException::class,
-            InvalidIdentifierException::class,
+            ApplyMethodNotFoundException::class,
             NoEventsRecordedException::class,
+            ReplayFailedException::class,
         ];
 
-        foreach ($concretes as $cls) {
+        foreach ($framework as $cls) {
             self::assertTrue(
                 is_subclass_of($cls, NexusDddException::class),
-                "$cls must extend NexusDddException",
+                "$cls must extend NexusDddException (framework wiring fault)",
+            );
+            self::assertFalse(
+                is_subclass_of($cls, DomainException::class),
+                "$cls must NOT extend DomainException — it is framework, not domain",
             );
         }
+    }
+
+    #[Test]
+    public function domainExceptionsExtendDomainException(): void
+    {
+        $domain = [
+            InvalidIdentifierException::class,
+            OptimisticLockException::class,
+        ];
+
+        foreach ($domain as $cls) {
+            self::assertTrue(
+                is_subclass_of($cls, DomainException::class),
+                "$cls must extend DomainException (business rule violation)",
+            );
+            self::assertFalse(
+                is_subclass_of($cls, NexusDddException::class),
+                "$cls must NOT extend NexusDddException — it is domain, not framework",
+            );
+        }
+    }
+
+    #[Test]
+    public function domainAndFrameworkRootsAreDisjoint(): void
+    {
+        // The whole point of the split: catching one root must not also
+        // accidentally catch the other.
+        self::assertFalse(is_subclass_of(DomainException::class, NexusDddException::class));
+        self::assertFalse(is_subclass_of(NexusDddException::class, DomainException::class));
     }
 }

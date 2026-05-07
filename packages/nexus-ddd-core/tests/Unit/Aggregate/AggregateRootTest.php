@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
+use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
@@ -19,22 +21,25 @@ use Symfony\Component\Uid\Ulid;
 final class AggregateRootTest extends TestCase
 {
     #[Test]
-    public function recordThatInvokesApplyAndAppendsEvent(): void
+    public function recordThatAppendsEventAndBumpsVersionWithoutApplyDispatch(): void
     {
-        $a = TestAggregate::create(self::ulid());
-        $a->doSomething('hello');
+        $a = StatefulSample::create(self::ulid());
+        $a->setName('Ada');
 
-        self::assertSame('hello', $a->state);
+        // State-stored aggregate mutates state directly in the command method;
+        // no applyXxx is required (or invoked).
+        self::assertSame('Ada', $a->name);
         $events = $a->pullRecordedEvents();
         self::assertCount(1, $events);
-        self::assertInstanceOf(SomethingHappened::class, $events[0]);
+        self::assertInstanceOf(NameSet::class, $events[0]);
+        self::assertSame(1, $a->version());
     }
 
     #[Test]
     public function pullRecordedEventsClearsTheBuffer(): void
     {
-        $a = TestAggregate::create(self::ulid());
-        $a->doSomething('a');
+        $a = StatefulSample::create(self::ulid());
+        $a->setName('a');
         (void) $a->pullRecordedEvents();   // intentional drain
         self::assertCount(0, $a->pullRecordedEvents());
     }
@@ -42,9 +47,9 @@ final class AggregateRootTest extends TestCase
     #[Test]
     public function aggregateIsEntityButNotEventSourceableAtBaseLevel(): void
     {
-        $a = TestAggregate::create(self::ulid());
+        $a = StatefulSample::create(self::ulid());
         self::assertInstanceOf(Entity::class, $a);
-        // EventSourceable applies only to EventSourcedAggregateRoot, not the base.
+        // State-stored aggregates are NOT EventSourceable.
         self::assertNotInstanceOf(EventSourceable::class, $a);
     }
 
@@ -52,9 +57,9 @@ final class AggregateRootTest extends TestCase
     public function entityEqualityRequiresSameTypeAndId(): void
     {
         $id = self::ulid();
-        $a = TestAggregate::create($id);
-        $b = TestAggregate::create($id);
-        $c = TestAggregate::create(self::ulid());
+        $a = StatefulSample::create($id);
+        $b = StatefulSample::create($id);
+        $c = StatefulSample::create(self::ulid());
         self::assertTrue($a->equals($b));
         self::assertFalse($a->equals($c));
     }
@@ -62,8 +67,39 @@ final class AggregateRootTest extends TestCase
     #[Test]
     public function defaultStateVersionIsOne(): void
     {
-        $a = TestAggregate::create(self::ulid());
+        $a = StatefulSample::create(self::ulid());
         self::assertSame(1, $a->stateVersion());
+    }
+
+    #[Test]
+    public function checkPassesWhenInvariantHolds(): void
+    {
+        $a = StatefulSample::create(self::ulid());
+        $a->setName('Ada');   // non-empty — invariant holds
+
+        self::assertSame('Ada', $a->name);
+    }
+
+    #[Test]
+    public function checkThrowsTypedDomainExceptionWhenInvariantViolated(): void
+    {
+        $a = StatefulSample::create(self::ulid());
+
+        $this->expectException(NameMustBeNonEmpty::class);
+        $a->setName('');   // empty — invariant violated
+    }
+
+    #[Test]
+    public function checkThrowsAdHocDomainExceptionForStringRule(): void
+    {
+        $a = StatefulSample::create(self::ulid());
+
+        try {
+            $a->setNameWithAdHocRule('');
+            self::fail('expected DomainException');
+        } catch (DomainException $e) {
+            self::assertSame('name must not be blank', $e->getMessage());
+        }
     }
 
     private static function ulid(): UlidValue
@@ -72,9 +108,9 @@ final class AggregateRootTest extends TestCase
     }
 }
 
-final class TestAggregate extends AggregateRoot
+final class StatefulSample extends AggregateRoot
 {
-    public string $state = '';
+    public string $name = '';
 
     public static function create(Identifier $id): self
     {
@@ -87,18 +123,30 @@ final class TestAggregate extends AggregateRoot
         return $this->id;
     }
 
-    public function doSomething(string $value): void
+    public function setName(string $name): void
     {
-        $this->recordThat(new SomethingHappened($value));
+        $this->check($name !== '', new NameMustBeNonEmpty());
+        $this->name = $name;
+        $this->recordThat(new NameSet($name));
     }
 
-    private function applySomethingHappened(SomethingHappened $e): void
+    public function setNameWithAdHocRule(string $name): void
     {
-        $this->state = $e->payload;
+        $this->check($name !== '', 'name must not be blank');
+        $this->name = $name;
+        $this->recordThat(new NameSet($name));
     }
 }
 
-final readonly class SomethingHappened
+final readonly class NameSet implements DomainEvent
 {
-    public function __construct(public string $payload) {}
+    public function __construct(public string $name) {}
+}
+
+final class NameMustBeNonEmpty extends DomainException
+{
+    public function __construct()
+    {
+        parent::__construct('name must not be empty');
+    }
 }

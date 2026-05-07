@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Aggregate\Internal;
 
 use Closure;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
 use ReflectionClass;
@@ -26,13 +27,13 @@ use ReflectionClass;
  */
 final class ApplyDispatcher
 {
-    /** @var array<class-string, array<class-string, Closure(object, object): void>> */
+    /** @var array<class-string, array<class-string, Closure(object, DomainEvent): void>> */
     private array $cache = [];
 
     /** @var array<class-string, array<string, list<class-string>>> */
     private array $shortNameIndex = [];
 
-    public function dispatch(object $entity, object $event): void
+    public function dispatch(object $entity, DomainEvent $event): void
     {
         $entityClass = $entity::class;
         $eventClass = $event::class;
@@ -45,8 +46,8 @@ final class ApplyDispatcher
 
     /**
      * @param class-string $entityClass
-     * @param class-string $eventClass
-     * @return Closure(object, object): void
+     * @param class-string<DomainEvent> $eventClass
+     * @return Closure(object, DomainEvent): void
      */
     private function resolve(string $entityClass, string $eventClass): Closure
     {
@@ -59,9 +60,9 @@ final class ApplyDispatcher
             throw ApplyMethodNotFoundException::for($entityClass, $eventClass);
         }
 
-        /** @var Closure(object, object): void $invoker */
+        /** @var Closure(object, DomainEvent): void $invoker */
         $invoker = Closure::bind(
-            static function (object $entity, object $event) use ($methodName): void {
+            static function (object $entity, DomainEvent $event) use ($methodName): void {
                 /** @psalm-suppress MixedMethodCall */
                 $entity->$methodName($event);
             },

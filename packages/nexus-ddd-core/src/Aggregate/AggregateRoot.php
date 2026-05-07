@@ -5,35 +5,39 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 
 /**
  * @psalm-api
  *
- * Base class for all aggregates. Subclasses must implement id() and provide
- * applyXxx() methods for every event recorded via recordThat().
+ * Base for all aggregates — the consistency boundary that protects domain
+ * invariants. Subclasses must implement `id()` and use `recordThat()` to
+ * emit `DomainEvent`s when domain rules are exercised.
  *
- * recordThat() invokes the corresponding applyXxx() synchronously to mutate
- * state, then appends the event to the recorded buffer. pullRecordedEvents()
- * returns and clears the buffer (called by the repository at persist time).
+ * **State-stored vs event-sourced**: extend this class directly for a
+ * state-stored aggregate (the kind whose state lives in a Doctrine row).
+ * Such aggregates emit events for the bus but do not replay them — state is
+ * mutated directly inside command handlers, NOT via `applyXxx()`.
  *
- * AggregateRoot is `Entity` only — NOT `EventSourceable`. Event-sourcing
- * semantics (replaying events to rebuild state) are specific to
- * EventSourcedAggregateRoot. StatefulAggregateRoot records events for the
- * EventBus but doesn't replay — its persistence is state-based, not
- * event-based.
+ * For an event-sourced aggregate, extend `EventSourcedAggregateRoot`
+ * instead — it adds `replay()` and routes `recordThat()` through the
+ * applyXxx convention so state stays in sync with the recorded stream.
  *
  * Aggregates are NOT readonly — they have mutable internal state ($version,
  * $recordedEvents). Concrete subclasses are typically `final class` (not
- * readonly). Properties that should be immutable (e.g., the id) use the
- * property-level `readonly` modifier.
+ * readonly). The id is constructor-promoted with the property-level
+ * `readonly` modifier.
+ *
+ * Use `check()` inside command methods to assert invariants — it throws a
+ * `DomainException` subclass (or a plain message) when violated, which is
+ * the right exception family for business rule failures.
  */
 abstract class AggregateRoot implements Entity
 {
-    private static ?ApplyDispatcher $dispatcher = null;
-
-    /** @var array<int, object> */
+    /** @var array<int, DomainEvent> */
     private array $recordedEvents = [];
 
     protected int $version = 0;
@@ -53,14 +57,18 @@ abstract class AggregateRoot implements Entity
         return 1;
     }
 
-    final protected function recordThat(object $event): void
+    /**
+     * Record that a domain event happened. State-stored aggregates simply
+     * append; event-sourced aggregates override this to also dispatch the
+     * event through the applyXxx convention.
+     */
+    protected function recordThat(DomainEvent $event): void
     {
-        self::dispatcher()->dispatch($this, $event);
         $this->recordedEvents[] = $event;
         $this->version++;
     }
 
-    /** @return array<int, object> */
+    /** @return array<int, DomainEvent> */
     #[\NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
     final public function pullRecordedEvents(): array
     {
@@ -76,8 +84,21 @@ abstract class AggregateRoot implements Entity
         return $other instanceof static && $other->id->equals($this->id);
     }
 
-    protected static function dispatcher(): ApplyDispatcher
+    /**
+     * Invariant guard. Use inside command methods to assert a domain rule
+     * holds before recording the event. Pass an exception instance for a
+     * typed failure (preferred) or a plain string for ad-hoc rules.
+     *
+     * @throws DomainException
+     */
+    final protected function check(bool $condition, DomainException|string $rule): void
     {
-        return self::$dispatcher ??= new ApplyDispatcher();
+        if ($condition) {
+            return;
+        }
+
+        throw $rule instanceof DomainException
+            ? $rule
+            : new class ($rule) extends DomainException {};
     }
 }

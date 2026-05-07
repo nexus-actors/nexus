@@ -98,7 +98,7 @@ final class SmokeOrder extends EventSourcedAggregateRoot
     }
 }
 
-final readonly class SmokePlaced {}
+final readonly class SmokePlaced implements \Monadial\Nexus\Ddd\Core\Entity\DomainEvent {}
 
 /** @extends AbstractRichSpecification<string> */
 final class SmokeNonEmpty extends AbstractRichSpecification
