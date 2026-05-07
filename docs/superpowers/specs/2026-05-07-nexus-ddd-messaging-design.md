@@ -102,14 +102,18 @@ interface Query {}
 
 `DomainEvent` and `PublishableDomainEvent` already live in `nexus-ddd-core` — this package does not redeclare them.
 
-### Bus interfaces — three separate, type-specialized
+### Bus interfaces — single-argument, type-specialized
 
 ```php
 interface CommandBus {
     /**
-     * Dispatch a command to its (single) handler. Returns void — the
-     * post-handler outcome flows out via events / queries; idempotency
-     * and retry are bus-impl concerns.
+     * Dispatch a command to its (single) handler. The bus internally
+     * wraps the message in an Envelope using the ambient
+     * `CurrentMessageContext` (§5) for causation/correlation propagation;
+     * the caller passes only the raw command.
+     *
+     * Returns void — the post-handler outcome flows out via events;
+     * idempotency and retry are bus-impl concerns.
      */
     public function dispatchCommand(Command $command): void;
 }
@@ -133,9 +137,11 @@ interface EventBus {
 }
 ```
 
+**Single argument by design.** Buses take only the message — never an envelope. The Envelope (§6) is the *transport-layer* wrapper; the bus constructs it internally before crossing the transport boundary, reading metadata from the ambient `CurrentMessageContext`. Domain code never instantiates an `Envelope` and never threads metadata manually.
+
 Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is greppable, distinct from `$bus->publishEvent(...)`. Adapters that wrap a single underlying transport (e.g., a Symfony Messenger adapter) implement all three by holding the configured-bus instance and casting at the seam.
 
-### Handler interfaces — marker only, validated by Psalm
+### Handler interfaces — marker only, single-argument `__invoke`
 
 ```php
 /**
@@ -143,7 +149,13 @@ Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is
  *
  * Marker for command handlers. Implementers declare:
  *
- *   public function __invoke(ConcreteCommand $command, MessageContext $ctx): void
+ *   public function __invoke(ConcreteCommand $command): void
+ *
+ * Single-argument `__invoke`. Handlers do NOT receive metadata as a
+ * second parameter — the framework's `CurrentMessageContext` (§5) carries
+ * in-flight metadata implicitly. Handlers that need to read metadata for
+ * logging/audit call `CurrentMessageContext::current()`; the typical
+ * domain handler doesn't read it at all.
  *
  * The `nexus-psalm` plugin's `CommandHandlerSignatureRule` enforces the
  * `__invoke` shape; PHP variance won't let us put it on the interface.
@@ -157,7 +169,7 @@ interface CommandHandler {}
  *
  * Marker for query handlers. Implementers declare:
  *
- *   public function __invoke(ConcreteQuery $query, MessageContext $ctx): TResult
+ *   public function __invoke(ConcreteQuery $query): TResult
  *
  * Validated by `QueryHandlerSignatureRule`.
  */
@@ -168,7 +180,7 @@ interface QueryHandler {}
  *
  * Marker for event listeners. Implementers declare:
  *
- *   public function __invoke(ConcreteEvent $event, MessageContext $ctx): void
+ *   public function __invoke(ConcreteEvent $event): void
  *
  * Validated by `EventListenerSignatureRule`. Multiple listeners per event
  * type are allowed (broadcast semantics).
@@ -176,13 +188,159 @@ interface QueryHandler {}
 interface EventListener {}
 ```
 
-**Why marker-only.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
+**Why marker-only + single-argument.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
+
+The single-argument shape (no `MessageContext` parameter) keeps domain handlers focused on their message. Metadata threading happens automatically via the framework's `CurrentMessageContext` (§5) — when a handler dispatches a nested command, the framework reads in-flight metadata and propagates causation/correlation/conversation/trace context onto the new envelope without the handler doing anything.
 
 This mirrors the Symfony Messenger handler convention exactly, so a future Symfony adapter is straightforward.
 
 ---
 
-## 4. Envelope, MessageMetadata, Stamps, MessageContext
+## 5. `CurrentMessageContext` — implicit metadata propagation
+
+The metadata-threading discipline (causation, correlation, conversation, trace context, actor) is a **framework concern**, not a domain concern. Handlers shouldn't have to remember to call `forCausedMessage()` on every nested dispatch — the framework knows which message is currently being processed and propagates automatically.
+
+### The ambient-context primitive
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Context;
+
+/**
+ * @psalm-api
+ *
+ * Stack of in-flight `MessageContext` entries — the framework's
+ * implicit-propagation primitive.
+ *
+ * Lifecycle:
+ *   - At the application boundary (HTTP controller, CLI, scheduled job),
+ *     code calls `CurrentMessageContext::within(MessageContext, callback)`
+ *     to establish the root context for the boundary message.
+ *   - When a bus dispatches a message and is about to invoke a handler,
+ *     the bus middleware pushes the new context onto the stack.
+ *   - Inside the handler, code that calls `dispatchCommand`/`publishEvent`/
+ *     `dispatchQuery` triggers the bus to read `current()`, derive
+ *     causation/correlation/etc. via `forCausedMessage()`, wrap the
+ *     message in an Envelope, and send to transport.
+ *   - When the handler returns (or throws), the bus pops the stack.
+ *
+ * The stack-shape supports nested dispatch within a single thread / fiber.
+ * Cross-coroutine isolation is the bus implementation's responsibility
+ * (typically: one stack per coroutine, swapped on yield).
+ */
+final class CurrentMessageContext {
+    /** @var list<MessageContext> */
+    private static array $stack = [];
+
+    /** @return MessageContext|null  null at top-level (no in-flight message). */
+    public static function current(): ?MessageContext {
+        return array_last(self::$stack);
+    }
+
+    /** @internal Bus implementations call this when entering a handler. */
+    public static function push(MessageContext $ctx): void {
+        self::$stack[] = $ctx;
+    }
+
+    /** @internal Bus implementations call this when a handler returns. */
+    public static function pop(): void {
+        array_pop(self::$stack);
+    }
+
+    /**
+     * Application-boundary helper: run $callback with $ctx as the root
+     * context, then restore. Use this in HTTP middleware / CLI bootstrap
+     * to establish the actor and trace identity for an incoming request.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public static function within(MessageContext $ctx, callable $callback): mixed {
+        self::push($ctx);
+        try {
+            return $callback();
+        } finally {
+            self::pop();
+        }
+    }
+}
+```
+
+### How a bus implementation uses it
+
+Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus) follow this pattern when dispatching:
+
+```php
+final class InProcessCommandBus implements CommandBus {
+    public function dispatchCommand(Command $command): void {
+        // 1. Read ambient context to derive child metadata.
+        $parent = CurrentMessageContext::current();
+        $childMeta = $parent === null
+            ? MessageMetadata::root()                                       // root-level
+            : $parent->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
+
+        // 2. Wrap in transport envelope.
+        $envelope = new Envelope($command, $childMeta);
+
+        // 3. Find handler, push context, invoke, pop.
+        $handler = $this->locator->locate($command);
+        CurrentMessageContext::within(new MessageContext($childMeta), fn() => $handler($command));
+    }
+}
+```
+
+Domain code never sees `CurrentMessageContext::push/pop`; only the bus implementations call them. Domain handlers stay one-argument:
+
+```php
+public function __invoke(PaymentReceived $event): void {
+    // No metadata threading — framework handles it.
+    $this->commandBus->dispatchCommand(new ShipOrder($this->orderId));
+}
+```
+
+The `dispatchCommand($cmd)` call internally reads `CurrentMessageContext::current()` (which the bus pushed before invoking *this* handler), derives causation = `PaymentReceived.id`, wraps `ShipOrder` in a fresh envelope with proper correlation/conversation/trace context, and sends to transport.
+
+### Application-boundary entry point
+
+Code at the application boundary establishes the root context:
+
+```php
+// HTTP controller — extract authenticated user, propagate trace context, dispatch.
+public function placeOrder(Request $request, CommandBus $bus): Response {
+    $rootMeta = MessageMetadata::root(
+        actor: ActorRef::user($request->user()->id),
+        traceParent: $request->headers->get('traceparent'),
+        traceState:  $request->headers->get('tracestate'),
+    );
+
+    CurrentMessageContext::within(new MessageContext($rootMeta), function () use ($bus, $request) {
+        $bus->dispatchCommand(new PlaceOrder(
+            OrderId::generate(),
+            ProductId::fromString($request->input('product_id')),
+        ));
+    });
+
+    return new Response(201);
+}
+```
+
+Most teams will hide this in a small middleware so controllers don't see it.
+
+### Why no manual envelope construction
+
+The user-facing API is **dispatch a raw message; the framework figures out the envelope**. This:
+- Keeps domain code free of metadata threading
+- Makes nested dispatch ergonomically identical to top-level dispatch
+- Centralizes causation/correlation/trace propagation in the bus, where it's testable
+- Mirrors PixelFederation's PM-emits-raw-message-then-framework-stamps-metadata pattern, but without their mutable `Command::appendMetadata()` setter (we keep messages `final readonly`)
+
+The `Envelope`, `MessageMetadata::forCausedMessage()`, and `MessageContext` value objects still exist — but their *audience* is the framework, not the domain code.
+
+---
+
+## 6. Envelope, MessageMetadata, Stamps, MessageContext
+
+> **Audience.** Domain code does NOT instantiate any of these — the bus does. The Envelope is constructed by the bus internally before crossing transport. `MessageMetadata::forCausedMessage()` is called by the bus when reading the ambient `CurrentMessageContext`. `MessageContext` is what the bus pushes onto the stack before invoking a handler. Handlers that want to *read* metadata for logging/audit reach into `CurrentMessageContext::current()`.
 
 The **Option C hybrid** from brainstorm Q4: typed core metadata + Symfony-style stamp extension.
 
@@ -281,18 +439,35 @@ final readonly class MessageMetadata {
     ) {}
 
     /**
+     * Application-boundary factory: synthesize a root MessageMetadata for
+     * the first message in a chain (HTTP controller, CLI, scheduled job).
+     */
+    #[\NoDiscard('the constructed metadata is the entire point of this call')]
+    public static function root(
+        ?ActorRef $actor = null,
+        ?string $traceParent = null,
+        ?string $traceState = null,
+        ?ClockInterface $clock = null,
+    ): self {
+        return new self(
+            id: MessageId::generate(),
+            occurredAt: ($clock ?? new SystemClock())->now(),
+            actor: $actor,
+            traceParent: $traceParent,
+            traceState: $traceState,
+        );
+    }
+
+    /**
      * Derive metadata for a message *caused by* this one. The current
      * message becomes the new message's causation; correlation and
      * conversation propagate (initialized to the original id if absent —
      * the very first message in a chain is its own correlation root);
      * actor and trace context flow forward unchanged.
      *
-     * Used at every nested-dispatch site:
-     *
-     *   public function __invoke(OrderPlaced $event, MessageContext $ctx): void {
-     *       $childMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
-     *       $this->commandBus->dispatchCommand(new ChargePayment(..., $childMeta));
-     *   }
+     * **@internal — called by the framework, not by domain code.** Bus
+     * implementations call this when reading `CurrentMessageContext` to
+     * stamp a child message's envelope. Handlers never call this directly.
      */
     #[\NoDiscard('the derived metadata is the entire point of this call')]
     public function forCausedMessage(MessageId $newId, DateTimeImmutable $now): self {
@@ -311,34 +486,40 @@ final readonly class MessageMetadata {
 }
 ```
 
-### Causation propagation — worked example
+### Causation propagation — worked example (implicit, no manual threading)
 
-A 3-hop chain showing how `forCausedMessage` threads metadata across producer/consumer boundaries:
+A 3-hop chain showing how the framework threads metadata automatically. Domain handlers stay raw — they call `dispatchCommand($cmd)` / `publishEvent($evt)` with no metadata in sight:
 
 ```
-Hop 1 — outside the system, user runs CLI:
-  $rootId = MessageId::generate();
-  $rootMeta = new MessageMetadata(
-      id: $rootId, occurredAt: $now, actor: ActorRef::user('alice'),
-      // causationId, correlationId, conversationId all null
+Hop 1 — outside the system, HTTP controller (the only place metadata is named):
+  CurrentMessageContext::within(
+      new MessageContext(MessageMetadata::root(actor: ActorRef::user('alice'), traceParent: $tp)),
+      fn() => $commandBus->dispatchCommand(new PlaceOrder(...))
   );
-  $commandBus->dispatchCommand(new PlaceOrder(...), envelope: new Envelope(..., $rootMeta));
+  // Bus reads CurrentMessageContext::current()
+  // Effective envelope metadata: id=R, causation=null, correlation=R, conversation=R, actor=alice, traceParent=$tp
 
-  // Effective: id=R, causation=null, correlation=R (lazy-init), conversation=R, actor=alice
+Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
+  public function __invoke(PlaceOrder $cmd): void {
+      $order = Order::place(...);
+      $this->orders->save($order);   // Aggregate's pullPendingEvents stages OrderPlaced
+                                     // Staging flush -> EventBus.publishEvent(new OrderPlaced(...))
+                                     // EventBus reads CurrentMessageContext::current() -> derives:
+                                     // Effective envelope metadata for OrderPlaced:
+                                     //   id=E1, causation=R, correlation=R, conversation=R, actor=alice
+  }
 
-Hop 2 — PlaceOrderHandler runs, aggregate emits OrderPlaced:
-  // Inside the aggregate's pullPendingEvents, the staging code calls:
-  $eventMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $clock->now());
-  // Effective: id=E1, causation=R, correlation=R, conversation=R, actor=alice
-
-Hop 3 — OrderFulfillmentProcess saga consumes OrderPlaced, dispatches ChargePayment:
-  // In the saga's #[OnEvent] handler:
-  $cmdMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $clock->now());
-  $this->commandBus->dispatchCommand(new ChargePayment(...), envelope: new Envelope(..., $cmdMeta));
-  // Effective: id=C1, causation=E1, correlation=R, conversation=R, actor=alice
+Hop 3 — OrderFulfillmentProcess saga consumes OrderPlaced (no MessageContext arg):
+  public function __invoke(OrderPlaced $event): void {
+      $this->dispatchCommand(new ChargePayment(...));
+      // Bus reads CurrentMessageContext::current() (which is the OrderPlaced context)
+      // Derives: id=C1, causation=E1, correlation=R, conversation=R, actor=alice
+  }
 ```
 
-The full chain is reconstructable from any point: `causationId` walks back one hop; `conversationId` jumps to the root; `correlationId` groups every message in the workflow. Trace context (`traceParent`/`traceState`) propagates identically so the same chain shows up in your distributed tracer.
+At every hop, the framework manages metadata. The handler signature is just the message. The full chain is reconstructable from any point: `causationId` walks back one hop; `conversationId` jumps to the root; `correlationId` groups every message in the workflow. Trace context (`traceParent`/`traceState`) propagates identically so the same chain shows up in your distributed tracer.
+
+**Compare to PixelFederation's pattern.** PF achieves the same propagation by making `Command` mutable and calling `Command::appendMetadata()` at flush time. Nexus keeps messages `final readonly` and uses ambient `CurrentMessageContext` instead — same end-to-end behavior, immutable messages, no metadata threading in domain code.
 
 ### `Stamp` + `Envelope`
 
@@ -401,16 +582,17 @@ final readonly class Envelope {
  * @psalm-api
  * @psalm-immutable
  *
- * What every handler receives as its second `__invoke` parameter.
+ * Pure value object — metadata + stamps for the in-flight message.
  *
- * Pure value object — no behavior. Handlers that want to dispatch nested
- * messages inject the bus(es) they need via constructor; the metadata in
- * the context lets them propagate causation correctly via
- * `MessageMetadata::forCausedMessage()`.
+ * Audience: framework-internal. The bus pushes a MessageContext onto
+ * `CurrentMessageContext` before invoking a handler; the bus reads
+ * `CurrentMessageContext::current()->metadata` when stamping nested
+ * dispatches.
  *
- * Stamps are passed through alongside metadata so middleware-aware
- * handlers can read transport-level information without coupling to the
- * Envelope shape.
+ * Handlers do NOT receive a MessageContext as a parameter. Handlers that
+ * need to read metadata for logging/audit call
+ * `CurrentMessageContext::current()` — but the typical domain handler
+ * never reaches for it.
  */
 final readonly class MessageContext {
     public function __construct(
@@ -432,7 +614,7 @@ final readonly class MessageContext {
 
 ### Worked example — first command + handler
 
-A complete walkthrough for a developer writing their first command/handler/dispatch with this package:
+A complete walkthrough showing how clean domain code stays under implicit propagation:
 
 ```php
 namespace App\Users;
@@ -447,51 +629,52 @@ final readonly class RegisterUser implements Command {
     ) {}
 }
 
-// 2. Define the handler — implements CommandHandler marker, uses __invoke.
+// 2. Define the handler — single-argument __invoke; no MessageContext threading.
 //    The CommandHandlerSignatureRule Psalm rule enforces the __invoke shape.
 final class RegisterUserHandler implements CommandHandler {
     public function __construct(
         private readonly UserRepository $users,
         private readonly EventBus $events,
-        private readonly ClockInterface $clock,
     ) {}
 
-    public function __invoke(RegisterUser $cmd, MessageContext $ctx): void {
+    public function __invoke(RegisterUser $cmd): void {
         $user = User::register($cmd->id, $cmd->email, $cmd->displayName);
         $this->users->save($user);
 
-        // Emit a domain event with causation propagated from the incoming command.
-        $eventMeta = $ctx->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
-        $this->events->publishEvent(new UserRegistered($user->id(), $eventMeta));
+        // Emit a domain event — framework propagates causation from the
+        // in-flight RegisterUser command via CurrentMessageContext.
+        $this->events->publishEvent(new UserRegistered($user->id()));
     }
 }
 
 // 3. Dispatch from the application boundary (HTTP controller, CLI, etc.).
-$rootMeta = new MessageMetadata(
-    id: MessageId::generate(),
-    occurredAt: $clock->now(),
-    actor: ActorRef::user($currentUserId),
+//    The boundary code is the only place that names metadata.
+CurrentMessageContext::within(
+    new MessageContext(MessageMetadata::root(actor: ActorRef::user($currentUserId))),
+    fn() => $commandBus->dispatchCommand(new RegisterUser($newUserId, $email, $displayName))
 );
-$commandBus->dispatchCommand(new RegisterUser($newUserId, $email, $displayName));
 
-// 4. Test using InMemoryMessageStaging + RecordingCommandBus (test fixture).
+// 4. Test using RecordingEventBus + setting up CurrentMessageContext.
 final class RegisterUserHandlerTest extends TestCase {
     public function testRegistersUserAndEmitsEvent(): void {
         $users = new InMemoryUserRepository();
         $events = new RecordingEventBus();
-        $clock = new MockClock(...);
-        $handler = new RegisterUserHandler($users, $events, $clock);
+        $handler = new RegisterUserHandler($users, $events);
 
         $cmd = new RegisterUser($id, 'a@b.c', 'Alice');
-        $handler($cmd, new MessageContext($metadata));
+        CurrentMessageContext::within(
+            new MessageContext(MessageMetadata::root(actor: ActorRef::user('test-user'))),
+            fn() => $handler($cmd)
+        );
 
         self::assertCount(1, $users->all());
-        self::assertEquals([new UserRegistered($id, ...)], $events->recorded());
+        self::assertEquals([new UserRegistered($id)], $events->recorded());
+        self::assertNotNull($events->lastMetadata()->causationId);  // RegisterUser caused the event
     }
 }
 ```
 
-This is the canonical recipe. Every command/query/event/handler in the framework follows this shape — the only variations are the message kind (Command vs Query vs DomainEvent) and the bus interface used.
+This is the canonical recipe. Every command/query/event/handler in the framework follows this shape — the only variations are the message kind (Command vs Query vs DomainEvent) and the bus interface used. **Domain code never instantiates an Envelope, never calls `forCausedMessage()`, never threads `MessageContext` through method signatures.**
 
 ### Test doubles
 
@@ -1030,9 +1213,9 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 
 | Rule | Enforces |
 |---|---|
-| `CommandHandlerSignatureRule` | Implementers of `CommandHandler` declare `__invoke(ConcreteCommand, MessageContext): void` |
-| `QueryHandlerSignatureRule` | Implementers of `QueryHandler` declare `__invoke(ConcreteQuery, MessageContext): TResult` matching `Query<TResult>` |
-| `EventListenerSignatureRule` | Implementers of `EventListener` declare `__invoke(ConcreteEvent, MessageContext): void` |
+| `CommandHandlerSignatureRule` | Implementers of `CommandHandler` declare `__invoke(ConcreteCommand): void` (single-argument; no `MessageContext` parameter — implicit via `CurrentMessageContext`) |
+| `QueryHandlerSignatureRule` | Implementers of `QueryHandler` declare `__invoke(ConcreteQuery): TResult` matching `Query<TResult>` |
+| `EventListenerSignatureRule` | Implementers of `EventListener` declare `__invoke(ConcreteEvent): void` |
 | `ReadonlyMessageBodyRule` | Concrete `Command` and `Query` classes are `final readonly class` (mirrors core's `ReadonlyMessageRule` for `DomainEvent`) |
 | `OneCommandHandlerRule` | A given concrete `Command` class has exactly one implementer of `CommandHandler` (commands are point-to-point) |
 
