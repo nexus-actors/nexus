@@ -617,6 +617,16 @@ final readonly class MessageId extends UlidValue {
 
 ### `MessageMetadata`
 
+`MessageMetadata` carries the **universal** fields every message has, regardless of transport or runtime: identity, time, causation chain, schema version, optional W3C trace context, optional TTL. It does NOT include runtime-specific concerns (origin actor, target mailbox, delivery attempt count, queue partition, broker headers).
+
+**Runtime-specific metadata is layered at v2** via two complementary mechanisms:
+
+1. **Typed wrapper** — adapter packages may ship a composing wrapper that holds a `MessageMetadata` plus their runtime-specific fields. For example, the future `nexus-ddd-bus-actor` package will ship `ActorSystemInboundMessageMetadata` composing `core: MessageMetadata` with `originActor: ActorRef`, `targetMailbox: MailboxId`, `deliveryAttempt: int`. Actor-aware handlers receive the wrapper; non-actor consumers see only the universal `MessageMetadata`.
+
+2. **Stamps** — adapter-level metadata that doesn't deserve a typed wrapper goes on the `Envelope` as a `Stamp` (Symfony-Messenger-style). The `Stamp` extension in this spec is what makes future runtime-specific extension non-breaking.
+
+The discipline: anything that would be on *every* message in *every* runtime stays here in `MessageMetadata`; anything that's runtime-specific lives in the adapter's wrapper or stamp.
+
 ```php
 /**
  * @psalm-api
