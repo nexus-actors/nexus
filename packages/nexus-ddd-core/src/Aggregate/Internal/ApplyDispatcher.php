@@ -60,6 +60,26 @@ final class ApplyDispatcher
             throw ApplyMethodNotFoundException::for($entityClass, $eventClass);
         }
 
+        // Detect cross-namespace short-name collision BEFORE building or
+        // caching the closure. If two event classes resolve to the same
+        // applyXxx method, throw consistently — and invalidate any prior
+        // cache entry for events in the colliding short-name group so that
+        // earlier-dispatched events stop succeeding silently. This makes
+        // the failure deterministic from the second dispatch onward.
+        $this->shortNameIndex[$entityClass][$shortName][] = $eventClass;
+
+        if (count($this->shortNameIndex[$entityClass][$shortName]) > 1) {
+            foreach ($this->shortNameIndex[$entityClass][$shortName] as $colliding) {
+                unset($this->cache[$entityClass][$colliding]);
+            }
+
+            throw ApplyMethodAmbiguousException::for(
+                $entityClass,
+                $shortName,
+                $this->shortNameIndex[$entityClass][$shortName],
+            );
+        }
+
         /** @var Closure(object, DomainEvent): void $invoker */
         $invoker = Closure::bind(
             static function (object $entity, DomainEvent $event) use ($methodName): void {
@@ -71,15 +91,6 @@ final class ApplyDispatcher
         );
 
         $this->cache[$entityClass][$eventClass] = $invoker;
-        $this->shortNameIndex[$entityClass][$shortName][] = $eventClass;
-
-        if (count($this->shortNameIndex[$entityClass][$shortName]) > 1) {
-            throw ApplyMethodAmbiguousException::for(
-                $entityClass,
-                $shortName,
-                $this->shortNameIndex[$entityClass][$shortName],
-            );
-        }
 
         return $invoker;
     }

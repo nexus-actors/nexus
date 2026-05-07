@@ -26,6 +26,4 @@ interface EventSourceable extends Identifiable
     public function replay(iterable $events): void;
 
     public function version(): int;
-
-    public function stateVersion(): int;
 }

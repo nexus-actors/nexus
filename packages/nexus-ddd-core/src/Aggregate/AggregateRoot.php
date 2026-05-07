@@ -52,11 +52,6 @@ abstract class AggregateRoot implements Entity
         return $this->version;
     }
 
-    public function stateVersion(): int
-    {
-        return 1;
-    }
-
     /**
      * Record that a domain event happened. State-stored aggregates simply
      * append; event-sourced aggregates override this to also dispatch the

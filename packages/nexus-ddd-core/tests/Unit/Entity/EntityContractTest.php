@@ -28,7 +28,7 @@ final class EntityContractTest extends TestCase
         $reflection = new ReflectionClass(EventSourceable::class);
         self::assertTrue($reflection->isInterface());
         self::assertContains(Identifiable::class, $reflection->getInterfaceNames());
-        foreach (['pullRecordedEvents', 'replay', 'version', 'stateVersion'] as $m) {
+        foreach (['pullRecordedEvents', 'replay', 'version'] as $m) {
             self::assertTrue($reflection->hasMethod($m), "EventSourceable must declare $m()");
         }
     }

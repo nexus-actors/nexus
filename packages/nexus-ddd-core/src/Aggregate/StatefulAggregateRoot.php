@@ -17,9 +17,10 @@ namespace Monadial\Nexus\Ddd\Core\Aggregate;
  * - State mutation happens **directly inside command methods** — not
  *   through `applyXxx` methods. There is no apply-dispatch convention
  *   here; do NOT define `applyXxx` methods on a stateful aggregate.
- * - `recordThat()` only buffers the event and bumps version. The
- *   recorded events flow to the EventBus when the repository persists,
- *   but they are not used to rebuild this aggregate's state on load.
+ * - `recordThat()` only buffers the event and bumps version. Recorded
+ *   events drain via `pullRecordedEvents()` (typically called by the
+ *   repository at persist time); how/where they're then dispatched is
+ *   the messaging layer's concern, not this package's.
  * - This class deliberately does NOT implement `EventSourceable`.
  *   Type-discrimination of "is this aggregate event-sourced?" is
  *   answered by `instanceof EventSourceable`; the named subclass

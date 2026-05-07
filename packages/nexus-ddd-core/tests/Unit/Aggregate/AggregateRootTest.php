@@ -66,13 +66,6 @@ final class AggregateRootTest extends TestCase
     }
 
     #[Test]
-    public function defaultStateVersionIsOne(): void
-    {
-        $a = StatefulSample::create(self::ulid());
-        self::assertSame(1, $a->stateVersion());
-    }
-
-    #[Test]
     public function checkPassesWhenInvariantHolds(): void
     {
         $a = StatefulSample::create(self::ulid());
