@@ -16,6 +16,7 @@ final class UuidExtractor
     /** @psalm-suppress UnusedConstructor */
     private function __construct() {}
 
+    #[\NoDiscard('extract() returns the canonical UUID string — its return is the entire purpose of the call')]
     public static function extract(UuidValue $value): string
     {
         return ValueExtractor::extract($value);

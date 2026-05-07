@@ -16,6 +16,7 @@ final class FloatExtractor
     /** @psalm-suppress UnusedConstructor */
     private function __construct() {}
 
+    #[\NoDiscard('extract() returns the inner float — its return is the entire purpose of the call')]
     public static function extract(FloatValue $value): float
     {
         return ValueExtractor::extract($value);

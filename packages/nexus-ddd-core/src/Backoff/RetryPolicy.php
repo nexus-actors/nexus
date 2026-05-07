@@ -25,20 +25,25 @@ final readonly class RetryPolicy implements BackoffStrategy
         public array $giveUpSet,
     ) {}
 
+    /** @return Option<\Monadial\Duration\Duration> */
     #[\Override]
     public function delayFor(int $attempt, Throwable $cause): Option
     {
-        foreach ($this->giveUpSet as $cls => $_) {
-            if ($cause instanceof $cls) {
-                return Option::none();
-            }
-        }
-        foreach ($this->handlers as $cls => $strategy) {
-            if ($cause instanceof $cls) {
-                return $strategy->delayFor($attempt, $cause);
-            }
+        $shouldGiveUp = array_any(
+            array_keys($this->giveUpSet),
+            static fn(string $cls): bool => $cause instanceof $cls,
+        );
+
+        if ($shouldGiveUp) {
+            return Option::none();
         }
 
-        return Option::none();
+        /** @var BackoffStrategy|null $strategy */
+        $strategy = array_find(
+            $this->handlers,
+            static fn(BackoffStrategy $_, string $cls): bool => $cause instanceof $cls,
+        );
+
+        return $strategy?->delayFor($attempt, $cause) ?? Option::none();
     }
 }

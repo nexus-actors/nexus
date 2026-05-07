@@ -87,6 +87,28 @@ All four must pass. The hooks execute through `docker compose exec -T php`.
 - Trailing commas in all multiline contexts
 - Psalm runs in strict mode (level 1) — explicit `(float)` casts don't satisfy `InvalidOperand` for int/float mixing; use `@psalm-suppress InvalidOperand` on the **method docblock** instead
 
+## PHP 8.5+ Language Features (REQUIRED)
+
+The composer constraint is `php: >=8.5`, so PHP 8.4 and 8.5 features are available across the codebase. **Always prefer modern syntax/features over older equivalents** when writing or modifying code:
+
+- **`#[\NoDiscard]` (8.5)** — annotate any method whose return value carries the only side effect / outcome. Required on:
+  - Fluent builder methods that return `self`/`static` (`->withX()`, `->onException()`, etc.)
+  - Functor/monad operations (`map`, `flatMap`, `then*`, `bind`)
+  - Constructors of immutable result types (`Effect::persist()`, `Behavior::same()`, `BehaviorWithState::next()`, `Either::right()`, `Option::some()`)
+  - Drainers/getters whose return is the *only* way to read state and ignoring it loses data (`pullRecordedEvents()`, `extract()`)
+- **`array_first()` / `array_last()` (8.5)** — use instead of `reset()` / `end()` (which mutate the array's internal pointer).
+- **`array_find()` / `array_find_key()` / `array_any()` / `array_all()` (8.4)** — use instead of `array_filter` + `reset`/`array_keys` for filter-then-pick or boolean predicate idioms.
+- **Pipe operator `|>` (8.5)** — prefer over nested function calls for readable transformation chains: `$x |> trim(...) |> strtoupper(...)`.
+- **`Closure::namedClosure()` (8.5)** — when constructing closures whose stack-trace identity matters (factories, scheduled callbacks).
+- **`#[\Override]` (8.3, refined 8.5)** — required on every overriding method. Already enforced.
+- **`#[\Deprecated]` attribute (8.4)** — use instead of `@deprecated` PHPDoc when marking APIs for removal.
+- **Property hooks (8.4)** — prefer over manual `getX()`/`setX()` accessor methods on stateful classes (does not apply to `readonly` value objects, which keep public readonly properties).
+- **Asymmetric visibility (8.4)** — use `public private(set)` / `public protected(set)` to expose state read-only externally without ceremony.
+- **Chained `new` without parens (8.4)** — `new Foo()->bar()` is preferred over `(new Foo())->bar()`.
+- **Lazy objects (8.4)** — use `ReflectionClass::newLazyGhost()` / `newLazyProxy()` for deferred-construction patterns (e.g., aggregate hydration, snapshot rehydration) instead of hand-rolled lazy proxies.
+
+When refactoring older code, opportunistically modernize syntax in files you're already touching. Don't sweep unrelated files for modernization unless explicitly asked.
+
 ## Architecture
 
 ### Design Philosophy

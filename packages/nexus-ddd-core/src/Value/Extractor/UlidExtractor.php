@@ -20,6 +20,7 @@ final class UlidExtractor
     /** @psalm-suppress UnusedConstructor */
     private function __construct() {}
 
+    #[\NoDiscard('extract() returns the canonical ULID string — its return is the entire purpose of the call')]
     public static function extract(UlidValue $value): string
     {
         return ValueExtractor::extract($value);

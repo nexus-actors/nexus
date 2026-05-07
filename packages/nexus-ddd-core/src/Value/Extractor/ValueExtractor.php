@@ -39,6 +39,7 @@ final readonly class ValueExtractor extends WrappedValue
      * @param WrappedValue<T> $valueObject
      * @return T
      */
+    #[\NoDiscard('extract() returns the inner value — its return is the entire purpose of the call')]
     public static function extract(WrappedValue $valueObject): mixed
     {
         return $valueObject->getValue();

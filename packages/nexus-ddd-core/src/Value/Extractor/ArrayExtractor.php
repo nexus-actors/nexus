@@ -23,6 +23,7 @@ final class ArrayExtractor
      * @param ArrayValue<TKey, TValue> $value
      * @return array<TKey, TValue>
      */
+    #[\NoDiscard('extract() returns the inner array — its return is the entire purpose of the call')]
     public static function extract(ArrayValue $value): array
     {
         return ValueExtractor::extract($value);

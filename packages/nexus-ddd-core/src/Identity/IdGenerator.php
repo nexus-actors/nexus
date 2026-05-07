@@ -12,5 +12,6 @@ namespace Monadial\Nexus\Ddd\Core\Identity;
 interface IdGenerator
 {
     /** @return T */
+    #[\NoDiscard('next() consumes a fresh identifier — discarding it wastes the generation')]
     public function next(): Identifier;
 }

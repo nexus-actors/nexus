@@ -16,6 +16,7 @@ final class BoolExtractor
     /** @psalm-suppress UnusedConstructor */
     private function __construct() {}
 
+    #[\NoDiscard('extract() returns the inner bool — its return is the entire purpose of the call')]
     public static function extract(BoolValue $value): bool
     {
         return ValueExtractor::extract($value);

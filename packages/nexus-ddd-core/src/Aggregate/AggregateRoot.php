@@ -61,6 +61,7 @@ abstract class AggregateRoot implements Entity
     }
 
     /** @return array<int, object> */
+    #[\NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
     final public function pullRecordedEvents(): array
     {
         $events = $this->recordedEvents;

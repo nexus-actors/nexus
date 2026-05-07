@@ -35,7 +35,7 @@ final class AggregateRootTest extends TestCase
     {
         $a = TestAggregate::create(self::ulid());
         $a->doSomething('a');
-        $a->pullRecordedEvents();
+        (void) $a->pullRecordedEvents();   // intentional drain
         self::assertCount(0, $a->pullRecordedEvents());
     }
 

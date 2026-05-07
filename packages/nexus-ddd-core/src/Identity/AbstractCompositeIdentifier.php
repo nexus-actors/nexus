@@ -56,13 +56,10 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
             return false;
         }
 
-        foreach ($this->components as $key => $component) {
-            if (! $component->equals($otherComponents[$key])) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all(
+            $this->components,
+            static fn(Identifier $component, string $key): bool => $component->equals($otherComponents[$key]),
+        );
     }
 
     /**

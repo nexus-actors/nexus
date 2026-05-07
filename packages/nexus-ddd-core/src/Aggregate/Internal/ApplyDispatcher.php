@@ -87,7 +87,9 @@ final class ApplyDispatcher
     private function shortName(string $fqn): string
     {
         $parts = explode('\\', $fqn);
+        /** @var string|null $last */
+        $last = array_last($parts);
 
-        return end($parts);
+        return $last ?? $fqn;
     }
 }

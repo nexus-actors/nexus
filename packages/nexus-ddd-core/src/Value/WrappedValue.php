@@ -35,6 +35,7 @@ abstract readonly class WrappedValue
      * @return static
      * @psalm-suppress ImpureFunctionCall,UnsafeInstantiation
      */
+    #[\NoDiscard('map() returns the transformed value object — ignoring it loses the transformation')]
     public function map(callable $fn): static
     {
         return new static($fn($this->value));
@@ -46,6 +47,7 @@ abstract readonly class WrappedValue
      * @return U
      * @psalm-suppress ImpureFunctionCall
      */
+    #[\NoDiscard('flatMap() returns the produced value object — ignoring it loses the transformation')]
     public function flatMap(callable $fn): WrappedValue
     {
         return $fn($this->value);
