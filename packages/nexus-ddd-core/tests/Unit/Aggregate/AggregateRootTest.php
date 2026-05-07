@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
@@ -108,7 +109,7 @@ final class AggregateRootTest extends TestCase
     }
 }
 
-final class StatefulSample extends AggregateRoot
+final class StatefulSample extends StatefulAggregateRoot
 {
     public string $name = '';
 

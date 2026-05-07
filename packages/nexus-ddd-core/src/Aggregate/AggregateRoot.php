@@ -17,14 +17,15 @@ use Monadial\Nexus\Ddd\Core\Exception\DomainException;
  * invariants. Subclasses must implement `id()` and use `recordThat()` to
  * emit `DomainEvent`s when domain rules are exercised.
  *
- * **State-stored vs event-sourced**: extend this class directly for a
- * state-stored aggregate (the kind whose state lives in a Doctrine row).
- * Such aggregates emit events for the bus but do not replay them — state is
- * mutated directly inside command handlers, NOT via `applyXxx()`.
+ * **Do NOT extend this class directly.** Choose one of the two intent-
+ * revealing subclasses:
  *
- * For an event-sourced aggregate, extend `EventSourcedAggregateRoot`
- * instead — it adds `replay()` and routes `recordThat()` through the
- * applyXxx convention so state stays in sync with the recorded stream.
+ *   - `StatefulAggregateRoot` — state lives in a Doctrine row (or
+ *      similar). State is mutated directly inside command methods.
+ *      Events are emitted to the bus but not used to rebuild state.
+ *   - `EventSourcedAggregateRoot` — state is reconstructed by replaying
+ *      events. `recordThat()` routes through an `applyXxx` convention so
+ *      state stays in lock-step with the recorded stream.
  *
  * Aggregates are NOT readonly — they have mutable internal state ($version,
  * $recordedEvents). Concrete subclasses are typically `final class` (not
