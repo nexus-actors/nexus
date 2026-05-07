@@ -615,9 +615,148 @@ final readonly class MessageId extends UlidValue {
 }
 ```
 
+### `NodeId` and `VectorClock`
+
+Vector clocks provide a partial order over events across distributed nodes (actors, worker processes, replicas). Each node has a logical counter; the clock is the union of node-counter pairs. Vector clocks let consumers detect:
+
+- **Happens-before** — A's clock dominates B's → A causally precedes B
+- **Concurrent** — neither dominates → A and B happened independently (CRDT conflict territory)
+- **Equal** — same vector → same logical event
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Identity;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * Identifies a logical node (PHP process, actor system, worker pool
+ * member, DB replica) for vector-clock accounting. ULID-backed for the
+ * same reasons as MessageId — sortable, globally unique, no coordination.
+ *
+ * One NodeId per running process is the typical mapping; long-lived
+ * actor systems may use the ActorSystem's writer id (see nexus-core's
+ * single-writer principle).
+ */
+final readonly class NodeId extends UlidValue {
+    public static function generate(): self {
+        return new self((new Ulid())->toBase32());
+    }
+}
+```
+
+```php
+namespace Monadial\Nexus\Ddd\Messaging\Clock;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * Vector clock — partial order over events across distributed nodes.
+ * Standard Lamport-Mattern algorithm:
+ *   - On send: sender ticks its own counter, stamps the message
+ *   - On receive: receiver merges (pointwise max) incoming clock
+ *     with its own, then ticks its own counter
+ *
+ * Used by distributed bus implementations (actor adapter, multi-node
+ * persistence) to detect concurrent updates and resolve write conflicts.
+ * Single-process bus implementations leave `MessageMetadata::vectorClock`
+ * as `Option::none()`; vector clocks are zero-cost when unused.
+ */
+final readonly class VectorClock {
+    /**
+     * @param array<string, int> $counters  NodeId.value() => positive counter
+     */
+    public function __construct(public array $counters) {}
+
+    public static function empty(): self {
+        return new self([]);
+    }
+
+    /** Increment this node's counter. Called when the node SENDS a message. */
+    #[\NoDiscard('tick() returns the advanced clock — discarding loses the increment')]
+    public function tick(NodeId $node): self {
+        $next = $this->counters;
+        $key = $node->value();
+        $next[$key] = ($next[$key] ?? 0) + 1;
+
+        return new self($next);
+    }
+
+    /**
+     * Merge with another clock (pointwise max). Called on RECEIVE before
+     * the local node ticks its own counter.
+     */
+    #[\NoDiscard('merge() returns the merged clock — discarding loses the update')]
+    public function merge(VectorClock $other): self {
+        $merged = $this->counters;
+        foreach ($other->counters as $node => $counter) {
+            $merged[$node] = max($merged[$node] ?? 0, $counter);
+        }
+
+        return new self($merged);
+    }
+
+    /**
+     * Pointwise compare two clocks. Result is the partial-order relation
+     * between this and `$other`.
+     */
+    public function compareTo(VectorClock $other): VectorClockOrdering {
+        $hasLess = false;
+        $hasGreater = false;
+        $allKeys = array_unique([...array_keys($this->counters), ...array_keys($other->counters)]);
+
+        foreach ($allKeys as $node) {
+            $a = $this->counters[$node] ?? 0;
+            $b = $other->counters[$node] ?? 0;
+
+            if ($a < $b) {
+                $hasLess = true;
+            }
+            if ($a > $b) {
+                $hasGreater = true;
+            }
+        }
+
+        return match (true) {
+            $hasLess && $hasGreater  => VectorClockOrdering::Concurrent,
+            $hasLess                 => VectorClockOrdering::HappensBefore,
+            $hasGreater              => VectorClockOrdering::HappensAfter,
+            default                  => VectorClockOrdering::Equal,
+        };
+    }
+}
+
+/**
+ * @psalm-api
+ *
+ * Partial-order relation between two vector clocks.
+ * `HappensBefore` / `HappensAfter` indicate causal precedence;
+ * `Concurrent` means the events are causally independent
+ * (a CRDT or last-writer-wins resolution may be needed);
+ * `Equal` means the two events represent the same logical send.
+ */
+enum VectorClockOrdering {
+    case HappensBefore;
+    case HappensAfter;
+    case Concurrent;
+    case Equal;
+}
+```
+
+**Properties** (proven by the contract test in §13):
+- **Reflexive**: `clock.compareTo(clock) === Equal`
+- **Antisymmetric for total order**: `a.compareTo(b) === HappensBefore` ⟹ `b.compareTo(a) === HappensAfter`
+- **Symmetric for concurrent**: `a.compareTo(b) === Concurrent` ⟹ `b.compareTo(a) === Concurrent`
+- **Merge is commutative**: `a.merge(b) === b.merge(a)`
+- **Merge is associative**: `a.merge(b).merge(c) === a.merge(b.merge(c))`
+- **Merge is idempotent**: `a.merge(a) === a`
+
+**Tradeoff acknowledged.** Vector clocks grow with the number of nodes that have *ever* participated. For long-lived systems with churning node membership, some teams prefer pruning policies (drop entries older than N seconds) or hybrid logical clocks (HLC). v1 ships the standard vector clock; pruning and HLC variants are downstream concerns for adapters that need them.
+
 ### `MessageMetadata`
 
-`MessageMetadata` carries the **universal** fields every message has, regardless of transport or runtime: identity, time, causation chain, schema version, optional W3C trace context, optional TTL. It does NOT include runtime-specific concerns (origin actor, target mailbox, delivery attempt count, queue partition, broker headers).
+`MessageMetadata` carries the **universal** fields every message has, regardless of transport or runtime: identity, time, causation chain, schema version, optional W3C trace context, optional TTL, optional vector clock. It does NOT include runtime-specific concerns (origin actor, target mailbox, delivery attempt count, queue partition, broker headers).
 
 **Runtime-specific metadata is layered at v2** via two complementary mechanisms:
 
@@ -662,6 +801,7 @@ final readonly class MessageMetadata {
      * @param Option<string> $traceParent           W3C traceparent header value
      * @param Option<string> $traceState            W3C tracestate header value
      * @param Option<DateTimeImmutable> $expiresAt  optional TTL — bus impls SHOULD drop expired
+     * @param Option<VectorClock> $vectorClock      partial-order across distributed nodes
      */
     public function __construct(
         public MessageId $id,
@@ -673,6 +813,7 @@ final readonly class MessageMetadata {
         public Option $traceParent,
         public Option $traceState,
         public Option $expiresAt,
+        public Option $vectorClock,
     ) {}
 
     /**
@@ -693,6 +834,7 @@ final readonly class MessageMetadata {
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
+            vectorClock: Option::none(),
         );
     }
 
@@ -703,6 +845,10 @@ final readonly class MessageMetadata {
     /** @return self with the TTL set. */
     #[\NoDiscard(...)]
     public function withExpiresAt(DateTimeImmutable $expiresAt): self;
+
+    /** @return self with the vector clock set. */
+    #[\NoDiscard(...)]
+    public function withVectorClock(VectorClock $clock): self;
 
     /**
      * Derive metadata for a message *caused by* this one. The current
@@ -730,10 +876,30 @@ final readonly class MessageMetadata {
             traceState: $this->traceState,
             // expiresAt does NOT propagate — TTL is per-message, not per-chain
             expiresAt: Option::none(),
+            // vectorClock propagates as-is. Distributed bus impls call .tick()
+            // on the sender-side seam, AFTER forCausedMessage has run.
+            vectorClock: $this->vectorClock,
         );
     }
 }
 ```
+
+**Vector-clock propagation across hops.** `forCausedMessage` carries the parent's vector clock unchanged. The distributed bus implementation is responsible for ticking it at the *send* seam:
+
+```
+Producer side (actor-bus / multi-node adapter):
+  $childMeta = $parentMeta->forCausedMessage($newId, $now);
+  $clock = $childMeta->vectorClock->getOrElse(fn() => VectorClock::empty());
+  $stamped = $childMeta->withVectorClock($clock->tick($this->thisNodeId));
+  // ... wrap in envelope, send to transport
+
+Consumer side (actor-bus / multi-node adapter):
+  $incomingClock = $envelope->metadata->vectorClock->getOrElse(fn() => VectorClock::empty());
+  $localClock = $localClock->merge($incomingClock)->tick($this->thisNodeId);
+  // ... store local clock for next-send
+```
+
+Single-process bus implementations skip the tick/merge — `vectorClock` stays `Option::none()` end-to-end and consumers ignore the field. Vector clocks are zero-cost when unused.
 
 **`expiresAt` semantics.** Optional message TTL. Producers MAY set it on time-sensitive messages (e.g., a `ChargePayment` that's only valid within 24h). Bus implementations SHOULD check `expiresAt` against the wall-clock at handler-invocation time and route expired messages to the DLQ via `InvalidMessageReason::Expired` (§10) without invoking the handler. The field does NOT propagate via `forCausedMessage` — each downstream message decides its own expiry.
 
@@ -1693,7 +1859,8 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 - **Bus interface signature snapshot test** — pins the public method signatures of `CommandBus`, `QueryBus`, `EventBus` (return types, parameter types, exception annotations) into a fixture file; fails CI if any signature drifts without a coordinated fixture update. Five downstream packages will compile against these three interfaces; one quietly-added parameter breaks every adapter.
 - **Three-root exception disjointness test** — `NexusDddException`, `DomainException`, `MessagingException` extend `RuntimeException` directly and not each other.
 - **TransientFailure ∩ TerminalFailure = ∅ test** — every concrete exception in the package implements at most one of the markers (`assertFalse($e instanceof TransientFailure && $e instanceof TerminalFailure)` for each). Otherwise a fundamentally terminal failure could escape into the retry loop.
-- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `traceParent`, `traceState` correctly across hops; `expiresAt` does NOT propagate.
+- `MessageMetadata::forCausedMessage` propagates `causationId`, `correlationId`, `conversationId`, `traceParent`, `traceState`, `vectorClock` correctly across hops; `expiresAt` does NOT propagate.
+- **`VectorClock` algebra contract test** — pins reflexivity (`a.compareTo(a) === Equal`), antisymmetry (HappensBefore ↔ HappensAfter), concurrent symmetry, merge commutativity / associativity / idempotency, and `tick` monotonicity (`tick(node).counters[node] === counters[node] + 1`).
 - `Envelope::with()` / `get()` round-trip stamps.
 - `RetryPolicy` first-match-wins and `giveUpSet` precedence.
 - **`MessageStagingContractTest`** — both `InMemoryMessageStaging` and any future impl pass; pins discard/flush/FIFO/producer-supplied-id semantics.
