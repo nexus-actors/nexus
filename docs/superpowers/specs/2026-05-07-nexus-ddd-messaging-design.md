@@ -102,7 +102,7 @@ interface Query {}
 
 `DomainEvent` and `PublishableDomainEvent` already live in `nexus-ddd-core` — this package does not redeclare them.
 
-### Bus interfaces — single-argument, type-specialized
+### Bus interfaces — type-specialized; user-facing single argument
 
 ```php
 interface CommandBus {
@@ -110,12 +110,19 @@ interface CommandBus {
      * Dispatch a command to its (single) handler. The bus internally
      * wraps the message in an Envelope using the ambient
      * `CurrentMessageContext` (§5) for causation/correlation propagation;
-     * the caller passes only the raw command.
+     * domain code passes only the raw command.
      *
      * Returns void — the post-handler outcome flows out via events;
      * idempotency and retry are bus-impl concerns.
+     *
+     * **Producer-supplied id** (`$id` parameter, optional). Framework
+     * code — `MessageStaging` flush, DLQ replay, transport recovery —
+     * passes a deterministic `MessageId` here when the producer (PM,
+     * aggregate) computed it for crash-replay safety (§6.1). The bus
+     * MUST honor this id and MUST NOT regenerate. Domain code passes
+     * nothing; the bus generates a fresh id.
      */
-    public function dispatchCommand(Command $command): void;
+    public function dispatchCommand(Command $command, ?MessageId $id = null): void;
 }
 
 interface QueryBus {
@@ -124,7 +131,7 @@ interface QueryBus {
      * @param Query<TResult> $query
      * @return TResult
      */
-    public function dispatchQuery(Query $query): mixed;
+    public function dispatchQuery(Query $query, ?MessageId $id = null): mixed;
 }
 
 interface EventBus {
@@ -133,11 +140,13 @@ interface EventBus {
      * "Publish" verb (not "dispatch") matches the broadcast semantics —
      * the publisher does not know who listens.
      */
-    public function publishEvent(DomainEvent $event): void;
+    public function publishEvent(DomainEvent $event, ?MessageId $id = null): void;
 }
 ```
 
-**Single argument by design.** Buses take only the message — never an envelope. The Envelope (§6) is the *transport-layer* wrapper; the bus constructs it internally before crossing the transport boundary, reading metadata from the ambient `CurrentMessageContext`. Domain code never instantiates an `Envelope` and never threads metadata manually.
+**Single argument for domain code.** Domain handlers and application code call `$bus->dispatchCommand($cmd)` — one argument. The optional `?MessageId` second parameter is for framework-internal callers (staging flush, DLQ replay) that supply a producer-deterministic id; user code never passes it. The Envelope (§6) is the *transport-layer* wrapper; the bus constructs it internally before crossing the transport boundary, reading metadata from the ambient `CurrentMessageContext`. Domain code never instantiates an `Envelope`.
+
+**Why an optional parameter (not a separate `EnvelopedDispatcher` interface).** Two interfaces would force every adapter to implement both, double the contract surface, and double the Psalm rules. One interface with an optional argument is Symfony-Messenger-shaped (`MessageBusInterface::dispatch($message, $stamps = [])`) and keeps the surface minimal.
 
 Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is greppable, distinct from `$bus->publishEvent(...)`. Adapters that wrap a single underlying transport (e.g., a Symfony Messenger adapter) implement all three by holding the configured-bus instance and casting at the seam.
 
@@ -276,6 +285,15 @@ final class CurrentMessageContext {
     }
 
     /**
+     * Read the active storage. Used by framework integrations that need
+     * to swap-and-restore (e.g., installing the ReplayingContextStorage
+     * around an `EventSourcedXxx::replay()` call).
+     */
+    public static function getStorage(): ContextStorage {
+        return self::storage();
+    }
+
+    /**
      * Replace the storage. Called by framework integrations once at boot
      * (e.g., the Swoole adapter installs a coroutine-keyed storage).
      * Tests use this to install a fresh storage per test for isolation.
@@ -343,7 +361,7 @@ During event-sourced replay (PMs, aggregates rebuilding state from streams), the
  * Consumer packages (PM, aggregate, eventsourcing) install this around
  * `EventSourcedXxx::replay()` invocations:
  *
- *     $previous = CurrentMessageContext::storage();
+ *     $previous = CurrentMessageContext::getStorage();
  *     CurrentMessageContext::setStorage(new ReplayingContextStorage());
  *     try {
  *         $aggregate->replay($events);
@@ -1060,6 +1078,16 @@ interface MessageInbox {
      * next redelivery can retry. Without this, a transient failure would
      * permanently block the message.
      *
+     * **Transactional co-location MUST.** `release()` MUST execute in the
+     * same rolled-back transaction as the failing handler — for DB-backed
+     * inboxes, that means the release is part of the rollback (or a
+     * compensating insert in a separate retry-safe transaction). NEVER
+     * call `release()` AFTER the rollback has already committed: there
+     * is a sliver between rollback-commit and release-execute where
+     * broker redelivery hits a still-reserved row, gets `false` from
+     * `tryReserve`, and incorrectly routes to DLQ. The reservation and
+     * its release are co-transactional.
+     *
      * @param class-string $handlerClass
      */
     public function release(string $handlerClass, MessageId $messageId): void;
@@ -1178,19 +1206,25 @@ Ship `InMemoryMessageStaging` + `InMemoryUnitOfWork` in this package. They're su
 
 ```php
 final class InMemoryMessageStaging implements MessageStaging {
-    /** @var array<int, Command> */
+    /** @var list<array{0: Command, 1: ?MessageId}> */
     private array $commands = [];
 
-    /** @var array<int, DomainEvent> */
+    /** @var list<array{0: DomainEvent, 1: ?MessageId}> */
     private array $events = [];
 
     public function __construct(
         private readonly CommandBus $commandBus,
         private readonly EventBus $eventBus,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
-    public function appendCommand(Command $command): void { $this->commands[] = $command; }
-    public function appendEvent(DomainEvent $event): void { $this->events[] = $event; }
+    public function appendCommand(Command $command, ?MessageId $id = null): void {
+        $this->commands[] = [$command, $id];
+    }
+
+    public function appendEvent(DomainEvent $event, ?MessageId $id = null): void {
+        $this->events[] = [$event, $id];
+    }
 
     /**
      * Flush ordering: commands first, then events. Some workflows
@@ -1203,13 +1237,21 @@ final class InMemoryMessageStaging implements MessageStaging {
      * Document this choice prominently — consumers that accidentally
      * depend on flush ordering and then swap to OutboxMessageStaging
      * will not break only if the outbox preserves the same order.
+     *
+     * **Production warning** logged on every flush — see class docblock.
      */
     public function flush(): void {
-        foreach ($this->commands as $cmd) {
-            $this->commandBus->dispatchCommand($cmd);
+        $this->logger->warning(
+            'InMemoryMessageStaging.flush() — at-most-once delivery; '
+            . 'a crash between flush() start and bus dispatch loses messages. '
+            . 'Use a persistent staging implementation (OutboxMessageStaging) in production.',
+        );
+
+        foreach ($this->commands as [$cmd, $id]) {
+            $this->commandBus->dispatchCommand($cmd, $id);
         }
-        foreach ($this->events as $evt) {
-            $this->eventBus->publishEvent($evt);
+        foreach ($this->events as [$evt, $id]) {
+            $this->eventBus->publishEvent($evt, $id);
         }
         $this->commands = [];
         $this->events = [];
@@ -1220,6 +1262,23 @@ final class InMemoryMessageStaging implements MessageStaging {
         $this->events = [];
     }
 }
+```
+
+The class-level docblock SHOULD additionally say:
+
+```
+/**
+ * In-memory staging — TESTS-ONLY (and single-process Fiber-only).
+ *
+ * Provides at-most-once delivery: a crash between flush() and the bus's
+ * actual dispatch loses messages. Production deployments MUST use a
+ * persistent staging implementation (OutboxMessageStaging from
+ * nexus-ddd-aggregate, or equivalent) which writes the staged messages
+ * to a durable store within the same DB transaction as the domain state.
+ *
+ * The runtime warning logged on every flush() is the operator-facing
+ * canary that wiring is wrong if this impl is in production.
+ */
 ```
 
 The PM package extends `MessageStaging` with `appendDeadlineOperation(DeadlineOperation $op): void` (PMs need it; aggregates don't). The base contract stays minimal.
@@ -1558,6 +1617,7 @@ Beyond code:
 - Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus — separate packages)
 - DB-backed staging (`OutboxMessageStaging` in downstream persistence package)
 - DB-backed message inbox (`PersistentMessageInbox` in downstream persistence package)
+- **Inbox retention policy** (TTL-based pruning of old `markProcessed` rows). Production teams will hit DB-bloat at month 6; downstream `PersistentMessageInbox` MUST ship a retention strategy. The contract here is silent because retention windows are application-specific.
 - Coroutine-aware `ContextStorage` (Swoole / ReactPHP impls in their respective adapter packages)
 - Middleware abstraction (each bus impl decides)
 - Specific handler resolution mechanism implementations (locator *contracts* are in v1; container-backed / registry-backed locators ship in adapter packages)
