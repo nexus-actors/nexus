@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit;
 
 use Fp\Functional\Either\Either;
-use Monadial\Duration\FiniteDuration;
-use Monadial\Duration\TimeUnit\TimeUnit;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
-use Monadial\Nexus\Ddd\Core\Backoff\ExponentialBackoff;
-use Monadial\Nexus\Ddd\Core\Backoff\RetryPolicyBuilder;
 use Monadial\Nexus\Ddd\Core\Identity\IdGenerator;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Identity\UlidGenerator;
@@ -22,7 +18,6 @@ use Monadial\Nexus\Ddd\Core\Value\StringValue;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 
 final class SmokeTest extends TestCase
 {
@@ -55,17 +50,6 @@ final class SmokeTest extends TestCase
         // Policy — compute
         $policy = new SmokeDoublePolicy();
         self::assertSame(8, $policy->apply(4));
-
-        // Backoff — RetryPolicy
-        $retry = RetryPolicyBuilder::create()
-            ->onException(RuntimeException::class, ExponentialBackoff::of(
-                FiniteDuration::fromTimeUnit(10, TimeUnit::Milliseconds()),
-                FiniteDuration::fromTimeUnit(100, TimeUnit::Milliseconds()),
-                3,
-            ))
-            ->build();
-        $delay = $retry->delayFor(1, new RuntimeException('boom'));
-        self::assertFalse($delay->isNone());
     }
 }
 

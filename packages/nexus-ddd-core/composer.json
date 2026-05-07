@@ -1,12 +1,11 @@
 {
     "name": "nexus-actors/ddd-core",
-    "description": "Nexus DDD Framework — tactical building blocks (Identity, Value, Entity, AggregateRoot, Specification, Policy, BackoffStrategy).",
+    "description": "Nexus DDD Framework — tactical building blocks (Identity, Value, Entity, AggregateRoot, Specification, Policy).",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5",
         "fp4php/functional": "^6.0",
-        "monadial/php-duration": "^1.0",
         "psr/clock": "^1.0",
         "symfony/uid": "^8.0"
     },
