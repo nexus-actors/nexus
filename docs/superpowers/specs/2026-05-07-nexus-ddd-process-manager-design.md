@@ -100,12 +100,126 @@ abstract class AbstractProcessManager
     protected function complete(): void;
     protected function terminate(Reason $reason): void;
 
-    // Correlation introspection (Udi)
+    // Correlation introspection
     public function startedBy(): ?DomainEvent;                          // which event triggered this instance
-    protected function correlateOn(string $field, mixed $value): void;  // secondary correlation index
+    protected function correlateOn(string $field, mixed $value): void;  // add secondary correlation key
+    protected function removeCorrelation(string $field): void;          // forget a temporary secondary key
 
-    // Replay-mode awareness (Greg)
+    // Replay-mode awareness
     final public function isReplaying(): bool;                          // set by runtime during load
+}
+```
+
+**`correlateOn()` semantics.** Call exactly **once per secondary key**, at the moment the PM first observes the secondary id (typically inside an `#[OnEvent]` handler that introduces a new identifier — e.g., `$event->shipmentId` after the order is shipped). Idempotent re-registration with the *same value* is a no-op; calling it with a *different value* for an existing field throws `CorrelationConflictException`. The call is **state-mutating** and is recorded as an internal event (`PmCorrelationAdded(field, value)`) for ES PMs so replay rebuilds the secondary index correctly. For stateful PMs the field is part of the snapshot.
+
+**`removeCorrelation()`** is the inverse — used when a PM "forgets" a temporary key (e.g., a quote-id once the quote becomes an order). Recorded as `PmCorrelationRemoved(field)`. Without removal the secondary index grows unboundedly per PM and stale keys redirect future events to wrong instances.
+
+### `Reason` value object
+
+`terminate()` and `terminationReason()` traffic in a typed `Reason`, not a free string:
+
+```php
+final readonly class Reason {
+    public static function of(string $code, ?string $detail = null): self;
+    public function code(): string;
+    public function detail(): ?string;
+}
+```
+
+`code` is a stable machine-readable identifier (`'payment-not-received-within-24h'`); `detail` is optional human-friendly context. Reasons go into the persisted `PmTerminated(Reason)` event, so changing `code` values for already-terminated PMs is a schema migration.
+
+### `ProcessManagerEventStore` — stream contract
+
+For ES PMs, persistence adapters must satisfy this contract. Per-PM-type physical tables are the user's chosen layout; the *contract* below is what every adapter implements regardless:
+
+```php
+/**
+ * @template TInternalEvent of DomainEvent
+ */
+interface ProcessManagerEventStore {
+    /**
+     * Append events to a PM's stream with optimistic concurrency.
+     * @param iterable<int, TInternalEvent> $events
+     * @throws OptimisticLockException when expected version mismatches.
+     */
+    public function append(
+        ProcessManagerId $streamId,
+        int $expectedVersion,
+        iterable $events,
+        WriterId $writerId,
+    ): void;
+
+    /**
+     * Load the full stream (or from-snapshot+delta when a snapshot store is present).
+     * @return iterable<int, TInternalEvent>
+     */
+    public function load(ProcessManagerId $streamId): iterable;
+
+    public function streamExists(ProcessManagerId $streamId): bool;
+}
+```
+
+**Stream invariants** (every adapter must guarantee):
+- Stream id = `ProcessManagerId` value
+- Sequence numbers are per-stream, monotonically increasing from 1
+- Each row is exactly one `DomainEvent` (internal to the PM)
+- Writer-id stamping (`WriterId` from core's single-writer principle) on every row
+- Optimistic concurrency on `(stream_id, expected_version)` at append
+
+**Recommended physical schema** (informative, not normative):
+
+```sql
+CREATE TABLE order_fulfillment_process_events (
+    stream_id    UUID    NOT NULL,
+    sequence_no  INT     NOT NULL,
+    event_type   TEXT    NOT NULL,
+    payload      JSONB   NOT NULL,
+    occurred_at  TIMESTAMPTZ NOT NULL,
+    writer_id    UUID    NOT NULL,
+    PRIMARY KEY (stream_id, sequence_no)
+);
+CREATE INDEX ON order_fulfillment_process_events (stream_id, occurred_at);
+```
+
+Persistence adapters MAY choose a different shape (e.g., one-events-table-per-app vs per-PM-type) but the contract above is what `EventSourcedProcessManager.replay()` and the runtime call against.
+
+### `ProcessManagerInspector` — observability contract
+
+A v1 contract for ops/tooling. Implementation defers to a future tooling package, but the contract ships now so persistence adapters design schemas with inspection in mind:
+
+```php
+interface ProcessManagerInspector {
+    public function findById(ProcessManagerId $id): ?ProcessManagerSnapshot;
+
+    /**
+     * PMs that are alive but have made no progress (no recorded internal
+     * events) for at least $idleFor, and have no pending deadlines.
+     * @return iterable<int, ProcessManagerSnapshot>
+     */
+    public function findStuck(FiniteDuration $idleFor): iterable;
+
+    /**
+     * Lookup by primary or secondary correlation key.
+     * @return iterable<int, ProcessManagerSnapshot>
+     */
+    public function findByCorrelation(string $field, mixed $value): iterable;
+}
+
+final readonly class ProcessManagerSnapshot {
+    public function __construct(
+        public ProcessManagerId $id,
+        public string $pmClass,
+        public bool $isCompleted,
+        public bool $isTerminated,
+        public ?Reason $terminationReason,
+        public int $version,
+        public DateTimeImmutable $startedAt,
+        public DateTimeImmutable $lastEventAt,
+        /** @var array<int, DeadlineName> */
+        public array $pendingDeadlines,
+        /** @var array<string, mixed> */
+        public array $correlations,
+    ) {}
 }
 ```
 
@@ -254,13 +368,43 @@ final readonly class WithRetry {
 final readonly class ProcessManager {
     public function __construct(public bool $deleteOnComplete = true) {}
 }
+
+#[Attribute(Attribute::TARGET_METHOD)]
+final readonly class OnLateArrival {
+    // Handler signature: (ConcreteEventClass|DomainEvent $event, MessageContext $ctx): void
+    // The framework dispatches by reflection on the parameter type — pass a typed
+    // event class to handle a specific late event, or DomainEvent for a catch-all.
+}
+
+#[Attribute(Attribute::TARGET_CLASS)]
+final readonly class LateArrivalPolicy {
+    public function __construct(public Policy $policy = Policy::DeadLetter) {}
+}
+
+enum Policy {
+    case DeadLetter;   // route to DLQ (default — strictest)
+    case LogAndDrop;   // structured log + metric, no DLQ entry
+    case Reject;       // throw RejectedMessageException — upstream bus decides retry/drop
+}
 ```
 
-**Multiple `#[StartsOn]` allowed**: a single PM class may have multiple methods marked `#[StartsOn]`, each starting an instance from a different triggering event. Discipline:
-- The framework enforces a unique constraint on `(pm_type, correlation_key)` at the persistence layer — first-write-wins under concurrent starts.
-- The race-loser's event falls through to `#[OnEvent]` handling against the now-existing instance.
-- Every `#[StartsOn]` handler must establish the PM's invariants (Vernon).
-- Only the *first* event arriving for a given correlation key fires a start handler; subsequent events for the same correlation key are routed to `#[OnEvent]` handlers if any match, otherwise dead-lettered.
+### Multiple `#[StartsOn]` rules (MUST)
+
+A single PM class may have multiple methods marked `#[StartsOn]`, each starting an instance from a different triggering event. The runtime invariants are MUST-strength:
+
+- The framework MUST enforce a unique constraint on `(pm_type, correlation_key)` at the persistence layer — first-write-wins under concurrent starts.
+- The race-loser's event MUST fall through to `#[OnEvent]` handling against the now-existing instance.
+- If the race-loser's event has no matching `#[OnEvent]` handler on the now-existing instance, it MUST be dead-lettered with reason `"race-loser-no-on-event-match"`.
+- Every `#[StartsOn]` handler MUST establish the PM's invariants — i.e., set whatever fields downstream `#[OnEvent]` handlers depend on.
+- Only the *first* event arriving for a given correlation key fires a start handler. Subsequent matches of `#[StartsOn]` for the same correlation key MUST be treated as `#[OnEvent]` if a matching `#[OnEvent]` exists; otherwise dead-lettered.
+
+### `#[OnLateArrival]` discipline rules (DOCUMENTED + Psalm-enforced where possible)
+
+- A `#[OnLateArrival]` handler MUST NOT call `recordThat()` (the PM is already terminal — its event stream is closed). Enforced by Psalm rule `OnLateArrivalSemanticsRule`.
+- A `#[OnLateArrival]` handler MUST NOT call `complete()` / `terminate()` (state already terminal). Enforced by the same Psalm rule.
+- A `#[OnLateArrival]` handler SHOULD only emit *compensating* commands (refund, notify, audit-log). It MUST NOT dispatch commands that create new domain state — that is a `#[StartsOn]` on a different PM, not a late-arrival follow-up.
+- The handler signature accepts either a typed event class (preferred) OR `DomainEvent` (catch-all). The catch-all is intended for forwarding to a DLQ-enrichment listener; do not let it become a junk drawer for "events I haven't modeled yet."
+- Class-level `#[LateArrivalPolicy(Policy)]` defaults to `DeadLetter`. Method-level `#[OnLateArrival]` overrides the class policy when present (handler runs instead of policy).
 
 ---
 
@@ -287,16 +431,38 @@ The PM declares completion/termination; the framework declares failure (Vernon).
 
 ### Event arriving for a completed/terminated PM
 
-If the PM class declares an `#[OnLateArrival]` method, the framework routes the event to it. **If no `#[OnLateArrival]` handler is declared, the event is dead-lettered** — pushed to the framework's structured DLQ with the original event payload, the correlation key, the resolved PM id, and a routing-decision marker.
+Routing decision (in order):
 
-Late-arrival events are NEVER silently dropped or logged-and-forgotten. The DLQ is the single off-ramp for messages the framework cannot route, and ops investigates from there. This is intentionally stricter than v1's earlier "log and drop" — silent drops produce production mysteries that survive postmortems.
+1. If the PM class declares a typed `#[OnLateArrival(...)]` method matching the event class → invoke it.
+2. Else if the PM class declares a catch-all `#[OnLateArrival]` (parameter type `DomainEvent`) → invoke it.
+3. Else fall back to the class-level `#[LateArrivalPolicy(Policy)]` (default `DeadLetter`):
+   - `DeadLetter` → route to DLQ with full routing trace
+   - `LogAndDrop` → structured log entry + metric, no DLQ
+   - `Reject` → throw `RejectedMessageException`; upstream bus decides retry semantics
+
+`DeadLetter` is the default because silent drops produce production mysteries that survive postmortems. Domains that have *expected* late-arrival noise (e.g., `PaymentRefunded` after subscription cancellation) opt into `LogAndDrop` consciously — the Psalm rule reminds the team that this is a deliberate choice, not the path of least resistance.
 
 ### Event arriving for a non-existent PM
 
-- If a matching `#[StartsOn]` exists on any registered PM class → start a new instance.
+- If a matching `#[StartsOn]` exists on any registered PM class → start a new instance (subject to the multi-StartsOn race rules above).
 - Otherwise → dead-letter (do not silently drop, do not auto-create empty PMs).
 
-The DLQ entry includes: original event, the correlation key the framework computed, the list of PM classes the framework checked, and the reason for non-routing ("no instance + no `#[StartsOn]`" vs "instance completed/terminated + no `#[OnLateArrival]`"). Ops must be able to answer "why didn't this event fire?" in under five minutes (Udi's on-call ask).
+### DLQ entry shape
+
+Every DLQ entry MUST include:
+
+| Field | Purpose |
+|---|---|
+| `originalEvent` | The full event payload — needed for replay-from-DLQ |
+| `originalEventId` | Stable id (from `MessageMetadata`) — needed for idempotency on DLQ-replay |
+| `correlationKey` | Value the framework computed from `correlateBy` — answers "what did the framework think this was about?" |
+| `attemptedAt` | Timestamp when routing was attempted (NOT the event's `occurredAt`) |
+| `routingTrace` | List of `{pmClass, declaration, rejectionReason}` — every `#[StartsOn]` and `#[OnEvent]` declaration the framework considered, and why each was rejected |
+| `nonRoutingReason` | Single canonical code: `no-instance-no-startson`, `completed-no-onlatearrival`, `terminated-no-onlatearrival`, `race-loser-no-on-event-match` |
+| `pmClass` | The PM class the framework would have routed to, if it had matched |
+| `correlationField` | The field name from the `correlateBy` declaration |
+
+The trace + canonical reason code MUST allow ops to answer "why didn't this event fire?" in under five minutes by looking at the DLQ entry alone (Udi's on-call ask).
 
 ### Replay (event-sourced PMs)
 
@@ -305,18 +471,88 @@ Outputs: fully-rehydrated state object. **Nothing else.**
 
 During replay (`isReplaying() === true`):
 - `applyXxx` methods run (driven by core's `ApplyDispatcher`)
-- `dispatch()` is a no-op
-- `publish()` is a no-op
-- `scheduleDeadline()` updates internal state (so `hasDeadline()` returns correct values) but does NOT enqueue physically with the deadline scheduler
+- `dispatchCommand()` is a no-op
+- `publishEvent()` is a no-op
+- `scheduleDeadline()` / `rescheduleDeadline()` / `cancelDeadline()` update internal state (so `hasDeadline()` returns correct values) but do NOT enqueue physically with the deadline scheduler
+- `correlateOn()` / `removeCorrelation()` update the correlation index in memory but do NOT publish to any external correlation registry
 - `complete()` / `terminate()` set the flags but do not emit lifecycle events (those are already in the stream)
+- `#[OnEvent]` / `#[StartsOn]` / `#[OnLateArrival]` handlers do NOT run — only `applyXxx`
 
 **Internal event categories persisted in the stream** for ES PMs:
-1. State-mutation events the PM owns (`PmPaymentRecorded`, `PmShipmentScheduled`, ...)
-2. `PmDeadlineScheduled` / `PmDeadlineRescheduled` / `PmDeadlineCancelled` / `PmDeadlineFired` (deadline state changes)
-3. `PmConsumedExternalEvent(externalEventId)` (idempotency tracking — replay reconstructs the dedup set)
-4. `PmCompleted` / `PmTerminated(Reason)` (lifecycle transitions)
 
-Categories 2–4 are framework-emitted; subclasses don't `recordThat` them directly. The framework wraps `scheduleDeadline()`, `complete()`, `terminate()` and emits the corresponding internal events.
+| # | Event family | Owner | Recorded by |
+|---|---|---|---|
+| 1 | State-mutation events (`PmPaymentRecorded`, `PmShipmentDispatched`, ...) | Subclass | `recordThat()` from inside `#[OnEvent]`/`#[StartsOn]` handlers |
+| 2 | `PmDeadlineScheduled` / `PmDeadlineRescheduled` / `PmDeadlineCancelled` / `PmDeadlineFired` | Framework | Framework wraps `scheduleDeadline()` / `rescheduleDeadline()` / `cancelDeadline()` and emits these |
+| 3 | `PmCorrelationAdded(field, value)` / `PmCorrelationRemoved(field)` | Framework | Framework wraps `correlateOn()` / `removeCorrelation()` and emits these |
+| 4 | `PmConsumedExternalEvent(externalEventId)` | Framework | Recorded after a successful handler dispatch — used for both live and replay dedup |
+| 5 | `PmStarted(triggeringEventId, startMethodName)` | Framework | Recorded as the FIRST event in the stream when a `#[StartsOn]` fires |
+| 6 | `PmCompleted` / `PmTerminated(Reason)` | Framework | Framework wraps `complete()` / `terminate()` and emits these as the LAST event |
+
+Categories 2–6 are framework-emitted under the `Monadial\Nexus\Ddd\ProcessManager\Internal\Event` namespace. Subclasses MUST NOT `recordThat` events from that namespace directly — enforced by `PmInternalEventNamespaceRule` Psalm rule. The framework supplies `applyXxx` for all category 2–6 events on `EventSourcedProcessManager`.
+
+### Idempotency: live in-flight redelivery vs replay
+
+These are **two distinct dedup paths** with the same dedup-set source-of-truth.
+
+**Live in-flight redelivery** (same external event arrives twice while PM is alive in memory or after recent eviction):
+
+```
+external event arrives
+  ↓
+runtime computes correlation key
+  ↓
+runtime loads PM (replay rebuilds in-memory dedup set from PmConsumedExternalEvent stream)
+  ↓
+runtime checks: is event.id in dedup set?
+  ↓ YES                                ↓ NO
+ack the message, no handler invoked.   begin transaction
+                                       ↓
+                                       invoke handler
+                                       ↓
+                                       handler emits commands/events/deadlines via staging
+                                       ↓
+                                       framework appends PmConsumedExternalEvent(event.id) to stream
+                                       ↓
+                                       commit transaction (PM events + outbox rows in same TX)
+                                       ↓
+                                       staging.flush() → buses dispatch
+                                       ↓
+                                       ack the message
+```
+
+The dedup check fires **after PM load** but **before handler dispatch**. This is the only correct ordering: you need the dedup set to be reconstructed, and you need the check to fire before any side effect. In practice, hot PMs stay loaded across events (cache), so the load is cheap.
+
+**Replay** (PM being rehydrated from stream during load):
+
+```
+runtime reads stream
+  ↓
+for each persisted event:
+  - applyXxx runs (state mutation)
+  - if PmConsumedExternalEvent(id) → add id to in-memory dedup set
+  - all side-effect methods (dispatch, publish, schedule physical) are no-ops
+  ↓
+PM is loaded with full dedup set
+```
+
+Replay does NOT re-trigger handler logic and does NOT re-record `PmConsumedExternalEvent`. It just rebuilds the dedup set as a state projection.
+
+**DLQ-replay**: when ops re-injects an event from the DLQ, the runtime treats it as a new external delivery — the same dedup gate fires. If the original event was never processed (the reason it's in the DLQ), the dedup set won't contain its id, and the handler runs normally. If ops accidentally re-injects the same DLQ entry twice, the second injection dedups correctly. The DLQ-replay path MUST be the same code path as live ingestion to preserve this property.
+
+### Outbound command idempotency
+
+A PM dispatches a command. The transaction commits. The bus publishes. Ops retries; PM reloads (live, not replay); handler fires again on a redelivered external event. Will the same command be dispatched twice?
+
+**Inbound dedup prevents the handler from running twice for the same external event** (above). So in normal flow, the same command is not re-emitted.
+
+**Failure mode**: the handler dispatched the command, but the transaction commit failed (DB error AFTER the bus already published). The external event is unacked, redelivered, the handler runs again — but the dedup set wasn't updated (transaction rolled back), so the handler dispatches the command **a second time**.
+
+To make this safe, **commands emitted by a PM carry a deterministic `MessageId` derived from `(pmId, sequenceNo)`** — where `sequenceNo` is the position in the PM's stream where the command was first staged. The runtime stamps this id on the command's metadata at staging time. Downstream command handlers MUST dedup on `MessageId` (the messaging layer's idempotency contract).
+
+This means: even if the bus publishes the same command twice due to crash-before-ack, the downstream handler sees the same `MessageId` and dedups.
+
+`publishEvent()` follows the same pattern — events get a deterministic id from `(pmId, sequenceNo)`. Downstream subscribers dedup on `MessageId` if they care about exactly-once.
 
 ---
 
@@ -348,6 +584,8 @@ The PM doesn't know about transactions — it calls `dispatch()` / `publish()` /
 **Default implementation in this package:** `InMemoryMessageStaging` + `InMemoryUnitOfWork`. Sufficient for tests and for users running a single-process Fiber runtime without DB-backed persistence.
 
 **Downstream:** `OutboxMessageStaging` (writes commands/events/deadline-ops to an outbox table within the same DB transaction as PM state; a separate dispatcher polls the outbox post-commit) ships in `nexus-ddd-aggregate` or a dedicated `nexus-ddd-outbox` package.
+
+**Shared contract test class.** This package ships an abstract `MessageStagingContractTest` that both `InMemoryMessageStaging` and downstream `OutboxMessageStaging` MUST pass. The shared test pins the discard semantics (`discard()` after `appendCommand()` → buses never see the command), the flush semantics (`flush()` invokes the bus exactly once per appended message), and ordering invariants (FIFO within a single staging cycle). Without this, two implementations drift and the "drop on rollback" guarantee becomes implementation-dependent.
 
 ---
 
@@ -399,8 +637,12 @@ final readonly class PmPaymentRecorded implements OrderFulfillmentEvent {
 final readonly class PmShipmentDispatched implements OrderFulfillmentEvent {
     public function __construct(public OrderId $orderId, public ShipmentId $shipmentId) {}
 }
+final readonly class PmShippingFailed implements OrderFulfillmentEvent {
+    public function __construct(public OrderId $orderId, public string $failureReason) {}
+}
 
 #[ProcessManager(deleteOnComplete: false)]
+#[LateArrivalPolicy(Policy::DeadLetter)]    // explicit; matches default
 /**
  * @extends EventSourcedProcessManager<OrderFulfillmentProcessId, OrderFulfillmentEvent>
  */
@@ -413,7 +655,8 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
     #[StartsOn(OrderPlaced::class, correlateBy: 'orderId')]
     public function onOrderPlaced(OrderPlaced $event, MessageContext $ctx): void
     {
-        $this->orderId = $event->orderId;
+        // Establish PM invariants — every #[StartsOn] handler MUST do this.
+        $this->recordThat(new PmOrderRegistered($event->orderId));
         $this->scheduleDeadline(DeadlineName::of('payment-deadline'), FiniteDuration::ofHours(24));
     }
 
@@ -422,16 +665,27 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
     public function onPaymentReceived(PaymentReceived $event, MessageContext $ctx): void
     {
         $this->recordThat(new PmPaymentRecorded($this->orderId));
+        $this->cancelDeadline(DeadlineName::of('payment-deadline'));    // recorded as PmDeadlineCancelled
         $this->dispatchCommand(new ShipOrder($this->orderId));
-        $this->publishEvent(new OrderFulfillmentPaymentConfirmed($this->orderId));   // PM-emitted event for projections
+        $this->publishEvent(new OrderFulfillmentPaymentConfirmed($this->orderId));
     }
 
     #[OnEvent(OrderShipped::class, correlateBy: 'orderId')]
     public function onOrderShipped(OrderShipped $event, MessageContext $ctx): void
     {
+        // recordThat first so the secondary correlation is event-sourced via
+        // applyPmShipmentDispatched — replay-safe.
         $this->recordThat(new PmShipmentDispatched($this->orderId, $event->shipmentId));
-        $this->correlateOn('shipmentId', $event->shipmentId->value());
         $this->complete();
+    }
+
+    /** Failure-path branch — what happens when shipping breaks. */
+    #[OnEvent(OrderShippingFailed::class, correlateBy: 'orderId')]
+    public function onOrderShippingFailed(OrderShippingFailed $event, MessageContext $ctx): void
+    {
+        $this->recordThat(new PmShippingFailed($this->orderId, $event->reason));
+        $this->dispatchCommand(new RefundPayment($this->orderId));
+        $this->terminate(Reason::of('shipping-failed', detail: $event->reason));
     }
 
     #[OnDeadline('payment-deadline')]
@@ -443,16 +697,28 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
         }
     }
 
+    /**
+     * Optional: late-arrival handler. Without this method, late events
+     * follow the class-level #[LateArrivalPolicy] (DeadLetter). Defining
+     * a typed handler lets the PM react to specific late events (e.g.,
+     * refund a payment that arrived after timeout-cancellation).
+     */
     #[OnLateArrival]
-    public function onLateEvent(DomainEvent $event, MessageContext $ctx): void
+    public function onLatePaymentReceived(PaymentReceived $event, MessageContext $ctx): void
     {
-        // Optional. If present, late-arrival events route here instead of
-        // hitting the DLQ. Useful for workflows where late events are
-        // expected (e.g., "PaymentReceived after timeout-cancellation —
-        // refund the payment").
+        // Compensating side effect — the PM is terminal, so we cannot
+        // recordThat() or terminate() here; we can only emit compensating
+        // commands.
+        $this->dispatchCommand(new RefundPayment($event->orderId));
     }
 
-    // State-mutation handlers (event-sourced replay invokes only these)
+    // ---- State-mutation handlers (event-sourced replay invokes ONLY these) ----
+
+    private function applyPmOrderRegistered(PmOrderRegistered $e): void
+    {
+        $this->orderId = $e->orderId;
+    }
+
     private function applyPmPaymentRecorded(PmPaymentRecorded $e): void
     {
         $this->paid = true;
@@ -461,9 +727,65 @@ final class OrderFulfillmentProcess extends EventSourcedProcessManager
     private function applyPmShipmentDispatched(PmShipmentDispatched $e): void
     {
         $this->shipmentId = $e->shipmentId;
+        // Replay-safe secondary correlation: emitted as a state-mutation
+        // event so replay rebuilds the index.
+        $this->correlateOn('shipmentId', $e->shipmentId->value());
+    }
+
+    private function applyPmShippingFailed(PmShippingFailed $e): void
+    {
+        // No state field here — the failure reason is captured in the
+        // termination Reason. The applyXxx exists so replay walks the event.
     }
 }
 ```
+
+### The complete persisted stream (happy path)
+
+For an `OrderFulfillmentProcess` instance that goes through payment → shipment → completion, the stream contains:
+
+```
+seq | event class                                       | emitted by
+----+---------------------------------------------------+--------------------------
+  1 | PmStarted(orderPlacedEventId, 'onOrderPlaced')    | framework (start handler)
+  2 | PmOrderRegistered(orderId)                        | onOrderPlaced (recordThat)
+  3 | PmDeadlineScheduled('payment-deadline', 24h)      | framework (scheduleDeadline)
+  4 | PmConsumedExternalEvent(orderPlacedEventId)       | framework (post-handler)
+  5 | PmPaymentRecorded(orderId)                        | onPaymentReceived (recordThat)
+  6 | PmDeadlineCancelled('payment-deadline')           | framework (cancelDeadline)
+  7 | PmConsumedExternalEvent(paymentReceivedEventId)   | framework (post-handler)
+  8 | PmShipmentDispatched(orderId, shipmentId)         | onOrderShipped (recordThat)
+  9 | PmCorrelationAdded('shipmentId', '01HK...')       | framework (correlateOn from applyXxx)
+ 10 | PmConsumedExternalEvent(orderShippedEventId)      | framework (post-handler)
+ 11 | PmCompleted                                       | framework (complete)
+```
+
+Notice three things:
+- The stream contains **all** persisted events including framework-emitted ones, not just the subclass's `recordThat`s. A developer who reads "I only persist what I `recordThat`" has the wrong mental model.
+- `correlateOn('shipmentId', ...)` is invoked from inside `applyPmShipmentDispatched`, NOT from `onOrderShipped`. This is the replay-safe pattern: secondary correlation must happen during state mutation so it re-runs on replay.
+- `PmConsumedExternalEvent` is appended after every successful handler dispatch and is the source of truth for the live-redelivery dedup check (§7).
+
+### Replay trace
+
+Loading this PM from its stream:
+
+```
+runtime: isReplaying = true
+  apply(PmStarted)              → set startedBy = OrderPlaced(eventId=...)
+  apply(PmOrderRegistered)      → orderId = ...
+  apply(PmDeadlineScheduled)    → record 'payment-deadline' as scheduled internally
+  apply(PmConsumedExternalEvent(orderPlacedEventId))  → add to dedup set
+  apply(PmPaymentRecorded)      → paid = true
+  apply(PmDeadlineCancelled)    → remove 'payment-deadline' from internal scheduled set
+  apply(PmConsumedExternalEvent(paymentReceivedEventId))  → add to dedup set
+  apply(PmShipmentDispatched)   → shipmentId = ...; correlateOn('shipmentId', ...) updates in-memory index
+  apply(PmCorrelationAdded)     → idempotent re-confirmation of the index entry
+  apply(PmConsumedExternalEvent(orderShippedEventId))  → add to dedup set
+  apply(PmCompleted)            → isCompleted = true
+runtime: isReplaying = false; PM is loaded
+```
+
+`#[OnEvent]` / `#[StartsOn]` handlers do not run during replay. `dispatchCommand` / `publishEvent` are no-ops if accidentally called from `applyXxx` (which is itself a Psalm violation — the `ProcessManagerStateRule` catches it).
 
 ---
 
@@ -484,21 +806,64 @@ This package uses **PSR contracts wherever a relevant PSR exists**, and never de
 
 ## 12. Fitness functions (CI-enforced)
 
-**Deptrac layer `DddProcessManager`:**
-- Allowed deps: `DddCore`, `DddMessaging`, `psr/event-dispatcher`, `monadial/php-duration`
-- Forbidden: `symfony/*`, `doctrine/*`, persistence packages, actor-runtime packages, future P0 DDD packages
+These are testable architectural assertions. Wire them now, before code exists, so violations are impossible rather than discouraged.
+
+**Deptrac layers (added to `deptrac.yaml`):**
+
+```yaml
+- name: DddProcessManager
+  collectors:
+    - type: directory
+      value: packages/nexus-ddd-process-manager/src/.*
+
+- name: PmInternalEventNamespace
+  collectors:
+    - type: classLike
+      regex: ^Monadial\\Nexus\\Ddd\\ProcessManager\\Internal\\Event\\.*$
+
+ruleset:
+  DddProcessManager:
+    - DddCore
+    - DddMessaging
+    # PSR & Duration deps allowed via vendor whitelist below
+
+forbidden_imports:
+  DddProcessManager:
+    # Build fails if any of these vendor namespaces are imported.
+    - regex: ^Symfony\\.*
+    - regex: ^Laravel\\.*
+    - regex: ^Illuminate\\.*
+    - regex: ^Monolog\\.*
+    - regex: ^Doctrine\\.*
+```
+
+The forbidden-imports rule promotes the PSR-everywhere policy from CLAUDE.md docblock to a build-failing CI gate.
 
 **Psalm rules** (in `nexus-psalm` plugin):
-- `ProcessManagerStateRule` — PM property mutations only inside `applyXxx` (for ES PMs) or inside command-handler methods (for stateful PMs)
-- `StartsOnUniqueRule` — within a single PM class, no two methods may carry `#[StartsOn(SameEvent::class)]`
-- `HandlerSignatureRule` — methods with `#[StartsOn]` / `#[OnEvent]` / `#[OnDeadline]` have signature `(ConcreteEvent|nothing, MessageContext): void`
-- `ProcessManagerInternalEventReadOnlyRule` — listeners on `ProcessManagerLifecycleEvent` must not call mutators on the event or the PM
+
+| Rule | Enforces |
+|---|---|
+| `ProcessManagerStateRule` | PM property mutations only inside `applyXxx` (for ES PMs) or inside `#[StartsOn]`/`#[OnEvent]`/`#[OnDeadline]` handlers (for stateful PMs) |
+| `StartsOnUniqueRule` | Within a single PM class, no two methods may carry `#[StartsOn(SameEvent::class)]` |
+| `HandlerSignatureRule` | Methods with `#[StartsOn]` / `#[OnEvent]` / `#[OnDeadline]` / `#[OnLateArrival]` have signature `(ConcreteEvent\|DomainEvent\|nothing, MessageContext): void` |
+| `ProcessManagerInternalEventReadOnlyRule` | Listeners on `ProcessManagerLifecycleEvent` must not call mutators on the event or the PM |
+| `PmInternalEventNamespaceRule` | Subclass `recordThat()` calls MUST NOT pass an event from `Monadial\Nexus\Ddd\ProcessManager\Internal\Event\` — that namespace is framework-only (`PmDeadlineScheduled`, `PmConsumedExternalEvent`, `PmCompleted`, etc.) |
+| `OnLateArrivalSemanticsRule` | `#[OnLateArrival]` handlers MUST NOT call `recordThat()`, `complete()`, or `terminate()` (the PM is already terminal); MAY call `dispatchCommand()` for compensating effects |
 
 **PHPUnit reflection / contract tests:**
+
 - Drain semantics — `pullPending*` returns N then 0
-- `discard()` after `dispatch()` → buses never see the staged messages
+- `discard()` after `dispatchCommand()`/`publishEvent()` → buses never see the staged messages
+- `flush()` after `dispatchCommand()` → bus invoked exactly once per command
+- FIFO ordering preserved across staging cycles
 - ES PM with `applyXxx` for every recorded event class — fail if a `recordThat(X)` has no `applyX` method
-- `isReplaying()` flag suppresses side effects
+- `isReplaying()` flag suppresses side effects (call `dispatchCommand()` during replay → bus NOT invoked)
+- Replay reconstructs full state including secondary correlations and dedup set
+- Live in-flight redelivery of the same external event id → handler invoked exactly once
+
+**Shared `MessageStagingContractTest`** — abstract test class that both `InMemoryMessageStaging` and downstream `OutboxMessageStaging` MUST pass. Pins discard/flush/FIFO/idempotency invariants so implementations cannot drift.
+
+**Mutation testing (Infection):** target 90% MSI on `AbstractProcessManager`, `EventSourcedProcessManager`, `StatefulProcessManager`, `MessageStaging` implementations, and the `ProcessManagerDefinitionCompiler`. Attribute classes are essentially data — exclude or accept lower MSI.
 
 ---
 
@@ -520,28 +885,41 @@ This package uses **PSR contracts wherever a relevant PSR exists**, and never de
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| `MessageStaging` shape diverges between PM and aggregate | Med | High | Define in `nexus-ddd-messaging` (shared), not here; both packages depend on it |
+| `MessageStaging` shape diverges between PM and aggregate | Med | High | **Plan-time decision**: define in `nexus-ddd-messaging` (shared), not here; both packages depend on it. Tracked as the first decision the writing-plans skill must resolve. |
 | Static dispatcher in `EventSourcedProcessManager` shared across coroutines | Low | Med | Same `setDispatcher()` injection seam as `EventSourcedAggregateRoot` |
 | `MessageContext` shape drift between messaging and PM | Low | Med | PM extras (PM id, lifecycle phase) carried as Stamps on the envelope, NOT as a richer context |
-| Internal lifecycle events become an undocumented control plane | Med | Med | Psalm rule + readonly events + listener test |
+| Internal lifecycle events become an undocumented control plane | Med | Med | Psalm rule (`ProcessManagerInternalEventReadOnlyRule`) + readonly events + listener test |
 | Per-PM-type table schema migration burden | Med | Low | Document; per-table is the user's chosen tradeoff |
+| `#[OnLateArrival]` becomes a junk drawer | Med | Med | `OnLateArrivalSemanticsRule` Psalm rule; explicit discipline in §5; typed event params discouraged-but-allowed for catch-all |
+| Outbound command duplicate after crash-before-ack | Med | High | Deterministic `MessageId` from `(pmId, sequenceNo)`; downstream handlers dedup |
 
 ---
 
-## 14. Out of scope for v1
+## 14. v1 deliverables — not just code
+
+Beyond the code, v1 ships:
+
+- **Spec doc** (this file) committed to `docs/superpowers/specs/`
+- **"Writing Process Managers in an Async World" guide** at `docs/superpowers/guides/process-managers-async-discipline.md` — separate document, NOT a section bolted onto this spec. Covers at-least-once delivery, idempotency keys, late-arrival vs out-of-order vs duplicate (three different problems, three different mechanisms — `#[OnLateArrival]`, ordering invariants in handlers, dedup set), explicit anti-patterns (no clock-based ordering, no "wait for both events" without timeout, no `Command` from `#[OnLateArrival]` that creates new domain state). Linked from every PM-related Psalm-error message.
+- **`ProcessManagerInspector` contract** (interface only — implementation defers to a tooling package)
+- **`MessageStagingContractTest`** abstract test class (shared between in-memory and future outbox impls)
+- **All Psalm rules** in §12 added to the `nexus-psalm` plugin
+- **Deptrac layer + forbidden_imports** rule for framework vendors
+
+## 15. Out of scope for v1
 
 - Outbox table schema and DB-backed staging (downstream package)
 - Saga compensation primitives (compensation = a `Command` dispatch; no separate `compensate()` API)
 - Runtime DSL configuration
 - DB-backed deadline scheduler runtime (timer adapter — separate package)
-- `pm-inspect` CLI (Udi's on-call ask — useful but tooling, not contracts)
-- Stuck-PM detection query (same — tooling)
+- **`pm-inspect` CLI implementation** — only the `ProcessManagerInspector` *contract* is in v1; the CLI tool that uses it is a separate tooling package
+- **Stuck-PM detection runtime** — only the `findStuck(idleFor)` *contract* is in v1; the polling implementation is downstream
 - Process-manager-as-actor adapter (separate package wiring PMs as actors in the actor framework)
 
 ---
 
-## 15. Sign-off
+## 16. Sign-off
 
-All seven items in §13 confirmed by user 2026-05-07.
+All seven user-facing decisions confirmed (§13). Round-2 four-expert review (Mark/Udi/Vaughn/Greg) found 17 additional gaps; this spec revision addresses every one of them.
 
-Next step: re-run the four-expert review board against this updated spec. After board approval → invoke `superpowers:writing-plans` to produce the implementation plan.
+Next step: re-run the four-expert review board against this updated spec. Iterate until all four reviewers pass. After board approval → invoke `superpowers:writing-plans` to produce the implementation plan.
