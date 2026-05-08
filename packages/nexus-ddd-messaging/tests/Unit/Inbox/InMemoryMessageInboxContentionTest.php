@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 final class InMemoryMessageInboxContentionTest extends TestCase
 {
     #[Test]
-    public function exactlyOneSuccessAcrossTenSequentialReserveAttempts(): void
+    public function tryReserveIsTransitivelyIdempotentAcrossTenSequentialAttempts(): void
     {
         $inbox = new InMemoryMessageInbox();
         $id = MessageId::generate();
