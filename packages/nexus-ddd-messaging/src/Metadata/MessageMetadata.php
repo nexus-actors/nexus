@@ -136,4 +136,29 @@ final readonly class MessageMetadata
             vectorClock: $this->vectorClock,
         );
     }
+
+    /**
+     * Derive metadata for a message *caused by* this one. The current
+     * message becomes the new message's causation; correlation and
+     * conversation propagate (initialized to the original id if absent —
+     * the very first message in a chain is its own correlation root);
+     * trace context, vector clock, schema version flow forward unchanged.
+     * `expiresAt` does NOT propagate — TTL is per-message, not per-chain.
+     */
+    #[\NoDiscard('the derived metadata is the entire point of this call')]
+    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now): self
+    {
+        return new self(
+            id: $newId,
+            occurredAt: $now,
+            causationId: Option::some($this->id),
+            correlationId: $this->correlationId->orElse(fn() => Option::some($this->id)),
+            conversationId: $this->conversationId->orElse(fn() => Option::some($this->id)),
+            schemaVersion: $this->schemaVersion,
+            traceParent: $this->traceParent,
+            traceState: $this->traceState,
+            expiresAt: Option::none(),
+            vectorClock: $this->vectorClock,
+        );
+    }
 }
