@@ -11,6 +11,11 @@ use Throwable;
 
 /**
  * @psalm-api
+ *
+ * Linear backoff — delay = base * attempt. **`$attempt` must be 1-indexed**
+ * (the first retry is attempt 1; passing 0 returns a zero delay, which is
+ * a degenerate hot-loop). Production retry loops should start counting
+ * from 1.
  */
 final readonly class LinearBackoff implements BackoffStrategy
 {
