@@ -42,6 +42,7 @@ final class StaticStackContextStorage implements ContextStorage
     #[Override]
     public function current(): Option
     {
+        /** @var MessageContext|null $top — Psalm's CallMap signature for array_last is mixed regardless of input element type */
         $top = array_last($this->stack);
 
         if ($top === null) {
