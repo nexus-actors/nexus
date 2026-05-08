@@ -23,10 +23,9 @@ abstract class ContextStorageContractTest extends TestCase
     abstract protected function createStorage(): ContextStorage;
 
     #[Test]
-    public function snapshotEmptyAndCurrentNoneOnFreshStorage(): void
+    public function currentIsNoneOnFreshStorage(): void
     {
         $storage = $this->createStorage();
-        self::assertSame([], $storage->snapshot());
         self::assertTrue($storage->current()->isNone());
     }
 

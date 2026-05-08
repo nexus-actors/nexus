@@ -19,13 +19,6 @@ final class StaticStackContextStorage implements ContextStorage
     /** @var list<MessageContext> */
     private array $stack = [];
 
-    /** @return list<MessageContext> */
-    #[Override]
-    public function snapshot(): array
-    {
-        return $this->stack;
-    }
-
     #[Override]
     public function push(MessageContext $ctx): void
     {
@@ -50,12 +43,5 @@ final class StaticStackContextStorage implements ContextStorage
         }
 
         return Option::some($top);
-    }
-
-    /** @param list<MessageContext> $stack */
-    #[Override]
-    public function restore(array $stack): void
-    {
-        $this->stack = $stack;
     }
 }

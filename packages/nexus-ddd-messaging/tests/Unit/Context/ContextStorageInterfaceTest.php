@@ -15,7 +15,7 @@ use ReflectionMethod;
 final class ContextStorageInterfaceTest extends TestCase
 {
     #[Test]
-    public function exposesFiveMethods(): void
+    public function exposesThreeMethods(): void
     {
         $reflection = new ReflectionClass(ContextStorage::class);
         self::assertTrue($reflection->isInterface());
@@ -26,6 +26,6 @@ final class ContextStorageInterfaceTest extends TestCase
         );
         sort($methodNames);
 
-        self::assertSame(['current', 'pop', 'push', 'restore', 'snapshot'], $methodNames);
+        self::assertSame(['current', 'pop', 'push'], $methodNames);
     }
 }

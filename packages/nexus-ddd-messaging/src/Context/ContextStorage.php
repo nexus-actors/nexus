@@ -16,22 +16,10 @@ use Fp\Functional\Option\Option;
  */
 interface ContextStorage
 {
-    /** @return list<MessageContext> */
-    public function snapshot(): array;
-
     public function push(MessageContext $ctx): void;
 
     public function pop(): void;
 
     /** @return Option<MessageContext> */
     public function current(): Option;
-
-    /**
-     * Replace the entire stack with the given snapshot. Used by
-     * coroutine-bridge code that hands off control across runtime
-     * boundaries.
-     *
-     * @param list<MessageContext> $stack
-     */
-    public function restore(array $stack): void;
 }

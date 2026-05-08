@@ -22,14 +22,6 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
     private NodeId $nodeId;
 
     #[Test]
-    public function snapshotIsEmptyOnCreation(): void
-    {
-        $storage = new StaticStackContextStorage();
-        self::assertSame([], $storage->snapshot());
-        self::assertTrue($storage->current()->isNone());
-    }
-
-    #[Test]
     public function pushPopMaintainsLifoOrder(): void
     {
         $storage = new StaticStackContextStorage();
@@ -46,19 +38,6 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
 
         $storage->pop();
         self::assertTrue($storage->current()->isNone());
-    }
-
-    #[Test]
-    public function restoreReplacesStackEntirely(): void
-    {
-        $storage = new StaticStackContextStorage();
-        $a = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-        $b = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-
-        $storage->push($a);
-        $storage->restore([$b]);
-
-        self::assertSame([$b], $storage->snapshot());
     }
 
     #[Override]
