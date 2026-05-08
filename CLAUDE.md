@@ -154,6 +154,27 @@ Two exceptions, narrowly scoped:
 - `?ClockInterface $clock = null` constructor parameters where the implementation falls back to a default clock — defensible only because PSR-20 uses null-default itself, and the body immediately replaces it (`$clock ?? new SystemClock()`). Prefer requiring the clock explicitly when you can.
 - Third-party type signatures we don't own (PSR contracts, Symfony/Doctrine return types). Wrap them at the boundary: `Option::fromNullable($possiblyNull)` immediately after the call.
 
+## Never use singletons — use DI or factories (REQUIRED)
+
+**Hard rule across all packages.** Mutable global state is forbidden. No `private static ?T $foo = null` lazy-init slots, no `Foo::getInstance()`, no static `setX()` / `resetX()` swap-and-restore helpers, no `::$foo` mutated outside the class itself.
+
+Why: singletons hide dependencies (a method that calls `Foo::getInstance()` doesn't declare it in the signature), break test isolation (one test's mutation leaks into the next without explicit teardown), and are incompatible with coroutine runtimes (Swoole workers see each other's static state).
+
+What to do instead:
+
+- **Constructor injection** is the default. Every collaborator arrives via `__construct`. Tests pass mocks/fakes per case; production wires real instances at the composition root.
+- **Factory methods** (`Foo::default()`, `Bar::fromString()`) are fine — they're named constructors, not state-holding singletons.
+- **Per-class memoized caches** are OK if the cache is keyed by an immutable class-level concern (reflection metadata, attribute parsing) AND the cache is held on an instance, not a static slot. The instance gets shared across consumers via DI; sharing the cache is the *point* of sharing the instance.
+- **`final class` for state-holding services**, not `final readonly` — readonly forbids mutation of properties, which is what state-holding services need. Compose: each instance owns one storage/cache.
+
+Existing static-mutable-state patterns (any `private static $foo` that mutates after declaration) are tech debt — convert when you touch the file. New code MUST use DI.
+
+The two refactors that established this rule:
+- `CurrentMessageContext` (singleton with `::setStorage`/`resetStorage`/`getStorage`) → `MessageContextStack` (instance class, `__construct(ContextStorage)`, `MessageContextStack::default()` for the cheap factory)
+- `EventSourcedAggregateRoot::$dispatcher` (singleton with `::setDispatcher`) → constructor-injected `ApplyDispatcher` (repositories own one and pass it to every aggregate they construct, sharing the Closure cache through composition)
+
+Both followed the same pattern: drop the static slot, add a constructor parameter, drop the swap-and-restore helpers, let DI carry the dependency. Tests are simpler (no global teardown), the API is honest about what it depends on, and Swoole's per-worker isolation works out-of-the-box.
+
 ## PSR Contracts (REQUIRED — prefer over framework-specific deps)
 
 **Always depend on PSR contracts when one exists for the concern, never on a framework-specific implementation.** Framework dispatchers/loggers/clocks/containers (Symfony, Laravel, Monolog, etc.) all implement the PSR interface; consumers wire whichever implementation suits their stack. Hard-coding the framework dep in our packages forces every consumer to bring it in — that's contamination.
