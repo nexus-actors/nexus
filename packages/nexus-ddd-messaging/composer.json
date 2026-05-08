@@ -9,8 +9,6 @@
         "monadial/php-duration": "^1.0",
         "nexus-actors/ddd-core": "dev-main",
         "psr/clock": "^1.0",
-        "psr/container": "^2.0",
-        "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
         "symfony/uid": "^8.0"
     },
