@@ -1,0 +1,172 @@
+<?php
+
+/**
+ * Psalm stub for `fp4php/functional` Option<A>.
+ *
+ * Reason: Option's methods are conceptually pure (constructor-like
+ * derivations, predicates that don't mutate $this), but the upstream
+ * library doesn't annotate them. That makes any `@psalm-immutable`
+ * class that calls Option::* trip ImpureMethodCall (psalm.dev/203).
+ *
+ * This stub re-declares the methods we actually use as
+ * `@psalm-mutation-free`, which is the weaker promise needed
+ * for them to be callable from a `@psalm-immutable` context.
+ *
+ * `@psalm-mutation-free` (vs `@psalm-pure`):
+ *   - mutation-free: no `$this` mutation, no global/static mutation
+ *   - pure: mutation-free AND deterministic (no I/O, no time, no rand)
+ *
+ * We pick mutation-free because user-provided callables (`map`,
+ * `flatMap`, `filter`, `tap`, etc.) may legitimately observe time,
+ * the clock, or other ambient state. Pure would force every callback
+ * site to also be pure, which is too strict for a general-purpose
+ * Option library.
+ *
+ * Methods covered: the ones MessageMetadata + downstream value
+ * objects actually call. Add more entries here if a future caller
+ * needs another method in an immutable context.
+ */
+
+declare(strict_types=1);
+
+namespace Fp\Functional\Option;
+
+use Closure;
+use Fp\Collections\ArrayList;
+use Fp\Functional\Either\Either;
+
+/**
+ * @template-covariant A
+ *
+ * @psalm-seal-methods
+ *
+ * @mixin OptionExtensions<A>
+ */
+abstract class Option
+{
+    /**
+     * @return Option<empty>
+     *
+     * @psalm-mutation-free
+     */
+    public static function none(): Option {}
+
+    /**
+     * @template B
+     *
+     * @param B $value
+     * @return Option<B>
+     *
+     * @psalm-mutation-free
+     */
+    public static function some(mixed $value): Option {}
+
+    /**
+     * @template B
+     *
+     * @param B|null $value
+     * @return Option<B>
+     *
+     * @psalm-mutation-free
+     */
+    public static function fromNullable(mixed $value): Option {}
+
+    /**
+     * @return A
+     *
+     * @psalm-mutation-free
+     */
+    public function get(): mixed {}
+
+    /**
+     * @return A
+     *
+     * @psalm-mutation-free
+     */
+    public function getUnsafe(): mixed {}
+
+    /**
+     * @template B
+     *
+     * @param B $fallback
+     * @return A|B
+     *
+     * @psalm-mutation-free
+     */
+    public function getOrElse(mixed $fallback): mixed {}
+
+    /**
+     * @template B
+     *
+     * @param callable(): B $fallback
+     * @return A|B
+     *
+     * @psalm-mutation-free
+     */
+    public function getOrCall(callable $fallback): mixed {}
+
+    /**
+     * @psalm-mutation-free
+     *
+     * @psalm-assert-if-true Some<A> $this
+     * @psalm-assert-if-false None $this
+     */
+    public function isSome(): bool {}
+
+    /**
+     * @psalm-mutation-free
+     *
+     * @psalm-assert-if-true None $this
+     * @psalm-assert-if-false Some<A> $this
+     */
+    public function isNone(): bool {}
+
+    /**
+     * @template B
+     *
+     * @param callable(A): B $callback
+     * @return Option<B>
+     *
+     * @psalm-mutation-free
+     */
+    public function map(callable $callback): Option {}
+
+    /**
+     * @template B
+     *
+     * @param callable(A): Option<B> $callback
+     * @return Option<B>
+     *
+     * @psalm-mutation-free
+     */
+    public function flatMap(callable $callback): Option {}
+
+    /**
+     * @param callable(A): bool $callback
+     * @return Option<A>
+     *
+     * @psalm-mutation-free
+     */
+    public function filter(callable $callback): Option {}
+
+    /**
+     * @template B
+     *
+     * @param callable(): Option<B> $fallback
+     * @return Option<A|B>
+     *
+     * @psalm-mutation-free
+     */
+    public function orElse(callable $fallback): Option {}
+
+    /**
+     * @template B
+     *
+     * @param callable(A): B $ifSome
+     * @param callable(): B $ifNone
+     * @return B
+     *
+     * @psalm-mutation-free
+     */
+    public function fold(callable $ifNone, callable $ifSome): mixed {}
+}

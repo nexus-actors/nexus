@@ -6,14 +6,17 @@ namespace Monadial\Nexus\Ddd\Messaging\Metadata;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
+use Monadial\Duration\FiniteDuration;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClockOrdering;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
+use NoDiscard;
 use Psr\Clock\ClockInterface;
 
 /**
  * @psalm-api
+ * @psalm-immutable
  *
  * Required metadata on every Envelope. The fields are non-negotiable
  * because they're load-bearing for audit trails (causation), tracing
@@ -23,12 +26,6 @@ use Psr\Clock\ClockInterface;
  * causal hop).
  *
  * Anything *not* in this list lives in a Stamp.
- *
- * Structurally immutable (`final readonly class`, all "with" methods
- * return new instances). The class is NOT marked `@psalm-immutable`
- * because the body calls `Option::*` from `fp4php/functional`, which
- * Psalm does not recognise as pure — the looser "immutable by
- * construction" guarantee is what Psalm can verify here.
  */
 final readonly class MessageMetadata
 {
@@ -60,7 +57,7 @@ final readonly class MessageMetadata
      * carries a non-empty vector clock — every send is one logical event
      * in Lamport-Mattern terms.
      */
-    #[\NoDiscard('the constructed metadata is the entire point of this call')]
+    #[NoDiscard('the constructed metadata is the entire point of this call')]
     public static function root(ClockInterface $clock, NodeId $nodeId): self
     {
         return new self(
@@ -80,7 +77,7 @@ final readonly class MessageMetadata
     /**
      * @param Option<string> $traceState
      */
-    #[\NoDiscard('withTrace() returns a new instance — the original is unchanged')]
+    #[NoDiscard('withTrace() returns a new instance — the original is unchanged')]
     public function withTrace(string $traceParent, Option $traceState): self
     {
         return new self(
@@ -97,7 +94,7 @@ final readonly class MessageMetadata
         );
     }
 
-    #[\NoDiscard('withExpiresAt() returns a new instance — the original is unchanged')]
+    #[NoDiscard('withExpiresAt() returns a new instance — the original is unchanged')]
     public function withExpiresAt(DateTimeImmutable $expiresAt): self
     {
         return new self(
@@ -119,7 +116,7 @@ final readonly class MessageMetadata
      * over the wire — the receiver merges the incoming clock with its own
      * known clock and re-stamps before forwarding.
      */
-    #[\NoDiscard('withVectorClock() returns a new instance — the original is unchanged')]
+    #[NoDiscard('withVectorClock() returns a new instance — the original is unchanged')]
     public function withVectorClock(VectorClock $vectorClock): self
     {
         return new self(
@@ -136,7 +133,7 @@ final readonly class MessageMetadata
         );
     }
 
-    #[\NoDiscard('withSchemaVersion() returns a new instance — the original is unchanged')]
+    #[NoDiscard('withSchemaVersion() returns a new instance — the original is unchanged')]
     public function withSchemaVersion(int $schemaVersion): self
     {
         return new self(
@@ -163,7 +160,7 @@ final readonly class MessageMetadata
      * metadata strictly happens-after the parent.
      * `expiresAt` does NOT propagate — TTL is per-message, not per-chain.
      */
-    #[\NoDiscard('the derived metadata is the entire point of this call')]
+    #[NoDiscard('the derived metadata is the entire point of this call')]
     public function forCausedMessage(MessageId $newId, DateTimeImmutable $now, NodeId $nodeId): self
     {
         return new self(
@@ -188,21 +185,21 @@ final readonly class MessageMetadata
     public function isCausedBy(MessageId $id): bool
     {
         return $this->causationId
-            ->map(fn(MessageId $c) => $c->equals($id))
+            ->map(static fn(MessageId $c) => $c->equals($id))
             ->getOrElse(false);
     }
 
     public function correlatesTo(MessageId $id): bool
     {
         return $this->correlationId
-            ->map(fn(MessageId $c) => $c->equals($id))
+            ->map(static fn(MessageId $c) => $c->equals($id))
             ->getOrElse(false);
     }
 
     public function isPartOfConversation(MessageId $id): bool
     {
         return $this->conversationId
-            ->map(fn(MessageId $c) => $c->equals($id))
+            ->map(static fn(MessageId $c) => $c->equals($id))
             ->getOrElse(false);
     }
 
@@ -219,35 +216,23 @@ final readonly class MessageMetadata
     public function isExpired(DateTimeImmutable $now): bool
     {
         return $this->expiresAt
-            ->map(fn(DateTimeImmutable $at) => $at <= $now)
+            ->map(static fn(DateTimeImmutable $at) => $at <= $now)
             ->getOrElse(false);
     }
 
     /** @return Option<\Monadial\Duration\FiniteDuration> */
-    #[\NoDiscard('timeUntilExpiry returns the remaining duration; ignoring it loses the value')]
+    #[NoDiscard('timeUntilExpiry returns the remaining duration; ignoring it loses the value')]
     public function timeUntilExpiry(DateTimeImmutable $now): Option
     {
         return $this->expiresAt
-            ->filter(fn(DateTimeImmutable $at) => $at > $now)
-            ->map(fn(DateTimeImmutable $at) => self::durationBetween($now, $at));
+            ->filter(static fn(DateTimeImmutable $at) => $at > $now)
+            ->map(static fn(DateTimeImmutable $at) => self::durationBetween($now, $at));
     }
 
-    #[\NoDiscard('ageAt returns the elapsed duration; ignoring it loses the value')]
-    public function ageAt(DateTimeImmutable $now): \Monadial\Duration\FiniteDuration
+    #[NoDiscard('ageAt returns the elapsed duration; ignoring it loses the value')]
+    public function ageAt(DateTimeImmutable $now): FiniteDuration
     {
         return self::durationBetween($this->occurredAt, $now);
-    }
-
-    private static function durationBetween(
-        DateTimeImmutable $earlier,
-        DateTimeImmutable $later,
-    ): \Monadial\Duration\FiniteDuration {
-        $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
-        $microsDiff = ((int) $later->format('u')) - ((int) $earlier->format('u'));
-
-        return \Monadial\Duration\FiniteDuration::fromNanos(
-            ($secondsDiff * 1_000_000_000) + ($microsDiff * 1_000),
-        );
     }
 
     public function happensBefore(self $other): bool
@@ -268,5 +253,13 @@ final readonly class MessageMetadata
     public function compareCausalityWith(self $other): VectorClockOrdering
     {
         return $this->vectorClock->compareTo($other->vectorClock);
+    }
+
+    /** @psalm-pure */
+    private static function durationBetween(DateTimeImmutable $earlier, DateTimeImmutable $later,): FiniteDuration {
+        $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
+        $microsDiff = (int) $later->format('u') - (int) $earlier->format('u');
+
+        return FiniteDuration::fromNanos(($secondsDiff * 1_000_000_000) + ($microsDiff * 1_000));
     }
 }

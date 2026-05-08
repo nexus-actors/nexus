@@ -20,27 +20,6 @@ final class MessageMetadataVectorClockTest extends TestCase
 {
     private DateTimeImmutable $now;
 
-    protected function setUp(): void
-    {
-        $this->now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
-    }
-
-    private function metaWithClock(VectorClock $vc): MessageMetadata
-    {
-        return new MessageMetadata(
-            id: MessageId::generate(),
-            occurredAt: $this->now,
-            causationId: Option::none(),
-            correlationId: Option::none(),
-            conversationId: Option::none(),
-            schemaVersion: 1,
-            traceParent: Option::none(),
-            traceState: Option::none(),
-            expiresAt: Option::none(),
-            vectorClock: $vc,
-        );
-    }
-
     #[Test]
     public function happensBeforeReturnsTrueWhenOrdered(): void
     {
@@ -93,5 +72,26 @@ final class MessageMetadataVectorClockTest extends TestCase
         $b = $this->metaWithClock($vc);
 
         self::assertSame(VectorClockOrdering::Equal, $a->compareCausalityWith($b));
+    }
+
+    protected function setUp(): void
+    {
+        $this->now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
+    }
+
+    private function metaWithClock(VectorClock $vc): MessageMetadata
+    {
+        return new MessageMetadata(
+            id: MessageId::generate(),
+            occurredAt: $this->now,
+            causationId: Option::none(),
+            correlationId: Option::none(),
+            conversationId: Option::none(),
+            schemaVersion: 1,
+            traceParent: Option::none(),
+            traceState: Option::none(),
+            expiresAt: Option::none(),
+            vectorClock: $vc,
+        );
     }
 }

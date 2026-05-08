@@ -21,18 +21,6 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     private MessageMetadata $root;
     private NodeId $nodeId;
 
-    protected function setUp(): void
-    {
-        $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
-        $clock = new class ($now) implements ClockInterface {
-            public function __construct(private DateTimeImmutable $now) {}
-
-            public function now(): DateTimeImmutable { return $this->now; }
-        };
-        $this->nodeId = NodeId::generate();
-        $this->root = MessageMetadata::root($clock, $this->nodeId);
-    }
-
     #[Test]
     public function isRootReturnsTrueWhenNoCausationId(): void
     {
@@ -42,7 +30,11 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isRootReturnsFalseWhenCausationIdPresent(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
+        $child = $this->root->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertFalse($child->isRoot());
     }
@@ -50,7 +42,11 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isCausedByReturnsTrueForDirectParent(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
+        $child = $this->root->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertTrue($child->isCausedBy($this->root->id));
     }
@@ -58,7 +54,11 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isCausedByReturnsFalseForUnrelatedId(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
+        $child = $this->root->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
         $unrelated = MessageId::generate();
 
         self::assertFalse($child->isCausedBy($unrelated));
@@ -120,5 +120,19 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     public function isPartOfConversationReturnsFalseWhenNoConversation(): void
     {
         self::assertFalse($this->root->isPartOfConversation(MessageId::generate()));
+    }
+
+    protected function setUp(): void
+    {
+        $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
+        $clock = new class ($now) implements ClockInterface {
+            public function __construct(private DateTimeImmutable $now) {}
+
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
+        };
+        $this->nodeId = NodeId::generate();
+        $this->root = MessageMetadata::root($clock, $this->nodeId);
     }
 }

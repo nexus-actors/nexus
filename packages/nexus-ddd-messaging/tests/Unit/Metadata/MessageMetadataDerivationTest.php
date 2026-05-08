@@ -22,18 +22,6 @@ final class MessageMetadataDerivationTest extends TestCase
     private DateTimeImmutable $rootTime;
     private NodeId $nodeId;
 
-    protected function setUp(): void
-    {
-        $this->rootTime = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
-        $clock = new class ($this->rootTime) implements ClockInterface {
-            public function __construct(private DateTimeImmutable $now) {}
-
-            public function now(): DateTimeImmutable { return $this->now; }
-        };
-        $this->nodeId = NodeId::generate();
-        $this->root = MessageMetadata::root($clock, $this->nodeId);
-    }
-
     #[Test]
     public function causationIdIsSetToParentId(): void
     {
@@ -194,5 +182,19 @@ final class MessageMetadataDerivationTest extends TestCase
         self::assertSame(1, $this->root->vectorClock->counters[$this->nodeId->value()]);
         self::assertSame(2, $child->vectorClock->counters[$this->nodeId->value()]);
         self::assertSame(3, $grandchild->vectorClock->counters[$this->nodeId->value()]);
+    }
+
+    protected function setUp(): void
+    {
+        $this->rootTime = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
+        $clock = new class ($this->rootTime) implements ClockInterface {
+            public function __construct(private DateTimeImmutable $now) {}
+
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
+        };
+        $this->nodeId = NodeId::generate();
+        $this->root = MessageMetadata::root($clock, $this->nodeId);
     }
 }

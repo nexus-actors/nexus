@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Clock;
 
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
+use NoDiscard;
 
 /**
  * @psalm-api
@@ -29,7 +30,7 @@ final readonly class VectorClock
     }
 
     /** Increment this node's counter. Called when the node SENDS a message. */
-    #[\NoDiscard('tick() returns the advanced clock — discarding loses the increment')]
+    #[NoDiscard('tick() returns the advanced clock — discarding loses the increment')]
     public function tick(NodeId $node): self
     {
         $next = $this->counters;
@@ -43,7 +44,7 @@ final readonly class VectorClock
      * Merge with another clock (pointwise max). Called on RECEIVE before
      * the local node ticks its own counter.
      */
-    #[\NoDiscard('merge() returns the merged clock — discarding loses the update')]
+    #[NoDiscard('merge() returns the merged clock — discarding loses the update')]
     public function merge(self $other): self
     {
         $merged = $this->counters;

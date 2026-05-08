@@ -20,18 +20,6 @@ final class MessageMetadataExpiryTraceTest extends TestCase
     private MessageMetadata $base;
     private DateTimeImmutable $occurredAt;
 
-    protected function setUp(): void
-    {
-        $this->occurredAt = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
-        $clock = new class ($this->occurredAt) implements ClockInterface {
-            public function __construct(private DateTimeImmutable $now) {}
-
-            public function now(): DateTimeImmutable { return $this->now; }
-        };
-
-        $this->base = MessageMetadata::root($clock, NodeId::generate());
-    }
-
     #[Test]
     public function hasTraceReturnsFalseWhenNoTraceParent(): void
     {
@@ -123,5 +111,19 @@ final class MessageMetadataExpiryTraceTest extends TestCase
         $duration = $this->base->ageAt($now);
         self::assertInstanceOf(FiniteDuration::class, $duration);
         self::assertSame(1800, $duration->toSeconds());
+    }
+
+    protected function setUp(): void
+    {
+        $this->occurredAt = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
+        $clock = new class ($this->occurredAt) implements ClockInterface {
+            public function __construct(private DateTimeImmutable $now) {}
+
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
+        };
+
+        $this->base = MessageMetadata::root($clock, NodeId::generate());
     }
 }

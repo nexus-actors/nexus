@@ -7,7 +7,6 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
-use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -19,18 +18,6 @@ use Psr\Clock\ClockInterface;
 final class MessageMetadataBuilderTest extends TestCase
 {
     private MessageMetadata $base;
-
-    protected function setUp(): void
-    {
-        $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
-        $clock = new class ($now) implements ClockInterface {
-            public function __construct(private DateTimeImmutable $now) {}
-
-            public function now(): DateTimeImmutable { return $this->now; }
-        };
-
-        $this->base = MessageMetadata::root($clock, NodeId::generate());
-    }
 
     #[Test]
     public function withTraceSetsBothFields(): void
@@ -91,5 +78,19 @@ final class MessageMetadataBuilderTest extends TestCase
 
         self::assertSame(1, $this->base->schemaVersion);
         self::assertSame(42, $updated->schemaVersion);
+    }
+
+    protected function setUp(): void
+    {
+        $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
+        $clock = new class ($now) implements ClockInterface {
+            public function __construct(private DateTimeImmutable $now) {}
+
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
+        };
+
+        $this->base = MessageMetadata::root($clock, NodeId::generate());
     }
 }

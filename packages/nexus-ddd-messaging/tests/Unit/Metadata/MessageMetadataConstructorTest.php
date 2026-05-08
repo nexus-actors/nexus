@@ -25,7 +25,9 @@ final class MessageMetadataConstructorTest extends TestCase
         $clock = new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable { return $this->now; }
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
         };
         $nodeId = NodeId::generate();
 
