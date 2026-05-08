@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Metadata;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
+use Monadial\Nexus\Ddd\Messaging\Clock\VectorClockOrdering;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Psr\Clock\ClockInterface;
 
@@ -229,6 +230,45 @@ final readonly class MessageMetadata
 
         return \Monadial\Duration\FiniteDuration::fromNanos(
             ($secondsDiff * 1_000_000_000) + ($microsDiff * 1_000),
+        );
+    }
+
+    public function hasVectorClock(): bool
+    {
+        return $this->vectorClock->isSome();
+    }
+
+    public function happensBefore(self $other): bool
+    {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensBefore)
+            ->getOrElse(false);
+    }
+
+    public function happensAfter(self $other): bool
+    {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensAfter)
+            ->getOrElse(false);
+    }
+
+    public function isConcurrentWith(self $other): bool
+    {
+        return $this->compareCausalityWith($other)
+            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::Concurrent)
+            ->getOrElse(false);
+    }
+
+    /**
+     * @return Option<VectorClockOrdering> None when either side lacks a
+     *         vector clock — partial order is undefined without both.
+     */
+    public function compareCausalityWith(self $other): Option
+    {
+        return $this->vectorClock->flatMap(
+            fn(VectorClock $a) => $other->vectorClock->map(
+                fn(VectorClock $b) => $a->compareTo($b),
+            ),
         );
     }
 }
