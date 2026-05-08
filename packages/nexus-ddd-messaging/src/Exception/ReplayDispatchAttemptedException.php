@@ -10,7 +10,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Exception;
  * Thrown by `ReplayingContextStorage::push()` when application code
  * attempts to dispatch a message during event-sourced replay.
  */
-final class ReplayDispatchAttemptedException extends MessagingException
+final class ReplayDispatchAttemptedException extends MessagingException implements TerminalFailure
 {
     public static function whileReplaying(): self
     {

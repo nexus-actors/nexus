@@ -10,4 +10,4 @@ namespace Monadial\Nexus\Ddd\Messaging\Exception;
  * Thrown by command/query handler locators when no handler is registered
  * for the dispatched message's concrete class.
  */
-final class HandlerNotFoundException extends MessagingException {}
+final class HandlerNotFoundException extends MessagingException implements TerminalFailure {}
