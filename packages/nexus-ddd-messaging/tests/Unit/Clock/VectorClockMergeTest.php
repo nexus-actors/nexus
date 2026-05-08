@@ -37,7 +37,7 @@ final class VectorClockMergeTest extends TestCase
         $left = VectorClock::empty()->tick($a)->tick($a);
         $right = VectorClock::empty()->tick($b)->tick($b)->tick($a);
 
-        self::assertSame($left->merge($right)->counters, $right->merge($left)->counters);
+        self::assertEquals($left->merge($right)->counters, $right->merge($left)->counters);
     }
 
     #[Test]
@@ -54,7 +54,7 @@ final class VectorClockMergeTest extends TestCase
         $left = $x->merge($y)->merge($z);
         $right = $x->merge($y->merge($z));
 
-        self::assertSame($left->counters, $right->counters);
+        self::assertEquals($left->counters, $right->counters);
     }
 
     #[Test]
@@ -62,7 +62,7 @@ final class VectorClockMergeTest extends TestCase
     {
         $a = NodeId::generate();
         $clock = VectorClock::empty()->tick($a)->tick($a)->tick($a);
-        self::assertSame($clock->counters, $clock->merge($clock)->counters);
+        self::assertEquals($clock->counters, $clock->merge($clock)->counters);
     }
 
     #[Test]

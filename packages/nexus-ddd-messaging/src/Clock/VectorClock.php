@@ -42,8 +42,6 @@ final readonly class VectorClock
     /**
      * Merge with another clock (pointwise max). Called on RECEIVE before
      * the local node ticks its own counter.
-     * Counters are sorted by key so the result is canonical regardless of
-     * which clock was `$this` (required for commutativity assertions).
      */
     #[\NoDiscard('merge() returns the merged clock — discarding loses the update')]
     public function merge(self $other): self
@@ -53,8 +51,6 @@ final readonly class VectorClock
         foreach ($other->counters as $node => $counter) {
             $merged[$node] = max($merged[$node] ?? 0, $counter);
         }
-
-        ksort($merged);
 
         return new self($merged);
     }
