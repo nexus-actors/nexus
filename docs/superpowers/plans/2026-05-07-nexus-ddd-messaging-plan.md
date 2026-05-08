@@ -1520,11 +1520,35 @@ final class ReadonlyMessageBodyRule implements AfterClassLikeAnalysisInterface
 
 - [ ] **Step 4.5.4: Register the rule in the plugin**
 
-Edit `packages/nexus-psalm/src/Plugin.php` — add to the `$hooks` list:
+`packages/nexus-psalm/src/Plugin.php` already registers the actor-system hooks (`ReadonlyMessageRule`, `MutableActorStateRule`, `BlockingCallInHandlerRule`, etc.) as `::class` constants in a single `$hooks` array. The messaging rules are added alongside them. Two edits are required: add the `use` import (alphabetically ordered with the existing `Monadial\Nexus\Psalm\Hook\…` imports), then append the hook constant to the `$hooks` array (preserving alphabetical order within the array).
 
-```php
-            \Monadial\Nexus\Psalm\Hook\Messaging\ReadonlyMessageBodyRule::class,
-```
+**Edit 1 — add the import.** Use the `Edit` tool with:
+
+- `old_string`:
+  ```
+  use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
+  ```
+- `new_string`:
+  ```
+  use Monadial\Nexus\Psalm\Hook\Messaging\ReadonlyMessageBodyRule;
+  use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
+  ```
+
+**Edit 2 — add the hook to the `$hooks` array.** Use the `Edit` tool with:
+
+- `old_string`:
+  ```
+              CloneWithReturnTypeProvider::class,
+          ];
+  ```
+- `new_string`:
+  ```
+              CloneWithReturnTypeProvider::class,
+              ReadonlyMessageBodyRule::class,
+          ];
+  ```
+
+(The same two-edit pattern — `use` import alphabetical + `::class` entry alphabetical inside `$hooks` — is reused for the four remaining messaging rules in Tasks 5.4, 5.5, 5.6, 5.7. Read `packages/nexus-psalm/src/Plugin.php` once at the start of Task 4.5 to confirm the current shape; the file holds a single `$hooks` array inside `__invoke()`.)
 
 - [ ] **Step 4.5.5: Run, expect pass; commit**
 
@@ -1970,7 +1994,10 @@ final class CommandHandlerSignatureRule implements AfterClassLikeAnalysisInterfa
 
 - [ ] **Step 5.4.4: Register hook + run + commit**
 
-Edit `packages/nexus-psalm/src/Plugin.php` and add `\Monadial\Nexus\Psalm\Hook\Messaging\CommandHandlerSignatureRule::class` to `$hooks`.
+Apply the same two-edit pattern from Step 4.5.4 to `packages/nexus-psalm/src/Plugin.php`:
+
+- **Edit 1 — import:** add `use Monadial\Nexus\Psalm\Hook\Messaging\CommandHandlerSignatureRule;` (alphabetically — between the existing `Hook\BlockingCallInHandlerRule` and `Hook\CloneWithReturnTypeProvider` imports — the leading namespace ordering puts `Hook\Messaging\CommandHandlerSignatureRule` after `Hook\BlockingCallInHandlerRule`).
+- **Edit 2 — `$hooks` entry:** add `CommandHandlerSignatureRule::class,` to the array, alphabetically.
 
 ```bash
 docker compose exec -T php vendor/bin/phpunit packages/nexus-psalm/tests/Unit/CommandHandlerSignatureRuleTest.php
@@ -2179,7 +2206,10 @@ final class QueryHandlerSignatureRule implements AfterClassLikeAnalysisInterface
 
 - [ ] **Step 5.5.3: Register, run, commit**
 
-Add to plugin hooks list, then:
+Apply the same two-edit pattern from Step 4.5.4 to `packages/nexus-psalm/src/Plugin.php`:
+
+- **Edit 1 — import:** add `use Monadial\Nexus\Psalm\Hook\Messaging\QueryHandlerSignatureRule;` (alphabetically alongside the other `Hook\Messaging\…` imports).
+- **Edit 2 — `$hooks` entry:** add `QueryHandlerSignatureRule::class,` to the array, alphabetically.
 
 ```bash
 docker compose exec -T php vendor/bin/phpunit packages/nexus-psalm/tests/Unit/QueryHandlerSignatureRuleTest.php
@@ -2381,6 +2411,11 @@ final class EventListenerSignatureRule implements AfterClassLikeAnalysisInterfac
 
 - [ ] **Step 5.6.3: Register, run, commit**
 
+Apply the same two-edit pattern from Step 4.5.4 to `packages/nexus-psalm/src/Plugin.php`:
+
+- **Edit 1 — import:** add `use Monadial\Nexus\Psalm\Hook\Messaging\EventListenerSignatureRule;` (alphabetically alongside the other `Hook\Messaging\…` imports).
+- **Edit 2 — `$hooks` entry:** add `EventListenerSignatureRule::class,` to the array, alphabetically.
+
 ```bash
 docker compose exec -T php vendor/bin/phpunit packages/nexus-psalm/tests/Unit/EventListenerSignatureRuleTest.php
 git add packages/nexus-psalm/src/Hook/Messaging/EventListenerSignatureRule.php packages/nexus-psalm/src/Plugin.php packages/nexus-psalm/tests/Fixture/EventListenerSignatureFixture.php packages/nexus-psalm/tests/Unit/EventListenerSignatureRuleTest.php
@@ -2552,6 +2587,11 @@ final class OneCommandHandlerRule implements AfterCodebaseAnalysisInterface
 ```
 
 - [ ] **Step 5.7.4: Register, run, commit**
+
+Apply the same two-edit pattern from Step 4.5.4 to `packages/nexus-psalm/src/Plugin.php`:
+
+- **Edit 1 — import:** add `use Monadial\Nexus\Psalm\Hook\Messaging\OneCommandHandlerRule;` (alphabetically alongside the other `Hook\Messaging\…` imports).
+- **Edit 2 — `$hooks` entry:** add `OneCommandHandlerRule::class,` to the array, alphabetically.
 
 ```bash
 docker compose exec -T php vendor/bin/phpunit packages/nexus-psalm/tests/Unit/OneCommandHandlerRuleTest.php
@@ -3389,14 +3429,14 @@ final class MessageMetadataExpiryTraceTest extends TestCase
     {
         $meta = MessageMetadata::root($this->fixedClock('2026-05-07T10:00:00+00:00'));
         $duration = $meta->ageAt(new DateTimeImmutable('2026-05-07T10:30:00+00:00'));
-        self::assertNotNull($duration);
+        self::assertSame(1800, $duration->toSeconds());
     }
 }
 ```
 
 - [ ] **Step 6.5.2: Add predicates + computations to MessageMetadata**
 
-Append to the class body. Note `FiniteDuration::between` is from `monadial/php-duration`.
+Append to the class body. `FiniteDuration` lives at `Monadial\Duration\FiniteDuration` (verified against `vendor/monadial/php-duration/src/FiniteDuration.php`). The vendor class exposes `fromNanos(int)` but no `between()` factory, so the diff is computed inline from `DateTimeImmutable::getTimestamp()` plus `format('u')` (microseconds).
 
 ```php
     public function hasTrace(): bool
@@ -3416,23 +3456,35 @@ Append to the class body. Note `FiniteDuration::between` is from `monadial/php-d
             ->getOrElse(fn() => false);
     }
 
-    /** @return Option<\Monadial\Php\Duration\FiniteDuration> */
+    /** @return Option<\Monadial\Duration\FiniteDuration> */
     #[\NoDiscard('timeUntilExpiry returns the remaining duration; ignoring it loses the value')]
     public function timeUntilExpiry(DateTimeImmutable $now): Option
     {
         return $this->expiresAt
             ->filter(fn(DateTimeImmutable $at) => $at > $now)
-            ->map(fn(DateTimeImmutable $at) => \Monadial\Php\Duration\FiniteDuration::between($now, $at));
+            ->map(fn(DateTimeImmutable $at) => self::durationBetween($now, $at));
     }
 
     #[\NoDiscard('ageAt returns the elapsed duration; ignoring it loses the value')]
-    public function ageAt(DateTimeImmutable $now): \Monadial\Php\Duration\FiniteDuration
+    public function ageAt(DateTimeImmutable $now): \Monadial\Duration\FiniteDuration
     {
-        return \Monadial\Php\Duration\FiniteDuration::between($this->occurredAt, $now);
+        return self::durationBetween($this->occurredAt, $now);
+    }
+
+    private static function durationBetween(
+        DateTimeImmutable $earlier,
+        DateTimeImmutable $later,
+    ): \Monadial\Duration\FiniteDuration {
+        $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
+        $microsDiff = ((int) $later->format('u')) - ((int) $earlier->format('u'));
+
+        return \Monadial\Duration\FiniteDuration::fromNanos(
+            ($secondsDiff * 1_000_000_000) + ($microsDiff * 1_000),
+        );
     }
 ```
 
-(Confirm the actual `monadial/php-duration` namespace by inspecting `vendor/monadial/php-duration` after composer install; if the namespace differs from `Monadial\Php\Duration\FiniteDuration`, swap the FQN above to match. Do NOT add a `use` import for it inside this file to avoid a stray import if the namespace is different in this repo's pinned version.)
+(The plan pins `\Monadial\Duration\FiniteDuration` against the vendor class `vendor/monadial/php-duration/src/FiniteDuration.php`. The class declares `namespace Monadial\Duration;` — if the vendor pin shifts, swap the FQN above to match. Do NOT add a `use` import for `FiniteDuration` here; the FQN keeps the dependency local to these two methods.)
 
 - [ ] **Step 6.5.3: Run, expect pass; commit**
 
@@ -5622,8 +5674,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Resolution;
 
-use Monadial\Nexus\Ddd\Messaging\Command;
-use Monadial\Nexus\Ddd\Messaging\CommandHandler;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
 
 /**
@@ -5709,8 +5761,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Resolution;
 
 use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
-use Monadial\Nexus\Ddd\Messaging\Query;
-use Monadial\Nexus\Ddd\Messaging\QueryHandler;
+use Monadial\Nexus\Ddd\Messaging\Message\Query;
+use Monadial\Nexus\Ddd\Messaging\Handler\QueryHandler;
 
 /**
  * @psalm-api
@@ -5798,7 +5850,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Resolution;
 
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\EventListener;
+use Monadial\Nexus\Ddd\Messaging\Handler\EventListener;
 
 /**
  * @psalm-api
@@ -5842,7 +5894,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingCommandBus;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -5884,7 +5936,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\CommandBus;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Override;
 
 final class RecordingCommandBus implements CommandBus
@@ -6028,7 +6080,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 
-use Monadial\Nexus\Ddd\Messaging\Query;
+use Monadial\Nexus\Ddd\Messaging\Message\Query;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingQueryBus;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -6071,7 +6123,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\QueryBus;
 use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
-use Monadial\Nexus\Ddd\Messaging\Query;
+use Monadial\Nexus\Ddd\Messaging\Message\Query;
 use Override;
 
 final class RecordingQueryBus implements QueryBus
@@ -6144,9 +6196,9 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -6205,7 +6257,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Override;
 
@@ -6279,7 +6331,7 @@ use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -6410,7 +6462,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
-use Monadial\Nexus\Ddd\Messaging\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\WithRootContext;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -6501,8 +6553,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
-use Monadial\Nexus\Ddd\Messaging\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Psr\Clock\ClockInterface;
 
 /**
@@ -6614,7 +6666,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Staging;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 
 /**
@@ -6764,7 +6816,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
@@ -6850,12 +6902,12 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Override;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
@@ -6979,7 +7031,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryUnitOfWork;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
@@ -7113,7 +7165,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Staging\MessageStaging;
 use PHPUnit\Framework\Attributes\Test;
@@ -8838,9 +8890,11 @@ EOF
 )"
 ```
 
-### Task 14.12 — MessagingException root
+### Task 14.12 — MessagingException root (verification only — already shipped)
 
-- [ ] **Step 14.12.1: Write failing test**
+`MessagingException` already lives at `packages/nexus-ddd-messaging/src/Exception/MessagingException.php`, created in **Task 9.3.2** because `ReplayingContextStorage::push()` needs to throw a subclass of it. Do NOT recreate the file here — that would produce a `Cannot redeclare class` fatal.
+
+- [ ] **Step 14.12.1: Write a focused regression test asserting the abstract+RuntimeException contract**
 
 Path: `packages/nexus-ddd-messaging/tests/Unit/Exception/MessagingExceptionTest.php`
 
@@ -8873,46 +8927,20 @@ final class MessagingExceptionTest extends TestCase
 }
 ```
 
-- [ ] **Step 14.12.2: Run, expect failure**
+- [ ] **Step 14.12.2: Run, expect green (the class exists from Task 9.3.2)**
 
 ```bash
 docker compose exec -T php vendor/bin/phpunit packages/nexus-ddd-messaging/tests/Unit/Exception/MessagingExceptionTest.php
 ```
 
-- [ ] **Step 14.12.3: Implement MessagingException**
+Expected: PASS on first run — this is a regression pin, not a TDD red→green cycle. The class shipped in Task 9.3.2.
 
-Path: `packages/nexus-ddd-messaging/src/Exception/MessagingException.php`
-
-```php
-<?php
-
-declare(strict_types=1);
-
-namespace Monadial\Nexus\Ddd\Messaging\Exception;
-
-use RuntimeException;
-
-/**
- * @psalm-api
- *
- * Root for messaging-layer faults. Distinct from `NexusDddException` and
- * `DomainException`. Each root extends `RuntimeException` directly.
- */
-abstract class MessagingException extends RuntimeException {}
-```
-
-- [ ] **Step 14.12.4: Run, expect green**
+- [ ] **Step 14.12.3: Commit**
 
 ```bash
-docker compose exec -T php vendor/bin/phpunit packages/nexus-ddd-messaging/tests/Unit/Exception/MessagingExceptionTest.php
-```
-
-- [ ] **Step 14.12.5: Commit**
-
-```bash
-git add packages/nexus-ddd-messaging
+git add packages/nexus-ddd-messaging/tests/Unit/Exception/MessagingExceptionTest.php
 git commit -m "$(cat <<'EOF'
-feat(ddd-messaging): add MessagingException root
+test(ddd-messaging): pin MessagingException abstract+RuntimeException contract
 EOF
 )"
 ```
@@ -9057,7 +9085,14 @@ namespace Monadial\Nexus\Ddd\Messaging\Exception;
 final class StagingClosedException extends MessagingException {}
 ```
 
-Path: `packages/nexus-ddd-messaging/src/Exception/ReplayDispatchAttemptedException.php`
+**Edit (do NOT recreate):** `packages/nexus-ddd-messaging/src/Exception/ReplayDispatchAttemptedException.php` already exists from Task 9.3.2 with the `whileReplaying()` factory. Add `implements TerminalFailure` to the existing class declaration — keep the `whileReplaying()` factory intact so `ReplayingContextStorage::push()` still resolves.
+
+Use the `Edit` tool with:
+
+- `old_string`: `final class ReplayDispatchAttemptedException extends MessagingException`
+- `new_string`: `final class ReplayDispatchAttemptedException extends MessagingException implements TerminalFailure`
+
+After the edit, the file body should read:
 
 ```php
 <?php
@@ -9066,7 +9101,23 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Exception;
 
-final class ReplayDispatchAttemptedException extends MessagingException implements TerminalFailure {}
+/**
+ * @psalm-api
+ *
+ * Thrown by `ReplayingContextStorage::push()` when application code
+ * attempts to dispatch a message during event-sourced replay.
+ */
+final class ReplayDispatchAttemptedException extends MessagingException implements TerminalFailure
+{
+    public static function whileReplaying(): self
+    {
+        return new self(
+            'Cannot dispatch during ES replay — a handler or applyXxx method '
+            . 'attempted to dispatch a message while the framework is rebuilding '
+            . 'state from a persisted event stream.',
+        );
+    }
+}
 ```
 
 Path: `packages/nexus-ddd-messaging/src/Exception/NonReplayableDeadLetterException.php`
@@ -9340,7 +9391,7 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\DeadLetter\DeadLetterEntry;
 use Monadial\Nexus\Ddd\Messaging\DeadLetter\DeadLetterReason;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -9718,7 +9769,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke\Fixtures;
 
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 
 final readonly class RegisterUser implements Command
 {
@@ -9760,7 +9811,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke\Fixtures;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\EventBus;
-use Monadial\Nexus\Ddd\Messaging\CommandHandler;
+use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 
 final readonly class RegisterUserHandler implements CommandHandler
 {
@@ -9843,13 +9894,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
-use Monadial\Nexus\Ddd\Messaging\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\MessageInbox;
-use Monadial\Nexus\Ddd\Messaging\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
 use Override;
 use Psr\Clock\ClockInterface;
@@ -9908,11 +9959,11 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Command;
-use Monadial\Nexus\Ddd\Messaging\CommandHandler;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\InMemoryMessageInbox;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
@@ -10003,16 +10054,14 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke;
 
-use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
+use Closure;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus;
-use Monadial\Nexus\Ddd\Messaging\Command;
-use Monadial\Nexus\Ddd\Messaging\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Envelope\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\InMemoryMessageInbox;
-use Monadial\Nexus\Ddd\Messaging\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\InMemoryCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
@@ -10034,16 +10083,22 @@ final class CausationPropagationSmokeTest extends TestCase
         CurrentMessageContext::resetStorage();
         $events = new RecordingEnvelopedEventBus();
         $clock = new SystemClock();
+        $observedCommandId = null;
+        $captureCommandId = static function (MessageId $id) use (&$observedCommandId): void {
+            $observedCommandId = $id;
+        };
 
-        $handler = new class ($events, $clock) implements CommandHandler {
+        $handler = new class ($events, $clock, $captureCommandId) implements CommandHandler {
             public function __construct(
                 private readonly EnvelopedEventBus $events,
                 private readonly SystemClock $clock,
+                private readonly Closure $captureCommandId,
             ) {}
 
             public function __invoke(RegisterUser $cmd): void
             {
                 $parent = CurrentMessageContext::current()->get();
+                ($this->captureCommandId)($parent->metadata->id);
                 $eventMeta = $parent->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
                 $this->events->publishEnveloped(new Envelope(new UserRegistered($cmd->userId), $eventMeta));
             }
@@ -10061,17 +10116,18 @@ final class CausationPropagationSmokeTest extends TestCase
 
         $bus = new InMemoryCommandBus($locator, new InMemoryMessageInbox(), $clock);
         $cmd = new RegisterUser('user-9', 'a@b.c');
-        $observedCommandMeta = null;
 
-        WithRootContext::default()->run(static function () use ($bus, $cmd, &$observedCommandMeta): void {
+        WithRootContext::default()->run(static function () use ($bus, $cmd): void {
             $bus->dispatchCommand($cmd);
-            $observedCommandMeta = CurrentMessageContext::current()->get()->metadata;
         });
 
         self::assertCount(1, $events->recordedEnvelopes());
-        $eventEnvelope = $events->recordedEnvelopes()[0];
-        $eventCausation = $eventEnvelope->metadata->causationId->get();
-        self::assertInstanceOf(MessageMetadata::class, $observedCommandMeta);
+        $eventCausation = $events->recordedEnvelopes()[0]->metadata->causationId->get();
+        self::assertInstanceOf(MessageId::class, $observedCommandId);
+        self::assertTrue(
+            $eventCausation->equals($observedCommandId),
+            'event.causationId must equal the dispatched command MessageId',
+        );
     }
 }
 ```
@@ -10211,8 +10267,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Fitness;
 
-use Monadial\Nexus\Ddd\Messaging\Command;
-use Monadial\Nexus\Ddd\Messaging\Query;
+use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Monadial\Nexus\Ddd\Messaging\Message\Query;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
