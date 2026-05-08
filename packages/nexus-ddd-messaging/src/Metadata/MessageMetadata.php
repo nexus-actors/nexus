@@ -187,4 +187,48 @@ final readonly class MessageMetadata
             ->map(fn(MessageId $c) => $c->equals($id))
             ->getOrElse(false);
     }
+
+    public function hasTrace(): bool
+    {
+        return $this->traceParent->isSome();
+    }
+
+    public function hasExpiry(): bool
+    {
+        return $this->expiresAt->isSome();
+    }
+
+    public function isExpired(DateTimeImmutable $now): bool
+    {
+        return $this->expiresAt
+            ->map(fn(DateTimeImmutable $at) => $at <= $now)
+            ->getOrElse(false);
+    }
+
+    /** @return Option<\Monadial\Duration\FiniteDuration> */
+    #[\NoDiscard('timeUntilExpiry returns the remaining duration; ignoring it loses the value')]
+    public function timeUntilExpiry(DateTimeImmutable $now): Option
+    {
+        return $this->expiresAt
+            ->filter(fn(DateTimeImmutable $at) => $at > $now)
+            ->map(fn(DateTimeImmutable $at) => self::durationBetween($now, $at));
+    }
+
+    #[\NoDiscard('ageAt returns the elapsed duration; ignoring it loses the value')]
+    public function ageAt(DateTimeImmutable $now): \Monadial\Duration\FiniteDuration
+    {
+        return self::durationBetween($this->occurredAt, $now);
+    }
+
+    private static function durationBetween(
+        DateTimeImmutable $earlier,
+        DateTimeImmutable $later,
+    ): \Monadial\Duration\FiniteDuration {
+        $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
+        $microsDiff = ((int) $later->format('u')) - ((int) $earlier->format('u'));
+
+        return \Monadial\Duration\FiniteDuration::fromNanos(
+            ($secondsDiff * 1_000_000_000) + ($microsDiff * 1_000),
+        );
+    }
 }
