@@ -10,7 +10,6 @@ use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\InMemoryMessageInbox;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
@@ -33,18 +32,16 @@ final class CausationPropagationSmokeTest extends TestCase
     {
         $events = new RecordingEnvelopedEventBus();
         $clock = new SystemClock();
-        $nodeId = NodeId::generate();
         $stack = MessageContextStack::default();
         $observedCommandId = null;
         $captureCommandId = static function (MessageId $id) use (&$observedCommandId): void {
             $observedCommandId = $id;
         };
 
-        $handler = new class ($events, $clock, $nodeId, $stack, $captureCommandId) implements CommandHandler {
+        $handler = new class ($events, $clock, $stack, $captureCommandId) implements CommandHandler {
             public function __construct(
                 private readonly EnvelopedEventBus $events,
                 private readonly SystemClock $clock,
-                private readonly NodeId $nodeId,
                 private readonly MessageContextStack $stack,
                 private readonly Closure $captureCommandId,
             ) {}
@@ -56,7 +53,6 @@ final class CausationPropagationSmokeTest extends TestCase
                 $eventMeta = $parent->metadata->forCausedMessage(
                     MessageId::generate(),
                     $this->clock->now(),
-                    $this->nodeId,
                 );
                 $this->events->publishEnveloped(new Envelope(new UserRegistered($cmd->userId), $eventMeta));
             }
@@ -72,9 +68,9 @@ final class CausationPropagationSmokeTest extends TestCase
             }
         };
 
-        $bus = new InMemoryCommandBus($locator, new InMemoryMessageInbox(), $stack, $clock, $nodeId);
+        $bus = new InMemoryCommandBus($locator, new InMemoryMessageInbox(), $stack, $clock);
         $cmd = new RegisterUser('user-9', 'a@b.c');
-        $helper = new WithRootContext($stack, $clock, $nodeId);
+        $helper = new WithRootContext($stack, $clock);
 
         $helper->run(static function () use ($bus, $cmd): void {
             $bus->dispatchCommand($cmd);

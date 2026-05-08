@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\SystemClock;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\WithRootContext;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -29,7 +28,7 @@ final class WithRootContextTest extends TestCase
                 return new DateTimeImmutable('2026-01-01T00:00:00+00:00');
             }
         };
-        $helper = new WithRootContext($stack, $clock, NodeId::generate());
+        $helper = new WithRootContext($stack, $clock);
 
         $observed = Option::none();
         $result = $helper->run(static function () use ($stack, &$observed): string {
@@ -58,7 +57,7 @@ final class WithRootContextTest extends TestCase
     public function exposesStackForTestAssertion(): void
     {
         $stack = MessageContextStack::default();
-        $helper = new WithRootContext($stack, new SystemClock(), NodeId::generate());
+        $helper = new WithRootContext($stack, new SystemClock());
         self::assertSame($stack, $helper->stack());
     }
 }

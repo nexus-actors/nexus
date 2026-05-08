@@ -19,7 +19,7 @@ use Psr\Clock\ClockInterface;
 final class MessageMetadataConstructorTest extends TestCase
 {
     #[Test]
-    public function rootProducesMetadataWithVectorClockTickedForProducingNode(): void
+    public function rootProducesMetadataWithNoVectorClock(): void
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
         $clock = new class ($now) implements ClockInterface {
@@ -29,9 +29,8 @@ final class MessageMetadataConstructorTest extends TestCase
 return $this->now;
  }
         };
-        $nodeId = NodeId::generate();
 
-        $meta = MessageMetadata::root($clock, $nodeId);
+        $meta = MessageMetadata::root($clock);
 
         self::assertInstanceOf(MessageId::class, $meta->id);
         self::assertSame($now, $meta->occurredAt);
@@ -42,7 +41,7 @@ return $this->now;
         self::assertTrue($meta->traceParent->isNone());
         self::assertTrue($meta->traceState->isNone());
         self::assertTrue($meta->expiresAt->isNone());
-        self::assertSame(1, $meta->vectorClock->counters[$nodeId->value()]);
+        self::assertTrue($meta->vectorClock->isNone());
     }
 
     #[Test]
@@ -64,12 +63,13 @@ return $this->now;
             traceParent: Option::some('00-abc-def-01'),
             traceState: Option::none(),
             expiresAt: Option::some($expires),
-            vectorClock: $vectorClock,
+            vectorClock: Option::some($vectorClock),
         );
 
         self::assertSame($id, $meta->id);
         self::assertTrue($meta->causationId->isSome());
         self::assertSame(3, $meta->schemaVersion);
-        self::assertSame($vectorClock, $meta->vectorClock);
+        self::assertTrue($meta->vectorClock->isSome());
+        self::assertSame($vectorClock, $meta->vectorClock->get());
     }
 }

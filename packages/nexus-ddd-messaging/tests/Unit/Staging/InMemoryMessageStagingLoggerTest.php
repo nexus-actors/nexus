@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
@@ -45,7 +44,6 @@ final class InMemoryMessageStagingLoggerTest extends TestCase
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
-            NodeId::generate(),
             $logger,
         );
 

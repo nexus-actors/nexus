@@ -6,10 +6,8 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
@@ -23,7 +21,6 @@ final class RecordingEnvelopedCommandBusTest extends TestCase
     #[Test]
     public function recordsBothPlainAndEnvelopedDispatches(): void
     {
-        $nodeId = NodeId::generate();
         $bus = new RecordingEnvelopedCommandBus();
         $cmd = new class () implements Command {};
         $envelopeCmd = new class () implements Command {};
@@ -39,7 +36,7 @@ final class RecordingEnvelopedCommandBusTest extends TestCase
                 traceParent: Option::none(),
                 traceState: Option::none(),
                 expiresAt: Option::none(),
-                vectorClock: VectorClock::empty()->tick($nodeId),
+                vectorClock: Option::none(),
             ),
         );
 

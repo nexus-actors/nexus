@@ -10,7 +10,6 @@ use Monadial\Duration\FiniteDuration;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClockOrdering;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use NoDiscard;
 use Psr\Clock\ClockInterface;
 
@@ -21,11 +20,20 @@ use Psr\Clock\ClockInterface;
  * Required metadata on every Envelope. The fields are non-negotiable
  * because they're load-bearing for audit trails (causation), tracing
  * (correlation/conversation/W3C trace context), idempotency (id), schema
- * evolution (schemaVersion), observability (W3C trace context), and
- * partial-order causality (vectorClock — always present, ticked on every
- * causal hop).
+ * evolution (schemaVersion), and observability (W3C trace context).
  *
- * Anything *not* in this list lives in a Stamp.
+ * `vectorClock` is opt-in: single-process apps leave it as `Option::none()`.
+ * Distributed bus implementations tick and merge the clock at transport
+ * seams. Use `withVectorClock()` to attach a clock; the predicates
+ * (`happensBefore`, `compareCausalityWith`, …) return false / None when
+ * either side lacks a clock.
+ *
+ * Anything not in this list lives in a Stamp.
+ *
+ * Builder methods use PHP 8.5 `clone($this, [...])` clone-with syntax: each
+ * `with*` returns a fresh instance with the named properties updated and
+ * the rest carried over verbatim. No need to spell out every field per
+ * builder.
  */
 final readonly class MessageMetadata
 {
@@ -36,6 +44,7 @@ final readonly class MessageMetadata
      * @param Option<string> $traceParent
      * @param Option<string> $traceState
      * @param Option<DateTimeImmutable> $expiresAt
+     * @param Option<VectorClock> $vectorClock
      */
     public function __construct(
         public MessageId $id,
@@ -47,18 +56,17 @@ final readonly class MessageMetadata
         public Option $traceParent,
         public Option $traceState,
         public Option $expiresAt,
-        public VectorClock $vectorClock,
+        public Option $vectorClock,
     ) {}
 
     /**
      * Application-boundary factory: synthesize a root MessageMetadata for
      * the first message in a chain (HTTP controller, CLI, scheduled job).
-     * The producing node ticks its own counter so the resulting metadata
-     * carries a non-empty vector clock — every send is one logical event
-     * in Lamport-Mattern terms.
+     * The vector clock starts absent; distributed bus implementations attach
+     * one via `withVectorClock()` at the send seam if needed.
      */
     #[NoDiscard('the constructed metadata is the entire point of this call')]
-    public static function root(ClockInterface $clock, NodeId $nodeId): self
+    public static function root(ClockInterface $clock): self
     {
         return new self(
             id: MessageId::generate(),
@@ -70,7 +78,7 @@ final readonly class MessageMetadata
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: VectorClock::empty()->tick($nodeId),
+            vectorClock: Option::none(),
         );
     }
 
@@ -80,35 +88,16 @@ final readonly class MessageMetadata
     #[NoDiscard('withTrace() returns a new instance — the original is unchanged')]
     public function withTrace(string $traceParent, Option $traceState): self
     {
-        return new self(
-            id: $this->id,
-            occurredAt: $this->occurredAt,
-            causationId: $this->causationId,
-            correlationId: $this->correlationId,
-            conversationId: $this->conversationId,
-            schemaVersion: $this->schemaVersion,
-            traceParent: Option::some($traceParent),
-            traceState: $traceState,
-            expiresAt: $this->expiresAt,
-            vectorClock: $this->vectorClock,
-        );
+        return clone($this, [
+            'traceParent' => Option::some($traceParent),
+            'traceState' => $traceState,
+        ]);
     }
 
     #[NoDiscard('withExpiresAt() returns a new instance — the original is unchanged')]
     public function withExpiresAt(DateTimeImmutable $expiresAt): self
     {
-        return new self(
-            id: $this->id,
-            occurredAt: $this->occurredAt,
-            causationId: $this->causationId,
-            correlationId: $this->correlationId,
-            conversationId: $this->conversationId,
-            schemaVersion: $this->schemaVersion,
-            traceParent: $this->traceParent,
-            traceState: $this->traceState,
-            expiresAt: Option::some($expiresAt),
-            vectorClock: $this->vectorClock,
-        );
+        return clone($this, ['expiresAt' => Option::some($expiresAt)]);
     }
 
     /**
@@ -119,35 +108,13 @@ final readonly class MessageMetadata
     #[NoDiscard('withVectorClock() returns a new instance — the original is unchanged')]
     public function withVectorClock(VectorClock $vectorClock): self
     {
-        return new self(
-            id: $this->id,
-            occurredAt: $this->occurredAt,
-            causationId: $this->causationId,
-            correlationId: $this->correlationId,
-            conversationId: $this->conversationId,
-            schemaVersion: $this->schemaVersion,
-            traceParent: $this->traceParent,
-            traceState: $this->traceState,
-            expiresAt: $this->expiresAt,
-            vectorClock: $vectorClock,
-        );
+        return clone($this, ['vectorClock' => Option::some($vectorClock)]);
     }
 
     #[NoDiscard('withSchemaVersion() returns a new instance — the original is unchanged')]
     public function withSchemaVersion(int $schemaVersion): self
     {
-        return new self(
-            id: $this->id,
-            occurredAt: $this->occurredAt,
-            causationId: $this->causationId,
-            correlationId: $this->correlationId,
-            conversationId: $this->conversationId,
-            schemaVersion: $schemaVersion,
-            traceParent: $this->traceParent,
-            traceState: $this->traceState,
-            expiresAt: $this->expiresAt,
-            vectorClock: $this->vectorClock,
-        );
+        return clone($this, ['schemaVersion' => $schemaVersion]);
     }
 
     /**
@@ -155,26 +122,21 @@ final readonly class MessageMetadata
      * message becomes the new message's causation; correlation and
      * conversation propagate (initialized to the original id if absent —
      * the very first message in a chain is its own correlation root);
-     * trace context and schema version flow forward unchanged. The vector
-     * clock propagates *and is ticked* by the producing node so the new
-     * metadata strictly happens-after the parent.
-     * `expiresAt` does NOT propagate — TTL is per-message, not per-chain.
+     * trace context, schema version, and vector clock flow forward
+     * unchanged. `expiresAt` does NOT propagate — TTL is per-message,
+     * not per-chain.
      */
     #[NoDiscard('the derived metadata is the entire point of this call')]
-    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now, NodeId $nodeId): self
+    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now): self
     {
-        return new self(
-            id: $newId,
-            occurredAt: $now,
-            causationId: Option::some($this->id),
-            correlationId: $this->correlationId->orElse(fn() => Option::some($this->id)),
-            conversationId: $this->conversationId->orElse(fn() => Option::some($this->id)),
-            schemaVersion: $this->schemaVersion,
-            traceParent: $this->traceParent,
-            traceState: $this->traceState,
-            expiresAt: Option::none(),
-            vectorClock: $this->vectorClock->tick($nodeId),
-        );
+        return clone($this, [
+            'causationId' => Option::some($this->id),
+            'conversationId' => $this->conversationId->orElse(fn() => Option::some($this->id)),
+            'correlationId' => $this->correlationId->orElse(fn() => Option::some($this->id)),
+            'expiresAt' => Option::none(),
+            'id' => $newId,
+            'occurredAt' => $now,
+        ]);
     }
 
     public function isRoot(): bool
@@ -213,6 +175,11 @@ final readonly class MessageMetadata
         return $this->expiresAt->isSome();
     }
 
+    public function hasVectorClock(): bool
+    {
+        return $this->vectorClock->isSome();
+    }
+
     public function isExpired(DateTimeImmutable $now): bool
     {
         return $this->expiresAt
@@ -237,26 +204,39 @@ final readonly class MessageMetadata
 
     public function happensBefore(self $other): bool
     {
-        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::HappensBefore;
+        return $this->compareCausalityWith($other)
+            ->map(static fn(VectorClockOrdering $o): bool => $o === VectorClockOrdering::HappensBefore)
+            ->getOrElse(false);
     }
 
     public function happensAfter(self $other): bool
     {
-        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::HappensAfter;
+        return $this->compareCausalityWith($other)
+            ->map(static fn(VectorClockOrdering $o): bool => $o === VectorClockOrdering::HappensAfter)
+            ->getOrElse(false);
     }
 
     public function isConcurrentWith(self $other): bool
     {
-        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::Concurrent;
+        return $this->compareCausalityWith($other)
+            ->map(static fn(VectorClockOrdering $o): bool => $o === VectorClockOrdering::Concurrent)
+            ->getOrElse(false);
     }
 
-    public function compareCausalityWith(self $other): VectorClockOrdering
+    /** @return Option<VectorClockOrdering> None when either side lacks a clock. */
+    #[NoDiscard('compareCausalityWith returns an Option — ignoring it loses the result')]
+    public function compareCausalityWith(self $other): Option
     {
-        return $this->vectorClock->compareTo($other->vectorClock);
+        return $this->vectorClock->flatMap(
+            static fn(VectorClock $a): Option => $other->vectorClock->map(
+                static fn(VectorClock $b): VectorClockOrdering => $a->compareTo($b),
+            ),
+        );
     }
 
     /** @psalm-mutation-free */
-    private static function durationBetween(DateTimeImmutable $earlier, DateTimeImmutable $later,): FiniteDuration {
+    private static function durationBetween(DateTimeImmutable $earlier, DateTimeImmutable $later): FiniteDuration
+    {
         $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
         $microsDiff = (int) $later->format('u') - (int) $earlier->format('u');
 

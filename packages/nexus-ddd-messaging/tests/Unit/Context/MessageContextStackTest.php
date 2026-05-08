@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Context\StaticStackContextStorage;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,8 +18,6 @@ use RuntimeException;
 #[CoversClass(MessageContextStack::class)]
 final class MessageContextStackTest extends TestCase
 {
-    private NodeId $nodeId;
-
     #[Test]
     public function defaultFactoryWiresStaticStackContextStorage(): void
     {
@@ -45,8 +42,8 @@ final class MessageContextStackTest extends TestCase
     public function pushExposesContextThenPopRestoresEmpty(): void
     {
         $stack = MessageContextStack::default();
-        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
+        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock()));
 
         $stack->push($ctx);
         self::assertSame($ctx, $stack->current()->getOrElse($fallback));
@@ -59,7 +56,7 @@ final class MessageContextStackTest extends TestCase
     public function withinPushesAndPopsInTryFinally(): void
     {
         $stack = MessageContextStack::default();
-        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
+        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock()));
         $observed = null;
 
         $result = $stack->within($ctx, static function () use ($stack, &$observed): string {
@@ -77,7 +74,7 @@ final class MessageContextStackTest extends TestCase
     public function withinPopsEvenWhenCallbackThrows(): void
     {
         $stack = MessageContextStack::default();
-        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
+        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock()));
 
         try {
             $stack->within($ctx, static function (): void {
@@ -89,11 +86,6 @@ final class MessageContextStackTest extends TestCase
         }
 
         self::assertTrue($stack->current()->isNone());
-    }
-
-    protected function setUp(): void
-    {
-        $this->nodeId = NodeId::generate();
     }
 
     private function fixedClock(): ClockInterface

@@ -12,7 +12,6 @@ use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Override;
@@ -45,7 +44,6 @@ final class InMemoryMessageStaging implements MessageStaging
         private readonly EnvelopedEventBus $eventBus,
         private readonly MessageContextStack $stack,
         private readonly ClockInterface $clock,
-        private readonly NodeId $nodeId,
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
@@ -104,21 +102,18 @@ final class InMemoryMessageStaging implements MessageStaging
     {
         $id = $producerId->getOrCall(static fn(): MessageId => MessageId::generate());
         $now = $this->clock->now();
-        $nodeId = $this->nodeId;
 
         return $this->stack->current()
             ->map(
                 static fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
                     $id,
                     $now,
-                    $nodeId,
                 ),
             )
             ->getOrCall(
-                fn(): MessageMetadata => MessageMetadata::root($this->clock, $this->nodeId)->forCausedMessage(
+                fn(): MessageMetadata => MessageMetadata::root($this->clock)->forCausedMessage(
                     $id,
                     $now,
-                    $this->nodeId,
                 ),
             );
     }

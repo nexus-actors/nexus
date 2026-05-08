@@ -7,10 +7,8 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Support;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -23,7 +21,6 @@ final class RecordingEnvelopedEventBusTest extends TestCase
     #[Test]
     public function recordsBothPlainAndEnvelopedPublications(): void
     {
-        $nodeId = NodeId::generate();
         $bus = new RecordingEnvelopedEventBus();
         $event = new class () implements DomainEvent {};
         $envelopeEvent = new class () implements DomainEvent {};
@@ -39,7 +36,7 @@ final class RecordingEnvelopedEventBusTest extends TestCase
                 traceParent: Option::none(),
                 traceState: Option::none(),
                 expiresAt: Option::none(),
-                vectorClock: VectorClock::empty()->tick($nodeId),
+                vectorClock: Option::none(),
             ),
         );
 

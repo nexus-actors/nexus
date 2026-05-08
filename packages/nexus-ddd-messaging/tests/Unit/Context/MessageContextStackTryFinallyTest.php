@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Error;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -18,8 +17,6 @@ use Psr\Clock\ClockInterface;
 #[CoversClass(MessageContextStack::class)]
 final class MessageContextStackTryFinallyTest extends TestCase
 {
-    private NodeId $nodeId;
-
     #[Test]
     public function popsEvenWhenCallbackThrowsErrorNotException(): void
     {
@@ -30,7 +27,7 @@ final class MessageContextStackTryFinallyTest extends TestCase
                 return new DateTimeImmutable('2026-05-07T10:00:00+00:00');
             }
         };
-        $ctx = new MessageContext(MessageMetadata::root($clock, $this->nodeId));
+        $ctx = new MessageContext(MessageMetadata::root($clock));
 
         try {
             $stack->within($ctx, static function (): void {
@@ -55,8 +52,8 @@ final class MessageContextStackTryFinallyTest extends TestCase
             }
         };
 
-        $outer = new MessageContext(MessageMetadata::root($clock, $this->nodeId));
-        $inner = new MessageContext(MessageMetadata::root($clock, $this->nodeId));
+        $outer = new MessageContext(MessageMetadata::root($clock));
+        $inner = new MessageContext(MessageMetadata::root($clock));
 
         $observed = [];
 
@@ -74,8 +71,5 @@ final class MessageContextStackTryFinallyTest extends TestCase
         self::assertTrue($stack->current()->isNone());
     }
 
-    protected function setUp(): void
-    {
-        $this->nodeId = NodeId::generate();
-    }
 }
+

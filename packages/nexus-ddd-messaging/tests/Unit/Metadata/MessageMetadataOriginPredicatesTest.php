@@ -6,9 +6,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,7 +17,6 @@ use Psr\Clock\ClockInterface;
 final class MessageMetadataOriginPredicatesTest extends TestCase
 {
     private MessageMetadata $root;
-    private NodeId $nodeId;
 
     #[Test]
     public function isRootReturnsTrueWhenNoCausationId(): void
@@ -33,7 +30,6 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
         $child = $this->root->forCausedMessage(
             MessageId::generate(),
             new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
-            $this->nodeId,
         );
 
         self::assertFalse($child->isRoot());
@@ -45,7 +41,6 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
         $child = $this->root->forCausedMessage(
             MessageId::generate(),
             new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
-            $this->nodeId,
         );
 
         self::assertTrue($child->isCausedBy($this->root->id));
@@ -57,7 +52,6 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
         $child = $this->root->forCausedMessage(
             MessageId::generate(),
             new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
-            $this->nodeId,
         );
         $unrelated = MessageId::generate();
 
@@ -84,7 +78,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: VectorClock::empty()->tick($this->nodeId),
+            vectorClock: Option::none(),
         );
 
         self::assertTrue($meta->correlatesTo($correlationId));
@@ -110,7 +104,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: VectorClock::empty()->tick($this->nodeId),
+            vectorClock: Option::none(),
         );
 
         self::assertTrue($meta->isPartOfConversation($conversationId));
@@ -132,7 +126,6 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
 return $this->now;
  }
         };
-        $this->nodeId = NodeId::generate();
-        $this->root = MessageMetadata::root($clock, $this->nodeId);
+        $this->root = MessageMetadata::root($clock);
     }
 }

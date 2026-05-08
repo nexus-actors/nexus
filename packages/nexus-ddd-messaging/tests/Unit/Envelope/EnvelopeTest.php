@@ -6,11 +6,9 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Envelope;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Stamp\PerCorrelationKeyOrdered;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -25,13 +23,11 @@ final readonly class FixtureMessage
 #[CoversClass(Envelope::class)]
 final class EnvelopeTest extends TestCase
 {
-    private NodeId $nodeId;
-
     #[Test]
     public function constructorStoresMessageMetadataAndEmptyStampsByDefault(): void
     {
         $msg = new FixtureMessage('hello');
-        $meta = MessageMetadata::root($this->fixedClock(), $this->nodeId);
+        $meta = MessageMetadata::root($this->fixedClock());
         $env = new Envelope($msg, $meta);
 
         self::assertSame($msg, $env->message);
@@ -44,7 +40,7 @@ final class EnvelopeTest extends TestCase
     {
         $env = new Envelope(
             new FixtureMessage('x'),
-            MessageMetadata::root($this->fixedClock(), $this->nodeId),
+            MessageMetadata::root($this->fixedClock()),
         );
         self::assertTrue($env->get(PerCorrelationKeyOrdered::class)->isNone());
     }
@@ -54,7 +50,7 @@ final class EnvelopeTest extends TestCase
     {
         $original = new Envelope(
             new FixtureMessage('x'),
-            MessageMetadata::root($this->fixedClock(), $this->nodeId),
+            MessageMetadata::root($this->fixedClock()),
         );
         $stamp = new PerCorrelationKeyOrdered('order-7');
         $next = $original->with($stamp);
@@ -71,7 +67,7 @@ final class EnvelopeTest extends TestCase
     {
         $env = new Envelope(
             new FixtureMessage('x'),
-            MessageMetadata::root($this->fixedClock(), $this->nodeId),
+            MessageMetadata::root($this->fixedClock()),
         );
         $a = new PerCorrelationKeyOrdered('A');
         $b = new PerCorrelationKeyOrdered('B');
@@ -97,15 +93,10 @@ final class EnvelopeTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: VectorClock::empty()->tick($this->nodeId),
+            vectorClock: Option::none(),
         );
         $env = new Envelope(new FixtureMessage('x'), $meta);
         self::assertSame($id, $env->metadata->id);
-    }
-
-    protected function setUp(): void
-    {
-        $this->nodeId = NodeId::generate();
     }
 
     private function fixedClock(): ClockInterface

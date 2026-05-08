@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Psr\Clock\ClockInterface;
 
@@ -16,19 +15,19 @@ use Psr\Clock\ClockInterface;
  * Test helper: wrap a callback in a fresh root MessageContext so handler
  * unit tests don't have to spell out the context-installation each time.
  *
- * Composes a MessageContextStack via constructor — no global state.
+ * Composes a MessageContextStack via constructor — no global state. Does not
+ * require a NodeId; vector clocks are opt-in via VectorClockStamp.
  */
 final readonly class WithRootContext
 {
     public function __construct(
         private MessageContextStack $stack,
         private ClockInterface $clock,
-        private NodeId $nodeId,
     ) {}
 
     public static function default(): self
     {
-        return new self(MessageContextStack::default(), new SystemClock(), NodeId::generate());
+        return new self(MessageContextStack::default(), new SystemClock());
     }
 
     public function stack(): MessageContextStack
@@ -44,7 +43,7 @@ final readonly class WithRootContext
     public function run(callable $callback): mixed
     {
         return $this->stack->within(
-            new MessageContext(MessageMetadata::root($this->clock, $this->nodeId)),
+            new MessageContext(MessageMetadata::root($this->clock)),
             $callback,
         );
     }

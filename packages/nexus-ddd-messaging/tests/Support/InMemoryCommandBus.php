@@ -9,7 +9,6 @@ use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\MessageInbox;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
@@ -22,7 +21,7 @@ use Psr\Clock\ClockInterface;
  *
  * In-package InMemoryCommandBus for smoke testing the full command/event
  * flow. Production-shipped helpers should follow the same constructor
- * shape: locator + inbox + stack + clock + nodeId.
+ * shape: locator + inbox + stack + clock.
  */
 final readonly class InMemoryCommandBus implements EnvelopedCommandBus
 {
@@ -31,7 +30,6 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
         private MessageInbox $inbox,
         private MessageContextStack $stack,
         private ClockInterface $clock,
-        private NodeId $nodeId,
     ) {}
 
     #[Override]
@@ -45,10 +43,9 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
                 fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
                     $messageId,
                     $now,
-                    $this->nodeId,
                 ),
             )
-            ->getOrCall(fn(): MessageMetadata => MessageMetadata::root($this->clock, $this->nodeId));
+            ->getOrCall(fn(): MessageMetadata => MessageMetadata::root($this->clock));
 
         $this->dispatchEnveloped(new Envelope($command, $metadata));
     }

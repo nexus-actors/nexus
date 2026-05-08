@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\InMemoryMessageInbox;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
@@ -43,10 +41,9 @@ final class RegisterUserDedupSmokeTest extends TestCase
             }
         };
         $clock = new SystemClock();
-        $nodeId = NodeId::generate();
         $inbox = new InMemoryMessageInbox();
         $stack = MessageContextStack::default();
-        $bus = new InMemoryCommandBus($locator, $inbox, $stack, $clock, $nodeId);
+        $bus = new InMemoryCommandBus($locator, $inbox, $stack, $clock);
 
         $cmd = new RegisterUser('user-7', 'a@b.c');
         $messageId = MessageId::generate();
@@ -62,7 +59,7 @@ final class RegisterUserDedupSmokeTest extends TestCase
                 traceParent: Option::none(),
                 traceState: Option::none(),
                 expiresAt: Option::none(),
-                vectorClock: VectorClock::empty()->tick($nodeId),
+                vectorClock: Option::none(),
             ),
         );
 

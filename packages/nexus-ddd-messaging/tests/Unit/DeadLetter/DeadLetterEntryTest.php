@@ -6,12 +6,10 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\DeadLetter;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\DeadLetter\DeadLetterEntry;
 use Monadial\Nexus\Ddd\Messaging\DeadLetter\DeadLetterReason;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -24,7 +22,6 @@ final class DeadLetterEntryTest extends TestCase
     #[Test]
     public function exposesAllFields(): void
     {
-        $nodeId = NodeId::generate();
         $envelope = new Envelope(
             (object) [],
             new MessageMetadata(
@@ -37,7 +34,7 @@ final class DeadLetterEntryTest extends TestCase
                 traceParent: Option::none(),
                 traceState: Option::none(),
                 expiresAt: Option::none(),
-                vectorClock: VectorClock::empty()->tick($nodeId),
+                vectorClock: Option::none(),
             ),
         );
         $cause = new RuntimeException('boom');

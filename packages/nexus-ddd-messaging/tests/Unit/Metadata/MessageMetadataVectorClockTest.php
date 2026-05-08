@@ -21,6 +21,31 @@ final class MessageMetadataVectorClockTest extends TestCase
     private DateTimeImmutable $now;
 
     #[Test]
+    public function hasVectorClockReturnsFalseWhenAbsent(): void
+    {
+        self::assertFalse($this->metaWithoutClock()->hasVectorClock());
+    }
+
+    #[Test]
+    public function hasVectorClockReturnsTrueWhenPresent(): void
+    {
+        $nodeId = NodeId::generate();
+        self::assertTrue($this->metaWithClock(VectorClock::empty()->tick($nodeId))->hasVectorClock());
+    }
+
+    #[Test]
+    public function happensBeforeReturnsFalseWhenEitherSideLacksClock(): void
+    {
+        $nodeId = NodeId::generate();
+        $withClock = $this->metaWithClock(VectorClock::empty()->tick($nodeId));
+        $withoutClock = $this->metaWithoutClock();
+
+        self::assertFalse($withClock->happensBefore($withoutClock));
+        self::assertFalse($withoutClock->happensBefore($withClock));
+        self::assertFalse($withoutClock->happensBefore($withoutClock));
+    }
+
+    #[Test]
     public function happensBeforeReturnsTrueWhenOrdered(): void
     {
         $nodeId = NodeId::generate();
@@ -29,6 +54,17 @@ final class MessageMetadataVectorClockTest extends TestCase
 
         self::assertTrue($earlier->happensBefore($later));
         self::assertFalse($later->happensBefore($earlier));
+    }
+
+    #[Test]
+    public function happensAfterReturnsFalseWhenEitherSideLacksClock(): void
+    {
+        $nodeId = NodeId::generate();
+        $withClock = $this->metaWithClock(VectorClock::empty()->tick($nodeId));
+        $withoutClock = $this->metaWithoutClock();
+
+        self::assertFalse($withClock->happensAfter($withoutClock));
+        self::assertFalse($withoutClock->happensAfter($withClock));
     }
 
     #[Test]
@@ -43,6 +79,13 @@ final class MessageMetadataVectorClockTest extends TestCase
     }
 
     #[Test]
+    public function isConcurrentWithReturnsFalseWhenEitherSideLacksClock(): void
+    {
+        $withoutClock = $this->metaWithoutClock();
+        self::assertFalse($withoutClock->isConcurrentWith($withoutClock));
+    }
+
+    #[Test]
     public function isConcurrentWithReturnsTrueForConcurrentClocks(): void
     {
         $nodeA = NodeId::generate();
@@ -54,14 +97,32 @@ final class MessageMetadataVectorClockTest extends TestCase
     }
 
     #[Test]
+    public function compareCausalityWithReturnsNoneWhenEitherSideLacksClock(): void
+    {
+        $nodeId = NodeId::generate();
+        $withClock = $this->metaWithClock(VectorClock::empty()->tick($nodeId));
+        $withoutClock = $this->metaWithoutClock();
+
+        self::assertTrue($withClock->compareCausalityWith($withoutClock)->isNone());
+        self::assertTrue($withoutClock->compareCausalityWith($withClock)->isNone());
+        self::assertTrue($withoutClock->compareCausalityWith($withoutClock)->isNone());
+    }
+
+    #[Test]
     public function compareCausalityWithReturnsHappensBefore(): void
     {
         $nodeId = NodeId::generate();
         $earlier = $this->metaWithClock(VectorClock::empty()->tick($nodeId));
         $later = $this->metaWithClock(VectorClock::empty()->tick($nodeId)->tick($nodeId));
 
-        self::assertSame(VectorClockOrdering::HappensBefore, $earlier->compareCausalityWith($later));
-        self::assertSame(VectorClockOrdering::HappensAfter, $later->compareCausalityWith($earlier));
+        self::assertSame(
+            VectorClockOrdering::HappensBefore,
+            $earlier->compareCausalityWith($later)->get(),
+        );
+        self::assertSame(
+            VectorClockOrdering::HappensAfter,
+            $later->compareCausalityWith($earlier)->get(),
+        );
     }
 
     #[Test]
@@ -71,7 +132,7 @@ final class MessageMetadataVectorClockTest extends TestCase
         $a = $this->metaWithClock($vc);
         $b = $this->metaWithClock($vc);
 
-        self::assertSame(VectorClockOrdering::Equal, $a->compareCausalityWith($b));
+        self::assertSame(VectorClockOrdering::Equal, $a->compareCausalityWith($b)->get());
     }
 
     protected function setUp(): void
@@ -91,7 +152,23 @@ final class MessageMetadataVectorClockTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: $vc,
+            vectorClock: Option::some($vc),
+        );
+    }
+
+    private function metaWithoutClock(): MessageMetadata
+    {
+        return new MessageMetadata(
+            id: MessageId::generate(),
+            occurredAt: $this->now,
+            causationId: Option::none(),
+            correlationId: Option::none(),
+            conversationId: Option::none(),
+            schemaVersion: 1,
+            traceParent: Option::none(),
+            traceState: Option::none(),
+            expiresAt: Option::none(),
+            vectorClock: Option::none(),
         );
     }
 }

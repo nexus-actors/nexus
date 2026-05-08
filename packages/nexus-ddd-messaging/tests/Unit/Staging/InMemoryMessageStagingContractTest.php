@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
 
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Staging\MessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\MessageStagingContractTest;
@@ -29,7 +28,6 @@ final class InMemoryMessageStagingContractTest extends MessageStagingContractTes
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
-            NodeId::generate(),
             new NullLogger(),
         );
     }

@@ -57,8 +57,9 @@ final class MessageMetadataBuilderTest extends TestCase
         $replacement = VectorClock::empty()->tick(NodeId::generate())->tick(NodeId::generate());
         $updated = $this->base->withVectorClock($replacement);
 
-        self::assertSame($replacement, $updated->vectorClock);
-        self::assertNotSame($this->base->vectorClock, $updated->vectorClock);
+        self::assertTrue($updated->vectorClock->isSome());
+        self::assertSame($replacement, $updated->vectorClock->get());
+        self::assertTrue($this->base->vectorClock->isNone());
         self::assertSame($this->base->id, $updated->id);
     }
 
@@ -91,6 +92,6 @@ return $this->now;
  }
         };
 
-        $this->base = MessageMetadata::root($clock, NodeId::generate());
+        $this->base = MessageMetadata::root($clock);
     }
 }

@@ -8,7 +8,6 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
@@ -77,7 +76,6 @@ final class InMemoryMessageStagingTest extends TestCase
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
-            NodeId::generate(),
             new NullLogger(),
         );
     }

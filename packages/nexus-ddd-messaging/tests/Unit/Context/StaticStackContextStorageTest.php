@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Monadial\Nexus\Ddd\Messaging\Context\ContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\StaticStackContextStorage;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\ContextStorageContractTest;
 use Override;
@@ -19,15 +18,13 @@ use Psr\Clock\ClockInterface;
 #[CoversClass(StaticStackContextStorage::class)]
 final class StaticStackContextStorageTest extends ContextStorageContractTest
 {
-    private NodeId $nodeId;
-
     #[Test]
     public function pushPopMaintainsLifoOrder(): void
     {
         $storage = new StaticStackContextStorage();
-        $a = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-        $b = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
+        $a = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $b = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock()));
 
         $storage->push($a);
         $storage->push($b);
@@ -43,7 +40,6 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
     #[Override]
     protected function setUp(): void
     {
-        $this->nodeId = NodeId::generate();
     }
 
     #[Override]

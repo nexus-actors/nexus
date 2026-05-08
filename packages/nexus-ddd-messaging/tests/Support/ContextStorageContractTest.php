@@ -8,7 +8,6 @@ use DateTimeImmutable;
 use Fiber;
 use Monadial\Nexus\Ddd\Messaging\Context\ContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
-use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -33,9 +32,8 @@ abstract class ContextStorageContractTest extends TestCase
     public function pushThenCurrentExposesPushedContext(): void
     {
         $storage = $this->createStorage();
-        $nodeId = NodeId::generate();
-        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $nodeId));
-        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock(), $nodeId));
+        $ctx = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock()));
         $storage->push($ctx);
         self::assertSame($ctx, $storage->current()->getOrElse($fallback));
     }
@@ -44,10 +42,9 @@ abstract class ContextStorageContractTest extends TestCase
     public function popReturnsToPreviousContext(): void
     {
         $storage = $this->createStorage();
-        $nodeId = NodeId::generate();
-        $a = new MessageContext(MessageMetadata::root($this->fixedClock(), $nodeId));
-        $b = new MessageContext(MessageMetadata::root($this->fixedClock(), $nodeId));
-        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock(), $nodeId));
+        $a = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $b = new MessageContext(MessageMetadata::root($this->fixedClock()));
+        $fallback = new MessageContext(MessageMetadata::root($this->fixedClock()));
 
         $storage->push($a);
         $storage->push($b);
@@ -70,7 +67,7 @@ abstract class ContextStorageContractTest extends TestCase
                         return new DateTimeImmutable();
                     }
                 };
-                $ctx = new MessageContext(MessageMetadata::root($clock, NodeId::generate()));
+                $ctx = new MessageContext(MessageMetadata::root($clock));
                 $storage->push($ctx);
                 Fiber::suspend();
                 $observations[$i] = $storage->current()->getOrCall(static fn() => null) === $ctx;
