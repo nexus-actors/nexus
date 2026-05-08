@@ -35,7 +35,7 @@ final class ConcreteExceptionsTest extends TestCase
             [HandlerSignatureMismatchException::class, true],
             [MessageDispatchException::class, false],
             [MessageRejectedException::class, true],
-            [StagingClosedException::class, false],
+            [StagingClosedException::class, true],
             [NonReplayableDeadLetterException::class, true],
         ];
 
