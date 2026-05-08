@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Outbox;
 
 use Override;
 
@@ -11,12 +11,12 @@ use Override;
  *
  * In-memory unit of work. `begin()` is a no-op because there is no real
  * transaction boundary; the surrounding application code is the boundary.
- * `commit()` delegates to `MessageStaging::flush()`; `rollback()` delegates
- * to `MessageStaging::discard()`.
+ * `commit()` delegates to `Outbox::flush()`; `rollback()` delegates to
+ * `Outbox::discard()`.
  */
 final readonly class InMemoryUnitOfWork implements UnitOfWork
 {
-    public function __construct(private MessageStaging $staging) {}
+    public function __construct(private Outbox $outbox) {}
 
     #[Override]
     public function begin(): void
@@ -28,18 +28,18 @@ final readonly class InMemoryUnitOfWork implements UnitOfWork
     #[Override]
     public function commit(): void
     {
-        $this->staging->flush();
+        $this->outbox->flush();
     }
 
     #[Override]
     public function rollback(): void
     {
-        $this->staging->discard();
+        $this->outbox->discard();
     }
 
     #[Override]
-    public function staging(): MessageStaging
+    public function outbox(): Outbox
     {
-        return $this->staging;
+        return $this->outbox;
     }
 }

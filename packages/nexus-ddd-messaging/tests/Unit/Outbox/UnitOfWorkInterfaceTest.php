@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Outbox;
 
-use Monadial\Nexus\Ddd\Messaging\Staging\UnitOfWork;
+use Monadial\Nexus\Ddd\Messaging\Outbox\UnitOfWork;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -29,6 +29,6 @@ final class UnitOfWorkInterfaceTest extends TestCase
         self::assertContains('begin', $methods);
         self::assertContains('commit', $methods);
         self::assertContains('rollback', $methods);
-        self::assertContains('staging', $methods);
+        self::assertContains('outbox', $methods);
     }
 }

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Outbox;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
-use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
+use Monadial\Nexus\Ddd\Messaging\Outbox\InMemoryOutbox;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\SystemClock;
@@ -18,19 +18,19 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
-#[CoversClass(InMemoryMessageStaging::class)]
-final class InMemoryMessageStagingTest extends TestCase
+#[CoversClass(InMemoryOutbox::class)]
+final class InMemoryOutboxTest extends TestCase
 {
     #[Test]
     public function flushDispatchesCommandsThenEventsExactlyOnce(): void
     {
-        $staging = $this->newStaging($cmdBus, $evtBus);
+        $outbox = $this->newOutbox($cmdBus, $evtBus);
 
-        $cmd = new class () implements Command {};
-        $evt = new class () implements DomainEvent {};
-        $staging->appendCommand($cmd, Option::none());
-        $staging->appendEvent($evt, Option::none());
-        $staging->flush();
+        $cmd = new class implements Command {};
+        $evt = new class implements DomainEvent {};
+        $outbox->appendCommand($cmd, Option::none());
+        $outbox->appendEvent($evt, Option::none());
+        $outbox->flush();
 
         self::assertCount(1, $cmdBus->recordedEnvelopes());
         self::assertCount(1, $evtBus->recordedEnvelopes());
@@ -41,12 +41,12 @@ final class InMemoryMessageStagingTest extends TestCase
     #[Test]
     public function discardDropsEverythingStaged(): void
     {
-        $staging = $this->newStaging($cmdBus, $evtBus);
+        $outbox = $this->newOutbox($cmdBus, $evtBus);
 
-        $staging->appendCommand(new class () implements Command {}, Option::none());
-        $staging->appendEvent(new class () implements DomainEvent {}, Option::none());
-        $staging->discard();
-        $staging->flush();
+        $outbox->appendCommand(new class implements Command {}, Option::none());
+        $outbox->appendEvent(new class implements DomainEvent {}, Option::none());
+        $outbox->discard();
+        $outbox->flush();
 
         self::assertSame([], $cmdBus->recordedEnvelopes());
         self::assertSame([], $evtBus->recordedEnvelopes());
@@ -55,23 +55,23 @@ final class InMemoryMessageStagingTest extends TestCase
     #[Test]
     public function honoursProducerSuppliedMessageId(): void
     {
-        $staging = $this->newStaging($cmdBus, $evtBus);
+        $outbox = $this->newOutbox($cmdBus, $evtBus);
 
         $producerId = MessageId::generate();
-        $staging->appendCommand(new class () implements Command {}, Option::some($producerId));
-        $staging->flush();
+        $outbox->appendCommand(new class implements Command {}, Option::some($producerId));
+        $outbox->flush();
 
         self::assertTrue($cmdBus->recordedEnvelopes()[0]->metadata->id->equals($producerId));
     }
 
-    private function newStaging(
+    private function newOutbox(
         ?RecordingEnvelopedCommandBus &$cmdBus = null,
         ?RecordingEnvelopedEventBus &$evtBus = null,
-    ): InMemoryMessageStaging {
+    ): InMemoryOutbox {
         $cmdBus = new RecordingEnvelopedCommandBus();
         $evtBus = new RecordingEnvelopedEventBus();
 
-        return new InMemoryMessageStaging(
+        return new InMemoryOutbox(
             $cmdBus,
             $evtBus,
             MessageContextStack::default(),

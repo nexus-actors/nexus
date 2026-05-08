@@ -8,38 +8,38 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
-use Monadial\Nexus\Ddd\Messaging\Staging\MessageStaging;
+use Monadial\Nexus\Ddd\Messaging\Outbox\Outbox;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 /**
  * @psalm-api
  *
- * Contract test for MessageStaging implementations. Extend this class
- * and implement createStaging() to verify a new staging impl satisfies
- * the contract without duplicating test logic.
+ * Contract test for Outbox implementations. Extend this class and
+ * implement createOutbox() to verify a new outbox impl satisfies the
+ * contract without duplicating test logic.
  */
-abstract class MessageStagingContractTest extends TestCase
+abstract class OutboxContractTest extends TestCase
 {
     protected RecordingEnvelopedCommandBus $cmdBus;
 
     protected RecordingEnvelopedEventBus $evtBus;
 
-    abstract protected function createStaging(
+    abstract protected function createOutbox(
         RecordingEnvelopedCommandBus $cmdBus,
         RecordingEnvelopedEventBus $evtBus,
-    ): MessageStaging;
+    ): Outbox;
 
     #[Test]
     public function flushDispatchesInFifoOrder(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
         $cmd1 = new class () implements Command {};
         $cmd2 = new class () implements Command {};
-        $staging->appendCommand($cmd1, Option::none());
-        $staging->appendCommand($cmd2, Option::none());
-        $staging->flush();
+        $outbox->appendCommand($cmd1, Option::none());
+        $outbox->appendCommand($cmd2, Option::none());
+        $outbox->flush();
 
         $envelopes = $this->cmdBus->recordedEnvelopes();
         self::assertCount(2, $envelopes);
@@ -50,13 +50,13 @@ abstract class MessageStagingContractTest extends TestCase
     #[Test]
     public function flushDispatchesCommandsBeforeEvents(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
         $evt = new class () implements DomainEvent {};
         $cmd = new class () implements Command {};
-        $staging->appendEvent($evt, Option::none());
-        $staging->appendCommand($cmd, Option::none());
-        $staging->flush();
+        $outbox->appendEvent($evt, Option::none());
+        $outbox->appendCommand($cmd, Option::none());
+        $outbox->flush();
 
         self::assertCount(1, $this->cmdBus->recordedEnvelopes());
         self::assertCount(1, $this->evtBus->recordedEnvelopes());
@@ -65,12 +65,12 @@ abstract class MessageStagingContractTest extends TestCase
     #[Test]
     public function discardPreventsFlushFromDispatching(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
-        $staging->appendCommand(new class () implements Command {}, Option::none());
-        $staging->appendEvent(new class () implements DomainEvent {}, Option::none());
-        $staging->discard();
-        $staging->flush();
+        $outbox->appendCommand(new class () implements Command {}, Option::none());
+        $outbox->appendEvent(new class () implements DomainEvent {}, Option::none());
+        $outbox->discard();
+        $outbox->flush();
 
         self::assertSame([], $this->cmdBus->recordedEnvelopes());
         self::assertSame([], $this->evtBus->recordedEnvelopes());
@@ -79,11 +79,11 @@ abstract class MessageStagingContractTest extends TestCase
     #[Test]
     public function flushClearsBufferSoSecondFlushIsEmpty(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
-        $staging->appendCommand(new class () implements Command {}, Option::none());
-        $staging->flush();
-        $staging->flush();
+        $outbox->appendCommand(new class () implements Command {}, Option::none());
+        $outbox->flush();
+        $outbox->flush();
 
         self::assertCount(1, $this->cmdBus->recordedEnvelopes());
     }
@@ -91,11 +91,11 @@ abstract class MessageStagingContractTest extends TestCase
     #[Test]
     public function producerSuppliedIdIsHonouredOnCommand(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
         $id = MessageId::generate();
-        $staging->appendCommand(new class () implements Command {}, Option::some($id));
-        $staging->flush();
+        $outbox->appendCommand(new class () implements Command {}, Option::some($id));
+        $outbox->flush();
 
         self::assertTrue($this->cmdBus->recordedEnvelopes()[0]->metadata->id->equals($id));
     }
@@ -103,11 +103,11 @@ abstract class MessageStagingContractTest extends TestCase
     #[Test]
     public function producerSuppliedIdIsHonouredOnEvent(): void
     {
-        $staging = $this->createStaging($this->cmdBus, $this->evtBus);
+        $outbox = $this->createOutbox($this->cmdBus, $this->evtBus);
 
         $id = MessageId::generate();
-        $staging->appendEvent(new class () implements DomainEvent {}, Option::some($id));
-        $staging->flush();
+        $outbox->appendEvent(new class () implements DomainEvent {}, Option::some($id));
+        $outbox->flush();
 
         self::assertTrue($this->evtBus->recordedEnvelopes()[0]->metadata->id->equals($id));
     }

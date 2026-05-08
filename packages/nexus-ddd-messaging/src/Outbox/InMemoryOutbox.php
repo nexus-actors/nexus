@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Outbox;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
@@ -22,14 +22,14 @@ use Psr\Log\NullLogger;
 /**
  * @psalm-api
  *
- * In-memory staging — TESTS-ONLY (and single-process Fiber-only).
+ * In-memory outbox — TESTS-ONLY (and single-process Fiber-only).
  *
  * Provides at-most-once delivery: a crash between flush() start and bus
  * dispatch loses messages. Production deployments MUST use a persistent
- * staging implementation. The runtime warning logged on every flush() is
+ * outbox implementation. The runtime warning logged on every flush() is
  * the operator-facing canary that this is wired in production.
  */
-final class InMemoryMessageStaging implements MessageStaging
+final class InMemoryOutbox implements Outbox
 {
     /** @var list<Envelope<Command>> */
     private array $commandEnvelopes = [];
@@ -71,9 +71,9 @@ final class InMemoryMessageStaging implements MessageStaging
     public function flush(): void
     {
         $this->logger->warning(
-            'InMemoryMessageStaging.flush() — at-most-once delivery; '
+            'InMemoryOutbox.flush() — at-most-once delivery; '
             . 'a crash between flush() start and bus dispatch loses messages. '
-            . 'Use a persistent staging implementation in production.',
+            . 'Use a persistent outbox implementation in production.',
         );
 
         foreach ($this->commandEnvelopes as $envelope) {

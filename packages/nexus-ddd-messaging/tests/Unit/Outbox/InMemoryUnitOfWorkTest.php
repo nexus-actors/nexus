@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Outbox;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
-use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
-use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryUnitOfWork;
+use Monadial\Nexus\Ddd\Messaging\Outbox\InMemoryOutbox;
+use Monadial\Nexus\Ddd\Messaging\Outbox\InMemoryUnitOfWork;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\SystemClock;
@@ -21,61 +21,61 @@ use Psr\Log\NullLogger;
 final class InMemoryUnitOfWorkTest extends TestCase
 {
     #[Test]
-    public function commitFlushesStaging(): void
+    public function commitFlushesOutbox(): void
     {
         $cmdBus = new RecordingEnvelopedCommandBus();
         $evtBus = new RecordingEnvelopedEventBus();
-        $staging = new InMemoryMessageStaging(
+        $outbox = new InMemoryOutbox(
             $cmdBus,
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
             new NullLogger(),
         );
-        $uow = new InMemoryUnitOfWork($staging);
+        $uow = new InMemoryUnitOfWork($outbox);
 
         $uow->begin();
-        $uow->staging()->appendCommand(new class () implements Command {}, Option::none());
+        $uow->outbox()->appendCommand(new class implements Command {}, Option::none());
         $uow->commit();
 
         self::assertCount(1, $cmdBus->recordedEnvelopes());
     }
 
     #[Test]
-    public function rollbackDiscardsStaging(): void
+    public function rollbackDiscardsOutbox(): void
     {
         $cmdBus = new RecordingEnvelopedCommandBus();
         $evtBus = new RecordingEnvelopedEventBus();
-        $staging = new InMemoryMessageStaging(
+        $outbox = new InMemoryOutbox(
             $cmdBus,
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
             new NullLogger(),
         );
-        $uow = new InMemoryUnitOfWork($staging);
+        $uow = new InMemoryUnitOfWork($outbox);
 
         $uow->begin();
-        $uow->staging()->appendCommand(new class () implements Command {}, Option::none());
+        $uow->outbox()->appendCommand(new class implements Command {}, Option::none());
         $uow->rollback();
 
         self::assertSame([], $cmdBus->recordedEnvelopes());
     }
 
     #[Test]
-    public function stagingReturnsSameStagingInstance(): void
+    public function outboxReturnsSameOutboxInstance(): void
     {
         $cmdBus = new RecordingEnvelopedCommandBus();
         $evtBus = new RecordingEnvelopedEventBus();
-        $staging = new InMemoryMessageStaging(
+        $outbox = new InMemoryOutbox(
             $cmdBus,
             $evtBus,
             MessageContextStack::default(),
             new SystemClock(),
             new NullLogger(),
         );
-        $uow = new InMemoryUnitOfWork($staging);
+        $uow = new InMemoryUnitOfWork($outbox);
 
-        self::assertSame($staging, $uow->staging());
+        self::assertSame($outbox, $uow->outbox());
     }
 }

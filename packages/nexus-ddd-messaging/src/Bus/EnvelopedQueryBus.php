@@ -10,7 +10,7 @@ use Monadial\Nexus\Ddd\Messaging\Message\Query;
 /**
  * @psalm-api
  *
- * @internal Framework-facing — used by `MessageStaging` flush, DLQ replay,
+ * @internal Framework-facing — used by `Outbox` flush, DLQ replay,
  *           and transport recovery. Domain code uses `QueryBus` directly.
  */
 interface EnvelopedQueryBus extends QueryBus

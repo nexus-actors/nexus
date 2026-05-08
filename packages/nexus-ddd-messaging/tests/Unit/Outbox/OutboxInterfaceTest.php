@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Outbox;
 
-use Monadial\Nexus\Ddd\Messaging\Staging\MessageStaging;
+use Monadial\Nexus\Ddd\Messaging\Outbox\Outbox;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -12,12 +12,12 @@ use ReflectionClass;
 use ReflectionMethod;
 
 #[CoversNothing]
-final class MessageStagingInterfaceTest extends TestCase
+final class OutboxInterfaceTest extends TestCase
 {
     #[Test]
     public function interfaceDeclaresRequiredMethods(): void
     {
-        $reflection = new ReflectionClass(MessageStaging::class);
+        $reflection = new ReflectionClass(Outbox::class);
 
         self::assertTrue($reflection->isInterface());
 

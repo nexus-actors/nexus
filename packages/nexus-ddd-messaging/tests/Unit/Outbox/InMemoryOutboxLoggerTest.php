@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
+namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Outbox;
 
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
-use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
+use Monadial\Nexus\Ddd\Messaging\Outbox\InMemoryOutbox;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\SystemClock;
@@ -18,13 +18,13 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use Stringable;
 
-#[CoversClass(InMemoryMessageStaging::class)]
-final class InMemoryMessageStagingLoggerTest extends TestCase
+#[CoversClass(InMemoryOutbox::class)]
+final class InMemoryOutboxLoggerTest extends TestCase
 {
     #[Test]
     public function flushEmitsOneWarningPerCallMentioningAtMostOnce(): void
     {
-        $logger = new class () extends AbstractLogger {
+        $logger = new class extends AbstractLogger {
             /** @var list<string> */
             public array $warnings = [];
 
@@ -39,7 +39,7 @@ final class InMemoryMessageStagingLoggerTest extends TestCase
 
         $cmdBus = new RecordingEnvelopedCommandBus();
         $evtBus = new RecordingEnvelopedEventBus();
-        $staging = new InMemoryMessageStaging(
+        $outbox = new InMemoryOutbox(
             $cmdBus,
             $evtBus,
             MessageContextStack::default(),
@@ -47,9 +47,9 @@ final class InMemoryMessageStagingLoggerTest extends TestCase
             $logger,
         );
 
-        $staging->appendCommand(new class () implements Command {}, Option::none());
-        $staging->flush();
-        $staging->flush();
+        $outbox->appendCommand(new class implements Command {}, Option::none());
+        $outbox->flush();
+        $outbox->flush();
 
         self::assertCount(2, $logger->warnings);
         self::assertStringContainsString('at-most-once', $logger->warnings[0]);
