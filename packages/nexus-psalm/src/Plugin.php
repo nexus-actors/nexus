@@ -7,6 +7,10 @@ namespace Monadial\Nexus\Psalm;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\Messaging\CommandHandlerSignatureRule;
+use Monadial\Nexus\Psalm\Hook\Messaging\EventListenerSignatureRule;
+use Monadial\Nexus\Psalm\Hook\Messaging\OneCommandHandlerRule;
+use Monadial\Nexus\Psalm\Hook\Messaging\QueryHandlerSignatureRule;
 use Monadial\Nexus\Psalm\Hook\Messaging\ReadonlyMessageBodyRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
@@ -36,6 +40,10 @@ final class Plugin implements PluginEntryPointInterface
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
             ReadonlyMessageBodyRule::class,
+            CommandHandlerSignatureRule::class,
+            QueryHandlerSignatureRule::class,
+            EventListenerSignatureRule::class,
+            OneCommandHandlerRule::class,
         ];
 
         foreach ($hooks as $hook) {
