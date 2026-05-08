@@ -11,8 +11,9 @@ use Monadial\Nexus\Ddd\Messaging\Message\Command;
  *
  * Public command-dispatch contract. Domain code calls `dispatchCommand`
  * with the raw message; the bus internally constructs an `Envelope`,
- * generates a fresh `MessageId`, and reads the ambient
- * `CurrentMessageContext` for causation/correlation propagation.
+ * generates a fresh `MessageId`, and reads the in-flight
+ * `MessageContextStack` (DI-injected on the bus) for causation /
+ * correlation propagation.
  */
 interface CommandBus
 {

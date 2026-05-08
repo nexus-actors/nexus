@@ -13,9 +13,9 @@ use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
  * @psalm-immutable
  *
  * Pure value object — metadata + stamps for the in-flight message.
- * The bus pushes a MessageContext onto `CurrentMessageContext` before
- * invoking a handler; the bus reads
- * `CurrentMessageContext::current()->metadata` when stamping nested
+ * The bus pushes a MessageContext onto its injected `MessageContextStack`
+ * before invoking a handler; the bus reads
+ * `MessageContextStack::current()->metadata` when stamping nested
  * dispatches.
  */
 final readonly class MessageContext
