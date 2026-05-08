@@ -36,6 +36,7 @@
         ],
         "psr-4": {
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
+            "Monadial\\Nexus\\Ddd\\Aggregate\\": "packages/nexus-ddd-aggregate/src/",
             "Monadial\\Nexus\\Ddd\\Core\\": "packages/nexus-ddd-core/src/",
             "Monadial\\Nexus\\Ddd\\Messaging\\": "packages/nexus-ddd-messaging/src/",
             "Monadial\\Nexus\\Runtime\\": "packages/nexus-runtime/src/",
@@ -56,6 +57,7 @@
     "autoload-dev": {
         "psr-4": {
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
+            "Monadial\\Nexus\\Ddd\\Aggregate\\Tests\\": "packages/nexus-ddd-aggregate/tests/",
             "Monadial\\Nexus\\Ddd\\Core\\Tests\\": "packages/nexus-ddd-core/tests/",
             "Monadial\\Nexus\\Ddd\\Messaging\\Tests\\": "packages/nexus-ddd-messaging/tests/",
             "Monadial\\Nexus\\Runtime\\Tests\\": "packages/nexus-runtime/tests/",

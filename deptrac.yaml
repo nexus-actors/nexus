@@ -87,6 +87,11 @@ deptrac:
         - type: directory
           value: packages/nexus-ddd-messaging/src/.*
 
+    - name: DddAggregate
+      collectors:
+        - type: directory
+          value: packages/nexus-ddd-aggregate/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -135,3 +140,6 @@ deptrac:
     DddCore: []
     DddMessaging:
       - DddCore
+    DddAggregate:
+      - DddCore
+      - Persistence

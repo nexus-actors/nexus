@@ -9,6 +9,7 @@
     <testsuites>
         <testsuite name="unit">
             <directory>packages/nexus-core/tests/Unit</directory>
+            <directory>packages/nexus-ddd-aggregate/tests/Unit</directory>
             <directory>packages/nexus-ddd-core/tests/Unit</directory>
             <directory>packages/nexus-ddd-messaging/tests/Unit</directory>
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
@@ -20,6 +21,9 @@
             <directory>packages/nexus-persistence-dbal/tests/Unit</directory>
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
+        </testsuite>
+        <testsuite name="ddd-aggregate">
+            <directory>packages/nexus-ddd-aggregate/tests/Unit</directory>
         </testsuite>
         <testsuite name="ddd-messaging">
             <directory>packages/nexus-ddd-messaging/tests/Unit</directory>
@@ -78,6 +82,8 @@
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
             <directory>packages/nexus-core/tests/Support</directory>
+            <directory>packages/nexus-ddd-aggregate/src</directory>
+            <directory>packages/nexus-ddd-aggregate/tests/Support</directory>
             <directory>packages/nexus-ddd-core/src</directory>
             <directory>packages/nexus-ddd-messaging/src</directory>
             <directory>packages/nexus-ddd-messaging/tests/Support</directory>
