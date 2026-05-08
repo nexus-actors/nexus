@@ -1,8 +1,8 @@
 # Nexus DDD Framework — Umbrella Architecture Design
 
-- **Date:** 2026-05-06
-- **Version:** v5.4 (FINAL meta-architecture; feature-completeness pass; ready for P0 brainstorming)
-- **Status:** Draft (awaiting review)
+- **Date:** 2026-05-06 (original); 2026-05-08 (v6 expert-panel revisions)
+- **Version:** v6 (post-implementation expert-panel revisions; nexus-ddd-aggregate scope tightened)
+- **Status:** Implemented through P0 (`nexus-ddd-core`, `nexus-ddd-messaging`); aggregate-package design tightened in v6 ahead of P1 implementation
 - **Scope:** Meta-architecture for the Nexus DDD/CQRS/ES framework. Locks cross-cutting decisions, package boundaries, philosophical position, and phasing. Each package gets its own follow-up design spec.
 
 This document is a *blueprint*. It exists to align cross-cutting rules so per-package specs can stay focused.
@@ -10,6 +10,29 @@ This document is a *blueprint*. It exists to align cross-cutting rules so per-pa
 > **What changed from v2.** The round-2 review surfaced 24 issues. v3 locks 18 of them with single-answer decisions (no choice of substance) and resolves the 5 contentious ones with explicit user input. Headline changes: (1) Async dispatch is a **bus-level** choice, not a command-class concern — multiple bus instances coexist (sync/async/actor), routing config picks per command class. (2) Event store has a **configurable stream strategy** (Single vs PerAggregateType, Prooph-style); SingleStream is default. (3) Outbox and idempotency tables are **single shared resources** (context-tagged); event store stream strategy is the only per-aggregate variation. (4) **Idempotency is pluggable and configurable on/off** per handler; default is on for async, off for sync (in-tx already-exactly-once). (5) **Process managers run on actor OR sync host**, are DB-backed, opened on demand with per-instance locking (DB row lock for sync, actor mailbox for actor). (6) Event store schema is **columnar** with payload+headers as JSONB. (7) `MessageContext` supports both **injected-parameter** and **coroutine-aware ambient** access. (8) ACL preserves `correlationId`, severs `causationId` (OTel/W3C Trace Context model). (9) Test-kit is its own P0 package (`nexus-ddd-testkit`). (10) Outbox relay HA via **lease+heartbeat** partition ownership. Plus 14 smaller locks documented in §32.
 
 > **What changed from v3 → v3.1.** Round-3 review surfaced 6 critical/major issues that were locked inline: (1) **`dispatchApply`/`applyXxx` resolution convention** locked in §6.4.1 — short-name match, boot-time validation, cached reflection. (2) **Test-kit phasing fixed** — split into `nexus-ddd-testkit-core` (P0), `nexus-ddd-testkit-aggregate` (P1), `nexus-ddd-testkit-pm` (P2). Total 20 packages. (3) **Per-type stream + shared outbox** must live in the same database; XA configurations rejected at boot. (4) **`OccEventStore` subinterface** introduced for OCC-aware conditional append; the existing `nexus-persistence` `EventStore` interface is preserved unchanged. (5) **Pure-CQS command bus** locked — `CommandBus::dispatch()` returns `void` regardless of sync/async/actor; commands are tell-and-forget intent declarations; reads happen on `QueryBus`. (6) **Profile × routing validation** — boot fails (no silent fallback) when a route specifies a bus not available in the active profile.
+
+> **What changed from v5.4 → v6.** Expert-panel review (Evans / Vernon / Young / Helland-Lamport) on the locked aggregate-package design surfaced 8 consensus concerns + several taste calls; all folded inline ahead of P1 implementation:
+>
+> 1. **`OccEventStore` → `VersionedEventStore`** (§9.2.1): rename removes the OCC concept-leak; "versioned append" is the domain mechanic, OCC is the consequence. Implementations renamed (`InMemoryVersionedEventStore`, `DbalVersionedEventStore`, `DoctrineVersionedEventStore`).
+> 2. **OCC primitive locked: UNIQUE on `(aggregate_id, aggregate_version)`** (§9.2.1). The `WHERE NOT EXISTS` alternative phrasing is removed — it races. Isolation level pinned to `READ COMMITTED`. SQLSTATE `40001` and InnoDB deadlocks map to `OptimisticLockException`.
+> 3. **Actor-host `VersionedEventStore` rationale corrected** (§9.2.1). The old framing "OCC is no-op equivalent in actor mode" was wrong — it's the durability backstop for actor-restart-with-redelivery. Same code, honest justification.
+> 4. **`AggregateAlreadyExistsException` distinct from `OptimisticLockException`** (§9.1.2): version-0 collision is terminal; version>0 mismatch is retryable. `MultiAggregateTransactionException` separately classifies misbehaving handlers. Middleware behaviour differentiates.
+> 5. **`AggregateRepository::add()` added alongside `save()`** (§9.1): clarifies call-site intent without changing the underlying primitive. `save()` of a brand-new aggregate continues to upsert; both paths route uniqueness collisions to `AggregateAlreadyExistsException`.
+> 6. **One-aggregate-per-transaction rule locked** (§9.1.0.2): bus-middleware-enforced; throws `MultiAggregateTransactionException` on a second `save()` with a different identity in the same TX. The rule was implicit in v5; v6 makes it explicit and checked.
+> 7. **Cross-aggregate-type observability index reframed as a projection** (§9.3.1). The earlier transactional `ddd_event_index` was rejected — two synchronously-maintained truths in the write transaction is duplication risk plus hot-write contention. Replaced by `ddd_event_correlation_projection` rebuilt from the outbox stream.
+> 8. **`apply()` purity contract strengthened** (§6.4): `ReplaySafeApplyRule` now forbids clock reads, RNG, logger, container access, and ambient runtime state — not just I/O and `recordThat()`. Same restriction applies to `Upcaster::upcast()` and `SnapshotUpcaster::upcast()`.
+> 9. **Outbox stores envelope as-written** (§11.1, §10.2): consumers run their own upcaster chain on receipt. The earlier ambiguity could have allowed pre-upcasting; locked.
+> 10. **Snapshot incompatibility falls back to full replay** (§10.3.1) — earlier draft threw `SnapshotIncompatibleException`, which turned a recoverable schema-evolution event into an outage. Now: log + metric + replay.
+> 11. **Tombstones + projection rebuild contract documented** (§10.3): post-tombstone projection rebuilds are not bit-identical with running projections; manual repair pass may be required.
+> 12. **Upcaster `targetVersion` for projection rebuilds** (§10.2): aggregate replay always reaches latest; projection rebuilds may pin to ship-time version.
+> 13. **Identifier serialization locked: scalar `value()`** (§6.4): events serialize identifiers to their scalar form, not nested object form. Prevents wire-format coupling to PHP class shape.
+> 14. **Aggregates emit events only — never commands** (§6.4): `AggregateEmitsOnlyEventsRule` Psalm rule forbids any `Bus`/`tell()` call from inside an `AggregateRoot` subclass. Cross-aggregate flow is via process managers reacting to events.
+> 15. **Consumer transactional contract: `tryReserve` + write + `markProcessed` in same TX** (§11.1.1): documents the inbox dedup invariant explicitly. `EventHandlerInboxTransactionRule` Psalm rule enforces.
+> 16. **Idempotency layering order: Inbox before handler dedup** (§11.1.2): two distinct dedup layers, never reversed.
+> 17. **PersistenceStrategy internal split: `EventSourcedPersister` + `StatefulPersister`** (§9.2): public surface unchanged; `CompositePersistenceStrategy` dispatches by aggregate kind once at the entry seam.
+> 18. **`StreamStrategy::tableFor()` removed from public surface** (§9.3): physical layout concern moves to internal DBAL/Doctrine impls behind a private `TableNameResolver`.
+> 19. **`AggregateRepository::remove()` explicitly NOT exposed** (§9.1.0.1): aggregate retirement is a domain event, not a Repository concern.
+> 20. **Known-limitations section added** (§25.6): documents causation-chain integrity across writer-id changes, multi-region scope, composite-id collisions under partition, and snapshot-vs-event-store divergence — all deferred or out of scope but now explicit.
 
 > **What changed from v5.3 → v5.4.** Feature-completeness pass — closed 6 gaps vs mature DDD/CQRS/ES frameworks: (1) **Continuous projection runner** — new `nexus-ddd-projection` (P3) package with `Projection` interface, `ddd_projection_position` tracking, `bin/ddd projection {run,rebuild,status,pause,resume}` CLI, failure-stops-not-skips semantics, schema-migration rebuild pattern. Closes the gap that Marten / Axon / EventStoreDB fill in their respective frameworks. (§18.1) (2) **Validation middleware slot** — `#[Validate]` attribute + project-supplied `Validator` interface; ValidationFailedException with field-level violations. (§8.5.1.1) (3) **Authorization middleware slot** — `#[Authorize(policy:, subject:)]` attribute + project-supplied `AuthorizationDecider`; subject resolves from message property; principal from MessageContext header. Fail-closed if attribute used without registered decider. (§8.5.1.2) (4) **Health checks** — `HealthCheck` interface + 6 built-in checks (outbox lag, DLQ depth, replay failures, projection status, idempotency table size, relay lease expiration); `bin/ddd health` CLI; `/ddd/health` HTTP endpoint via Symfony bundle. (§23.5) (5) **Operations introspection commands** — 11 new CLI commands in §27.1: aggregate inspection, PM inspection, event sequence validation, snapshot inspection, stuck PM listing, projection management, health. (6) **Published Language recipe** — JSON Schema-based contract pattern in §14.3; framework provides recipe + future `nexus-ddd-schema-registry` package deferred. Plus 14 explicit out-of-scope additions in §30 calibrating adopter expectations. Package count: 20 → 21.
 
@@ -303,10 +326,19 @@ abstract class StatefulAggregateRoot extends AggregateRoot
 **Locked semantics:**
 
 - `recordThat($event)` invokes the corresponding `applyXxx($event)` synchronously, then appends to `$recordedEvents`. The next aggregate method observes the mutated state.
-- `applyXxx()` methods MUST be pure: no I/O, no logging, no `recordThat()`, no `tell()`, no clock access. The Psalm plugin enforces this (`ReplaySafeApplyRule`).
-- Replay invokes `applyXxx()` directly without recording.
+- `applyXxx()` methods MUST be pure functions of `(currentState, event) → newState`. The `ReplaySafeApplyRule` Psalm rule enforces this by **forbidding inside any `applyXxx()` body**:
+    - clock reads (`(new DateTimeImmutable())`, `time()`, `microtime()`, calls to `ClockInterface`)
+    - RNG (`random_int`, `Ulid::generate()`, `Uuid::generate()`)
+    - logging (calls on `LoggerInterface`)
+    - container/service-locator access (`ContainerInterface::get`, `static::someService()`)
+    - any non-domain mutation: I/O, `recordThat()`, `tell()`, `dispatchCommand()`, dispatching events on the bus
+    - reading from `MessageContextStack::current()` or any ambient runtime state
+  The same rule applies to `Upcaster::upcast()` and `SnapshotUpcaster::upcast()` — both are pure functions of `(payload, metadata) → payload` and `(payload, fromVersion, toVersion) → payload` respectively, with no access to aggregate state.
+- Replay invokes `applyXxx()` directly without recording. `recordThat()` called during replay throws `ApplyDuringReplayException` (already shipped in `nexus-ddd-core`).
+- **Aggregates emit events only — never commands.** A `recordThat(SomeEvent)` is OK; a `dispatchCommand(SomeCommand)` from inside an aggregate method is forbidden. Cross-aggregate coordination flows through process managers reacting to events. The `AggregateEmitsOnlyEventsRule` Psalm rule forbids any `Bus`/`tell()` call from inside an `AggregateRoot` subclass.
 - **Aggregates contain no command handlers.** Mutations happen via aggregate methods called from the command handler in the application layer.
 - `version()` semantics: for `EventSourcedAggregateRoot`, version equals the count of applied events (including replayed). For `StatefulAggregateRoot`, version is a counter incremented at each persist.
+- **Identifier serialization (locked).** Events carry `Identifier` value objects (e.g., `OrderId`) at the typed boundary. When events serialize for storage / transport, identifiers serialize to their scalar `value()` form (`"01H..."` for ULID-backed, the canonical UUID string for UUID-backed). Application-side deserialization (Valinor) maps the scalar back to the typed `OrderId`. **Forbidden:** persisting nested object form (`{"value":"01H..."}`) — that couples the wire format to the PHP class shape and breaks under Identifier-class evolution.
 - `stateVersion()` is the declared schema version of the aggregate's *state*. When state shape changes (a private field added/removed), bump `stateVersion()`. Snapshots store the version; `SnapshotUpcaster` (§10.4) handles upgrades.
 - **Aggregates expose behavior, not state. No getters, no setters.** Tell-don't-ask is enforced (§6.4.0.0). Application code interacts with aggregates by sending commands; reading aggregate state for queries goes through `QueryBus → QueryHandler → ProjectionTable`, never by inspecting aggregate fields.
 
@@ -869,7 +901,28 @@ interface AggregateRepository
 {
     /** @return Option<T> */
     public function find(Identifier $id): Option;
-    /** @param T $aggregate */
+
+    /**
+     * Persist a brand-new aggregate. Asserts `$aggregate->version() === 0`;
+     * uniqueness collision raises `AggregateAlreadyExistsException` (terminal —
+     * NOT retried by middleware), distinct from `OptimisticLockException`
+     * (retried). Use this when the call site clearly creates; use `save()`
+     * when the call site loaded-and-modified.
+     *
+     * @param T $aggregate
+     * @throws AggregateAlreadyExistsException
+     */
+    public function add(AggregateRoot $aggregate): void;
+
+    /**
+     * Upsert. Internally delegates to `add()` if `version === 0`, else to
+     * a versioned-append against the loaded version. Version mismatch raises
+     * `OptimisticLockException` (retried by middleware).
+     *
+     * @param T $aggregate
+     * @throws OptimisticLockException
+     * @throws AggregateAlreadyExistsException
+     */
     public function save(AggregateRoot $aggregate): void;
 }
 
@@ -886,27 +939,56 @@ final class GenericAggregateRepository implements AggregateRepository
 
 `find()` is the **command-side** loader — for write operations. NOT for queries (lists, search). Read-side queries go through `QueryBus`.
 
-Aggregate-specific bulk loaders belong in dedicated `Repository` subclasses for the rare case a single command needs to load multiple aggregates as one transactional unit (typically batch processing):
+#### 9.1.0 Why `add()` and `save()` are distinct
+
+The split surfaces *intent* at the call site. `add()` reads "I am creating a new aggregate; if one already exists with this id, that's a domain error." `save()` reads "I loaded this aggregate, mutated it, am persisting the changes." Without the split, both paths raise the same exception and the retry middleware cannot distinguish stale-write (retryable) from duplicate-creation (terminal). Mapping is:
+
+| Operation | Aggregate version | DB outcome | Exception | Middleware action |
+|---|---|---|---|---|
+| `add($newAggregate)` | 0 | UNIQUE constraint violation | `AggregateAlreadyExistsException` | terminal — surface to caller |
+| `save($newAggregate)` | 0 | UNIQUE constraint violation | `AggregateAlreadyExistsException` | terminal — surface to caller |
+| `save($loadedAggregate)` | N | versioned-append fail | `OptimisticLockException` | retry: reload + replay handler |
+
+Both paths use the same physical primitive (`appendIfVersion` on `VersionedEventStore`); the difference is purely the call-site contract and exception classification.
+
+#### 9.1.0.1 Deletion (locked)
+
+`AggregateRepository` does NOT expose `remove()` / `delete()`. Aggregate retirement is modeled in the domain (record an `OrderArchived` / `AccountClosed` event); the application then ignores the aggregate or routes new commands to a domain error. Retention/garbage-collection of historical events is an *infrastructure* concern handled by `RetentionPolicy` outside the Repository — not by the domain calling `repo->delete()`. Apps that want "soft delete" implement it as a status field updated by a domain event.
+
+#### 9.1.0.2 One-aggregate-per-transaction (locked, BLOCKER)
+
+A command handler MUST persist at most **one** aggregate (by identity). Cross-aggregate consistency is achieved via outbox-dispatched commands (§11) handled by process managers (§16), never via multi-aggregate transactions.
+
+**Enforcement:** the bus middleware that opens the transaction tracks the first `add()` / `save()` call's aggregate identity. A second `add()` / `save()` with a different identity in the same transaction throws `MultiAggregateTransactionException` (terminal). Same-aggregate re-save in the same TX (rare; idempotent retry path) is allowed. The rule is bus-middleware enforced, not repository enforced — because a handler that takes two repositories isn't doing anything wrong at the type level; it only crosses the line when both write.
+
+Aggregate-specific bulk loaders belong in dedicated `Repository` subclasses for the rare case a single command needs to load multiple aggregates as one *read-only* unit (typically batch processing where the command persists at most one aggregate per loaded item):
 
 ```php
 final class OrderRepository extends GenericAggregateRepository
 {
-    /** Command-side BULK load for batch processing — NOT a query.
+    /** Command-side BULK READ for batch processing — NOT a query, NOT a write.
+     *  Use case: a `ProcessBatch` handler iterates loaded orders and
+     *  dispatches one `ProcessOrder` command per item; each command then
+     *  loads + writes its own single aggregate. The bulk read does NOT
+     *  participate in the transactional boundary of any single write.
      *  @return iterable<Order>
      */
     public function inBatch(BatchId $batchId): iterable { /* ... */ }
 }
 ```
 
+**Bulk methods on Repository subclasses MUST be read-only.** A method named `*ByCustomer` / `*ForBatch` / `findAll*` that returns `iterable<T>` is a query in disguise — it belongs in a `QueryHandler` against a projection table, not on the Repository. The `AggregateRepositoryReadOnlyBulkRule` Psalm rule flags any non-`#[BulkCommand]` method on an `AggregateRepository` subclass that returns `iterable<T>` / `array<T>`.
+
 **Read-side queries (lists, search, filtering) NEVER go through `Repository`.** They go through `QueryBus → QueryHandler → ProjectionTable`. Apps that want "list active orders for a customer" implement `ListActiveOrdersHandler` reading from a projection table updated by event handlers — not via Repository.
 
 #### 9.1.1 Aggregate Creation Pattern (locked)
 
-New aggregates are created via **static factory methods** on the aggregate class. The handler creates and saves; there is no separate `repo->create()` API:
+New aggregates are created via **static factory methods** on the aggregate class. The handler creates and persists with `add()`; existing aggregates loaded with `find()` and persisted with `save()`. There is no separate `repo->create()` API.
 
 ```php
 final class Order extends EventSourcedAggregateRoot
 {
+    // Constructor sets ONLY the id. State lives in apply*() methods.
     private function __construct(private OrderId $id) {}
 
     public function id(): OrderId { return $this->id; }
@@ -915,6 +997,8 @@ final class Order extends EventSourcedAggregateRoot
     {
         $order = new self($id);
         $order->recordThat(new OrderPlaced($id, $customer, $lines));
+        // ↑ recordThat synchronously dispatches applyOrderPlaced before returning.
+        // The fields below are populated by apply*, not by the factory.
         return $order;
     }
 
@@ -932,14 +1016,55 @@ final class PlaceOrderHandler implements CommandHandler
     public function __invoke(PlaceOrder $cmd): void
     {
         $order = Order::placeNew($cmd->orderId, $cmd->customer, $cmd->lines);
-        $this->repo->save($order);
+        $this->repo->add($order);   // intent: brand-new aggregate
     }
 }
 ```
 
-`repo->save()` is **upsert-style** — handles both first-time creation (expectedVersion=0) and subsequent updates (expectedVersion=N) via `OccEventStore::appendIfVersion()`. For ES, the unique constraint on `(aggregate_id, aggregate_version)` ensures only the first writer of a new aggregate succeeds; concurrent attempts to create the same aggregate id collide as `OptimisticLockException` and retry (which loads the existing aggregate, recognizes the conflict semantically, and decides what to do — usually return a domain error).
+**Locked rule: factories set `id` only; state lives in `apply*()`.** A factory or an aggregate method that assigns to `$this->customer = $cmd->customer` instead of calling `recordThat(new SomethingHappened(...))` produces an aggregate whose state cannot be reconstituted from events. The `FactoryAssignsOnlyIdRule` Psalm rule forbids any direct property assignment in a public/private factory method or a public command method other than `$this->id = $id` in the constructor. All other state mutations MUST go through `recordThat()` and an `apply*()` method.
 
-For stateful aggregates, the strategy issues `INSERT` for first-time and `UPDATE WHERE version = ?` for subsequent, with the unique-id constraint catching duplicate creation.
+#### 9.1.2 Exception classification (locked)
+
+Three distinct exceptions describe the failure modes of `add()`/`save()`. Middleware behaviour depends on the type:
+
+```php
+// Distinct from each other; classified by the strategy at append time.
+namespace Monadial\Nexus\Ddd\Aggregate\Exception;
+
+/**
+ * `add($newAggregate)` collided with an existing aggregate of the same id,
+ * OR `save($newAggregate)` (version=0) collided with an existing aggregate.
+ * Terminal — middleware does NOT retry, surfaces to caller.
+ */
+final class AggregateAlreadyExistsException extends NexusDddException implements TerminalFailure {}
+
+/**
+ * `save($loadedAggregate)` (version=N) — another writer advanced the
+ * aggregate's version after we loaded. Retryable — middleware reloads,
+ * replays the handler against the new version, and re-attempts persist.
+ */
+final class OptimisticLockException extends NexusDddException implements RetryableFailure {}
+
+/**
+ * A handler attempted to persist a second aggregate (different identity)
+ * within the same transaction. Terminal — handler is misbehaving.
+ */
+final class MultiAggregateTransactionException extends NexusDddException implements TerminalFailure {}
+```
+
+Implementations classify at the strategy boundary:
+
+```
+SQL outcome                                          → Exception
+---                                                  → ---
+UNIQUE constraint violation, expectedVersion=0       → AggregateAlreadyExistsException
+versioned-append mismatch, expectedVersion=N (N>0)   → OptimisticLockException
+serialization failure (40001) / deadlock (1213)      → OptimisticLockException (treated as version-mismatch, retried)
+```
+
+`save()` of a brand-new aggregate (version=0) maps a uniqueness collision to `AggregateAlreadyExistsException` — the same as `add()` would. The split between `add()` and `save()` is for *call-site clarity*, not for outcome differentiation.
+
+For ES, the unique constraint on `(aggregate_id, aggregate_version)` is the OCC primitive; concurrent creators of the same aggregate id collide on `(aggregate_id, 0)` and the second writer's INSERT fails with the constraint violation, which the strategy translates to `AggregateAlreadyExistsException`. For stateful aggregates, the strategy issues `INSERT` for first-time and `UPDATE WHERE version = ?` for subsequent, with the unique-id constraint catching duplicate creation.
 
 ### 9.2 PersistenceStrategy
 
@@ -952,27 +1077,73 @@ interface PersistenceStrategy
      */
     public function load(string $entityClass, Identifier $id): Option;
 
-    /** @throws OptimisticLockException */
+    /** @throws OptimisticLockException
+     *  @throws AggregateAlreadyExistsException
+     */
     public function persist(EventSourceable $entity): void;
 }
 ```
 
-Note: parameter type is `EventSourceable`, not `AggregateRoot` — this lets the same strategy persist aggregates AND process managers (PMs are `EventSourceable` but not `AggregateRoot`, see §6.3).
+`PersistenceStrategy` is the single boundary the Repository sees. Internally, the persistence axis (event-sourced vs stateful) and the storage axis (DBAL/Doctrine/in-memory) are split into two cleaner roles:
+
+```php
+/** @internal — split out so impl matrix is single-axis */
+interface EventSourcedPersister
+{
+    /** @return Option<EventSourcedAggregateRoot|EventSourceable> */
+    public function load(string $entityClass, Identifier $id): Option;
+    public function persist(EventSourceable $entity): void;
+}
+
+/** @internal */
+interface StatefulPersister
+{
+    /** @return Option<StatefulAggregateRoot> */
+    public function load(string $entityClass, Identifier $id): Option;
+    public function persist(StatefulAggregateRoot $entity): void;
+}
+
+/**
+ * The Repository sees a single PersistenceStrategy. The composite
+ * dispatches by aggregate kind at the entry seam — once. No instanceof
+ * branching in handler/aggregate code.
+ */
+final readonly class CompositePersistenceStrategy implements PersistenceStrategy
+{
+    public function __construct(
+        private EventSourcedPersister $es,
+        private StatefulPersister $stateful,
+    ) {}
+
+    public function persist(EventSourceable $entity): void
+    {
+        match (true) {
+            $entity instanceof StatefulAggregateRoot => $this->stateful->persist($entity),
+            default                                  => $this->es->persist($entity),
+        };
+    }
+
+    /* load() dispatches similarly via class-string introspection */
+}
+```
+
+Note: parameter type on the public `PersistenceStrategy` is `EventSourceable`, not `AggregateRoot` — this lets the same strategy persist aggregates AND process managers (PMs are `EventSourceable` but not `AggregateRoot`, see §6.3).
 
 Implementations:
 
-| Strategy | Package | Aggregate kind |
-|---|---|---|
-| `EventSourcingStrategy(EventStore $store, SnapshotStore $snaps, StreamStrategy $stream)` | `nexus-ddd-aggregate` | `EventSourcedAggregateRoot` |
-| `DoctrineOrmStrategy(EntityManager $em)` | `nexus-ddd-doctrine` | `StatefulAggregateRoot` |
-| `DbalStrategy(Connection $conn, TableMap $map)` | `nexus-ddd-dbal` | `StatefulAggregateRoot` |
-| `InMemoryStrategy` | `nexus-ddd-aggregate` | both (tests) |
+| Persister role | Concrete impl | Package | Aggregate kind |
+|---|---|---|---|
+| `EventSourcedPersister` | `EventSourcingStrategy(VersionedEventStore $store, SnapshotStore $snaps, StreamStrategy $stream)` | `nexus-ddd-aggregate` | `EventSourcedAggregateRoot` |
+| `EventSourcedPersister` | `InMemoryEventSourcingStrategy` | `nexus-ddd-aggregate` | tests |
+| `StatefulPersister` | `DoctrineOrmStrategy(EntityManager $em)` | `nexus-ddd-doctrine` | `StatefulAggregateRoot` |
+| `StatefulPersister` | `DbalStrategy(Connection $conn, TableMap $map)` | `nexus-ddd-dbal` | `StatefulAggregateRoot` |
+| `StatefulPersister` | `InMemoryStatefulStrategy` | `nexus-ddd-aggregate` | tests |
 
-The `EventSourcingStrategy` reuses `nexus-persistence`'s existing `SnapshotStore` interface and **extends** its `EventStore` with an OCC-aware subinterface (see §9.2.1). Mapping to nexus-persistence: `PersistenceId` is constructed as `(aggregateClassFQN, identifier->value())` at the strategy boundary; aggregates and DDD identifiers stay clean.
+The `EventSourcingStrategy` reuses `nexus-persistence`'s existing `SnapshotStore` interface and depends on the new `VersionedEventStore` subinterface (see §9.2.1). Mapping to nexus-persistence: `PersistenceId` is constructed as `(aggregateClassFQN, identifier->value())` at the strategy boundary; aggregates and DDD identifiers stay clean.
 
-#### 9.2.1 `OccEventStore` — OCC-Aware Append (locked)
+#### 9.2.1 `VersionedEventStore` — Versioned Append (locked)
 
-The existing `nexus-persistence`'s `EventStore::persist()` is unconditional — adequate for actor-based ES where the actor is single-writer. DDD's `EventSourcingStrategy` requires conditional append for OCC under `SyncHost`. We introduce a subinterface in `nexus-ddd-aggregate`:
+The existing `nexus-persistence`'s `EventStore::persist()` is unconditional — adequate for actor-based ES where the actor is single-writer. DDD's `EventSourcingStrategy` requires conditional append for OCC under `SyncHost` (and as a durability backstop under `ActorHost`). We introduce a subinterface in `nexus-ddd-aggregate`:
 
 ```php
 namespace Monadial\Nexus\Ddd\Aggregate\Event;
@@ -981,18 +1152,23 @@ use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\PersistenceId;
 
-interface OccEventStore extends EventStore
+interface VersionedEventStore extends EventStore
 {
     /**
      * Atomically appends events iff the current highest sequence number for
      * $persistenceId equals $expectedVersion. Throws OptimisticLockException
      * on mismatch — no events are persisted.
      *
-     * Implementations encode the version check in SQL (e.g., conditional
-     * INSERT with `WHERE NOT EXISTS (... aggregate_version > ?)` or via
-     * a unique constraint on (aggregate_id, aggregate_version) that fails
-     * the second writer). Read-then-write across two queries is forbidden
-     * (TOCTOU race).
+     * Implementations MUST enforce the version check via a UNIQUE database
+     * constraint on `(aggregate_id, aggregate_version)`. Two-query
+     * read-then-write (e.g., `SELECT MAX(version) ... ; INSERT ...`) is
+     * forbidden — it races under all isolation levels. The constraint is
+     * the single source of OCC truth; isolation level is `READ COMMITTED`.
+     *
+     * `appendIfVersion` MUST participate in the caller's open transaction.
+     * The outbox INSERT (§11) MUST run in the same transaction. If
+     * `appendIfVersion` raises, the entire transaction (events + outbox)
+     * rolls back atomically.
      */
     public function appendIfVersion(
         PersistenceId $id,
@@ -1002,34 +1178,42 @@ interface OccEventStore extends EventStore
 }
 ```
 
+**Naming.** The interface is named `VersionedEventStore`, not `OccEventStore`. "Versioned append" is the domain mechanic exposed to the strategy; OCC is the *consequence* that flows from violating the version invariant. The aggregate already owns `version()`; the store appending against that version is the natural shape. Earlier drafts named this `OccEventStore` — that name leaked an implementation/concurrency concept into the strategy's neighborhood.
+
+**Implementation rules (locked, MUST):**
+- The version check is implemented as a `UNIQUE(aggregate_id, aggregate_version)` constraint, full stop. Constraint-violation maps to `OptimisticLockException` (or `AggregateAlreadyExistsException` if `expectedVersion === 0`, see §9.1.2).
+- Isolation level is `READ COMMITTED`. Other levels are unsupported by this contract — under `REPEATABLE READ`/`SERIALIZABLE`, writers may see `40001` serialization-failure instead of constraint violation; under MySQL, gap locks may produce `1213` deadlocks. Both must be mapped to `OptimisticLockException` so the retry middleware sees a uniform signal.
+- Versioned-append participates in the caller's open transaction. There is no separate connection. The same transaction includes the outbox INSERT (§11).
+
 **Why a subinterface, not modifying `EventStore`:**
 - `nexus-persistence`'s `EventStore` is consumed by actor persistence which doesn't need conditional append (single-writer guarantee from the actor). Forcing all `EventStore` implementations to support `appendIfVersion` would burden actor-only storage backends (e.g., `InMemoryEventStore`).
-- Implementations that DO support conditional append (Doctrine DBAL with unique constraint on `(aggregate_id, aggregate_version)`, `InMemoryEventStore` with explicit version check) implement BOTH `EventStore` AND `OccEventStore`.
-- `EventSourcingStrategy::persist()` requires an `OccEventStore`-typed parameter under `SyncHost`. Under `ActorHost`, plain `EventStore` is sufficient.
+- Implementations that DO support conditional append (Doctrine DBAL with unique constraint, `InMemoryVersionedEventStore` with explicit version check) implement BOTH `EventStore` AND `VersionedEventStore`.
+- `EventSourcingStrategy::persist()` requires a `VersionedEventStore`-typed parameter; this is locked even under `ActorHost`.
 
 **Implementations shipped:**
-- `InMemoryOccEventStore` (in `nexus-ddd-aggregate`) — for tests
-- `DbalOccEventStore` (in `nexus-ddd-dbal`) — DBAL with unique constraint
-- `DoctrineOccEventStore` (in `nexus-ddd-doctrine`) — DBAL impl reused; ORM-mapped state aggregates use Doctrine's own version mechanism (see §9.5)
+- `InMemoryVersionedEventStore` (in `nexus-ddd-aggregate`) — for tests
+- `DbalVersionedEventStore` (in `nexus-ddd-dbal`) — DBAL with the UNIQUE constraint
+- `DoctrineVersionedEventStore` (in `nexus-ddd-doctrine`) — DBAL impl reused; ORM-mapped state aggregates use Doctrine's own version mechanism (see §9.5)
 
-The existing `nexus-persistence` `EventStore` impls (`InMemoryEventStore`, `DoctrineEventStore`) remain unchanged — they continue to work for actor-based ES which doesn't need OCC.
+The existing `nexus-persistence` `EventStore` impls (`InMemoryEventStore`, `DoctrineEventStore`) remain unchanged — they continue to work for actor-based ES which doesn't need versioned append.
 
-**`EventSourcingStrategy` always uses `OccEventStore` (locked).** Even in `ActorHost` mode, the strategy is constructed with an `OccEventStore`. The OCC check is no-op-equivalent in actor mode (the version always matches, since the actor is single-writer), but the unified contract simplifies the framework: one strategy class, one store interface, one persistence path. The minor extra SQL work in actor mode is negligible compared to the architectural clarity.
+**`EventSourcingStrategy` always uses `VersionedEventStore` (locked).** Under `ActorHost`, the actor is the writer of record — the mailbox serializes commands per aggregate, and the in-memory `version()` advances in lockstep with each `recordThat()`. But "the actor is the single writer" is not always true: if the actor crashes mid-handler after `appendIfVersion` succeeded but before mailbox ack, the supervisor restarts it; the actor rehydrates from the store at version `N+1`; the message is redelivered from the mailbox; the handler sees `N+1` but was generated against `N`. Versioned-append is the *durability backstop* that catches this. The framing "OCC is no-op equivalent in actor mode" is wrong: it is a real check that fires in a real failure mode. Under `ActorHost`, an `OptimisticLockException` from the store SHOULD escalate via supervision (it indicates the mailbox-ack invariant is violated), not be silently retried — handlers in actor mode use the at-most-once-effect path and let the actor system replay.
 
 ### 9.3 Event Store Stream Strategy (Prooph-style)
 
-The event store has a configurable **stream strategy** that determines how events are physically organized:
+The event store has a configurable **stream strategy** that determines how events are physically organized. The public surface exposes only the *logical* streaming concern:
 
 ```php
 interface StreamStrategy
 {
     public function streamFor(string $aggregateClass, Identifier $id): StreamName;
-    public function tableFor(string $aggregateClass): string;
 }
 
 final class SingleStreamStrategy implements StreamStrategy { /* default */ }
 final class PerAggregateTypeStreamStrategy implements StreamStrategy { /* opt-in */ }
 ```
+
+The previous draft also exposed `tableFor(string): string` on the public interface — that surfaces a physical-layout concern (table names, connection-string adjacencies) into application code. **Removed.** Table-name resolution is an internal concern of the DBAL/Doctrine `VersionedEventStore` implementations, behind a private `TableNameResolver` collaborator. A query handler reaching for `$strategy->tableFor(...)` would cross a layer boundary the framework should not invite.
 
 | Strategy | Physical layout | Trade-off |
 |---|---|---|
@@ -1038,7 +1222,17 @@ final class PerAggregateTypeStreamStrategy implements StreamStrategy { /* opt-in
 
 Single-stream is the default. Per-aggregate-type is opt-in for systems with very high write volume on specific aggregates. Logical streaming via filter is always available regardless of strategy.
 
-**Cross-aggregate-type queries under `PerAggregateTypeStreamStrategy`** (e.g., "all events with `correlationId = X` across all aggregate types") require UNION across per-type tables, scaling poorly as the number of aggregate types grows. The framework provides a parallel `ddd_event_index (correlation_id, aggregate_type, sequence_nr)` table that maintains a cross-type index for observability queries; the debug UI uses this index for the per-`correlationId` view. The index is updated transactionally with each event write (separate row, same transaction). Apps using single-stream strategy don't need this index — the main `ddd_events` table is already cross-type. Apps using per-type strategy can opt out of the index via config if they don't need cross-type queries.
+#### 9.3.1 Cross-aggregate-type observability — the index is a *projection*, not a transactional sibling (locked)
+
+Earlier drafts proposed a parallel `ddd_event_index (correlation_id, aggregate_type, sequence_nr)` table updated transactionally with every event write. **That design is rejected.** Two synchronously-maintained truths in the same write transaction is a duplication risk (schema migrations, partition drops, GDPR shredding, repair tooling all double); under high write rate the shared `BIGSERIAL`/btree-tail contention defeats the very point of `PerAggregateTypeStreamStrategy` (hot-write distribution); and consumers of the index gain no guarantee they couldn't get from a normal projection.
+
+**Corrected design (locked):**
+- Cross-aggregate-type queries are served by `ddd_event_correlation_projection` — a normal projection table, updated by an ordinary projection event handler that consumes the outbox-dispatched event stream.
+- The projection is allowed to lag (eventually consistent with the event stores). Debug-UI users must understand "may be a few seconds stale" — that's the cost of avoiding the duplication.
+- The projection rebuilds from the event stores on demand (`bin/ddd projection rebuild correlation`) — same lifecycle as any other projection.
+- Apps that don't need cross-type observability skip the projection entirely.
+
+This fixes three things at once: removes write-path contention, eliminates the dual-truth migration surface, and aligns with the broader CQRS rule that the read side is a projection of the write side (Greg's framing — events are the truth; everything else is derived).
 
 **Per-aggregate-type schema migrations.** New aggregate type = new table. The framework provides `bin/ddd schema migrate-aggregate --type=NewAggregate` that generates the table. CI's `bin/ddd events check-versions` (§10.4) scans all per-type tables when this strategy is active.
 
@@ -1090,7 +1284,7 @@ The framework validates at boot that any composite ID's `value()` output fits wi
 ### 9.5 Optimistic Concurrency Control
 
 Every aggregate carries `version()`. `persist()` enforces version match:
-- **Sync host (event-sourced):** uses `OccEventStore::appendIfVersion()` (§9.2.1). Mismatch throws `OptimisticLockException`.
+- **Sync host (event-sourced):** uses `VersionedEventStore::appendIfVersion()` (§9.2.1). Mismatch throws `OptimisticLockException`; `expectedVersion=0` collision throws `AggregateAlreadyExistsException` (§9.1.2).
 - **Sync host (Doctrine ORM):** delegates to Doctrine's `#[Version]` annotation on the entity. The aggregate declares its version field; Doctrine handles conditional UPDATE. Framework re-throws Doctrine's `OptimisticLockException` as the framework's own.
 - **Sync host (Dbal):** `DbalStrategy` issues `UPDATE ... WHERE version = ?` and checks affected-rows count.
 - **Actor host:** OCC is a no-op — the actor is single-writer, so concurrent versions cannot exist.
@@ -1184,7 +1378,30 @@ final class OrderPlacedV1ToV2 implements Upcaster
 
 On replay, events are upcasted in version order (`v1 → v2 → v3 → current`) before Valinor mapping. Upcasters operate on raw payload arrays.
 
-> **Reverse upcasters / event downgrades are not supported.** The pipeline is forward-only: every replay reaches the latest schema version. In-flight events that have not yet been processed by all consumers must be processed by code that knows about the version they were written under (or a later version with an upcaster). Apps that need to gradually roll out new event versions across consumers should deploy producers AFTER all consumers have been upgraded.
+**Upcaster purity (locked).** `Upcaster::upcast(array $payload, MessageMetadata $metadata): array` is a pure function of `(payload, metadata)` only. No clock, no RNG, no logger, no container, no aggregate state — same restrictions as `applyXxx()` (§6.4). The `ReplaySafePurityRule` Psalm rule covers both. The same restriction applies to `SnapshotUpcaster::upcast()`.
+
+**Aggregate replay always upcasts to latest. Projection rebuilds may pin to a target version.** Aggregate replay reaches `currentVersion()` because the aggregate's `apply*()` is written against the current event shape. Projection rebuilds are different — a projection ships at version V, was running against V, and a debug or audit need may want to replay history *as the projection saw it* without re-implementing V's logic against today's V+1 events. The upcaster pipeline supports both:
+
+```php
+interface UpcasterPipeline
+{
+    /** Default: upcast to the highest registered version. Used for aggregate replay. */
+    public function upcast(string $eventName, int $fromVersion, array $payload, MessageMetadata $metadata): array;
+
+    /**
+     * Pin upcasting to a specific target version. Used for projection rebuilds
+     * that need to reproduce historical projection state. If the target is
+     * older than the requested fromVersion, returns the input unchanged.
+     */
+    public function upcastTo(string $eventName, int $fromVersion, int $targetVersion, array $payload, MessageMetadata $metadata): array;
+}
+```
+
+Projection rebuilds invoke `upcastTo($targetVersion: $projectionShipVersion)`. Aggregate replay invokes `upcast()` (no target — always latest).
+
+> **Reverse upcasters / event downgrades are not supported.** The pipeline is forward-only. The `targetVersion` parameter on `upcastTo()` is a *truncation* — you can stop the chain early — not a reversal.
+
+**Outbox stores events as-written, not as-upcasted (locked).** When the outbox dispatches a row, it carries the envelope as it was written to the event store (`schemaVersion = N` at write time, payload in N's shape). Consumers that need a different version run their own upcaster chain on receipt. The alternative — pre-upcasting before outbox insert — would couple every dispatch to the latest schema version and break "event store is the source of truth": a re-dispatched row would carry a different payload than the one persisted. Lock: **outbox is dispatch, not transformation.** The same envelope-as-written rule applies to `MessageSerializer` impls in transport-adapter packages.
 
 ### 10.3 Tombstones
 
@@ -1194,6 +1411,17 @@ final class OrderShippedManuallyTombstone {}
 ```
 
 On replay, tombstoned events are silently skipped (with debug-level log). **Tombstoning a state-affecting event without a compensating upcaster is a violation** — Psalm plugin's `TombstonedEventNotStateAffectingRule` flags this. Tombstones are valid only for events whose effects are no longer relevant to current aggregate state (logging-only, never-applied-to-state events).
+
+**Tombstones break bit-identical projection rebuilds.** A projection running before tombstoning consumed the now-tombstoned event and persisted state derived from it. A projection rebuild *after* tombstoning will skip the event and produce different state. This is intentional — tombstoning declares "this event no longer counts" — but the contract MUST be made explicit:
+- After tombstoning a previously-projected event, a manual repair pass on existing projection state may be required (the framework cannot know what the projection derived from the now-skipped event).
+- The `bin/ddd projection rebuild <name>` command produces the post-tombstone truth; running and rebuilt projections are not bit-identical until the running one has also been refreshed.
+- For aggregates: if the tombstoned event was state-affecting, the upcaster chain must compensate (e.g., a v(N)→v(N+1) upcaster that synthesizes the missing state from later events). Otherwise, replay produces an invalid aggregate.
+
+#### 10.3.1 Snapshot incompatibility — fall back to replay (locked)
+
+When loading an aggregate, the framework reads the latest snapshot then applies events `(snapshot.version + 1 .. current)`. If the snapshot's `stateVersion` does not match the aggregate's current `stateVersion()`, **the framework MUST fall back to a full replay from event 1, ignoring the incompatible snapshot, and emit a metric** (`ddd.snapshot.incompatible_fallback`).
+
+Earlier drafts threw `SnapshotIncompatibleException`. **Rejected.** The data is recoverable by replay — throwing turns a recoverable schema-evolution event into an outage. The fall-back is the well-behaved option; the metric is the operational signal that the snapshot upcaster needs attention. After deploying a `SnapshotUpcaster` for the new version, the next snapshot write produces a compatible snapshot and the fall-back stops firing.
 
 ### 10.4 Versioning Discipline
 
@@ -1233,14 +1461,55 @@ When the command handler returns, bus middleware drains the aggregate's recorded
 Command -> Handler -> repo.save($aggregate)
                           ↓
                     BEGIN TX
-                      persist aggregate state/events
+                      VersionedEventStore::appendIfVersion($id, $expectedVersion, ...$events)
                       INSERT INTO ddd_outbox (envelope) VALUES (...)
                     COMMIT TX
                           ↓
                     [later] OutboxRelay reads outbox -> EventBus -> subscribers
 ```
 
-Outbox row stores the full `Envelope` (payload + metadata, including all causation ids). Relay dispatches asynchronously; each subscriber gets its own envelope (independent fan-out, §8.4).
+Outbox row stores the full `Envelope` (payload + metadata, including all causation ids) **as written** — not pre-upcasted. Consumers run their own upcaster chain on receipt (§10.2). Relay dispatches asynchronously; each subscriber gets its own envelope (independent fan-out, §8.4).
+
+#### 11.1.1 Consumer-side delivery guarantees (locked)
+
+The outbox provides **at-least-once** delivery. Duplicates are inevitable when (a) the relay crashes after `EventBus::publish()` returns but before the relay marks the row dispatched, or (b) the consumer commits its own work but the relay's "row dispatched" mark fails to persist.
+
+Consumer correctness depends on **same-transaction inbox dedup**:
+
+```
+Consumer's transactional contract (locked, MUST):
+   BEGIN TX
+     if NOT MessageInbox::tryReserve($handlerClass, $envelope->metadata->id):
+       COMMIT (no-op)            -- already processed; idempotent skip
+       return
+     <handler logic, including DB writes>
+     MessageInbox::markProcessed($handlerClass, $envelope->metadata->id, $now)
+   COMMIT TX
+```
+
+`tryReserve` + the consumer's domain write + `markProcessed` MUST share the same database transaction. Two failure modes are eliminated by this contract:
+- **Crash after handler logic, before `markProcessed`:** the whole TX rolls back; the relay redelivers; `tryReserve` succeeds again; handler runs again (correctly).
+- **Crash after `markProcessed` commit:** the inbox row says "processed"; the relay redelivers; `tryReserve` returns false; the handler is skipped.
+
+If the consumer cannot share a connection with the inbox (e.g., the inbox is in `nexus-ddd-aggregate`'s database and the handler writes to a different database), the handler MUST be intrinsically idempotent OR be routed via `#[InProcess]` (§11.2 — same-DB constrained). The `EventHandlerInboxTransactionRule` Psalm rule flags `EventListener` impls that touch a DB connection without sharing one with the configured `MessageInbox`.
+
+#### 11.1.2 Idempotency layering order (locked)
+
+Two independent dedup layers compose:
+
+```
+Inbound message
+   ↓
+[1] MessageInbox::tryReserve($handlerClass, $messageId)   -- transport-level gate
+   ↓ (passed)
+[2] handler dispatch
+   ↓
+[3] IdempotencyStore::recordHandled($idempotencyKey)       -- application-level gate
+   ↓
+COMMIT
+```
+
+`MessageInbox` (§13) is *transport-level* — gates against transport redelivery (the same physical envelope arriving twice). `IdempotencyStore` (§13.3) is *application-level* — gates against semantic duplicates (a client sending the same logical operation twice with different envelope ids but the same `IdempotencyKey`). They run in this order, never reversed. Both can be configured; both can be disabled per handler. They do not double-deduplicate — Inbox keys on `messageId` (a per-envelope fact); IdempotencyStore keys on the application's choice of key (typically derived from command payload).
 
 ### 11.2 `#[InProcess]` Opt-In for Atomic Subscribers
 
@@ -2229,6 +2498,38 @@ Exactly-once delivery is impossible without distributed 2PC. The framework expli
 
 This is the practical "exactly-once" approximation; the framework documents it as such, not as actual exactly-once.
 
+### 25.6 Known Limitations
+
+The framework documents the failure modes it does NOT handle, so adopters can decide whether they apply:
+
+#### 25.6.1 Causation-chain integrity across `ActorSystem` writer-id changes (deferred)
+
+**Scenario:** ActorSystem `A` (writerId `W1`) persists events for aggregate `X` and writes corresponding outbox rows. `A` crashes mid-relay. ActorSystem `B` (writerId `W2`) takes over, drains `A`'s outbox rows, and dispatches them to subscribers. Meanwhile `B`'s actor for `X` handles a redelivered command and persists *new* events with `writerId = W2` whose `causationId` chains back to a message that `W1`'s relay just re-delivered to a downstream consumer. From the consumer's vantage, two distinct causal chains converge on the same aggregate version with no way to detect it: `ReplayFilter` operates on the event store, not on the dispatched stream, and the outbox envelope today does not carry `writerId`.
+
+**Why deferred:** the failure mode requires single-host crash + multi-host takeover *plus* an in-flight outbox row *plus* a consumer that reasons about causation chains. Real but rare.
+
+**Mitigations available today:**
+- Drain the outbox to zero before relinquishing leadership (operational discipline, not a framework guarantee).
+- Use `correlationId` / `conversationId` for cross-system reasoning; the framework's other propagation chains stay intact.
+
+**Future work:** stamp `writerId` onto outbox envelopes; expose a `DispatchedReplayFilter` analogous to `ReplayFilter` for consumers that need to reject envelopes whose causation chains involve a known-bad writer.
+
+#### 25.6.2 Multi-region / multi-cluster (out of scope, v1)
+
+The framework targets a single primary database and a single relay leader. Multi-region active-active, anti-entropy gossip, and `NodeAddress`-based remote routing (the `nexus-cluster` primitives in the actor system) are **not** wired through the DDD layer in v1. Apps that need this build it on top of the bounded-context isolation primitive (§14.1) and accept that cross-region consistency is an application concern.
+
+#### 25.6.3 Aggregate-id collision under network partition (out of scope, v1)
+
+`ULID`-backed and `UUID`-backed identifiers have negligible collision probability at single-host scale. `CompositeIdentifier` with externally-supplied components (e.g., `(tenantId, externalRef)`) can collide if two tenant routers issue the same composite during a split-brain. The framework treats this as the application's responsibility — the OCC layer catches it at write time as `AggregateAlreadyExistsException`, but the framework offers no coordination primitive to prevent it.
+
+#### 25.6.4 Snapshot-vs-event-store transactional divergence (deferred)
+
+Snapshot writes are best-effort: a snapshot is a derived projection of the event stream. If a snapshot write succeeds but a subsequent event write fails OCC, the snapshot is now ahead of the event store for one aggregate version. The next load reads the snapshot and replays events `(snapshot.version + 1 .. current)` — the missing event was rolled back, so the snapshot is also ahead-of-truth and produces a state derivable from a non-existent history.
+
+**Mitigation:** snapshot writes happen *after* the OCC append commits, in a separate transaction. A snapshot-write failure is logged and the next load falls back to full replay. The "ahead-of-truth" scenario is impossible because the snapshot is written from post-commit state, not from in-flight state.
+
+**Lock this in §9.5 implementations:** snapshots are written in a separate transaction that begins *after* the OCC append's `COMMIT` returns. Snapshot-write failure is non-fatal.
+
 ## 26. Adapters (P4)
 
 `nexus-ddd-actor`:
@@ -2336,7 +2637,7 @@ PHP namespace: `Monadial\Nexus\Ddd\…` for every package.
 | Phase | Outcome |
 |---|---|
 | P0 | Minimum viable command/query/event flow with attribute+DSL config, marker interfaces, **multi-bus model with profile-validated routing**, bus entry points, error model, **causation chain propagation**, `MessageContext` (parameter + ambient), `Envelope`/payload separation, error model, **`BackoffStrategy` family**, **`IdempotencyStore` interface**, **`MetricsCollector` interface**, **logging defaults + `#[Sensitive]` redaction**, **`nexus-ddd-testkit-core` package** |
-| P1 | DDD aggregates with Doctrine ORM and DBAL persistence, repositories, **OCC + retry middleware**, **`OccEventStore` contract**, **snapshotting + three-tier upgrade**, **event versioning + upcaster pipeline**, **event store stream strategies (Single + PerAggregateType, single-database constraint)**, **columnar event store schema**, **`nexus-ddd-testkit-aggregate` package** |
+| P1 | DDD aggregates with Doctrine ORM and DBAL persistence, repositories, **OCC + retry middleware**, **`VersionedEventStore` contract**, **snapshotting + three-tier upgrade**, **event versioning + upcaster pipeline**, **event store stream strategies (Single + PerAggregateType, single-database constraint)**, **columnar event store schema**, **`nexus-ddd-testkit-aggregate` package** |
 | P2 | Process managers (event-sourced, opened-on-demand with DB locking) and scheduling (deadlines, scheduled events), **`nexus-ddd-testkit-pm` package** |
 | P3 | **Outbox with single shared table**, lease-based HA relay, async transport abstraction, idempotency table, DLQ, **continuous projection runner** |
 | P4 | Actor adapter (actor-hosted aggregates and PMs, `ActorCommandBus`), Symfony bundle, ACL/context package, Redis idempotency adapter |
@@ -2442,7 +2743,7 @@ For traceability, all auto-locks applied across v3 → v3.1 → v4 → v5 → v5
 | L19 | `dispatchApply`/`applyXxx` convention | Method name = `apply` + event short class name; reflection cached at boot; `ApplyMethodNotFoundException` at boot validation; cross-namespace short-name collisions throw `ApplyMethodAmbiguousException`. (§6.4.1) |
 | L20 | Test-kit phasing | Split into `nexus-ddd-testkit-core` (P0), `nexus-ddd-testkit-aggregate` (P1), `nexus-ddd-testkit-pm` (P2). 20 packages total. |
 | L21 | Per-type stream + outbox | All event tables and shared outbox MUST live in same database; XA configurations rejected at boot via `XAConfigurationException`. (§11.3) |
-| L22 | OCC at EventStore contract | `OccEventStore extends EventStore` with `appendIfVersion()`; existing `nexus-persistence` `EventStore` preserved unchanged. (§9.2.1) |
+| L22 | OCC at EventStore contract | `VersionedEventStore extends EventStore` with `appendIfVersion()`; UNIQUE constraint on `(aggregate_id, aggregate_version)` is the OCC primitive; isolation `READ COMMITTED`; existing `nexus-persistence` `EventStore` preserved unchanged. (§9.2.1) |
 | L23 | Pure-CQS command bus | `CommandBus::dispatch()` returns `void` always; `tryDispatch(): Either<Throwable, Identifier>` for tracking. (§8.1.1, §8.6) |
 | L24 | Profile × routing validation | Boot fails with `BusNotAvailableInProfileException` when route specifies bus not available in profile. (§8.2.1) |
 
@@ -2452,7 +2753,7 @@ For traceability, all auto-locks applied across v3 → v3.1 → v4 → v5 → v5
 |---|---|---|
 | L25 | PMs as distinct type | `AbstractProcessManager` is its own base class, NOT extending `EventSourcedAggregateRoot`. (§16.0) |
 | L26 | PM emissions via outbox | `ctx::tell()` from PM defers via outbox; `PMSyncDispatchRule` Psalm enforcement. (§16.1.1) |
-| L27 | `OccEventStore` universal | `EventSourcingStrategy` always uses it (incl. actor mode where check is no-op-equivalent). (§9.2.1) |
+| L27 | `VersionedEventStore` universal | `EventSourcingStrategy` always uses it; under actor mode it acts as the durability backstop for actor-restart-with-redelivery, NOT a no-op (§9.2.1). |
 | L28 | `#[InProcess]` × `#[SharedInvocation]` | Orthogonal; explicit four-combination table. (§11.2.1) |
 | L29 | Per-context isolation DSL | `->isolatedInfrastructure(connection:, eventStorePrefix:, ...)`. (§14.1) |
 | L30 | `MessageContext` lifecycle | Stack-based, nested dispatches push child, destroyed on outermost return. (§7.3) |
