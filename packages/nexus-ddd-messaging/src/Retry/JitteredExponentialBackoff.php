@@ -23,6 +23,8 @@ final readonly class JitteredExponentialBackoff implements BackoffStrategy
 
     /**
      * @return Option<FiniteDuration>
+     *
+     * @psalm-suppress InvalidOperand
      */
     #[Override]
     public function delayFor(int $attempt, Throwable $cause): Option
