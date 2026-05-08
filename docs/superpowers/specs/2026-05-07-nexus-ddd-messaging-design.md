@@ -1,7 +1,7 @@
 # nexus-ddd-messaging — Design Spec
 
-**Status:** Draft (post-brainstorm), awaiting user sign-off before plan-writing
-**Date:** 2026-05-07
+**Status:** Implemented and reconciled (2026-05-08) — original design from 2026-05-07 brainstorm; reconciled with shipped code on 2026-05-08 after the post-implementation expert review (Wave 6).
+**Date:** 2026-05-07 (original); 2026-05-08 (reconciled)
 **Depends on:** `nexus-ddd-core`
 **Inputs:** brainstorm Q1–Q6 from 2026-05-07 conversation (six locked decisions)
 **Consumed by:** `nexus-ddd-process-manager` (already spec'd, plan written), `nexus-ddd-aggregate` (future), `nexus-ddd-cqrs` (future), all bus-implementation packages (Symfony Messenger adapter, actor-based bus, in-process pipeline bus)
@@ -109,7 +109,7 @@ interface CommandBus {
     /**
      * Dispatch a command to its (single) handler. The bus internally
      * wraps the message in an Envelope, generating a fresh `MessageId`
-     * and reading metadata from the ambient `CurrentMessageContext` (§5)
+     * and reading metadata from the ambient `MessageContextStack` (§5)
      * for causation/correlation propagation.
      *
      * `MessageId` is generated when the message is *created* (here, at
@@ -153,7 +153,7 @@ For paths where the message has *already* been enveloped (staging flush after a 
 /**
  * @psalm-api
  *
- * @internal Framework-facing — used by `MessageStaging` flush, DLQ replay,
+ * @internal Framework-facing — used by `Outbox` flush, DLQ replay,
  *           and transport recovery. Domain code uses `CommandBus` directly
  *           and never sees this interface.
  */
@@ -219,7 +219,7 @@ Method names spell out the *kind* of message — `$bus->dispatchCommand(...)` is
  * The second parameter is **optional** — declare it only if the handler
  * actually needs to read metadata (audit logging, observability,
  * kind, observability). Most domain handlers omit it; metadata threading
- * for nested dispatch happens implicitly via `CurrentMessageContext` (§5).
+ * for nested dispatch happens implicitly via `MessageContextStack` (§5).
  *
  * The `nexus-psalm` plugin's `CommandHandlerSignatureRule` validates the
  * shape: first parameter must be a concrete `Command` subtype; second
@@ -260,18 +260,18 @@ interface EventListener {}
 
 **Why marker-only.** PHP cannot enforce *parameter contravariance narrowing* on an interface — declaring `handle(Command $cmd)` would force every implementation to accept any `Command`, defeating type safety. Each `__invoke` carries the *concrete* message type as its parameter, the type system enforces the right type at the dispatch seam, and the Psalm plugin checks the shape at compile time.
 
-**Why optional `MessageContext` second parameter.** Domain handlers that don't need metadata stay clean — `__invoke(ConcreteCommand): void`, one argument, no framework noise. Handlers that legitimately need metadata (audit listener that logs the causation chain; observability handler that emits a span with trace context; saga that branches on the upstream conversation id) declare the second parameter and read what they need without calling `CurrentMessageContext::current()` at every site.
+**Why optional `MessageContext` second parameter.** Domain handlers that don't need metadata stay clean — `__invoke(ConcreteCommand): void`, one argument, no framework noise. Handlers that legitimately need metadata (audit listener that logs the causation chain; observability handler that emits a span with trace context; saga that branches on the upstream conversation id) declare the second parameter and read what they need without calling `MessageContextStack::current()` at every site.
 
-Both forms are equivalent for *implicit propagation*: when the handler dispatches a nested command, the framework's `CurrentMessageContext` propagates causation/correlation/conversation/trace whether or not the handler took the second parameter. The MessageContext arg is purely a *read-side* convenience.
+Both forms are equivalent for *implicit propagation*: when the handler dispatches a nested command, the framework's `MessageContextStack` propagates causation/correlation/conversation/trace whether or not the handler took the second parameter. The MessageContext arg is purely a *read-side* convenience.
 
-**The bus implementation reads the handler's `__invoke` signature via reflection** at handler-resolution time and decides whether to pass one or two arguments. No runtime cost on the hot path (cached after first resolution, like core's `ApplyDispatcher`).
+**The bus implementation reads the handler's `__invoke` signature via reflection** at handler-resolution time and decides whether to pass one or two arguments. The reflection result is cached per handler class so there is no runtime cost on the hot path.
 
 ```php
 // Domain handler — single argument, the canonical shape.
 final class PlaceOrderHandler implements CommandHandler {
     public function __invoke(PlaceOrder $cmd): void {
         // Implicit causation/correlation when this dispatches further commands;
-        // framework reads CurrentMessageContext::current() at dispatch.
+        // framework reads MessageContextStack::current() at dispatch.
     }
 }
 
@@ -294,15 +294,15 @@ This mirrors the Symfony Messenger handler convention exactly (Symfony allows `_
 
 ---
 
-## 5. `CurrentMessageContext` — implicit metadata propagation
+## 5. `MessageContextStack` — implicit metadata propagation
 
-> **Audience for this section: bus implementers and framework contributors.** Domain handlers do NOT interact with `CurrentMessageContext` directly except through the boundary helper `within()`. If you're writing aggregates / PMs / handlers, this section is informational; if you're writing a bus adapter or runtime integration, this is your contract.
+> **Audience for this section: bus implementers and framework contributors.** Domain handlers do NOT interact with `MessageContextStack` directly except through the boundary helper `within()`. If you're writing aggregates / PMs / handlers, this section is informational; if you're writing a bus adapter or runtime integration, this is your contract.
 
 The metadata-threading discipline (causation, correlation, conversation, trace context) is a **framework concern**, not a domain concern. Handlers shouldn't have to remember to call `forCausedMessage()` on every nested dispatch — the framework knows which message is currently being processed and propagates automatically.
 
 ### The ambient-context primitive
 
-`CurrentMessageContext` is a façade over a pluggable `ContextStorage`. The default storage uses a per-process static stack (correct for synchronous PHP and Fiber runtimes); coroutine-aware adapters (Swoole, ReactPHP) replace the storage with a per-coroutine implementation.
+`MessageContextStack` is a façade over a pluggable `ContextStorage`. The default storage uses a per-process static stack (correct for synchronous PHP and Fiber runtimes); coroutine-aware adapters (Swoole, ReactPHP) replace the storage with a per-coroutine implementation.
 
 ```php
 namespace Monadial\Nexus\Ddd\Messaging\Context;
@@ -321,98 +321,62 @@ namespace Monadial\Nexus\Ddd\Messaging\Context;
  * must each see only their own context's `current()`.
  */
 interface ContextStorage {
-    /** @return list<MessageContext> */
-    public function snapshot(): array;
     public function push(MessageContext $ctx): void;
     public function pop(): void;
 
     /** @return Option<MessageContext> */
     public function current(): Option;
-
-    /**
-     * Replace the entire stack with the given snapshot. Used by
-     * coroutine-bridge code that hands off control across runtime
-     * boundaries (e.g., enqueueing work into a worker pool that
-     * needs the same logical context restored on the consumer side).
-     *
-     * @param list<MessageContext> $stack
-     */
-    public function restore(array $stack): void;
 }
 
 /**
- * Default storage — per-process static stack. Correct for synchronous
- * PHP, Fiber-based runtimes, and any setting where one logical request
- * never yields control to another logical request mid-handler.
+ * Default storage — per-process LIFO stack. Correct for synchronous PHP,
+ * Fiber-based runtimes, and any setting where one logical request never
+ * yields control to another logical request mid-handler.
  */
 final class StaticStackContextStorage implements ContextStorage {
     /** @var list<MessageContext> */
     private array $stack = [];
-    public function snapshot(): array { return $this->stack; }
     public function push(MessageContext $ctx): void { $this->stack[] = $ctx; }
     public function pop(): void { array_pop($this->stack); }
 
     /** @return Option<MessageContext> */
     public function current(): Option { return Option::fromNullable(array_last($this->stack)); }
-    public function restore(array $stack): void { $this->stack = $stack; }
 }
 
 /**
  * @psalm-api
  *
- * Façade over `ContextStorage`. Domain code interacts only with `current()`
- * (read-only) and `within()` (boundary entry). Bus implementations
- * additionally use `push()` / `pop()` and may install a custom storage
- * via `setStorage()` for coroutine-aware runtimes.
+ * Instance class that owns a `ContextStorage`. Domain code interacts only
+ * with `current()` (read-only) and `within()` (boundary entry). Bus
+ * implementations additionally use `push()` / `pop()` (typically through
+ * `within()`'s try/finally guard).
  *
- * The static façade is intentional — making it injectable would force
- * every handler to receive a `MessageContextProvider` parameter, which
- * defeats the entire reason this design exists. The escape valve is
- * `setStorage()`: framework integrations swap the backing once at boot.
+ * Wired via DI — not a singleton. `MessageContextStack::default()` is the
+ * cheap factory that gives you the default `StaticStackContextStorage`;
+ * coroutine-aware runtimes construct one with their own coroutine-keyed
+ * storage. This avoids the singleton pitfalls flagged in the project's
+ * "Never use singletons" rule (test isolation, Swoole worker leakage).
  */
-final class CurrentMessageContext {
-    private static ?ContextStorage $storage = null;
+final class MessageContextStack {
+    public function __construct(private readonly ContextStorage $storage) {}
 
-    private static function storage(): ContextStorage {
-        return self::$storage ??= new StaticStackContextStorage();
-    }
-
-    /**
-     * Read the active storage. Used by framework integrations that need
-     * to swap-and-restore (e.g., installing the ReplayingContextStorage
-     * around an `EventSourcedXxx::replay()` call).
-     */
-    public static function getStorage(): ContextStorage {
-        return self::storage();
-    }
-
-    /**
-     * Replace the storage. Called by framework integrations once at boot
-     * (e.g., the Swoole adapter installs a coroutine-keyed storage).
-     * Tests use this to install a fresh storage per test for isolation.
-     */
-    public static function setStorage(ContextStorage $storage): void {
-        self::$storage = $storage;
-    }
-
-    /** Reset to the default `StaticStackContextStorage`. Used at end of test. */
-    public static function resetStorage(): void {
-        self::$storage = null;
+    public static function default(): self {
+        return new self(new StaticStackContextStorage());
     }
 
     /** @return Option<MessageContext>  Option::none() at top-level (no in-flight message). */
-    public static function current(): Option {
-        return self::storage()->current();
+    public function current(): Option {
+        return $this->storage->current();
     }
 
     /** @internal Bus implementations call this when entering a handler. */
-    public static function push(MessageContext $ctx): void {
-        self::storage()->push($ctx);
+    public function push(MessageContext $ctx): void {
+        $this->storage->push($ctx);
     }
 
     /** @internal Bus implementations call this when a handler returns. */
-    public static function pop(): void {
-        self::storage()->pop();
+    public function pop(): void {
+        $this->storage->pop();
     }
 
     /**
@@ -433,80 +397,76 @@ final class CurrentMessageContext {
      * @param callable(): T $callback
      * @return T
      */
-    public static function within(MessageContext $ctx, callable $callback): mixed {
-        self::push($ctx);
+    public function within(MessageContext $ctx, callable $callback): mixed {
+        $this->push($ctx);
         try {
             return $callback();
         } finally {
-            self::pop();
+            $this->pop();
         }
     }
 }
 ```
 
-### Replay-mode sentinel
+### Replay-mode dispatch guard
 
-During event-sourced replay (PMs, aggregates rebuilding state from streams), the framework MUST install a sentinel context that **rejects dispatch attempts**. Without it, a replay-suppression bug in a consumer package could silently corrupt causation chains by stamping replayed events with whatever ambient context happened to be active.
+During event-sourced replay (aggregates rebuilding state from streams), the framework MUST reject dispatch attempts. Without that guard, a replay-suppression bug could silently corrupt causation chains by stamping replayed events with whatever ambient context happened to be active.
+
+The current design enforces this at the **aggregate** layer (in `nexus-ddd-core`), not via a sentinel `ContextStorage`:
 
 ```php
-/**
- * @psalm-api
- *
- * Sentinel installed during ES replay. Throws on push/pop attempts —
- * any code that tries to dispatch during replay fails loudly instead
- * of silently corrupting the causation chain of an unrelated message.
- *
- * Consumer packages (PM, aggregate, eventsourcing) install this around
- * `EventSourcedXxx::replay()` invocations:
- *
- *     $previous = CurrentMessageContext::getStorage();
- *     CurrentMessageContext::setStorage(new ReplayingContextStorage());
- *     try {
- *         $aggregate->replay($events);
- *     } finally {
- *         CurrentMessageContext::setStorage($previous);
- *     }
- *
- * Any `applyXxx` method that accidentally calls `dispatchCommand` /
- * `publishEvent` / `scheduleDeadline` during replay throws
- * `ReplayDispatchAttemptedException` — a `MessagingException`-rooted,
- * `TerminalFailure`-marked exception that loudly surfaces the bug.
- */
-final class ReplayingContextStorage implements ContextStorage {
-    public function snapshot(): array { return []; }
-    public function push(MessageContext $ctx): void {
-        throw new ReplayDispatchAttemptedException(
-            'Cannot dispatch during ES replay — a handler or applyXxx method '
-            . 'attempted to dispatch a message while the framework is rebuilding '
-            . 'state from a persisted event stream. This is a framework wiring '
-            . 'bug; the dispatch-suppression check on the consumer-side runtime '
-            . 'failed. Investigate the call site that triggered the dispatch.'
-        );
-    }
-    public function pop(): void { /* no-op — push throws first */ }
+abstract class EventSourcedAggregateRoot extends AggregateRoot {
+    private bool $isReplaying = false;
 
-    /** @return Option<MessageContext> */
-    public function current(): Option { return Option::none(); }
-    public function restore(array $stack): void { /* no-op during replay */ }
+    /** Replay events from history. Disables recordThat() while running. */
+    final protected function replay(iterable $events): void {
+        $this->isReplaying = true;
+        try {
+            foreach ($events as $event) {
+                $this->apply($event);
+            }
+        } finally {
+            $this->isReplaying = false;
+        }
+    }
+
+    /** Record a new event. Throws if invoked during replay. */
+    final protected function recordThat(DomainEvent $event): void {
+        if ($this->isReplaying) {
+            throw new ApplyDuringReplayException(
+                'recordThat() called during replay — apply() must be a pure '
+                . 'state mutation; new events must only originate from command '
+                . 'handlers.'
+            );
+        }
+
+        $this->recordedEvents[] = $event;
+        $this->apply($event);
+    }
+
+    /** Subclasses implement: pure state mutation from one event. */
+    abstract protected function apply(DomainEvent $event): void;
 }
 ```
+
+`ApplyDuringReplayException` is `TerminalFailure`-marked: retrying won't help. The bug is in the aggregate code, not the runtime.
+
+This replaced an earlier design that used a `ReplayingContextStorage` sentinel. The aggregate-layer guard is more direct (the invariant lives next to the code it protects) and avoids the messaging package owning a concept that's purely about aggregate rehydration.
 
 ### Coroutine-isolation contract (MUST)
 
 Bus implementations running on a coroutine runtime MUST provide a `ContextStorage` that partitions the stack by coroutine identity such that two concurrently-active handler chains never see each other's `current()`. The default `StaticStackContextStorage` does NOT satisfy this — it's safe under PHP Fibers (cooperatively scheduled within a single thread, no preemption between explicit yield points the framework controls) but unsafe under Swoole coroutines (which share static state across coroutines within a worker process).
 
-The `ContextStorageContractTest` (in `tests/Support/`) is the cross-implementation invariant pin:
+`ContextStorageContractTest` (in `tests/Support/`) pins the *base* push/pop/current LIFO contract that every storage satisfies. Cross-fiber/cross-coroutine isolation is **not** part of that base contract — `StaticStackContextStorage` cannot satisfy it. A future `FiberLocalContextStorage` / `SwooleCoroutineContextStorage` will ship its own isolation contract test that runs the parallel-coroutine scenario and asserts each chain sees its own `current()`.
 
 ```php
 abstract class ContextStorageContractTest extends TestCase {
     abstract protected function createStorage(): ContextStorage;
 
-    public function testIsolatesConcurrentHandlerChains(): void {
-        // Spawn N parallel coroutines/fibers, each pushing a distinct
-        // MessageContext, yielding random microseconds, then asserting
-        // current() returns its own context. Test FAILS with shared
-        // static storage; PASSES with coroutine-keyed storage.
-    }
+    // Pins push/pop/current LIFO semantics. Concrete subclasses run.
+    public function testCurrentIsNoneOnFreshStorage(): void { /* ... */ }
+    public function testPushThenCurrentExposesPushedContext(): void { /* ... */ }
+    public function testPopReturnsToPreviousContext(): void { /* ... */ }
 }
 ```
 
@@ -514,32 +474,52 @@ The `nexus-ddd-bus-actor` adapter spec MUST document its per-fiber/per-coroutine
 
 ### Top-level orphan-dispatch policy
 
-When `dispatchCommand` is called with no surrounding `within()` (no in-flight context), the bus falls back to `MessageMetadata::root()` with all optional fields `Option::none()`. Bus implementations MUST log this fallback at WARNING level — silent root-fallback is how production systems end up with messages that have no traceable origin. Teams that legitimately dispatch from a non-boundary context (e.g., test setup, ops scripts) opt in via an explicit `CurrentMessageContext::within()` block; the warning is the canary that this wasn't done.
+When `dispatchCommand` is called with no surrounding `within()` (no in-flight context), the bus falls back to `MessageMetadata::root()` with all optional fields `Option::none()`. Bus implementations MUST log this fallback at WARNING level — silent root-fallback is how production systems end up with messages that have no traceable origin. Teams that legitimately dispatch from a non-boundary context (e.g., test setup, ops scripts) opt in via an explicit `MessageContextStack::within()` block; the warning is the canary that this wasn't done.
 
 ### How a bus implementation uses it
 
 Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus) follow this pattern when dispatching:
 
 ```php
-final class InProcessCommandBus implements CommandBus {
+final readonly class InProcessCommandBus implements CommandBus {
+    public function __construct(
+        private CommandHandlerLocator $locator,
+        private MessageContextStack $stack,
+        private ClockInterface $clock,
+    ) {}
+
     public function dispatchCommand(Command $command): void {
-        // 1. Read ambient context to derive child metadata.
-        $parent = CurrentMessageContext::current();
-        $childMeta = $parent === null
-            ? MessageMetadata::root()                                       // root-level
-            : $parent->metadata->forCausedMessage(MessageId::generate(), $this->clock->now());
+        // 1. Pre-generate the new message's id and now so root vs.
+        //    forCausedMessage paths produce consistent metadata.
+        $messageId = MessageId::generate();
+        $now = $this->clock->now();
+
+        $childMeta = $this->stack->current()
+            ->map(fn(MessageContext $p) => $p->metadata->forCausedMessage($messageId, $now))
+            ->getOrCall(fn() => new MessageMetadata(
+                id: $messageId,
+                occurredAt: $now,
+                causationId: Option::none(),
+                correlationId: Option::none(),
+                conversationId: Option::none(),
+                schemaVersion: 1,
+                traceParent: Option::none(),
+                traceState: Option::none(),
+                expiresAt: Option::none(),
+                vectorClock: Option::none(),
+            ));
 
         // 2. Wrap in transport envelope.
         $envelope = new Envelope($command, $childMeta);
 
         // 3. Find handler, push context, invoke, pop.
         $handler = $this->locator->locate($command);
-        CurrentMessageContext::within(new MessageContext($childMeta), fn() => $handler($command));
+        $this->stack->within(new MessageContext($childMeta), fn() => $handler($command));
     }
 }
 ```
 
-Domain code never sees `CurrentMessageContext::push/pop`; only the bus implementations call them. Domain handlers stay one-argument:
+Domain code never sees `$stack->push/pop`; only the bus implementations call them. Domain handlers stay one-argument:
 
 ```php
 public function __invoke(PaymentReceived $event): void {
@@ -548,7 +528,7 @@ public function __invoke(PaymentReceived $event): void {
 }
 ```
 
-The `dispatchCommand($cmd)` call internally reads `CurrentMessageContext::current()` (which the bus pushed before invoking *this* handler), derives causation = `PaymentReceived.id`, wraps `ShipOrder` in a fresh envelope with proper correlation/conversation/trace context, and sends to transport.
+The `dispatchCommand($cmd)` call internally reads `MessageContextStack::current()` (which the bus pushed before invoking *this* handler), derives causation = `PaymentReceived.id`, wraps `ShipOrder` in a fresh envelope with proper correlation/conversation/trace context, and sends to transport.
 
 ### Application-boundary entry point
 
@@ -563,7 +543,7 @@ public function placeOrder(Request $request, CommandBus $bus): Response {
             Option::fromNullable($request->headers->get('tracestate')),
         );
 
-    CurrentMessageContext::within(new MessageContext($rootMeta), function () use ($bus, $request) {
+    MessageContextStack::within(new MessageContext($rootMeta), function () use ($bus, $request) {
         $bus->dispatchCommand(new PlaceOrder(
             OrderId::generate(),
             ProductId::fromString($request->input('product_id')),
@@ -590,7 +570,7 @@ The `Envelope`, `MessageMetadata::forCausedMessage()`, and `MessageContext` valu
 
 ## 6. Envelope, MessageMetadata, Stamps, MessageContext
 
-> **Audience.** Domain code does NOT instantiate any of these — the bus does. The Envelope is constructed by the bus internally before crossing transport. `MessageMetadata::forCausedMessage()` is called by the bus when reading the ambient `CurrentMessageContext`. `MessageContext` is what the bus pushes onto the stack before invoking a handler. Handlers that want to *read* metadata for logging/audit reach into `CurrentMessageContext::current()`.
+> **Audience.** Domain code does NOT instantiate any of these — the bus does. The Envelope is constructed by the bus internally before crossing transport. `MessageMetadata::forCausedMessage()` is called by the bus when reading the ambient `MessageContextStack`. `MessageContext` is what the bus pushes onto the stack before invoking a handler. Handlers that want to *read* metadata for logging/audit reach into `MessageContextStack::current()`.
 
 The **Option C hybrid** from brainstorm Q4: typed core metadata + Symfony-style stamp extension.
 
@@ -940,7 +920,7 @@ final readonly class MessageMetadata {
      * trace context flows forward unchanged.
      *
      * **@internal — called by the framework, not by domain code.** Bus
-     * implementations call this when reading `CurrentMessageContext` to
+     * implementations call this when reading `MessageContextStack` to
      * stamp a child message's envelope. Handlers never call this directly.
      */
     #[\NoDiscard('the derived metadata is the entire point of this call')]
@@ -1021,11 +1001,11 @@ A 3-hop chain showing how the framework threads metadata automatically. Domain h
 
 ```
 Hop 1 — outside the system, HTTP controller (the only place metadata is named):
-  CurrentMessageContext::within(
+  MessageContextStack::within(
       new MessageContext(MessageMetadata::root($clock)->withTrace($tp, Option::none())),
       fn() => $commandBus->dispatchCommand(new PlaceOrder(...))
   );
-  // Bus reads CurrentMessageContext::current()
+  // Bus reads MessageContextStack::current()
   // Effective envelope metadata: id=R, causation=null, correlation=R, conversation=R, traceParent=$tp
 
 Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
@@ -1033,7 +1013,7 @@ Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
       $order = Order::place(...);
       $this->orders->save($order);   // Aggregate's pullPendingEvents stages OrderPlaced
                                      // Staging flush -> EventBus.publishEvent(new OrderPlaced(...))
-                                     // EventBus reads CurrentMessageContext::current() -> derives:
+                                     // EventBus reads MessageContextStack::current() -> derives:
                                      // Effective envelope metadata for OrderPlaced:
                                      //   id=E1, causation=R, correlation=R, conversation=R, traceParent=$tp
   }
@@ -1041,14 +1021,14 @@ Hop 2 — PlaceOrderHandler runs (no MessageContext arg, no manual threading):
 Hop 3 — OrderFulfillmentProcess saga consumes OrderPlaced (no MessageContext arg):
   public function __invoke(OrderPlaced $event): void {
       $this->dispatchCommand(new ChargePayment(...));
-      // Bus reads CurrentMessageContext::current() (which is the OrderPlaced context)
+      // Bus reads MessageContextStack::current() (which is the OrderPlaced context)
       // Derives: id=C1, causation=E1, correlation=R, conversation=R, traceParent=$tp
   }
 ```
 
 At every hop, the framework manages metadata. The handler signature is just the message. The full chain is reconstructable from any point: `causationId` walks back one hop; `conversationId` jumps to the root; `correlationId` groups every message in the workflow. Trace context (`traceParent`/`traceState`) propagates identically so the same chain shows up in your distributed tracer.
 
-**Compare to PixelFederation's pattern.** PF achieves the same propagation by making `Command` mutable and calling `Command::appendMetadata()` at flush time. Nexus keeps messages `final readonly` and uses ambient `CurrentMessageContext` instead — same end-to-end behavior, immutable messages, no metadata threading in domain code.
+**Compare to PixelFederation's pattern.** PF achieves the same propagation by making `Command` mutable and calling `Command::appendMetadata()` at flush time. Nexus keeps messages `final readonly` and uses ambient `MessageContextStack` instead — same end-to-end behavior, immutable messages, no metadata threading in domain code.
 
 ### `Stamp` + `Envelope`
 
@@ -1114,13 +1094,13 @@ final readonly class Envelope {
  * Pure value object — metadata + stamps for the in-flight message.
  *
  * Audience: framework-internal. The bus pushes a MessageContext onto
- * `CurrentMessageContext` before invoking a handler; the bus reads
- * `CurrentMessageContext::current()->metadata` when stamping nested
+ * `MessageContextStack` before invoking a handler; the bus reads
+ * `MessageContextStack::current()->metadata` when stamping nested
  * dispatches.
  *
  * Handlers do NOT receive a MessageContext as a parameter. Handlers that
  * need to read metadata for logging/audit call
- * `CurrentMessageContext::current()` — but the typical domain handler
+ * `MessageContextStack::current()` — but the typical domain handler
  * never reaches for it.
  */
 final readonly class MessageContext {
@@ -1171,19 +1151,19 @@ final class RegisterUserHandler implements CommandHandler {
         $this->users->save($user);
 
         // Emit a domain event — framework propagates causation from the
-        // in-flight RegisterUser command via CurrentMessageContext.
+        // in-flight RegisterUser command via MessageContextStack.
         $this->events->publishEvent(new UserRegistered($user->id()));
     }
 }
 
 // 3. Dispatch from the application boundary (HTTP controller, CLI, etc.).
 //    The boundary code is the only place that names metadata.
-CurrentMessageContext::within(
+MessageContextStack::within(
     new MessageContext(MessageMetadata::root($clock)),
     fn() => $commandBus->dispatchCommand(new RegisterUser($newUserId, $email, $displayName))
 );
 
-// 4. Test using RecordingEventBus + setting up CurrentMessageContext.
+// 4. Test using RecordingEventBus + setting up MessageContextStack.
 final class RegisterUserHandlerTest extends TestCase {
     public function testRegistersUserAndEmitsEvent(): void {
         $users = new InMemoryUserRepository();
@@ -1191,7 +1171,7 @@ final class RegisterUserHandlerTest extends TestCase {
         $handler = new RegisterUserHandler($users, $events);
 
         $cmd = new RegisterUser($id, 'a@b.c', 'Alice');
-        CurrentMessageContext::within(
+        MessageContextStack::within(
             new MessageContext(MessageMetadata::root($clock)),
             fn() => $handler($cmd)
         );
@@ -1454,7 +1434,7 @@ interface MessageInbox {
 12.    bus retry policy decides next action
 ```
 
-**`InMemoryMessageInbox` ships in this package** alongside `InMemoryMessageStaging`. Both are tests-only / single-process. Production teams wire the DB-backed inbox from a downstream package.
+**`InMemoryMessageInbox` ships in this package** alongside `InMemoryOutbox`. Both are tests-only / single-process. Production teams wire the DB-backed inbox from a downstream package.
 
 ### 6.4 Exactly-once-effect recipe
 
@@ -1483,7 +1463,7 @@ This is documented as a hard rule. Bus implementations that detect handlers viol
 
 ---
 
-## 7. `MessageStaging` & `UnitOfWork` — shared with PMs and aggregates
+## 7. `Outbox` & `UnitOfWork` — shared with PMs and aggregates
 
 **The architect's resolution from the PM spec is now executed:** these contracts live in `nexus-ddd-messaging` (shared), not in `nexus-ddd-process-manager`. Both PMs and aggregates need post-commit dispatch; both stage commands/events the same way; one shape avoids divergence.
 
@@ -1500,7 +1480,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Staging;
  * The shape is deliberately concrete — adapters extend the interface
  * with their own appendXxx methods if they stage additional kinds.
  */
-interface MessageStaging {
+interface Outbox {
     /**
      * Stage a command for post-commit dispatch.
      *
@@ -1533,28 +1513,28 @@ interface UnitOfWork {
     public function begin(): void;
     public function commit(): void;
     public function rollback(): void;
-    public function staging(): MessageStaging;
+    public function outbox(): Outbox;
 }
 ```
 
 ### Transactional participation invariant
 
-For **persistent** staging implementations (the future `OutboxMessageStaging` in downstream persistence package):
+For **persistent** staging implementations (the future `DbOutbox` in downstream persistence package):
 - `appendCommand()` / `appendEvent()` operations MUST participate in the same transaction that owns the domain state change. The outbox row is written in the SAME DB transaction as the PM/aggregate state, OR the impl MUST refuse to be used in a transactional context that does not enroll it.
 - `flush()` is the post-commit dispatch step; the staged buffer is durable across crashes via the underlying transaction's commit guarantee.
 - A staging impl that writes to a DIFFERENT DB connection than the domain state is broken — it gives you neither at-least-once nor exactly-once-effect.
 
-For **in-memory** staging (`InMemoryMessageStaging`, this package):
+For **in-memory** staging (`InMemoryOutbox`, this package):
 - No persistence. A crash between `flush()` and the bus's actual dispatch loses the messages. **At-most-once** delivery, NOT at-least-once.
 - This is **tests-only** and **single-process-Fiber-runtime-only**. Use in production at your own risk.
-- The `InMemoryMessageStaging` class docblock SHOULD warn explicitly: "Production deployments MUST use a persistent staging implementation (e.g., OutboxMessageStaging from nexus-ddd-aggregate); this in-memory impl provides at-most-once delivery."
+- The `InMemoryOutbox` class docblock SHOULD warn explicitly: "Production deployments MUST use a persistent outbox implementation (e.g., DbOutbox from nexus-ddd-aggregate); this in-memory impl provides at-most-once delivery."
 
 ### Default in-package implementations
 
-Ship `InMemoryMessageStaging` + `InMemoryUnitOfWork` in this package. They're sufficient for tests, single-process Fiber runtimes, and applications that consciously accept at-most-once delivery. Both pass the abstract `MessageStagingContractTest`.
+Ship `InMemoryOutbox` + `InMemoryUnitOfWork` in this package. They're sufficient for tests, single-process Fiber runtimes, and applications that consciously accept at-most-once delivery. Both pass the abstract `OutboxContractTest`.
 
 ```php
-final class InMemoryMessageStaging implements MessageStaging {
+final class InMemoryOutbox implements Outbox {
     /** @var list<Envelope<Command>> */
     private array $commandEnvelopes = [];
 
@@ -1583,12 +1563,27 @@ final class InMemoryMessageStaging implements MessageStaging {
 
     /** @param Option<MessageId> $producerId */
     private function buildMetadata(Option $producerId): MessageMetadata {
-        $id = $producerId->getOrElse(fn() => MessageId::generate());
+        $id = $producerId->getOrCall(fn() => MessageId::generate());
+        $now = $this->clock->now();
 
-        // Read ambient context to derive child metadata; if absent, root.
-        return CurrentMessageContext::current()
-            ->map(fn(MessageContext $parent) => $parent->metadata->forCausedMessage($id, $this->clock->now()))
-            ->getOrElse(fn() => MessageMetadata::root($this->clock)->forCausedMessage($id, $this->clock->now()));
+        // Read ambient context to derive child metadata. When absent, build
+        // root metadata directly with the producer-supplied id — calling
+        // root()->forCausedMessage($id) would point causationId at a
+        // throwaway root, which is wrong for an actually-orphan message.
+        return $this->stack->current()
+            ->map(fn(MessageContext $parent) => $parent->metadata->forCausedMessage($id, $now))
+            ->getOrCall(fn() => new MessageMetadata(
+                id: $id,
+                occurredAt: $now,
+                causationId: Option::none(),
+                correlationId: Option::none(),
+                conversationId: Option::none(),
+                schemaVersion: 1,
+                traceParent: Option::none(),
+                traceState: Option::none(),
+                expiresAt: Option::none(),
+                vectorClock: Option::none(),
+            ));
     }
 
     /**
@@ -1603,9 +1598,9 @@ final class InMemoryMessageStaging implements MessageStaging {
      */
     public function flush(): void {
         $this->logger->warning(
-            'InMemoryMessageStaging.flush() — at-most-once delivery; '
+            'InMemoryOutbox.flush() — at-most-once delivery; '
             . 'a crash between flush() start and bus dispatch loses messages. '
-            . 'Use a persistent staging implementation (OutboxMessageStaging) in production.',
+            . 'Use a persistent outbox implementation (DbOutbox) in production.',
         );
 
         foreach ($this->commandEnvelopes as $envelope) {
@@ -1633,7 +1628,7 @@ The class-level docblock SHOULD additionally say:
  *
  * Provides at-most-once delivery: a crash between flush() and the bus's
  * actual dispatch loses messages. Production deployments MUST use a
- * persistent staging implementation (OutboxMessageStaging from
+ * persistent outbox implementation (DbOutbox from
  * nexus-ddd-aggregate, or equivalent) which writes the staged messages
  * to a durable store within the same DB transaction as the domain state.
  *
@@ -1642,15 +1637,15 @@ The class-level docblock SHOULD additionally say:
  */
 ```
 
-The PM package extends `MessageStaging` with `appendDeadlineOperation(DeadlineOperation $op): void` (PMs need it; aggregates don't). The base contract stays minimal.
+The PM package extends `Outbox` with `appendDeadlineOperation(DeadlineOperation $op): void` (PMs need it; aggregates don't). The base contract stays minimal.
 
-### `MessageStagingContractTest` — abstract
+### `OutboxContractTest` — abstract
 
 ```php
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 /**
- * Shared test class. Every MessageStaging implementation MUST extend this
+ * Shared test class. Every Outbox implementation MUST extend this
  * and pass every test. Pins the four invariants:
  *
  *   1. discard() after appendCommand() → CommandBus never invoked
@@ -1658,13 +1653,13 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
  *   3. flush() after appendEvent() → EventBus invoked exactly once per event
  *   4. FIFO ordering preserved across staging cycles
  */
-abstract class MessageStagingContractTest extends TestCase {
-    abstract protected function createStaging(CommandBus $cmdBus, EventBus $evtBus): MessageStaging;
+abstract class OutboxContractTest extends TestCase {
+    abstract protected function createOutbox(CommandBus $cmdBus, EventBus $evtBus): Outbox;
     // ... shared test methods that subclasses inherit
 }
 ```
 
-`InMemoryMessageStagingTest` extends this; the future `OutboxMessageStagingTest` (in downstream persistence package) does too.
+`InMemoryOutboxTest` extends this; the future `DbOutboxTest` (in downstream persistence package) does too.
 
 ---
 
@@ -1874,7 +1869,7 @@ final class StagingClosedException extends MessagingException { ... }
 `HandlerSignatureMismatchException` is the runtime counterpart to the static Psalm rules. Bus implementations resolve handlers dynamically (container, registry, attribute scan) and may encounter a handler whose `__invoke` shape doesn't match what the static rule would have required. The bus MUST throw this exception **at handler-resolution time, not at dispatch time** — discovering the mismatch when the handler is loaded prevents the message from being lost in a rejected envelope.
 
 Three roots are now disjoint by design:
-- `NexusDddException` — framework wiring (e.g. ApplyMethod-not-found in core)
+- `NexusDddException` — framework wiring (e.g. `ApplyDuringReplayException` in core)
 - `DomainException` — business rule violations
 - `MessagingException` — runtime delivery faults
 
@@ -1945,10 +1940,10 @@ The `Symfony\Component\Uid` carve-out is the only allowed Symfony namespace (jus
 - **`VectorClock` algebra contract test** — pins reflexivity (`a.compareTo(a) === Equal`), antisymmetry (HappensBefore ↔ HappensAfter), concurrent symmetry, merge commutativity / associativity / idempotency, and `tick` monotonicity (`tick(node).counters[node] === counters[node] + 1`).
 - `Envelope::with()` / `get()` round-trip stamps.
 - `RetryPolicy` first-match-wins and `giveUpSet` precedence.
-- **`MessageStagingContractTest`** — both `InMemoryMessageStaging` and any future impl pass; pins discard/flush/FIFO/producer-supplied-id semantics.
+- **`OutboxContractTest`** — both `InMemoryOutbox` and any future impl pass; pins discard/flush/FIFO/producer-supplied-id semantics.
 - **`MessageInboxContractTest`** — both `InMemoryMessageInbox` and any future DB-backed impl pass; pins tryReserve/markProcessed/release semantics under concurrent reservation attempts.
 - **`ContextStorageContractTest`** — `StaticStackContextStorage` plus any coroutine-aware impl pass; spawns N parallel fibers/coroutines pushing distinct contexts and asserts no cross-leakage.
-- **Replay-sentinel test** — `ReplayingContextStorage` throws `ReplayDispatchAttemptedException` on push attempts.
+- **Replay-mode guard test** — `EventSourcedAggregateRoot::recordThat()` throws `ApplyDuringReplayException` when invoked during `replay()`.
 - **DLQ replay-policy test** — `replay()` rejects entries with `Invalid_*` reasons; accepts `Delivery` reasons.
 
 ---
@@ -1961,14 +1956,14 @@ Beyond code:
 - **All Psalm rules** in §13 added to the `nexus-psalm` plugin
 - **Deptrac layer + forbidden_imports** rule with the `Symfony\Component\Uid` carve-out
 - **Bus interface signature snapshot test** as a contract test
-- **`MessageStagingContractTest`** abstract test class (Support/)
+- **`OutboxContractTest`** abstract test class (Support/)
 - **`MessageInboxContractTest`** abstract test class (Support/)
 - **`ContextStorageContractTest`** abstract test class (Support/)
-- **`InMemoryMessageStaging`** + **`InMemoryUnitOfWork`** with full test coverage
+- **`InMemoryOutbox`** + **`InMemoryUnitOfWork`** with full test coverage
 - **`InMemoryMessageInbox`** with full test coverage
-- **`StaticStackContextStorage`** + **`ReplayingContextStorage`** with full test coverage
+- **`StaticStackContextStorage`** with full test coverage (replay-mode guard moved to `EventSourcedAggregateRoot` in nexus-ddd-core)
 - **Test doubles** (`RecordingCommandBus`, `RecordingEventBus`, `RecordingQueryBus`) in `tests/Support/`
-- **`withRootContext(callable $fn)` test helper** in `tests/Support/` — wraps `CurrentMessageContext::within(new MessageContext(MessageMetadata::root($clock)), $fn)` so handler unit tests stay one line
+- **`withRootContext(callable $fn)` test helper** in `tests/Support/` — wraps `MessageContextStack::within(new MessageContext(MessageMetadata::root($clock)), $fn)` so handler unit tests stay one line
 
 ---
 
@@ -1977,7 +1972,7 @@ Beyond code:
 **Out-of-scope but explicitly acknowledged** (so they don't get rediscovered as "missing" three years in):
 
 - Bus implementations (Symfony Messenger adapter, in-process pipeline bus, actor-based bus — separate packages)
-- DB-backed staging (`OutboxMessageStaging` in downstream persistence package)
+- DB-backed staging (`DbOutbox` in downstream persistence package)
 - DB-backed message inbox (`PersistentMessageInbox` in downstream persistence package)
 - **Inbox retention policy** (TTL-based pruning of old `markProcessed` rows). Production teams will hit DB-bloat at month 6; downstream `PersistentMessageInbox` MUST ship a retention strategy. The contract here is silent because retention windows are application-specific.
 - Coroutine-aware `ContextStorage` (Swoole / ReactPHP impls in their respective adapter packages)
@@ -2003,8 +1998,8 @@ The locked design (all 13 round-2/EIP patches applied):
 
 | Decision | Source |
 |---|---|
-| `MessageStaging`/`UnitOfWork` here (not in PM) | Architect resolution |
-| In-memory staging + `MessageStagingContractTest` here | Architect |
+| `Outbox`/`UnitOfWork` here (not in PM) | Architect resolution |
+| In-memory staging + `OutboxContractTest` here | Architect |
 | `TransientFailure`/`TerminalFailure` disjoint markers; default-when-neither = terminal | Udi |
 | Three exception roots disjoint, each extends `RuntimeException` directly | All reviewers |
 | `MessageId extends UlidValue`, producer-supplied authoritative (§6.1) | Greg |
@@ -2018,7 +2013,7 @@ The locked design (all 13 round-2/EIP patches applied):
 | **`MessageInbox` consumer-side dedup contract MUST in v1** | Hohpe |
 | **Ordering acknowledgment + `PerCorrelationKeyOrdered` stamp** | Hohpe |
 | **`ContextStorage` indirection + `StaticStackContextStorage` default** | Hohpe + Mark |
-| **`ReplayingContextStorage` sentinel for ES replay** | Greg |
+| **Replay-mode guard for ES replay (now: `isReplaying` on aggregate root)** | Greg |
 | **Coroutine-isolation contract MUST + `ContextStorageContractTest`** | Mark |
 | **`appendCommand(Command, ?MessageId)` overload for producer-id pathway** | Greg + Udi |
 | **Top-level orphan-dispatch fallback logs WARNING** | Mark |
