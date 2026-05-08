@@ -58,4 +58,35 @@ final readonly class VectorClock
 
         return new self($merged);
     }
+
+    /**
+     * Pointwise compare two clocks. Result is the partial-order relation
+     * between this and `$other`.
+     */
+    public function compareTo(self $other): VectorClockOrdering
+    {
+        $hasLess = false;
+        $hasGreater = false;
+        $allKeys = array_unique([...array_keys($this->counters), ...array_keys($other->counters)]);
+
+        foreach ($allKeys as $node) {
+            $a = $this->counters[$node] ?? 0;
+            $b = $other->counters[$node] ?? 0;
+
+            if ($a < $b) {
+                $hasLess = true;
+            }
+
+            if ($a > $b) {
+                $hasGreater = true;
+            }
+        }
+
+        return match (true) {
+            $hasLess && $hasGreater => VectorClockOrdering::Concurrent,
+            $hasLess => VectorClockOrdering::HappensBefore,
+            $hasGreater => VectorClockOrdering::HappensAfter,
+            default => VectorClockOrdering::Equal,
+        };
+    }
 }
