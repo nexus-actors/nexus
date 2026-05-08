@@ -34,6 +34,8 @@
     <file>packages/nexus-persistence-doctrine/tests</file>
     <file>packages/nexus-ddd-core/src</file>
     <file>packages/nexus-ddd-core/tests</file>
+    <file>packages/nexus-ddd-messaging/src</file>
+    <file>packages/nexus-ddd-messaging/tests</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->

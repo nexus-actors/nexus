@@ -82,6 +82,11 @@ deptrac:
         - type: directory
           value: packages/nexus-ddd-core/src/.*
 
+    - name: DddMessaging
+      collectors:
+        - type: directory
+          value: packages/nexus-ddd-messaging/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -128,3 +133,5 @@ deptrac:
       - Core
       - Serialization
     DddCore: []
+    DddMessaging:
+      - DddCore

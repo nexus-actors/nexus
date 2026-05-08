@@ -37,6 +37,7 @@
         "psr-4": {
             "Monadial\\Nexus\\Core\\": "packages/nexus-core/src/",
             "Monadial\\Nexus\\Ddd\\Core\\": "packages/nexus-ddd-core/src/",
+            "Monadial\\Nexus\\Ddd\\Messaging\\": "packages/nexus-ddd-messaging/src/",
             "Monadial\\Nexus\\Runtime\\": "packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "packages/nexus-runtime-fiber/src/",
             "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
@@ -56,6 +57,7 @@
         "psr-4": {
             "Monadial\\Nexus\\Core\\Tests\\": "packages/nexus-core/tests/",
             "Monadial\\Nexus\\Ddd\\Core\\Tests\\": "packages/nexus-ddd-core/tests/",
+            "Monadial\\Nexus\\Ddd\\Messaging\\Tests\\": "packages/nexus-ddd-messaging/tests/",
             "Monadial\\Nexus\\Runtime\\Tests\\": "packages/nexus-runtime/tests/",
             "Monadial\\Nexus\\Runtime\\Fiber\\Tests\\": "packages/nexus-runtime-fiber/tests/",
             "Monadial\\Nexus\\Runtime\\Step\\Tests\\": "packages/nexus-runtime-step/tests/",
