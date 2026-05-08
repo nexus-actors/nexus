@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Context;
 
 use DateTimeImmutable;
-use Monadial\Nexus\Ddd\Messaging\Context\CurrentMessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Context\StaticStackContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
@@ -16,79 +16,71 @@ use PHPUnit\Framework\TestCase;
 use Psr\Clock\ClockInterface;
 use RuntimeException;
 
-#[CoversClass(CurrentMessageContext::class)]
-final class CurrentMessageContextTest extends TestCase
+#[CoversClass(MessageContextStack::class)]
+final class MessageContextStackTest extends TestCase
 {
     private NodeId $nodeId;
 
-    protected function setUp(): void
+    #[Test]
+    public function defaultFactoryWiresStaticStackContextStorage(): void
     {
-        $this->nodeId = NodeId::generate();
-    }
-
-    protected function tearDown(): void
-    {
-        CurrentMessageContext::resetStorage();
+        self::assertInstanceOf(StaticStackContextStorage::class, MessageContextStack::default()->storage());
     }
 
     #[Test]
-    public function defaultStorageIsStaticStack(): void
+    public function constructorInjectsTheGivenStorage(): void
     {
-        self::assertInstanceOf(StaticStackContextStorage::class, CurrentMessageContext::getStorage());
+        $storage = new StaticStackContextStorage();
+        $stack = new MessageContextStack($storage);
+        self::assertSame($storage, $stack->storage());
     }
 
     #[Test]
-    public function setStorageSwapsBackingAndResetRestoresDefault(): void
+    public function currentReturnsNoneOnFreshStack(): void
     {
-        $custom = new StaticStackContextStorage();
-        CurrentMessageContext::setStorage($custom);
-        self::assertSame($custom, CurrentMessageContext::getStorage());
-
-        CurrentMessageContext::resetStorage();
-        self::assertNotSame($custom, CurrentMessageContext::getStorage());
-    }
-
-    #[Test]
-    public function currentReturnsNoneAtTopLevel(): void
-    {
-        self::assertTrue(CurrentMessageContext::current()->isNone());
+        self::assertTrue(MessageContextStack::default()->current()->isNone());
     }
 
     #[Test]
     public function pushExposesContextThenPopRestoresEmpty(): void
     {
+        $stack = MessageContextStack::default();
         $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
         $fallback = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
-        CurrentMessageContext::push($ctx);
-        self::assertSame($ctx, CurrentMessageContext::current()->getOrElse($fallback));
-        CurrentMessageContext::pop();
-        self::assertTrue(CurrentMessageContext::current()->isNone());
+
+        $stack->push($ctx);
+        self::assertSame($ctx, $stack->current()->getOrElse($fallback));
+
+        $stack->pop();
+        self::assertTrue($stack->current()->isNone());
     }
 
     #[Test]
     public function withinPushesAndPopsInTryFinally(): void
     {
+        $stack = MessageContextStack::default();
         $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
         $observed = null;
 
-        $result = CurrentMessageContext::within($ctx, static function () use (&$observed): string {
-            $observed = CurrentMessageContext::current()->getOrCall(static fn() => null);
+        $result = $stack->within($ctx, static function () use ($stack, &$observed): string {
+            $observed = $stack->current()->getOrCall(static fn() => null);
 
             return 'returned-value';
         });
 
         self::assertSame($ctx, $observed);
         self::assertSame('returned-value', $result);
-        self::assertTrue(CurrentMessageContext::current()->isNone());
+        self::assertTrue($stack->current()->isNone());
     }
 
     #[Test]
     public function withinPopsEvenWhenCallbackThrows(): void
     {
+        $stack = MessageContextStack::default();
         $ctx = new MessageContext(MessageMetadata::root($this->fixedClock(), $this->nodeId));
 
         try {
-            CurrentMessageContext::within($ctx, static function (): void {
+            $stack->within($ctx, static function (): void {
                 throw new RuntimeException('boom');
             });
             self::fail('expected exception');
@@ -96,7 +88,12 @@ final class CurrentMessageContextTest extends TestCase
             self::assertSame('boom', $expected->getMessage());
         }
 
-        self::assertTrue(CurrentMessageContext::current()->isNone());
+        self::assertTrue($stack->current()->isNone());
+    }
+
+    protected function setUp(): void
+    {
+        $this->nodeId = NodeId::generate();
     }
 
     private function fixedClock(): ClockInterface
