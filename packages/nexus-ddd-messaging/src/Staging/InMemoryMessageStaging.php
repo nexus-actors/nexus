@@ -21,6 +21,8 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
 /**
+ * @psalm-api
+ *
  * In-memory staging — TESTS-ONLY (and single-process Fiber-only).
  *
  * Provides at-most-once delivery: a crash between flush() start and bus

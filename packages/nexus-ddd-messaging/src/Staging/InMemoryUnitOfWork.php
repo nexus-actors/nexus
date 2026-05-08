@@ -7,6 +7,8 @@ namespace Monadial\Nexus\Ddd\Messaging\Staging;
 use Override;
 
 /**
+ * @psalm-api
+ *
  * In-memory unit of work. `begin()` is a no-op because there is no real
  * transaction boundary; the surrounding application code is the boundary.
  * `commit()` delegates to `MessageStaging::flush()`; `rollback()` delegates
