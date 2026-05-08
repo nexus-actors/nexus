@@ -1,0 +1,122 @@
+<?php
+
+/**
+ * Psalm stub for `monadial/php-duration` FiniteDuration / Duration.
+ *
+ * Reason: vendor doesn't annotate the static factories or the
+ * inspector methods as pure, so calling them from a
+ * `@psalm-immutable` / `@psalm-mutation-free` context trips
+ * ImpureMethodCall (psalm.dev/203).
+ *
+ * The factories construct a fresh value object from primitive
+ * inputs (or other Duration values) and never touch global state.
+ * The inspector methods (toNanos, toSeconds, …, equals) read $this
+ * and return scalars / new instances. All are mutation-free in
+ * practice. Marking them `@psalm-mutation-free` lets immutable
+ * callers use them without ceremony.
+ */
+
+declare(strict_types=1);
+
+namespace Monadial\Duration;
+
+use DateTimeImmutable;
+use Monadial\Duration\TimeUnit\TimeUnit;
+
+final class FiniteDuration extends Duration
+{
+    /**
+     * @psalm-mutation-free
+     */
+    public function __construct(int $length, TimeUnit $unit) {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public static function fromTimeUnit(int $length, TimeUnit $unit): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public static function fromNanos(int $nanos): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public static function fromString(string $duration): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toNanos(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toMicros(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toMillis(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toSeconds(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toMinutes(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toHours(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toDays(): int {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function add(Duration $other): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function subtract(Duration $other): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function multiply(int $factor): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function division(int $divisor): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function toUnit(TimeUnit $unit): self {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function isFinite(): bool {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function equals(Duration $other): bool {}
+
+    /**
+     * @psalm-mutation-free
+     */
+    public function asDateTime(): DateTimeImmutable {}
+}

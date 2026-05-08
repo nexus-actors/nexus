@@ -255,7 +255,7 @@ final readonly class MessageMetadata
         return $this->vectorClock->compareTo($other->vectorClock);
     }
 
-    /** @psalm-pure */
+    /** @psalm-mutation-free */
     private static function durationBetween(DateTimeImmutable $earlier, DateTimeImmutable $later,): FiniteDuration {
         $secondsDiff = $later->getTimestamp() - $earlier->getTimestamp();
         $microsDiff = (int) $later->format('u') - (int) $earlier->format('u');

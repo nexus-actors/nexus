@@ -30,6 +30,7 @@
 
     <stubs>
         <file name="stubs/fp-functional-option.phpstub" />
+        <file name="stubs/monadial-php-duration.phpstub" />
     </stubs>
 
     <plugins>
