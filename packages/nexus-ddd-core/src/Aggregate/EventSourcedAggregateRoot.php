@@ -7,11 +7,12 @@ namespace Monadial\Nexus\Ddd\Core\Aggregate;
 use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
+use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 
 /**
  * @psalm-api
  *
- * @template TId of \Monadial\Nexus\Ddd\Core\Identity\Identifier
+ * @template TId of Identifier
  * @template TEvent of DomainEvent
  * @extends AggregateRoot<TId, TEvent>
  * @implements EventSourceable<TEvent>
@@ -27,31 +28,20 @@ use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
  * versioned events. Resolution + invocation are handled by `ApplyDispatcher`
  * (cached as class-scoped Closures after first dispatch).
  *
- * **Concurrency.** The dispatcher is held in a single static slot on this
- * class. Under a single-process Fiber runtime that is safe; under multi-
- * worker runtimes (e.g. Swoole's worker pool) the dispatcher is shared
- * across coroutines within a worker but isolated across workers (each
- * worker has its own PHP heap). Frameworks that want a per-context
- * dispatcher (per worker, per test, per coroutine pool) replace the
- * default via `setDispatcher()`. Tests reset between cases via the same
- * hook.
+ * The dispatcher is constructor-injected. Repositories and aggregate
+ * factories own a single dispatcher instance and pass it to every
+ * aggregate they construct so the Closure cache is shared across
+ * aggregates of the same class. Tests instantiate a fresh dispatcher
+ * per case.
  */
 abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventSourceable
 {
-    private static ?ApplyDispatcher $dispatcher = null;
-
-    /**
-     * Replace the apply dispatcher. Returns the previous instance so the
-     * caller can restore it (typically used by tests for isolation, or by
-     * framework wiring code that scopes a dispatcher to a worker / test /
-     * coroutine context).
-     */
-    public static function setDispatcher(?ApplyDispatcher $dispatcher): ?ApplyDispatcher
-    {
-        $previous = self::$dispatcher;
-        self::$dispatcher = $dispatcher;
-
-        return $previous;
+    /** @param TId $id */
+    protected function __construct(
+        Identifier $id,
+        private readonly ApplyDispatcher $dispatcher,
+    ) {
+        parent::__construct($id);
     }
 
     /**
@@ -70,7 +60,7 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
     #[\Override]
     final protected function recordThat(DomainEvent $event): void
     {
-        self::dispatcher()->dispatch($this, $event);
+        $this->dispatcher->dispatch($this, $event);
         parent::recordThat($event);
     }
 
@@ -78,16 +68,9 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
     #[\Override]
     final public function replay(iterable $events): void
     {
-        $dispatcher = self::dispatcher();
-
         foreach ($events as $event) {
-            $dispatcher->dispatch($this, $event);
+            $this->dispatcher->dispatch($this, $event);
             $this->version++;
         }
-    }
-
-    private static function dispatcher(): ApplyDispatcher
-    {
-        return self::$dispatcher ??= new ApplyDispatcher();
     }
 }

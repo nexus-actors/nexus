@@ -36,7 +36,7 @@ final class SmokeTest extends TestCase
         self::assertSame('ALICE@EXAMPLE.COM', StringExtractor::extract($upper));
 
         // Aggregate — record-and-apply
-        $order = SmokeOrder::create($id);
+        $order = SmokeOrder::create($id, new \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher());
         $order->place();
         self::assertSame('placed', $order->status);
         self::assertCount(1, $order->pullRecordedEvents());
@@ -60,9 +60,9 @@ final class SmokeOrder extends EventSourcedAggregateRoot
 {
     public string $status = 'new';
 
-    public static function create(TestUlidId $id): self
+    public static function create(TestUlidId $id, \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher $dispatcher): self
     {
-        return new self($id);
+        return new self($id, $dispatcher);
     }
 
     #[\Override]

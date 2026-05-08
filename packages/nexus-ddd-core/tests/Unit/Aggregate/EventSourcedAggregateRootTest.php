@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
@@ -16,10 +17,12 @@ use Symfony\Component\Uid\Ulid;
 #[CoversClass(EventSourcedAggregateRoot::class)]
 final class EventSourcedAggregateRootTest extends TestCase
 {
+    private ApplyDispatcher $dispatcher;
+
     #[Test]
     public function eventSourcedAggregateIsEventSourceable(): void
     {
-        $a = EsAggregate::create(new TestUlidId((new Ulid())->toBase32()));
+        $a = EsAggregate::create(new TestUlidId((new Ulid())->toBase32()), $this->dispatcher);
         self::assertInstanceOf(EventSourceable::class, $a);
     }
 
@@ -27,12 +30,12 @@ final class EventSourcedAggregateRootTest extends TestCase
     public function replayReconstructsStateFromEvents(): void
     {
         $id = new TestUlidId((new Ulid())->toBase32());
-        $a = EsAggregate::create($id);
+        $a = EsAggregate::create($id, $this->dispatcher);
         $a->incrementBy(5);
         $a->incrementBy(7);
         $events = $a->pullRecordedEvents();
 
-        $rehydrated = EsAggregate::create($id);
+        $rehydrated = EsAggregate::create($id, $this->dispatcher);
         $rehydrated->replay($events);
 
         self::assertSame(12, $rehydrated->total);
@@ -43,7 +46,7 @@ final class EventSourcedAggregateRootTest extends TestCase
     public function replayDoesNotRecord(): void
     {
         $id = new TestUlidId((new Ulid())->toBase32());
-        $a = EsAggregate::create($id);
+        $a = EsAggregate::create($id, $this->dispatcher);
         $a->replay([new Incremented(3), new Incremented(2)]);
 
         self::assertCount(0, $a->pullRecordedEvents());
@@ -53,35 +56,36 @@ final class EventSourcedAggregateRootTest extends TestCase
     #[Test]
     public function rehydrateVersionSetsAggregateRevisionAndReplayContinuesFromThere(): void
     {
-        // Simulates loading from a snapshot taken at revision 42, plus 3
-        // events written after the snapshot.
         $id = new TestUlidId((new Ulid())->toBase32());
-        $a = EsAggregate::createWithSnapshotState($id, total: 100, atRevision: 42);
+        $a = EsAggregate::createWithSnapshotState($id, total: 100, atRevision: 42, dispatcher: $this->dispatcher);
 
         self::assertSame(42, $a->version());
         self::assertSame(100, $a->total);
 
         $a->replay([new Incremented(5), new Incremented(7), new Incremented(3)]);
 
-        self::assertSame(45, $a->version());        // 42 + 3 events
-        self::assertSame(115, $a->total);           // 100 + 5 + 7 + 3
+        self::assertSame(45, $a->version());
+        self::assertSame(115, $a->total);
         self::assertCount(0, $a->pullRecordedEvents());
     }
 
     #[Test]
-    public function setDispatcherSwapsTheStaticDispatcherAndReturnsThePrevious(): void
+    public function dispatcherIsSharedAcrossAggregatesOfTheSameClass(): void
     {
-        $custom = new \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher();
-        $previous = EsAggregate::setDispatcher($custom);
+        $shared = new ApplyDispatcher();
+        $a = EsAggregate::create(new TestUlidId((new Ulid())->toBase32()), $shared);
+        $b = EsAggregate::create(new TestUlidId((new Ulid())->toBase32()), $shared);
 
-        try {
-            $id = new TestUlidId((new Ulid())->toBase32());
-            $a = EsAggregate::create($id);
-            $a->incrementBy(2);
-            self::assertSame(2, $a->total);
-        } finally {
-            EsAggregate::setDispatcher($previous);
-        }
+        $a->incrementBy(3);
+        $b->incrementBy(4);
+
+        self::assertSame(3, $a->total);
+        self::assertSame(4, $b->total);
+    }
+
+    protected function setUp(): void
+    {
+        $this->dispatcher = new ApplyDispatcher();
     }
 }
 
@@ -90,9 +94,9 @@ final class EsAggregate extends EventSourcedAggregateRoot
 {
     public int $total = 0;
 
-    public static function create(TestUlidId $id): self
+    public static function create(TestUlidId $id, ApplyDispatcher $dispatcher): self
     {
-        return new self($id);
+        return new self($id, $dispatcher);
     }
 
     /**
@@ -100,9 +104,9 @@ final class EsAggregate extends EventSourcedAggregateRoot
      * with state already populated, then sets version to the snapshot's
      * stream revision via the framework rehydration hook.
      */
-    public static function createWithSnapshotState(TestUlidId $id, int $total, int $atRevision): self
+    public static function createWithSnapshotState(TestUlidId $id, int $total, int $atRevision, ApplyDispatcher $dispatcher): self
     {
-        $a = new self($id);
+        $a = new self($id, $dispatcher);
         $a->total = $total;
         $a->rehydrateVersion($atRevision);
 
