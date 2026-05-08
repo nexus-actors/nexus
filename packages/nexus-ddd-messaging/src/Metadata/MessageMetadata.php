@@ -161,4 +161,30 @@ final readonly class MessageMetadata
             vectorClock: $this->vectorClock,
         );
     }
+
+    public function isRoot(): bool
+    {
+        return $this->causationId->isNone();
+    }
+
+    public function isCausedBy(MessageId $id): bool
+    {
+        return $this->causationId
+            ->map(fn(MessageId $c) => $c->equals($id))
+            ->getOrElse(false);
+    }
+
+    public function correlatesTo(MessageId $id): bool
+    {
+        return $this->correlationId
+            ->map(fn(MessageId $c) => $c->equals($id))
+            ->getOrElse(false);
+    }
+
+    public function isPartOfConversation(MessageId $id): bool
+    {
+        return $this->conversationId
+            ->map(fn(MessageId $c) => $c->equals($id))
+            ->getOrElse(false);
+    }
 }
