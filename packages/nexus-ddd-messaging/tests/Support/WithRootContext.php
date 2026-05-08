@@ -20,10 +20,7 @@ use Psr\Clock\ClockInterface;
  */
 final readonly class WithRootContext
 {
-    public function __construct(
-        private MessageContextStack $stack,
-        private ClockInterface $clock,
-    ) {}
+    public function __construct(private MessageContextStack $stack, private ClockInterface $clock,) {}
 
     public static function default(): self
     {

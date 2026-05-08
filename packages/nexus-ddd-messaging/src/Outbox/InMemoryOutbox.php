@@ -111,9 +111,17 @@ final class InMemoryOutbox implements Outbox
                 ),
             )
             ->getOrCall(
-                fn(): MessageMetadata => MessageMetadata::root($this->clock)->forCausedMessage(
-                    $id,
-                    $now,
+                static fn(): MessageMetadata => new MessageMetadata(
+                    id: $id,
+                    occurredAt: $now,
+                    causationId: Option::none(),
+                    correlationId: Option::none(),
+                    conversationId: Option::none(),
+                    schemaVersion: 1,
+                    traceParent: Option::none(),
+                    traceState: Option::none(),
+                    expiresAt: Option::none(),
+                    vectorClock: Option::none(),
                 ),
             );
     }

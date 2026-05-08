@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
+use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
@@ -15,6 +16,7 @@ use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
 use Override;
 use Psr\Clock\ClockInterface;
+use Throwable;
 
 /**
  * @psalm-api
@@ -40,12 +42,25 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
 
         $metadata = $this->stack->current()
             ->map(
-                fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
+                static fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
                     $messageId,
                     $now,
                 ),
             )
-            ->getOrCall(fn(): MessageMetadata => MessageMetadata::root($this->clock));
+            ->getOrCall(
+                static fn(): MessageMetadata => new MessageMetadata(
+                    id: $messageId,
+                    occurredAt: $now,
+                    causationId: Option::none(),
+                    correlationId: Option::none(),
+                    conversationId: Option::none(),
+                    schemaVersion: 1,
+                    traceParent: Option::none(),
+                    traceState: Option::none(),
+                    expiresAt: Option::none(),
+                    vectorClock: Option::none(),
+                ),
+            );
 
         $this->dispatchEnveloped(new Envelope($command, $metadata));
     }
@@ -58,16 +73,24 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
     {
         $handler = $this->locator->locate($envelope->message);
         $handlerClass = $handler::class;
+        $messageId = $envelope->metadata->id;
 
-        if (! $this->inbox->tryReserve($handlerClass, $envelope->metadata->id)) {
+        if (! $this->inbox->tryReserve($handlerClass, $messageId)) {
             return;
         }
 
-        $this->stack->within(
-            new MessageContext($envelope->metadata),
-            static function () use ($handler, $envelope): void {
-                $handler($envelope->message);
-            },
-        );
+        try {
+            $this->stack->within(
+                new MessageContext($envelope->metadata),
+                static function () use ($handler, $envelope): void {
+                    $handler($envelope->message);
+                },
+            );
+            $this->inbox->markProcessed($handlerClass, $messageId, Option::some($this->clock->now()));
+        } catch (Throwable $e) {
+            $this->inbox->release($handlerClass, $messageId);
+
+            throw $e;
+        }
     }
 }

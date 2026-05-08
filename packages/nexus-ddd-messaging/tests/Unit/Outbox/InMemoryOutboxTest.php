@@ -64,6 +64,22 @@ final class InMemoryOutboxTest extends TestCase
         self::assertTrue($cmdBus->recordedEnvelopes()[0]->metadata->id->equals($producerId));
     }
 
+    #[Test]
+    public function withoutParentContextEmitsRootMetadataWithProducerId(): void
+    {
+        $outbox = $this->newOutbox($cmdBus, $evtBus);
+        $producerId = MessageId::generate();
+
+        $outbox->appendCommand(new class implements Command {}, Option::some($producerId));
+        $outbox->flush();
+
+        $metadata = $cmdBus->recordedEnvelopes()[0]->metadata;
+        self::assertTrue($metadata->id->equals($producerId));
+        self::assertTrue($metadata->causationId->isNone(), 'no parent context → root has no causation');
+        self::assertTrue($metadata->correlationId->isNone(), 'root has no correlation');
+        self::assertTrue($metadata->conversationId->isNone(), 'root has no conversation');
+    }
+
     private function newOutbox(
         ?RecordingEnvelopedCommandBus &$cmdBus = null,
         ?RecordingEnvelopedEventBus &$evtBus = null,

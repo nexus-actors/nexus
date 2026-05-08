@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use DateTimeImmutable;
-use Fiber;
 use Monadial\Nexus\Ddd\Messaging\Context\ContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
@@ -15,7 +14,13 @@ use Psr\Clock\ClockInterface;
 
 /**
  * Shared test class. Every ContextStorage implementation MUST extend this
- * and pass every test. Pins the cross-fiber/coroutine isolation invariant.
+ * and pass every test. Pins push/pop/current LIFO semantics — the minimum
+ * contract every storage satisfies.
+ *
+ * Cross-fiber/cross-coroutine isolation is NOT part of this contract:
+ * StaticStackContextStorage is a per-process stack and cannot satisfy
+ * isolation. A future FiberLocalContextStorage / SwooleCoroutineContextStorage
+ * will ship its own fiber/coroutine-isolation contract test.
  */
 abstract class ContextStorageContractTest extends TestCase
 {
@@ -53,47 +58,6 @@ abstract class ContextStorageContractTest extends TestCase
         self::assertSame($a, $storage->current()->getOrElse($fallback));
     }
 
-    #[Test]
-    public function isolatesConcurrentHandlerChainsUnderCooperativeScheduling(): void
-    {
-        $storage = $this->createStorage();
-        $observations = [];
-
-        $makeFiber = static function (int $i) use ($storage, &$observations): Fiber {
-            return new Fiber(static function () use ($i, $storage, &$observations): void {
-                $clock = new class implements ClockInterface {
-                    public function now(): DateTimeImmutable
-                    {
-                        return new DateTimeImmutable();
-                    }
-                };
-                $ctx = new MessageContext(MessageMetadata::root($clock));
-                $storage->push($ctx);
-                Fiber::suspend();
-                $observations[$i] = $storage->current()->getOrCall(static fn() => null) === $ctx;
-                $storage->pop();
-            });
-        };
-
-        $fibers = [];
-
-        for ($i = 0; $i < 4; ++$i) {
-            $fiber = $makeFiber($i);
-            $fiber->start();
-            $fibers[$i] = $fiber;
-        }
-
-        foreach ($fibers as $f) {
-            $f->resume();
-        }
-
-        self::assertCount(4, $observations);
-
-        foreach ($observations as $observed) {
-            self::assertIsBool($observed);
-        }
-    }
-
     private function fixedClock(): ClockInterface
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
@@ -101,9 +65,10 @@ abstract class ContextStorageContractTest extends TestCase
         return new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable {
-return $this->now;
- }
+            public function now(): DateTimeImmutable
+            {
+                return $this->now;
+            }
         };
     }
 }
