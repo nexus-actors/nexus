@@ -1177,6 +1177,24 @@ public function snapshotWriteFailureDoesNotRollBackPersist(): void
 - [ ] **Step 11: Implement `EventSourcingStrategy`**
 
 ```php
+namespace Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcing;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Aggregate\Event\Stream\StreamStrategy;
+use Monadial\Nexus\Ddd\Aggregate\Event\VersionedEventStore;
+use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
+use Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcedPersister;
+use Monadial\Nexus\Ddd\Aggregate\Versioning\UpcasterPipeline;
+use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
+use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
+use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Monadial\Nexus\Persistence\Event\EventEnvelope;
+use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
+
 final readonly class EventSourcingStrategy implements EventSourcedPersister
 {
     public function __construct(
@@ -1241,28 +1259,34 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
             throw $e;
         }
 
-        // Snapshot decision happens post-commit. Compute eventCountSinceLastSnapshot
-        // by querying the latest snapshot's sequence number; if no snapshot
-        // exists, it's the aggregate's full version.
-        $lastSnapshotSeq = Option::fromNullable($this->snapshots->load($persistenceId))
-            ->map(static fn(SnapshotEnvelope $s): int => $s->sequenceNr)
-            ->getOrElse(0);
-        $eventCountSinceLastSnapshot = $aggregateVersion - $lastSnapshotSeq;
+        // Snapshot WRITE path deferred to a follow-up PR — see the
+        // "Snapshot WRITE path deferral" subsection below for why
+        // (no public state() accessor on EventSourcedAggregateRoot
+        // by design; adding one touches shipped P0 code). Snapshot
+        // strategy consultation, eventCountSinceLastSnapshot math,
+        // and the save() call all return together once the
+        // state-extraction hook lands.
+    }
+}
+```
 
-        if ($this->snapshotStrategy->shouldSnapshot($entity, $eventCountSinceLastSnapshot)) {
-            try {
-                // SnapshotEnvelope construction requires a state-extraction
-                // hook on the aggregate — see "Snapshot WRITE path
-                // deferral" below this code block. The snapshot READ path
-                // (load + replay with incompatibility fallback) IS
-                // implemented in this phase since it doesn't require a
-                // state-export hook.
-                /* TODO follow-up: $this->snapshots->save(...) */
-            } catch (Throwable $e) {
-                $this->logger->warning('snapshot write failed; persist already committed', ['exception' => $e]);
-                // metric: ddd.snapshot.write_failure
-            }
-        }
+When the snapshot WRITE path lands in the follow-up PR, the deferred block looks like this — included here so the implementer of that follow-up has a single source of truth (NOT to be added in this phase):
+
+```php
+// In the follow-up PR's persist() body, AFTER the appendIfVersion() commits:
+$lastSnapshotSeq = Option::fromNullable($this->snapshots->load($persistenceId))
+    ->map(static fn(SnapshotEnvelope $s): int => $s->sequenceNr)
+    ->getOrElse(0);
+$eventCountSinceLastSnapshot = $aggregateVersion - $lastSnapshotSeq;
+
+if ($this->snapshotStrategy->shouldSnapshot($entity, $eventCountSinceLastSnapshot)) {
+    try {
+        $state = $this->accessor->extractStateFor($entity);   // hook added in follow-up
+        $envelope = new SnapshotEnvelope($persistenceId, $aggregateVersion, $state, $entity::class, $now, $entity->stateVersion());
+        $this->snapshots->save($persistenceId, $envelope);
+    } catch (Throwable $e) {
+        $this->logger->warning('snapshot write failed; persist already committed', ['exception' => $e]);
+        // metric: ddd.snapshot.write_failure
     }
 }
 ```
