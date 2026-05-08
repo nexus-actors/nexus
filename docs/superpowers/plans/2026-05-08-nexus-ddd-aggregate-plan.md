@@ -585,7 +585,7 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
 }
 ```
 
-(Verify `EventEnvelope` field names and `PersistenceId::entityType()/entityId()/value()` accessors against the actual shipped code before writing — adjust if signatures differ.)
+(All API access matches the round-3 "Already shipped" header at the top of this plan: `PersistenceId` uses public properties `entityType` / `entityId` and method `toString()`; `EventEnvelope` is constructed directly via the public constructor; `SnapshotStore::load` returns nullable.)
 
 - [ ] **Step 4: Concrete contract subclass**
 
@@ -1087,7 +1087,7 @@ public function persistAfterLoadComputesExpectedVersionAsAggregateVersionMinusEv
 
     /** @var Order $reloaded */
     $reloaded = $strategy->load(Order::class, $orderId)->get();
-    self::assertSame(1, $accessor->extractVersion($reloaded));
+    self::assertSame(1, $reloaded->version());   // public AggregateRoot accessor
 
     $reloaded->addLine(new OrderLine(/* ... */));   // recordThat → version 2
     $strategy->persist($reloaded);
@@ -1187,18 +1187,30 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
         private SnapshotStrategy $snapshotStrategy,
         private ClockInterface $clock,
         private LoggerInterface $logger,
-        // Stateless friend-class decorator — share one instance per strategy
-        // (per accessor's docblock).
+        // Stateless friend-class decorator. The default-`new` here gives
+        // per-strategy-instance sharing (each EventSourcingStrategy gets
+        // its own accessor at construction; subsequent calls reuse it).
+        // Since one strategy is typically wired application-wide via DI,
+        // this is effectively application-wide sharing in practice.
+        // Callers who need cross-strategy sharing inject an explicit
+        // accessor instead of relying on the default.
         private EventSourcedAggregateRootAccessor $accessor = new EventSourcedAggregateRootAccessor(),
     ) {}
 
     public function load(string $entityClass, Identifier $id): Option { /* see contract above */ }
 
     /**
+     * Tighter than `PersistenceStrategy::persist(AggregateRoot)` — this
+     * persister handles event-sourced aggregates only. The composite
+     * dispatches by `instanceof` so this method only sees the narrower
+     * type. Matching the narrower type avoids LSP issues against the
+     * `EventSourcedPersister::persist(EventSourcedAggregateRoot)`
+     * interface signature.
+     *
      * @throws OptimisticLockException
      * @throws AggregateAlreadyExistsException
      */
-    public function persist(AggregateRoot $entity): void
+    public function persist(EventSourcedAggregateRoot $entity): void
     {
         $events = $this->accessor->popRecordedEventsFrom($entity);
         if ($events === []) return;
@@ -1229,10 +1241,23 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
             throw $e;
         }
 
-        // Snapshot decision happens post-commit, separate concern.
-        if ($this->snapshotStrategy->shouldSnapshot($entity, /* eventCountSinceLastSnapshot */ count($events))) {
+        // Snapshot decision happens post-commit. Compute eventCountSinceLastSnapshot
+        // by querying the latest snapshot's sequence number; if no snapshot
+        // exists, it's the aggregate's full version.
+        $lastSnapshotSeq = Option::fromNullable($this->snapshots->load($persistenceId))
+            ->map(static fn(SnapshotEnvelope $s): int => $s->sequenceNr)
+            ->getOrElse(0);
+        $eventCountSinceLastSnapshot = $aggregateVersion - $lastSnapshotSeq;
+
+        if ($this->snapshotStrategy->shouldSnapshot($entity, $eventCountSinceLastSnapshot)) {
             try {
-                $this->snapshots->save($persistenceId, /* SnapshotEnvelope from $entity state */);
+                // SnapshotEnvelope construction requires a state-extraction
+                // hook on the aggregate — see "Snapshot WRITE path
+                // deferral" below this code block. The snapshot READ path
+                // (load + replay with incompatibility fallback) IS
+                // implemented in this phase since it doesn't require a
+                // state-export hook.
+                /* TODO follow-up: $this->snapshots->save(...) */
             } catch (Throwable $e) {
                 $this->logger->warning('snapshot write failed; persist already committed', ['exception' => $e]);
                 // metric: ddd.snapshot.write_failure
@@ -1243,6 +1268,17 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
 ```
 
 - [ ] **Step 12: Implement `InMemoryEventSourcingStrategy`** — convenience constructor that wires `InMemoryVersionedEventStore` + `InMemorySnapshotStore` + the supplied `UpcasterPipeline` + `SingleStreamStrategy` + `NeverSnapshot` + `NullLogger`.
+
+#### Snapshot WRITE path deferral (locked)
+
+`SnapshotEnvelope` construction requires a way to extract the aggregate's serialisable state. `EventSourcedAggregateRoot` (already shipped in P0) does NOT expose a public `state()` accessor — by design, per `NoGettersSettersOnAggregateRule`. Adding one would either require:
+1. Modifying `nexus-ddd-core` to add a `protected function snapshotState(): array` hook (touches shipped code; needs its own PR in nexus-ddd-core)
+2. Adding the hook on `EventSourcedAggregateRootAccessor` as `extractStateFor(EventSourcedAggregateRoot): array` using PHP's class-hierarchy protected-access rule (same trick as the other accessor methods)
+3. Using reflection to read private fields from the aggregate (works but couples the snapshot format to PHP internals)
+
+**This plan defers the snapshot WRITE path to a follow-up PR after the in-memory strategy ships.** The snapshot-decision logic stays in `EventSourcingStrategy::persist` (Step 11 above) — `shouldSnapshot()` is consulted, the `eventCountSinceLastSnapshot` is correctly computed — but the actual `save()` call is a TODO. The `NeverSnapshot` strategy is the package's only shipped impl in v1; production users wire `EveryNEvents` once the WRITE path lands.
+
+The snapshot READ path (load existing snapshot, fall back to replay on incompatibility per v6 §10.3.1) IS in scope for this phase because it only consumes `SnapshotStore::load()` — no state-export needed.
 
 - [ ] **Step 13: All tests green; Psalm + PHPCS clean**
 - [ ] **Step 14: Commit**
@@ -1265,11 +1301,43 @@ git commit -m "feat(ddd-aggregate): EventSourcedPersister + EventSourcingStrateg
 
 For the in-memory impl, the "state store" is an associative array keyed on `(class, id)` storing `(state-array, version)` tuples.
 
-- [ ] **Step 1: TDD `StatefulPersister` interface**
+- [ ] **Step 1: TDD `StatefulPersister` interface (signature)**
+
+```php
+namespace Monadial\Nexus\Ddd\Aggregate\Strategy;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
+use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
+use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+
+/** @internal — composed by CompositePersistenceStrategy */
+interface StatefulPersister
+{
+    /**
+     * @template T of StatefulAggregateRoot
+     * @param class-string<T> $entityClass
+     * @return Option<T>
+     */
+    public function load(string $entityClass, Identifier $id): Option;
+
+    /**
+     * Tighter than the public `PersistenceStrategy::persist(AggregateRoot)`
+     * — handles stateful aggregates only. Composite dispatches by
+     * `instanceof`, so this method only sees the narrower type.
+     *
+     * @throws OptimisticLockException
+     * @throws AggregateAlreadyExistsException
+     */
+    public function persist(StatefulAggregateRoot $entity): void;
+}
+```
+
 - [ ] **Step 2: TDD happy-path persist + load round-trip**
 - [ ] **Step 3: TDD OCC mismatch on existing aggregate raises `OptimisticLockException`**
 - [ ] **Step 4: TDD uniqueness collision on new aggregate raises `AggregateAlreadyExistsException`**
-- [ ] **Step 5: Implement `InMemoryStatefulStrategy`**
+- [ ] **Step 5: Implement `InMemoryStatefulStrategy`** — associative array keyed on `(class, id->value())` storing `(state-array, version)` tuples; INSERT path checks for existence, UPDATE path verifies version, both raise the right exception.
 - [ ] **Step 6: Run tests + Psalm + PHPCS**
 - [ ] **Step 7: Commit**
 
@@ -1336,6 +1404,16 @@ final readonly class CompositePersistenceStrategy implements PersistenceStrategy
      * @template T of AggregateRoot
      * @param class-string<T> $entityClass
      * @return Option<T>
+     *
+     * @psalm-suppress LessSpecificReturnStatement, MoreSpecificReturnType
+     *                 — `is_subclass_of` narrows `class-string<T>` to a
+     *                 concrete subtype, but Psalm cannot relate the
+     *                 narrower-typed `Option<EventSourcedAggregateRoot>`
+     *                 returned by the persister back to `Option<T>` in
+     *                 the outer template. The cast is sound at runtime
+     *                 (the branch guard ensures it); suppression
+     *                 documents that we accept the unsoundness in the
+     *                 type system in exchange for a clean dispatch seam.
      */
     public function load(string $entityClass, Identifier $id): Option
     {
@@ -1752,6 +1830,11 @@ Before considering the plan complete, verify:
 - [ ] `EventSourcedAggregateRootAccessor` is a `private readonly` field on `EventSourcingStrategy`, not instantiated per call.
 - [ ] All template bounds reconciled: `T of AggregateRoot` on `PersistenceStrategy::load` and `AggregateRepository`; `T of EventSourcedAggregateRoot` on `EventSourcedPersister`; `T of StatefulAggregateRoot` on `StatefulPersister`. `CompositePersistenceStrategy` dispatches by `instanceof` once.
 - [ ] `PersistenceStrategy::persist(AggregateRoot $entity)` — NOT `EventSourceable` (since `StatefulAggregateRoot` does not implement `EventSourceable`).
+- [ ] `EventSourcingStrategy::persist` parameter is `EventSourcedAggregateRoot` (NOT `AggregateRoot`) — matches the narrower `EventSourcedPersister` interface, avoids LSP violation. Same for `InMemoryStatefulStrategy::persist(StatefulAggregateRoot)`.
+- [ ] `CompositePersistenceStrategy::load` documents required `@psalm-suppress LessSpecificReturnStatement, MoreSpecificReturnType` for the `is_subclass_of` narrowing branch.
+- [ ] Snapshot WRITE path is gated behind a "deferred to follow-up PR" note — `EventSourcedAggregateRoot` has no public `state()` accessor, and adding one touches shipped P0 code. The READ path (load + replay-on-incompatibility) IS in scope.
+- [ ] `eventCountSinceLastSnapshot` is computed via `aggregateVersion - lastSnapshotSeq` (querying SnapshotStore for the last snapshot's `sequenceNr`), NOT via `count($events)` (which is just the current batch).
+- [ ] No undeclared `$accessor` references in test snippets — public `$aggregate->version()` is used where the test needs to assert version.
 
 ---
 
