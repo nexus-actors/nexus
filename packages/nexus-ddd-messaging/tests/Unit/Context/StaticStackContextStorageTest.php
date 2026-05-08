@@ -5,23 +5,32 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Context;
 
 use DateTimeImmutable;
+use Monadial\Nexus\Ddd\Messaging\Context\ContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\StaticStackContextStorage;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
+use Monadial\Nexus\Ddd\Messaging\Tests\Support\ContextStorageContractTest;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
-use PHPUnit\Framework\TestCase;
 use Psr\Clock\ClockInterface;
 
 #[CoversClass(StaticStackContextStorage::class)]
-final class StaticStackContextStorageTest extends TestCase
+final class StaticStackContextStorageTest extends ContextStorageContractTest
 {
     private NodeId $nodeId;
 
+    #[Override]
     protected function setUp(): void
     {
         $this->nodeId = NodeId::generate();
+    }
+
+    #[Override]
+    protected function createStorage(): ContextStorage
+    {
+        return new StaticStackContextStorage();
     }
 
     #[Test]
