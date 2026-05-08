@@ -11,6 +11,16 @@ use Throwable;
 
 /**
  * @psalm-api
+ *
+ * Exponential backoff with additive symmetric jitter. The delay is
+ * `base * multiplier^attempt`, capped at `max`, with a uniform-random
+ * ±jitterFraction perturbation applied symmetrically.
+ *
+ * **Jitter shape limitation:** this is symmetric ± jitter, not Marc Brooker's
+ * "decorrelated jitter" (uniform between base and 3×prev-attempt). For
+ * high-concurrency retry storms (many nodes retrying the same downstream
+ * simultaneously), decorrelated jitter spreads retries better; consumers
+ * should use `CustomBackoff` with their preferred formula in that case.
  */
 final readonly class JitteredExponentialBackoff implements BackoffStrategy
 {
