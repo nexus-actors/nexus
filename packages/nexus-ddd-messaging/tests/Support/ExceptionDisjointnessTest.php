@@ -13,7 +13,6 @@ use Monadial\Nexus\Ddd\Messaging\Exception\MessageDispatchException;
 use Monadial\Nexus\Ddd\Messaging\Exception\MessageRejectedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\MessagingException;
 use Monadial\Nexus\Ddd\Messaging\Exception\NonReplayableDeadLetterException;
-use Monadial\Nexus\Ddd\Messaging\Exception\ReplayDispatchAttemptedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\StagingClosedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 use Monadial\Nexus\Ddd\Messaging\Exception\TransientFailure;
@@ -79,7 +78,6 @@ abstract class ExceptionDisjointnessTest extends TestCase
             MessageDispatchException::class,
             MessageRejectedException::class,
             StagingClosedException::class,
-            ReplayDispatchAttemptedException::class,
             NonReplayableDeadLetterException::class,
         ];
 

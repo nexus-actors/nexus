@@ -11,7 +11,6 @@ use Monadial\Nexus\Ddd\Messaging\Exception\MessageDispatchException;
 use Monadial\Nexus\Ddd\Messaging\Exception\MessageRejectedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\MessagingException;
 use Monadial\Nexus\Ddd\Messaging\Exception\NonReplayableDeadLetterException;
-use Monadial\Nexus\Ddd\Messaging\Exception\ReplayDispatchAttemptedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\StagingClosedException;
 use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -24,7 +23,6 @@ use PHPUnit\Framework\TestCase;
 #[CoversClass(MessageDispatchException::class)]
 #[CoversClass(MessageRejectedException::class)]
 #[CoversClass(StagingClosedException::class)]
-#[CoversClass(ReplayDispatchAttemptedException::class)]
 #[CoversClass(NonReplayableDeadLetterException::class)]
 final class ConcreteExceptionsTest extends TestCase
 {
@@ -38,7 +36,6 @@ final class ConcreteExceptionsTest extends TestCase
             [MessageDispatchException::class, false],
             [MessageRejectedException::class, true],
             [StagingClosedException::class, false],
-            [ReplayDispatchAttemptedException::class, true],
             [NonReplayableDeadLetterException::class, true],
         ];
 
