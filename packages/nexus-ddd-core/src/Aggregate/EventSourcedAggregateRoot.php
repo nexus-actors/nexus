@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Aggregate;
 
-use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
+use Monadial\Nexus\Ddd\Core\Exception\ApplyDuringReplayException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Override;
 
@@ -19,57 +19,89 @@ use Override;
  * @implements EventSourceable<TEvent>
  *
  * Base for event-sourced aggregates. State is reconstructed by replaying
- * the event stream via `replay()`. Subclasses define `applyXxx()` methods
- * that MUST be pure (no I/O, no recordThat(), no clock, no logging) — they
- * are also called during normal command handling to keep state in sync
- * with the freshly-recorded event.
+ * the event stream via `replay()`. Subclasses implement `apply()` —
+ * typically a `match` over the concrete `TEvent` family — that mutates
+ * `$this` in response to a domain event.
  *
- * `applyXxx` resolution is convention-based (method name = `apply` + event
- * class short name), with `#[AppliesTo(...)]` as an explicit override for
- * versioned events. Resolution + invocation are handled by `ApplyDispatcher`
- * (cached as class-scoped Closures after first dispatch).
+ * `apply()` runs both during command execution (after `recordThat()` so
+ * state moves in lock-step with the recorded stream) AND during replay
+ * (without recording). It MUST be pure with respect to dispatch: do not
+ * call `recordThat()` from inside `apply()`, do not call buses, do not
+ * read clocks. The framework throws `ApplyDuringReplayException` if you
+ * try to recordThat() during replay.
  *
- * The dispatcher is constructor-injected. Repositories and aggregate
- * factories own a single dispatcher instance and pass it to every
- * aggregate they construct so the Closure cache is shared across
- * aggregates of the same class. Tests instantiate a fresh dispatcher
- * per case.
+ * Versioning: handle each version as a separate `match` arm.
+ *
+ *     protected function apply(DomainEvent $event): void
+ *     {
+ *         match (true) {
+ *             $event instanceof V1\OrderPlaced => $this->whenV1OrderPlaced($event),
+ *             $event instanceof V2\OrderPlaced => $this->whenV2OrderPlaced($event),
+ *             $event instanceof OrderShipped  => $this->whenOrderShipped($event),
+ *         };
+ *     }
+ *
+ * PHP 8.0+ `match` without a `default` arm throws `\UnhandledMatchError`
+ * on unknown events — fail-fast. Psalm's `MatchNotExhaustive` warns at
+ * static-analysis time when the closed `TEvent` union is missing an arm.
+ *
+ * Framework hooks (replay, pullRecordedEvents, version, rehydrateVersion)
+ * are protected; repositories reach them via `EventSourcedAggregateRootAccessor`.
  */
 abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventSourceable
 {
-    /** @param iterable<int, TEvent> $events */
-    #[Override]
-    final public function replay(iterable $events): void
-    {
-        foreach ($events as $event) {
-            $this->dispatcher->dispatch($this, $event);
-            $this->version++;
-        }
-    }
+    private bool $isReplaying = false;
 
     /**
-     * Record + apply: dispatch through applyXxx so state moves in lock-step
+     * Mutate state in response to a domain event. Runs both during command
+     * execution and during replay. Implementations are typically a
+     * `match (true) { $event instanceof X => $this->whenX($event), ... }`.
+     *
+     * @param TEvent $event
+     */
+    abstract protected function apply(DomainEvent $event): void;
+
+    /**
+     * Record + apply: dispatch through `apply()` so state moves in lock-step
      * with the recorded stream, then append the event and bump version.
      *
-     * **Ordering matters.** Dispatch runs *before* parent::recordThat. If
-     * `applyXxx` throws, the event is NOT appended and version is NOT
-     * bumped — the aggregate is left in its prior state, and
-     * `pullRecordedEvents()` will not surface the failed event. This is
-     * the "event-not-applied means event-not-recorded" semantic from
-     * akka-typed; do not reorder these two lines without revisiting it.
+     * **Ordering matters.** apply() runs *before* parent::recordThat. If
+     * `apply()` throws, the event is NOT appended and version is NOT
+     * bumped — the aggregate is left in its prior state.
+     *
+     * Throws `ApplyDuringReplayException` if called during replay (an
+     * apply() method invoked recordThat() — bug).
      *
      * @param TEvent $event
      */
     #[Override]
     final protected function recordThat(DomainEvent $event): void
     {
-        $this->dispatcher->dispatch($this, $event);
+        if ($this->isReplaying) {
+            throw ApplyDuringReplayException::inApplyMethod();
+        }
 
+        $this->apply($event);
         parent::recordThat($event);
     }
 
-    /** @param TId $id */
-    protected function __construct(Identifier $id, private readonly ApplyDispatcher $dispatcher,) {
-        parent::__construct($id);
+    /**
+     * Replay history without recording. Sets the `isReplaying` flag so any
+     * accidental `recordThat()` from inside `apply()` throws.
+     *
+     * @param iterable<int, TEvent> $events
+     */
+    final protected function replay(iterable $events): void
+    {
+        $this->isReplaying = true;
+
+        try {
+            foreach ($events as $event) {
+                $this->apply($event);
+                $this->version++;
+            }
+        } finally {
+            $this->isReplaying = false;
+        }
     }
 }

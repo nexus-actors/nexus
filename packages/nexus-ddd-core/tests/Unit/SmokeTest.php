@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit;
 
 use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
-use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
+use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Identity\IdGenerator;
 use Monadial\Nexus\Ddd\Core\Identity\UlidGenerator;
@@ -39,10 +39,11 @@ final class SmokeTest extends TestCase
         self::assertSame('ALICE@EXAMPLE.COM', StringExtractor::extract($upper));
 
         // Aggregate — record-and-apply
-        $order = SmokeOrder::create($id, new ApplyDispatcher());
+        $accessor = new EventSourcedAggregateRootAccessor();
+        $order = SmokeOrder::create($id);
         $order->place();
         self::assertSame('placed', $order->status);
-        self::assertCount(1, $order->pullRecordedEvents());
+        self::assertCount(1, $accessor->popRecordedEventsFrom($order));
 
         // Specification — bool + rich
         $rich = new SmokeNonEmpty();
@@ -63,9 +64,9 @@ final class SmokeOrder extends EventSourcedAggregateRoot
 {
     public string $status = 'new';
 
-    public static function create(TestUlidId $id, ApplyDispatcher $dispatcher,): self
+    public static function create(TestUlidId $id): self
     {
-        return new self($id, $dispatcher);
+        return new self($id);
     }
 
     #[Override]
@@ -80,9 +81,12 @@ final class SmokeOrder extends EventSourcedAggregateRoot
         $this->recordThat(new SmokePlaced());
     }
 
-    private function applySmokePlaced(SmokePlaced $_e): void
+    #[Override]
+    protected function apply(DomainEvent $event): void
     {
-        $this->status = 'placed';
+        match (true) {
+            $event instanceof SmokePlaced => $this->status = 'placed',
+        };
     }
 }
 

@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Exception;
 
-use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
-use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
+use Monadial\Nexus\Ddd\Core\Exception\ApplyDuringReplayException;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
 use Monadial\Nexus\Ddd\Core\Exception\NexusDddException;
@@ -20,8 +19,7 @@ use RuntimeException;
 
 #[CoversClass(NexusDddException::class)]
 #[CoversClass(DomainException::class)]
-#[CoversClass(ApplyMethodNotFoundException::class)]
-#[CoversClass(ApplyMethodAmbiguousException::class)]
+#[CoversClass(ApplyDuringReplayException::class)]
 #[CoversClass(ReplayFailedException::class)]
 #[CoversClass(OptimisticLockException::class)]
 #[CoversClass(InvalidIdentifierException::class)]
@@ -48,8 +46,7 @@ final class ExceptionHierarchyTest extends TestCase
     public function frameworkExceptionsExtendNexusDddException(): void
     {
         $framework = [
-            ApplyMethodAmbiguousException::class,
-            ApplyMethodNotFoundException::class,
+            ApplyDuringReplayException::class,
             NoEventsRecordedException::class,
             ReplayFailedException::class,
         ];

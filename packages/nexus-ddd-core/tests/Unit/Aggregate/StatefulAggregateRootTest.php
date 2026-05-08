@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
+use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
@@ -18,22 +19,28 @@ use Symfony\Component\Uid\Ulid;
 #[CoversClass(StatefulAggregateRoot::class)]
 final class StatefulAggregateRootTest extends TestCase
 {
+    /** @psalm-suppress PropertyNotSetInConstructor */
+    private EventSourcedAggregateRootAccessor $accessor;
+
     #[Test]
     public function statefulAggregateRecordsEventsAndMutatesStateDirectly(): void
     {
         $id = new TestUlidId((new Ulid())->toBase32());
         $c = StatefulCustomer::register($id, 'Ada Lovelace');
 
-        // State was mutated directly in the command method — no apply
-        // dispatch was involved.
         self::assertSame('Ada Lovelace', $c->name);
 
-        // Events still flow to the bus.
-        $events = $c->pullRecordedEvents();
+        $events = $this->accessor->popRecordedEventsFrom($c);
         self::assertCount(1, $events);
         self::assertInstanceOf(CustomerRegistered::class, $events[0]);
 
         self::assertSame(1, $c->version());
+    }
+
+    #[Override]
+    protected function setUp(): void
+    {
+        $this->accessor = new EventSourcedAggregateRootAccessor();
     }
 
     #[Test]

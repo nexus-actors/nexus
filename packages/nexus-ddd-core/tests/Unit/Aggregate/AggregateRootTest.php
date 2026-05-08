@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate;
 
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
@@ -21,16 +22,17 @@ use Symfony\Component\Uid\Ulid;
 #[CoversClass(AggregateRoot::class)]
 final class AggregateRootTest extends TestCase
 {
+    /** @psalm-suppress PropertyNotSetInConstructor */
+    private EventSourcedAggregateRootAccessor $accessor;
+
     #[Test]
     public function recordThatAppendsEventAndBumpsVersionWithoutApplyDispatch(): void
     {
         $a = StatefulSample::create(self::ulid());
         $a->setName('Ada');
 
-        // State-stored aggregate mutates state directly in the command method;
-        // no applyXxx is required (or invoked).
         self::assertSame('Ada', $a->name);
-        $events = $a->pullRecordedEvents();
+        $events = $this->accessor->popRecordedEventsFrom($a);
         self::assertCount(1, $events);
         self::assertInstanceOf(NameSet::class, $events[0]);
         self::assertSame(1, $a->version());
@@ -41,8 +43,8 @@ final class AggregateRootTest extends TestCase
     {
         $a = StatefulSample::create(self::ulid());
         $a->setName('a');
-        (void) $a->pullRecordedEvents();   // intentional drain
-        self::assertCount(0, $a->pullRecordedEvents());
+        $_ = $this->accessor->popRecordedEventsFrom($a);
+        self::assertCount(0, $this->accessor->popRecordedEventsFrom($a));
     }
 
     #[Test]
@@ -94,6 +96,12 @@ final class AggregateRootTest extends TestCase
         } catch (DomainException $e) {
             self::assertSame('name must not be blank', $e->getMessage());
         }
+    }
+
+    #[Override]
+    protected function setUp(): void
+    {
+        $this->accessor = new EventSourcedAggregateRootAccessor();
     }
 
     private static function ulid(): UlidValue

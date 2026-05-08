@@ -28,8 +28,8 @@ use Override;
  *      similar). State is mutated directly inside command methods.
  *      Events are emitted to the bus but not used to rebuild state.
  *   - `EventSourcedAggregateRoot` — state is reconstructed by replaying
- *      events. `recordThat()` routes through an `applyXxx` convention so
- *      state stays in lock-step with the recorded stream.
+ *      events. `recordThat()` routes through an abstract `apply()` method
+ *      so state stays in lock-step with the recorded stream.
  *
  * **Constrain identity AND event family.** Concrete aggregates declare
  * both their identifier type and the closed set of events they may emit
@@ -60,7 +60,7 @@ abstract class AggregateRoot implements Entity
     protected int $version = 0;
 
     /** @var array<int, TEvent> */
-    private array $recordedEvents = [];
+    protected array $recordedEvents = [];
 
     final public function version(): int
     {
@@ -69,7 +69,7 @@ abstract class AggregateRoot implements Entity
 
     /** @return array<int, TEvent> */
     #[NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
-    final public function pullRecordedEvents(): array
+    final protected function pullRecordedEvents(): array
     {
         $events = $this->recordedEvents;
         $this->recordedEvents = [];
