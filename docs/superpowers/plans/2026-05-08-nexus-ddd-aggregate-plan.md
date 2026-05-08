@@ -14,13 +14,20 @@
 - `Monadial\Nexus\Ddd\Core\Exception\NexusDddException` — framework-wiring exception root
 - `Monadial\Nexus\Ddd\Core\Exception\DomainException` — domain-rule-violation root
 - `Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException` — already extends `DomainException`; **does NOT implement any retry-classifier marker** — the markers `TerminalFailure` / `TransientFailure` live in `nexus-ddd-messaging`, and bus middleware classifies retry behavior by exception type, NOT via marker interfaces on the aggregate-side exceptions
-- `Monadial\Nexus\Persistence\Event\EventStore` — parent interface with 4 methods: `persist`, `load(id, fromSeq=0, toSeq=PHP_INT_MAX): iterable`, `deleteUpTo`, `highestSequenceNr`
-- `Monadial\Nexus\Persistence\Event\EventEnvelope` — wraps a `DomainEvent` with sequence number, persistence id, occurred-at
-- `Monadial\Nexus\Persistence\PersistenceId` — `(entityType, entityId)` value object
+- `Monadial\Nexus\Persistence\Event\EventStore` — parent interface with 4 methods: `persist(PersistenceId, EventEnvelope ...)`, `load(PersistenceId, int $fromSeq=0, int $toSeq=PHP_INT_MAX): iterable<EventEnvelope>`, `deleteUpTo(PersistenceId, int)`, `highestSequenceNr(PersistenceId): int`
+- `Monadial\Nexus\Persistence\Event\EventEnvelope` — `final readonly class` with constructor `__construct(PersistenceId $persistenceId, int $sequenceNr, object $event, string $eventType, DateTimeImmutable $timestamp, Ulid $writerId = new Ulid(), array $metadata = [])`. **No `::of()` factory** — use `new EventEnvelope(...)` directly.
+- `Monadial\Nexus\Persistence\PersistenceId` — `final readonly class` with **public properties** `$entityType` and `$entityId` (NOT methods), factory `PersistenceId::of(string, string): self`, and `toString(): string` (NOT `value()`).
+- `Monadial\Nexus\Persistence\Snapshot\SnapshotStore` — interface with `save(PersistenceId, SnapshotEnvelope): void`, **`load(PersistenceId): ?SnapshotEnvelope`** (nullable — wrap with `Option::fromNullable()` at the strategy boundary; NOT `loadLatest`), `delete(PersistenceId, int): void`. Per the project's no-null rule, the aggregate package's strategy code converts the nullable to `Option<SnapshotEnvelope>` at the call site.
 
 **Spec/code drift notes the plan reconciles:**
 - v6 spec §9.1.2 says exceptions implement `RetryableFailure`; actual marker is `TransientFailure` (in messaging). Plan does NOT make aggregate exceptions implement either marker — bus middleware classifies by type to avoid a cross-package marker dependency.
 - v6 spec §6.4 references `applyXxx()` per-event method names; shipped `EventSourcedAggregateRoot` uses single `apply()` + `match (true)`. Plan aligns fixtures and `ReplaySafeApplyRule` with the shipped pattern.
+- v6 spec §9.2 says `PersistenceStrategy::persist(EventSourceable $entity)`; shipped `StatefulAggregateRoot` deliberately does NOT implement `EventSourceable` (its docblock says so explicitly). Plan reconciles by using `AggregateRoot` (the common supertype of both ES and stateful) on `PersistenceStrategy` + `AggregateRepository`. Process-manager persistence (PMs are `Identifiable + EventSourceable` but not `AggregateRoot`) is out of scope for this package — it lives in `nexus-ddd-process-manager` (P2) with its own strategy seam.
+
+**Post-merge spec follow-up tasks (track separately, NOT this PR):**
+1. Update v6 §9.1.2 — replace `RetryableFailure` reference with notes that bus middleware classifies retry by type.
+2. Update v6 §9.2 — `PersistenceStrategy::persist(AggregateRoot)` for the aggregate package; PMs handled separately.
+3. Update v6 §6.4 — narrative still uses `applyXxx`; align with single-`apply()` + `match` pattern that shipped in P0.
 
 **Tech Stack:** PHP 8.5+, Psalm strict (level 1), PER-CS2.0, fp4php/functional (Option<T>), psr/clock, monadial/nexus-persistence (existing — provides `EventStore`, `SnapshotStore`, `PersistenceId`, `EventEnvelope`), nexus-actors/ddd-core (already shipped). Symfony/uid for ULID. PHPUnit 13.
 
@@ -518,12 +525,12 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
     #[Override]
     public function appendIfVersion(PersistenceId $id, int $expectedVersion, EventEnvelope ...$events): void
     {
-        $key = $id->value();
+        $key = $id->toString();
         $current = count($this->streams[$key] ?? []);
         if ($current !== $expectedVersion) {
             throw new OptimisticLockException(
-                $id->entityType(),  // class-string
-                $id->entityId(),
+                $id->entityType,    // public readonly property, NOT a method
+                $id->entityId,      // public readonly property
                 $expectedVersion,
                 $current,
             );
@@ -537,7 +544,7 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
         // Unconditional path (matches nexus-persistence's contract for non-OCC actor-based ES).
-        $key = $id->value();
+        $key = $id->toString();
         foreach ($events as $event) {
             $this->streams[$key][] = $event;
         }
@@ -547,7 +554,7 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
     #[Override]
     public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
     {
-        $stream = $this->streams[$id->value()] ?? [];
+        $stream = $this->streams[$id->toString()] ?? [];
         foreach ($stream as $envelope) {
             $seq = $envelope->sequenceNr;
             if ($seq >= $fromSequenceNr && $seq <= $toSequenceNr) {
@@ -559,7 +566,7 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
     #[Override]
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
-        $key = $id->value();
+        $key = $id->toString();
         $stream = $this->streams[$key] ?? [];
         $this->streams[$key] = array_values(array_filter(
             $stream,
@@ -570,8 +577,10 @@ final class InMemoryVersionedEventStore implements VersionedEventStore
     #[Override]
     public function highestSequenceNr(PersistenceId $id): int
     {
-        $stream = $this->streams[$id->value()] ?? [];
-        return $stream === [] ? 0 : end($stream)->sequenceNr;
+        $stream = $this->streams[$id->toString()] ?? [];
+        // Use array_last (PHP 8.5) per project style — end() mutates internal pointer.
+        $last = array_last($stream);
+        return $last === null ? 0 : $last->sequenceNr;
     }
 }
 ```
@@ -922,7 +931,12 @@ final class UpcasterRegistry
         $registered = [];
         $maxVersionByEvent = [];
         foreach ($classes as $class) {
-            $upcaster = new $class();  // assumes no-arg ctor; document this
+            // Upcasters are framework contracts; the no-arg ctor convention
+            // is documented on the Upcaster interface. Suppress Psalm's
+            // UnsafeInstantiation because we accept the contract rather
+            // than introducing a factory layer.
+            /** @psalm-suppress UnsafeInstantiation */
+            $upcaster = new $class();
             $event = $upcaster->eventName();
             $from = $upcaster->fromVersion();
             $to = $upcaster->toVersion();
@@ -1005,23 +1019,23 @@ git commit -m "feat(ddd-aggregate): SnapshotStrategy + NeverSnapshot + EveryNEve
 
 ### Behavioral contract (per v6 §9.2 + §10.3.1 + §25.6.4)
 
-`load(class-string, Identifier): Option<EventSourceable>`:
-1. Resolve `PersistenceId` from `(aggregateClass, identifier->value())`.
-2. Try `SnapshotStore::loadLatest(persistenceId)`.
-3. If snapshot exists AND `snapshot.stateVersion === currentStateVersion`: rehydrate aggregate from snapshot; replay events from `(snapshot.version + 1, currentVersion)` via `EventSourcedAggregateRootAccessor::replayOn`.
-4. If snapshot exists BUT `stateVersion` mismatches: **fall back to full replay from event 1**. Log `ddd.snapshot.incompatible_fallback` metric. Do NOT throw `SnapshotIncompatibleException`.
-5. If no snapshot: full replay from event 1.
+`load(class-string<T>, Identifier): Option<T>` where `T of EventSourcedAggregateRoot`:
+1. Resolve `PersistenceId::of($aggregateClass, $identifier->value())`. (`Identifier::value(): string` is the interface-level accessor for the scalar form, used at persistence boundaries.)
+2. Try `Option::fromNullable($snapshotStore->load($persistenceId))` — wraps the nullable return per the no-null rule.
+3. If snapshot is Some AND `snapshot.stateVersion === currentStateVersion` of the aggregate class: rehydrate aggregate from snapshot; replay events `(snapshot.version + 1, currentVersion)` via the strategy's `EventSourcedAggregateRootAccessor::replayOn` field.
+4. If snapshot is Some BUT `stateVersion` mismatches: **fall back to full replay from event 1**. Log `ddd.snapshot.incompatible_fallback` metric. Do NOT throw `SnapshotIncompatibleException`.
+5. If snapshot is None: full replay from event 1.
 6. If no events AND no snapshot: return `Option::none()`.
-7. After load, the aggregate's internal version field is set to the count of replayed events via `EventSourcedAggregateRootAccessor::rehydrateVersionOn`.
+7. After load, the aggregate's internal version field is set to the count of replayed events via `$this->accessor->rehydrateVersionOn($aggregate, $eventCount)`.
 
-`persist(EventSourceable)`:
-1. Resolve `PersistenceId` from `(aggregateClass, aggregate->id()->value())`.
-2. Pull recorded events: `$events = $accessor->popRecordedEventsFrom($aggregate)`.
+`persist(AggregateRoot)` (specifically: an `EventSourcedAggregateRoot`):
+1. Resolve `PersistenceId::of($aggregate::class, $aggregate->id()->toString())`.
+2. Pull recorded events: `$events = $this->accessor->popRecordedEventsFrom($aggregate)`. The accessor is a `private readonly` field on the strategy — single instance, stateless, shared across calls (per the accessor's docblock: "stateless; share one instance").
 3. If `$events === []`: return (idempotent no-op).
-4. **Compute `expectedVersion` = `$accessor->extractVersion($aggregate) - count($events)`**. (After `recordThat` calls, `version()` has already advanced; subtract the count to reach the version the aggregate had *before* the new events.)
-5. Convert each event to `EventEnvelope`, sequence numbers `(expectedVersion + 1) .. (expectedVersion + count($events))`.
-6. `$store->appendIfVersion($persistenceId, $expectedVersion, ...$envelopes)` — this raises `OptimisticLockException` (version mismatch) or `AggregateAlreadyExistsException` (uniqueness violation when `expectedVersion === 0`).
-7. **Snapshot decision happens AFTER append succeeds, in a separate transaction.** Consult `$snapshotStrategy->shouldSnapshot($aggregate, $eventCountSinceLastSnapshot)`; if true, write snapshot. Snapshot-write failure is logged + metric, NOT raised.
+4. **Compute `expectedVersion` = `$this->accessor->extractVersion($aggregate) - count($events)`**. (After `recordThat` calls, `version()` has already advanced; subtract the count to reach the version the aggregate had *before* the new events.)
+5. Construct each `EventEnvelope` via the public constructor (no `::of()` factory): `new EventEnvelope($persistenceId, $sequenceNr, $event, $event::class, $clock->now())` — the optional `$writerId` defaults to a fresh `Ulid()`, `$metadata` defaults to `[]`. Sequence numbers run `(expectedVersion + 1) .. (expectedVersion + count($events))`.
+6. `$store->appendIfVersion($persistenceId, $expectedVersion, ...$envelopes)` — raises `OptimisticLockException` (version mismatch) which the strategy translates to `AggregateAlreadyExistsException` when `$expectedVersion === 0` (uniqueness violation on creation), or re-throws as-is when `$expectedVersion > 0`.
+7. **Snapshot decision happens AFTER the append commit, in a separate transaction.** Consult `$this->snapshotStrategy->shouldSnapshot($aggregate, $eventCountSinceLastSnapshot)`; if true, write snapshot. Snapshot-write failure is logged + metric, NOT raised — the OCC append already committed.
 
 - [ ] **Step 1: TDD `EventSourcedPersister` interface**
 
@@ -1039,7 +1053,7 @@ interface EventSourcedPersister
      * @throws OptimisticLockException
      * @throws AggregateAlreadyExistsException
      */
-    public function persist(EventSourceable $entity): void;
+    public function persist(EventSourcedAggregateRoot $entity): void;
 }
 ```
 
@@ -1163,33 +1177,47 @@ public function snapshotWriteFailureDoesNotRollBackPersist(): void
 - [ ] **Step 11: Implement `EventSourcingStrategy`**
 
 ```php
-final class EventSourcingStrategy implements EventSourcedPersister
+final readonly class EventSourcingStrategy implements EventSourcedPersister
 {
     public function __construct(
-        private readonly VersionedEventStore $store,
-        private readonly SnapshotStore $snapshots,
-        private readonly UpcasterPipeline $upcasters,
-        private readonly StreamStrategy $streamStrategy,
-        private readonly SnapshotStrategy $snapshotStrategy,
-        private readonly LoggerInterface $logger,
+        private VersionedEventStore $store,
+        private SnapshotStore $snapshots,
+        private UpcasterPipeline $upcasters,
+        private StreamStrategy $streamStrategy,
+        private SnapshotStrategy $snapshotStrategy,
+        private ClockInterface $clock,
+        private LoggerInterface $logger,
+        // Stateless friend-class decorator — share one instance per strategy
+        // (per accessor's docblock).
+        private EventSourcedAggregateRootAccessor $accessor = new EventSourcedAggregateRootAccessor(),
     ) {}
 
     public function load(string $entityClass, Identifier $id): Option { /* see contract above */ }
 
-    public function persist(EventSourceable $entity): void
+    /**
+     * @throws OptimisticLockException
+     * @throws AggregateAlreadyExistsException
+     */
+    public function persist(AggregateRoot $entity): void
     {
-        $accessor = new EventSourcedAggregateRootAccessor();
-        $events = $accessor->popRecordedEventsFrom($entity);
+        $events = $this->accessor->popRecordedEventsFrom($entity);
         if ($events === []) return;
 
         $persistenceId = PersistenceId::of($entity::class, $entity->id()->value());
-        $aggregateVersion = $accessor->extractVersion($entity);
+        $aggregateVersion = $this->accessor->extractVersion($entity);
         $expectedVersion = $aggregateVersion - count($events);
 
         $envelopes = [];
         $seq = $expectedVersion + 1;
+        $now = $this->clock->now();
         foreach ($events as $event) {
-            $envelopes[] = EventEnvelope::of($persistenceId, $seq++, $event, $now /* ... */);
+            $envelopes[] = new EventEnvelope(
+                $persistenceId,
+                $seq++,
+                $event,
+                $event::class,
+                $now,
+            );
         }
 
         try {
@@ -1202,9 +1230,9 @@ final class EventSourcingStrategy implements EventSourcedPersister
         }
 
         // Snapshot decision happens post-commit, separate concern.
-        if ($this->snapshotStrategy->shouldSnapshot($entity, /* eventCountSinceLastSnapshot */)) {
+        if ($this->snapshotStrategy->shouldSnapshot($entity, /* eventCountSinceLastSnapshot */ count($events))) {
             try {
-                $this->snapshots->save(/* snapshot */);
+                $this->snapshots->save($persistenceId, /* SnapshotEnvelope from $entity state */);
             } catch (Throwable $e) {
                 $this->logger->warning('snapshot write failed; persist already committed', ['exception' => $e]);
                 // metric: ddd.snapshot.write_failure
@@ -1266,7 +1294,7 @@ Public `PersistenceStrategy` is the single seam the Repository sees. `CompositeP
 interface PersistenceStrategy
 {
     /**
-     * @template T of EventSourceable
+     * @template T of AggregateRoot
      * @param class-string<T> $entityClass
      * @return Option<T>
      */
@@ -1276,7 +1304,7 @@ interface PersistenceStrategy
      * @throws OptimisticLockException
      * @throws AggregateAlreadyExistsException
      */
-    public function persist(EventSourceable $entity): void;
+    public function persist(AggregateRoot $entity): void;
 }
 ```
 
@@ -1292,20 +1320,39 @@ final readonly class CompositePersistenceStrategy implements PersistenceStrategy
         private StatefulPersister $stateful,
     ) {}
 
-    public function persist(EventSourceable $entity): void
+    public function persist(AggregateRoot $entity): void
     {
         match (true) {
-            $entity instanceof StatefulAggregateRoot => $this->stateful->persist($entity),
-            default                                  => $this->eventSourced->persist($entity),
+            $entity instanceof StatefulAggregateRoot      => $this->stateful->persist($entity),
+            $entity instanceof EventSourcedAggregateRoot  => $this->eventSourced->persist($entity),
+            default => throw new \LogicException(sprintf(
+                '%s is neither EventSourcedAggregateRoot nor StatefulAggregateRoot — cannot persist.',
+                $entity::class,
+            )),
         };
     }
 
+    /**
+     * @template T of AggregateRoot
+     * @param class-string<T> $entityClass
+     * @return Option<T>
+     */
     public function load(string $entityClass, Identifier $id): Option
     {
         if (is_subclass_of($entityClass, StatefulAggregateRoot::class)) {
+            /** @var class-string<StatefulAggregateRoot> $entityClass */
             return $this->stateful->load($entityClass, $id);
         }
-        return $this->eventSourced->load($entityClass, $id);
+
+        if (is_subclass_of($entityClass, EventSourcedAggregateRoot::class)) {
+            /** @var class-string<EventSourcedAggregateRoot> $entityClass */
+            return $this->eventSourced->load($entityClass, $id);
+        }
+
+        throw new \LogicException(sprintf(
+            '%s is neither EventSourcedAggregateRoot nor StatefulAggregateRoot — cannot load.',
+            $entityClass,
+        ));
     }
 }
 ```
@@ -1392,17 +1439,26 @@ final readonly class GenericAggregateRepository implements AggregateRepository
 
     public function find(Identifier $id): Option
     {
-        // Psalm narrowing: PersistenceStrategy::load returns Option<EventSourceable>.
-        // Because we pass class-string<T> and T extends EventSourceable, the narrow
-        // is sound. The /** @var Option<T> */ docblock pins the type for Psalm.
-        /** @var Option<T> $loaded */
-        $loaded = $this->strategy->load($this->aggregateClass, $id);
-        return $loaded;
+        // PersistenceStrategy::load is `@template T of AggregateRoot` taking
+        // `class-string<T>` and returning `Option<T>`. Passing
+        // `class-string<RepoT>` (where RepoT extends AggregateRoot) binds the
+        // strategy's T to RepoT, so Option<RepoT> flows back directly. Psalm
+        // generally infers this; if your Psalm version refuses to narrow,
+        // add `/** @var Option<T> */` plus
+        // `@psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement`
+        // and document why in the docblock.
+        return $this->strategy->load($this->aggregateClass, $id);
     }
 
     public function add(AggregateRoot $aggregate): void
     {
         if ($aggregate->version() !== 0) {
+            // Programmer error — caller used the wrong API. \LogicException
+            // is appropriate here (per PSR/PHP convention: contract
+            // violation that should never happen if the call site is
+            // written correctly). Not promoted to a typed exception
+            // because there's no domain or framework-wiring meaning;
+            // this should be caught in tests, not surfaced operationally.
             throw new \LogicException(sprintf(
                 'add() invoked on an aggregate with version %d; add() requires version 0. Use save() for previously-loaded aggregates.',
                 $aggregate->version(),
@@ -1689,6 +1745,13 @@ Before considering the plan complete, verify:
 - [ ] No `AggregateRepository::remove()` method anywhere.
 - [ ] `StreamStrategy` interface has only `streamFor()` — no `tableFor()`.
 - [ ] `ddd_event_index` reframed-as-projection is correctly out of scope (no phase produces it).
+- [ ] `PersistenceId` access uses property syntax: `$id->entityType` / `$id->entityId` / `$id->toString()` (not `entityType()` / `value()`).
+- [ ] `EventEnvelope` constructed with `new EventEnvelope(...)` — no `::of()` factory.
+- [ ] `SnapshotStore::load(PersistenceId): ?SnapshotEnvelope` is the actual method (NOT `loadLatest`); strategy wraps with `Option::fromNullable()`.
+- [ ] `array_last()` (PHP 8.5) used in place of `end()` per project style.
+- [ ] `EventSourcedAggregateRootAccessor` is a `private readonly` field on `EventSourcingStrategy`, not instantiated per call.
+- [ ] All template bounds reconciled: `T of AggregateRoot` on `PersistenceStrategy::load` and `AggregateRepository`; `T of EventSourcedAggregateRoot` on `EventSourcedPersister`; `T of StatefulAggregateRoot` on `StatefulPersister`. `CompositePersistenceStrategy` dispatches by `instanceof` once.
+- [ ] `PersistenceStrategy::persist(AggregateRoot $entity)` — NOT `EventSourceable` (since `StatefulAggregateRoot` does not implement `EventSourceable`).
 
 ---
 
