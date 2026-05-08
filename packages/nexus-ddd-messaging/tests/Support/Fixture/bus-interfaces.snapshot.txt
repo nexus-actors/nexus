@@ -1,0 +1,20 @@
+interface Monadial\Nexus\Ddd\Messaging\Bus\CommandBus extends 
+  dispatchCommand(Monadial\Nexus\Ddd\Messaging\Message\Command $command): void
+
+interface Monadial\Nexus\Ddd\Messaging\Bus\QueryBus extends 
+  dispatchQuery(Monadial\Nexus\Ddd\Messaging\Message\Query $query): ?mixed
+
+interface Monadial\Nexus\Ddd\Messaging\Bus\EventBus extends 
+  publishEvent(Monadial\Nexus\Ddd\Core\Entity\DomainEvent $event): void
+
+interface Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus extends Monadial\Nexus\Ddd\Messaging\Bus\CommandBus
+  dispatchCommand(Monadial\Nexus\Ddd\Messaging\Message\Command $command): void
+  dispatchEnveloped(Monadial\Nexus\Ddd\Messaging\Envelope\Envelope $envelope): void
+
+interface Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedQueryBus extends Monadial\Nexus\Ddd\Messaging\Bus\QueryBus
+  dispatchEnveloped(Monadial\Nexus\Ddd\Messaging\Envelope\Envelope $envelope): ?mixed
+  dispatchQuery(Monadial\Nexus\Ddd\Messaging\Message\Query $query): ?mixed
+
+interface Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus extends Monadial\Nexus\Ddd\Messaging\Bus\EventBus
+  publishEnveloped(Monadial\Nexus\Ddd\Messaging\Envelope\Envelope $envelope): void
+  publishEvent(Monadial\Nexus\Ddd\Core\Entity\DomainEvent $event): void
