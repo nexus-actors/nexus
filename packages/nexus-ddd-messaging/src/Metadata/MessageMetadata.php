@@ -65,4 +65,75 @@ final readonly class MessageMetadata
             vectorClock: Option::none(),
         );
     }
+
+    /**
+     * @param Option<string> $traceState
+     */
+    #[\NoDiscard('withTrace() returns a new instance — the original is unchanged')]
+    public function withTrace(string $traceParent, Option $traceState): self
+    {
+        return new self(
+            id: $this->id,
+            occurredAt: $this->occurredAt,
+            causationId: $this->causationId,
+            correlationId: $this->correlationId,
+            conversationId: $this->conversationId,
+            schemaVersion: $this->schemaVersion,
+            traceParent: Option::some($traceParent),
+            traceState: $traceState,
+            expiresAt: $this->expiresAt,
+            vectorClock: $this->vectorClock,
+        );
+    }
+
+    #[\NoDiscard('withExpiresAt() returns a new instance — the original is unchanged')]
+    public function withExpiresAt(DateTimeImmutable $expiresAt): self
+    {
+        return new self(
+            id: $this->id,
+            occurredAt: $this->occurredAt,
+            causationId: $this->causationId,
+            correlationId: $this->correlationId,
+            conversationId: $this->conversationId,
+            schemaVersion: $this->schemaVersion,
+            traceParent: $this->traceParent,
+            traceState: $this->traceState,
+            expiresAt: Option::some($expiresAt),
+            vectorClock: $this->vectorClock,
+        );
+    }
+
+    #[\NoDiscard('withVectorClock() returns a new instance — the original is unchanged')]
+    public function withVectorClock(VectorClock $vectorClock): self
+    {
+        return new self(
+            id: $this->id,
+            occurredAt: $this->occurredAt,
+            causationId: $this->causationId,
+            correlationId: $this->correlationId,
+            conversationId: $this->conversationId,
+            schemaVersion: $this->schemaVersion,
+            traceParent: $this->traceParent,
+            traceState: $this->traceState,
+            expiresAt: $this->expiresAt,
+            vectorClock: Option::some($vectorClock),
+        );
+    }
+
+    #[\NoDiscard('withSchemaVersion() returns a new instance — the original is unchanged')]
+    public function withSchemaVersion(int $schemaVersion): self
+    {
+        return new self(
+            id: $this->id,
+            occurredAt: $this->occurredAt,
+            causationId: $this->causationId,
+            correlationId: $this->correlationId,
+            conversationId: $this->conversationId,
+            schemaVersion: $schemaVersion,
+            traceParent: $this->traceParent,
+            traceState: $this->traceState,
+            expiresAt: $this->expiresAt,
+            vectorClock: $this->vectorClock,
+        );
+    }
 }
