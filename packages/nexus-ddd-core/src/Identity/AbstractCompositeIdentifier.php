@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Identity;
 
+use Override;
+
 /**
  * @psalm-api
  * @psalm-immutable
@@ -17,11 +19,19 @@ namespace Monadial\Nexus\Ddd\Core\Identity;
  */
 abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifier
 {
-    /** @param array<string, Identifier> $components */
-    protected function __construct(private array $components) {}
+    /**
+     * Subclasses MUST implement: parse $value, instantiate each component's
+     * concrete Identifier via its own ::fromString, then call the subclass
+     * constructor with typed components.
+     *
+     * The abstract base cannot provide a default — it doesn't know which
+     * concrete Identifier types each component should be.
+     */
+    #[Override]
+    abstract public static function fromString(string $value): static;
 
     /** @return array<string, Identifier> */
-    #[\Override]
+    #[Override]
     final public function components(): array
     {
         return $this->components;
@@ -35,10 +45,13 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
      * canonical form *both ways* — encode in `value()`, decode in
      * `fromString()` — so the encoding/decoding always agree.
      */
-    #[\Override]
+    #[Override]
     abstract public function value(): string;
 
-    #[\Override]
+    /** @param array<string, Identifier> $components */
+    protected function __construct(private array $components) {}
+
+    #[Override]
     public function equals(Identifier $other): bool
     {
         if (! $other instanceof self) {
@@ -60,15 +73,4 @@ abstract readonly class AbstractCompositeIdentifier implements CompositeIdentifi
             static fn(Identifier $component, string $key): bool => $component->equals($otherComponents[$key]),
         );
     }
-
-    /**
-     * Subclasses MUST implement: parse $value, instantiate each component's
-     * concrete Identifier via its own ::fromString, then call the subclass
-     * constructor with typed components.
-     *
-     * The abstract base cannot provide a default — it doesn't know which
-     * concrete Identifier types each component should be.
-     */
-    #[\Override]
-    abstract public static function fromString(string $value): static;
 }

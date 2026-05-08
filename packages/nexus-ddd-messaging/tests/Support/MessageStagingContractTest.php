@@ -30,12 +30,6 @@ abstract class MessageStagingContractTest extends TestCase
         RecordingEnvelopedEventBus $evtBus,
     ): MessageStaging;
 
-    protected function setUp(): void
-    {
-        $this->cmdBus = new RecordingEnvelopedCommandBus();
-        $this->evtBus = new RecordingEnvelopedEventBus();
-    }
-
     #[Test]
     public function flushDispatchesInFifoOrder(): void
     {
@@ -116,5 +110,11 @@ abstract class MessageStagingContractTest extends TestCase
         $staging->flush();
 
         self::assertTrue($this->evtBus->recordedEnvelopes()[0]->metadata->id->equals($id));
+    }
+
+    protected function setUp(): void
+    {
+        $this->cmdBus = new RecordingEnvelopedCommandBus();
+        $this->evtBus = new RecordingEnvelopedEventBus();
     }
 }

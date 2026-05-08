@@ -8,6 +8,7 @@ use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Override;
 
 /**
  * @psalm-api
@@ -36,12 +37,14 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  */
 abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventSourceable
 {
-    /** @param TId $id */
-    protected function __construct(
-        Identifier $id,
-        private readonly ApplyDispatcher $dispatcher,
-    ) {
-        parent::__construct($id);
+    /** @param iterable<int, TEvent> $events */
+    #[Override]
+    final public function replay(iterable $events): void
+    {
+        foreach ($events as $event) {
+            $this->dispatcher->dispatch($this, $event);
+            $this->version++;
+        }
     }
 
     /**
@@ -57,20 +60,16 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
      *
      * @param TEvent $event
      */
-    #[\Override]
+    #[Override]
     final protected function recordThat(DomainEvent $event): void
     {
         $this->dispatcher->dispatch($this, $event);
+
         parent::recordThat($event);
     }
 
-    /** @param iterable<int, TEvent> $events */
-    #[\Override]
-    final public function replay(iterable $events): void
-    {
-        foreach ($events as $event) {
-            $this->dispatcher->dispatch($this, $event);
-            $this->version++;
-        }
+    /** @param TId $id */
+    protected function __construct(Identifier $id, private readonly ApplyDispatcher $dispatcher,) {
+        parent::__construct($id);
     }
 }

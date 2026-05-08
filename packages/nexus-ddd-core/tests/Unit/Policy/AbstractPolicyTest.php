@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Policy;
 
 use Monadial\Nexus\Ddd\Core\Policy\AbstractPolicy;
 use Monadial\Nexus\Ddd\Core\Policy\ComposedPolicy;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -48,7 +49,7 @@ final class AbstractPolicyTest extends TestCase
 final class DoublingPolicy extends AbstractPolicy
 {
     /** @param int $input @return int */
-    #[\Override]
+    #[Override]
     public function apply(mixed $input): mixed
     {
         return $input * 2;
@@ -59,7 +60,7 @@ final class DoublingPolicy extends AbstractPolicy
 final class StringifyPolicy extends AbstractPolicy
 {
     /** @param int $input @return string */
-    #[\Override]
+    #[Override]
     public function apply(mixed $input): mixed
     {
         return (string) $input;
@@ -70,7 +71,7 @@ final class StringifyPolicy extends AbstractPolicy
 final class ExclaimPolicy extends AbstractPolicy
 {
     /** @param string $input @return string */
-    #[\Override]
+    #[Override]
     public function apply(mixed $input): mixed
     {
         return $input . '!';

@@ -63,7 +63,7 @@ abstract class ContextStorageContractTest extends TestCase
         $storage = $this->createStorage();
         $observations = [];
 
-        $makeFiber = function (int $i) use ($storage, &$observations): Fiber {
+        $makeFiber = static function (int $i) use ($storage, &$observations): Fiber {
             return new Fiber(static function () use ($i, $storage, &$observations): void {
                 $clock = new class implements ClockInterface {
                     public function now(): DateTimeImmutable
@@ -105,7 +105,9 @@ abstract class ContextStorageContractTest extends TestCase
         return new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable { return $this->now; }
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
         };
     }
 }

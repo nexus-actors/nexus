@@ -9,6 +9,7 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -63,7 +64,7 @@ final class StatefulCustomer extends StatefulAggregateRoot
         return $c;
     }
 
-    #[\Override]
+    #[Override]
     public function id(): TestUlidId
     {
         /** @var TestUlidId */
@@ -73,8 +74,5 @@ final class StatefulCustomer extends StatefulAggregateRoot
 
 final readonly class CustomerRegistered implements DomainEvent
 {
-    public function __construct(
-        public Identifier $id,
-        public string $name,
-    ) {}
+    public function __construct(public Identifier $id, public string $name,) {}
 }

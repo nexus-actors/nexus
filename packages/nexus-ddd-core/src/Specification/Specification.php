@@ -21,11 +21,11 @@ interface Specification
     public function isSatisfiedBy(mixed $candidate): bool;
 
     /** @param Specification<T> $other @return Specification<T> */
-    public function and(Specification $other): Specification;
+    public function and(self $other): self;
 
     /** @param Specification<T> $other @return Specification<T> */
-    public function or(Specification $other): Specification;
+    public function or(self $other): self;
 
     /** @return Specification<T> */
-    public function not(): Specification;
+    public function not(): self;
 }

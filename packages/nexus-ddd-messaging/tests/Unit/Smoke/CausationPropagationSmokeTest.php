@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Smoke;
 
 use Closure;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus;
-use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler;
@@ -54,7 +53,11 @@ final class CausationPropagationSmokeTest extends TestCase
             {
                 $parent = $this->stack->current()->get();
                 ($this->captureCommandId)($parent->metadata->id);
-                $eventMeta = $parent->metadata->forCausedMessage(MessageId::generate(), $this->clock->now(), $this->nodeId);
+                $eventMeta = $parent->metadata->forCausedMessage(
+                    MessageId::generate(),
+                    $this->clock->now(),
+                    $this->nodeId,
+                );
                 $this->events->publishEnveloped(new Envelope(new UserRegistered($cmd->userId), $eventMeta));
             }
         };

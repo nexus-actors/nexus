@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Identity;
 
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use Override;
 use Symfony\Component\Uid\Ulid;
 
 /**
@@ -29,7 +30,7 @@ final class UlidGenerator implements IdGenerator
     public function __construct(private string $idClass) {}
 
     /** @return T */
-    #[\Override]
+    #[Override]
     public function next(): Identifier
     {
         return $this->idClass::fromString((new Ulid())->toBase32());

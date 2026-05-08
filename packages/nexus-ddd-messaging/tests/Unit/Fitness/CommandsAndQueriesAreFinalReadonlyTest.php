@@ -46,7 +46,10 @@ final class CommandsAndQueriesAreFinalReadonlyTest extends TestCase
 
             $reflection = new ReflectionClass($fqn);
 
-            if (! $reflection->implementsInterface(Command::class) && ! $reflection->implementsInterface(Query::class)) {
+            if (
+                ! $reflection->implementsInterface(Command::class)
+                && ! $reflection->implementsInterface(Query::class)
+            ) {
                 continue;
             }
 

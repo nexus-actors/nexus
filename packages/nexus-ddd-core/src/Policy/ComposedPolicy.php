@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Policy;
 
+use Override;
+
 /**
  * @psalm-api
  *
@@ -23,16 +25,13 @@ final class ComposedPolicy extends AbstractPolicy
      * @param AbstractPolicy<TIn, TMid> $first
      * @param AbstractPolicy<TMid, TOut> $next
      */
-    public function __construct(
-        private readonly AbstractPolicy $first,
-        private readonly AbstractPolicy $next,
-    ) {}
+    public function __construct(private readonly AbstractPolicy $first, private readonly AbstractPolicy $next,) {}
 
     /**
      * @param TIn $input
      * @return TOut
      */
-    #[\Override]
+    #[Override]
     public function apply(mixed $input): mixed
     {
         /** @var TMid $intermediate */

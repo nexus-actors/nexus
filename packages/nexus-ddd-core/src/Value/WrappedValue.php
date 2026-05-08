@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Value;
 
+use NoDiscard;
+
 /**
  * @psalm-api
  * @psalm-immutable
@@ -23,12 +25,6 @@ abstract readonly class WrappedValue
     /** @param T $value */
     protected function __construct(private mixed $value) {}
 
-    /** @return T */
-    protected function getValue(): mixed
-    {
-        return $this->value;
-    }
-
     /**
      * Endomap — re-construct via static, re-running the subclass constructor
      * (which re-runs validation if the subclass enforces invariants on its
@@ -45,7 +41,7 @@ abstract readonly class WrappedValue
      * @return static
      * @psalm-suppress ImpureFunctionCall,UnsafeInstantiation
      */
-    #[\NoDiscard('map() returns the transformed value object — ignoring it loses the transformation')]
+    #[NoDiscard('map() returns the transformed value object — ignoring it loses the transformation')]
     public function map(callable $fn): static
     {
         return new static($fn($this->value));
@@ -62,8 +58,8 @@ abstract readonly class WrappedValue
      * @return U
      * @psalm-suppress ImpureFunctionCall
      */
-    #[\NoDiscard('flatMap() returns the produced value object — ignoring it loses the transformation')]
-    public function flatMap(callable $fn): WrappedValue
+    #[NoDiscard('flatMap() returns the produced value object — ignoring it loses the transformation')]
+    public function flatMap(callable $fn): self
     {
         return $fn($this->value);
     }
@@ -71,5 +67,11 @@ abstract readonly class WrappedValue
     public function equals(object $other): bool
     {
         return $other instanceof static && $other->value === $this->value;
+    }
+
+    /** @return T */
+    protected function getValue(): mixed
+    {
+        return $this->value;
     }
 }

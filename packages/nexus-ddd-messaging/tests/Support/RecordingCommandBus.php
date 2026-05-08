@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Messaging\Bus\CommandBus;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Override;
 
 /**
  * @psalm-api
@@ -18,7 +19,7 @@ final class RecordingCommandBus implements CommandBus
     /** @var list<Command> */
     private array $recorded = [];
 
-    #[\Override]
+    #[Override]
     public function dispatchCommand(Command $command): void
     {
         $this->recorded[] = $command;

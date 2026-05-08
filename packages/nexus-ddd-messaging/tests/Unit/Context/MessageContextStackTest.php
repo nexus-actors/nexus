@@ -103,7 +103,9 @@ final class MessageContextStackTest extends TestCase
         return new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable { return $this->now; }
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
         };
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Value\Extractor;
 
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use NoDiscard;
 
 /**
  * @psalm-api
@@ -20,7 +21,7 @@ final class UlidExtractor
     /** @psalm-suppress UnusedConstructor */
     private function __construct() {}
 
-    #[\NoDiscard('extract() returns the canonical ULID string — its return is the entire purpose of the call')]
+    #[NoDiscard('extract() returns the canonical ULID string — its return is the entire purpose of the call')]
     public static function extract(UlidValue $value): string
     {
         return ValueExtractor::extract($value);

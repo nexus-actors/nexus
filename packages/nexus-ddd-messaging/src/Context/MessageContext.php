@@ -23,10 +23,7 @@ final readonly class MessageContext
     /**
      * @param array<class-string<Stamp>, Stamp> $stamps
      */
-    public function __construct(
-        public MessageMetadata $metadata,
-        public array $stamps = [],
-    ) {}
+    public function __construct(public MessageMetadata $metadata, public array $stamps = [],) {}
 
     /**
      * @template S of Stamp

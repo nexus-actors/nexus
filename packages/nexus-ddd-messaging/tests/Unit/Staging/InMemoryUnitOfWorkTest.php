@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Staging;
 
 use Fp\Functional\Option\Option;
-use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;

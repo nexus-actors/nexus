@@ -13,5 +13,5 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifiable;
  */
 interface Entity extends Identifiable
 {
-    public function equals(Entity $other): bool;
+    public function equals(self $other): bool;
 }

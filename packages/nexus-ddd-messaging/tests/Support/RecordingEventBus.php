@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Bus\EventBus;
+use Override;
 
 /**
  * @psalm-api
@@ -18,7 +19,7 @@ final class RecordingEventBus implements EventBus
     /** @var list<DomainEvent> */
     private array $recorded = [];
 
-    #[\Override]
+    #[Override]
     public function publishEvent(DomainEvent $event): void
     {
         $this->recorded[] = $event;

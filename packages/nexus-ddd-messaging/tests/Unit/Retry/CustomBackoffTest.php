@@ -11,6 +11,7 @@ use Monadial\Nexus\Ddd\Messaging\Tests\Support\Durations;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 
 #[CoversClass(CustomBackoff::class)]
 final class CustomBackoffTest extends TestCase
@@ -19,7 +20,7 @@ final class CustomBackoffTest extends TestCase
     public function delayForDelegatesToCallable(): void
     {
         $strategy = new CustomBackoff(
-            static fn(int $attempt, \Throwable $cause): Option => Option::some(Durations::seconds($attempt * 3)),
+            static fn(int $attempt, Throwable $cause): Option => Option::some(Durations::seconds($attempt * 3)),
         );
 
         $delay = $strategy->delayFor(2, new Exception())->get();
@@ -31,7 +32,7 @@ final class CustomBackoffTest extends TestCase
     public function delayForCanReturnNone(): void
     {
         $strategy = new CustomBackoff(
-            static fn(int $attempt, \Throwable $cause): Option => Option::none(),
+            static fn(int $attempt, Throwable $cause): Option => Option::none(),
         );
 
         $result = $strategy->delayFor(1, new Exception());
@@ -48,7 +49,7 @@ final class CustomBackoffTest extends TestCase
         $cause = new Exception('test-cause');
 
         $strategy = new CustomBackoff(
-            static function (int $attempt, \Throwable $c) use (&$capturedAttempt, &$capturedException): Option {
+            static function (int $attempt, Throwable $c) use (&$capturedAttempt, &$capturedException): Option {
                 $capturedAttempt = $attempt;
                 $capturedException = $c;
 

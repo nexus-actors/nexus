@@ -41,7 +41,13 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
         $messageId = MessageId::generate();
 
         $metadata = $this->stack->current()
-            ->map(fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage($messageId, $now, $this->nodeId))
+            ->map(
+                fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
+                    $messageId,
+                    $now,
+                    $this->nodeId,
+                ),
+            )
             ->getOrCall(fn(): MessageMetadata => MessageMetadata::root($this->clock, $this->nodeId));
 
         $this->dispatchEnveloped(new Envelope($command, $metadata));

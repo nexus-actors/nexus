@@ -19,10 +19,7 @@ final class RetryPolicyBuilder
      * @param array<class-string<Throwable>, BackoffStrategy> $handlers
      * @param array<class-string<Throwable>, true>            $giveUpSet
      */
-    private function __construct(
-        private readonly array $handlers,
-        private readonly array $giveUpSet,
-    ) {}
+    private function __construct(private readonly array $handlers, private readonly array $giveUpSet,) {}
 
     public static function create(): self
     {
@@ -56,9 +53,6 @@ final class RetryPolicyBuilder
     #[NoDiscard('returns the constructed RetryPolicy')]
     public function build(): RetryPolicy
     {
-        return new RetryPolicy(
-            handlers: $this->handlers,
-            giveUpSet: $this->giveUpSet,
-        );
+        return new RetryPolicy(handlers: $this->handlers, giveUpSet: $this->giveUpSet);
     }
 }

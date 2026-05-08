@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Value\Extractor;
 
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
+use Monadial\Nexus\Ddd\Core\Tests\Support\TestUuidId;
 use Monadial\Nexus\Ddd\Core\Value\ArrayValue;
 use Monadial\Nexus\Ddd\Core\Value\BoolValue;
 use Monadial\Nexus\Ddd\Core\Value\Extractor\ArrayExtractor;
@@ -14,8 +16,6 @@ use Monadial\Nexus\Ddd\Core\Value\Extractor\StringExtractor;
 use Monadial\Nexus\Ddd\Core\Value\Extractor\UlidExtractor;
 use Monadial\Nexus\Ddd\Core\Value\Extractor\UuidExtractor;
 use Monadial\Nexus\Ddd\Core\Value\Extractor\ValueExtractor;
-use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
-use Monadial\Nexus\Ddd\Core\Tests\Support\TestUuidId;
 use Monadial\Nexus\Ddd\Core\Value\FloatValue;
 use Monadial\Nexus\Ddd\Core\Value\IntValue;
 use Monadial\Nexus\Ddd\Core\Value\StringValue;

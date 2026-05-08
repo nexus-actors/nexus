@@ -14,9 +14,5 @@ namespace Monadial\Nexus\Ddd\Core\Specification;
  */
 final readonly class Failure
 {
-    public function __construct(
-        public string $field,
-        public string $code,
-        public string $message,
-    ) {}
+    public function __construct(public string $field, public string $code, public string $message,) {}
 }

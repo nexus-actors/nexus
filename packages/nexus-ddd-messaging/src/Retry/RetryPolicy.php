@@ -25,10 +25,7 @@ final readonly class RetryPolicy implements BackoffStrategy
      * @param array<class-string<Throwable>, BackoffStrategy> $handlers  Ordered map of exception type → strategy.
      * @param array<class-string<Throwable>, true>            $giveUpSet Exception types that must never be retried.
      */
-    public function __construct(
-        private array $handlers,
-        private array $giveUpSet,
-    ) {}
+    public function __construct(private array $handlers, private array $giveUpSet,) {}
 
     /**
      * @return Option<FiniteDuration>

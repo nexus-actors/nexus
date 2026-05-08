@@ -8,6 +8,8 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\Entity;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use NoDiscard;
+use Override;
 
 /**
  * @psalm-api
@@ -55,22 +57,35 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  */
 abstract class AggregateRoot implements Entity
 {
-    /** @var array<int, TEvent> */
-    private array $recordedEvents = [];
-
     protected int $version = 0;
 
-    /** @param TId $id */
-    protected function __construct(protected readonly Identifier $id) {}
-
-    /** @return TId */
-    #[\Override]
-    abstract public function id(): Identifier;
+    /** @var array<int, TEvent> */
+    private array $recordedEvents = [];
 
     final public function version(): int
     {
         return $this->version;
     }
+
+    /** @return array<int, TEvent> */
+    #[NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
+    final public function pullRecordedEvents(): array
+    {
+        $events = $this->recordedEvents;
+        $this->recordedEvents = [];
+
+        return $events;
+    }
+
+    #[Override]
+    final public function equals(Entity $other): bool
+    {
+        return $other instanceof static && $other->id->equals($this->id);
+    }
+
+    /** @return TId */
+    #[Override]
+    abstract public function id(): Identifier;
 
     /**
      * Rehydrate the aggregate version from a snapshot. Called by the
@@ -93,35 +108,6 @@ abstract class AggregateRoot implements Entity
     final protected function rehydrateVersion(int $revision): void
     {
         $this->version = $revision;
-    }
-
-    /**
-     * Record that a domain event happened. State-stored aggregates simply
-     * append; event-sourced aggregates override this to also dispatch the
-     * event through the applyXxx convention.
-     *
-     * @param TEvent $event
-     */
-    protected function recordThat(DomainEvent $event): void
-    {
-        $this->recordedEvents[] = $event;
-        $this->version++;
-    }
-
-    /** @return array<int, TEvent> */
-    #[\NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
-    final public function pullRecordedEvents(): array
-    {
-        $events = $this->recordedEvents;
-        $this->recordedEvents = [];
-
-        return $events;
-    }
-
-    #[\Override]
-    final public function equals(Entity $other): bool
-    {
-        return $other instanceof static && $other->id->equals($this->id);
     }
 
     /**
@@ -151,5 +137,21 @@ abstract class AggregateRoot implements Entity
         throw $rule instanceof DomainException
             ? $rule
             : new class ($rule) extends DomainException {};
+    }
+
+    /** @param TId $id */
+    protected function __construct(protected readonly Identifier $id) {}
+
+    /**
+     * Record that a domain event happened. State-stored aggregates simply
+     * append; event-sourced aggregates override this to also dispatch the
+     * event through the applyXxx convention.
+     *
+     * @param TEvent $event
+     */
+    protected function recordThat(DomainEvent $event): void
+    {
+        $this->recordedEvents[] = $event;
+        $this->version++;
     }
 }

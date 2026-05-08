@@ -27,7 +27,7 @@ interface Identifier
      * Equality requires both runtime type AND value match.
      * @psalm-pure
      */
-    public function equals(Identifier $other): bool;
+    public function equals(self $other): bool;
 
     /**
      * Reconstruct an instance from its canonical string form.

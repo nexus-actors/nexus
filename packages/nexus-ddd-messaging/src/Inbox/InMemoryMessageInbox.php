@@ -46,6 +46,8 @@ final class InMemoryMessageInbox implements MessageInbox
     #[Override]
     public function markProcessed(string $handlerClass, MessageId $messageId, Option $at): void
     {
+        // No-op — the reservation map is the persistence boundary for this in-memory
+        // variant. Persistent inboxes record the timestamp + remove the working-set entry.
     }
 
     /**

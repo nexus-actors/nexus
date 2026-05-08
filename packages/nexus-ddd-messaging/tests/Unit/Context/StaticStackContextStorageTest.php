@@ -21,18 +21,6 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
 {
     private NodeId $nodeId;
 
-    #[Override]
-    protected function setUp(): void
-    {
-        $this->nodeId = NodeId::generate();
-    }
-
-    #[Override]
-    protected function createStorage(): ContextStorage
-    {
-        return new StaticStackContextStorage();
-    }
-
     #[Test]
     public function snapshotIsEmptyOnCreation(): void
     {
@@ -73,6 +61,18 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
         self::assertSame([$b], $storage->snapshot());
     }
 
+    #[Override]
+    protected function setUp(): void
+    {
+        $this->nodeId = NodeId::generate();
+    }
+
+    #[Override]
+    protected function createStorage(): ContextStorage
+    {
+        return new StaticStackContextStorage();
+    }
+
     private function fixedClock(): ClockInterface
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
@@ -80,7 +80,9 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
         return new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable { return $this->now; }
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
         };
     }
 }

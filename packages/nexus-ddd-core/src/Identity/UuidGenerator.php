@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Identity;
 
 use Monadial\Nexus\Ddd\Core\Value\UuidValue;
+use Override;
 use Symfony\Component\Uid\Uuid;
 
 /**
@@ -23,7 +24,7 @@ final class UuidGenerator implements IdGenerator
     public function __construct(private string $idClass) {}
 
     /** @return T */
-    #[\Override]
+    #[Override]
     public function next(): Identifier
     {
         return $this->idClass::fromString((string) Uuid::v7());

@@ -6,6 +6,8 @@ namespace Monadial\Nexus\Ddd\Core\Tests\Unit;
 
 use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Identity\IdGenerator;
 use Monadial\Nexus\Ddd\Core\Identity\UlidGenerator;
 use Monadial\Nexus\Ddd\Core\Policy\AbstractPolicy;
@@ -15,6 +17,7 @@ use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\Extractor\StringExtractor;
 use Monadial\Nexus\Ddd\Core\Value\StringValue;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use Override;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -36,7 +39,7 @@ final class SmokeTest extends TestCase
         self::assertSame('ALICE@EXAMPLE.COM', StringExtractor::extract($upper));
 
         // Aggregate — record-and-apply
-        $order = SmokeOrder::create($id, new \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher());
+        $order = SmokeOrder::create($id, new ApplyDispatcher());
         $order->place();
         self::assertSame('placed', $order->status);
         self::assertCount(1, $order->pullRecordedEvents());
@@ -60,12 +63,12 @@ final class SmokeOrder extends EventSourcedAggregateRoot
 {
     public string $status = 'new';
 
-    public static function create(TestUlidId $id, \Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher $dispatcher): self
+    public static function create(TestUlidId $id, ApplyDispatcher $dispatcher,): self
     {
         return new self($id, $dispatcher);
     }
 
-    #[\Override]
+    #[Override]
     public function id(): TestUlidId
     {
         /** @var TestUlidId */
@@ -83,12 +86,12 @@ final class SmokeOrder extends EventSourcedAggregateRoot
     }
 }
 
-final readonly class SmokePlaced implements \Monadial\Nexus\Ddd\Core\Entity\DomainEvent {}
+final readonly class SmokePlaced implements DomainEvent {}
 
 /** @extends AbstractRichSpecification<string> */
 final class SmokeNonEmpty extends AbstractRichSpecification
 {
-    #[\Override]
+    #[Override]
     public function evaluate(mixed $candidate): Either
     {
         if (is_string($candidate) && $candidate !== '') {
@@ -104,7 +107,7 @@ final class SmokeNonEmpty extends AbstractRichSpecification
 /** @extends AbstractPolicy<int, int> */
 final class SmokeDoublePolicy extends AbstractPolicy
 {
-    #[\Override]
+    #[Override]
     public function apply(mixed $input): mixed
     {
         /** @var int $input */

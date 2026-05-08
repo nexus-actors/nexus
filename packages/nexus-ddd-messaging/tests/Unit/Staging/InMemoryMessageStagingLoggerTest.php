@@ -12,6 +12,7 @@ use Monadial\Nexus\Ddd\Messaging\Staging\InMemoryMessageStaging;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\RecordingEnvelopedEventBus;
 use Monadial\Nexus\Ddd\Messaging\Tests\Support\SystemClock;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -28,7 +29,7 @@ final class InMemoryMessageStagingLoggerTest extends TestCase
             /** @var list<string> */
             public array $warnings = [];
 
-            #[\Override]
+            #[Override]
             public function log(mixed $level, string|Stringable $message, array $context = []): void
             {
                 if ($level === 'warning') {

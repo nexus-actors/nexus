@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Specification;
 
 use Monadial\Nexus\Ddd\Core\Specification\AbstractSpecification;
-use Monadial\Nexus\Ddd\Core\Specification\Specification;
+use Override;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -49,7 +49,7 @@ final class SpecificationCombinatorsTest extends TestCase
 /** @extends AbstractSpecification<int> */
 final class IsPositive extends AbstractSpecification
 {
-    #[\Override]
+    #[Override]
     public function isSatisfiedBy(mixed $candidate): bool
     {
         return is_int($candidate) && $candidate > 0;
@@ -59,7 +59,7 @@ final class IsPositive extends AbstractSpecification
 /** @extends AbstractSpecification<int> */
 final class IsEven extends AbstractSpecification
 {
-    #[\Override]
+    #[Override]
     public function isSatisfiedBy(mixed $candidate): bool
     {
         return is_int($candidate) && $candidate % 2 === 0;

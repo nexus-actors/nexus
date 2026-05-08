@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Identity;
 
+use NoDiscard;
+
 /**
  * @psalm-api
  *
@@ -12,6 +14,6 @@ namespace Monadial\Nexus\Ddd\Core\Identity;
 interface IdGenerator
 {
     /** @return T */
-    #[\NoDiscard('next() consumes a fresh identifier — discarding it wastes the generation')]
+    #[NoDiscard('next() consumes a fresh identifier — discarding it wastes the generation')]
     public function next(): Identifier;
 }

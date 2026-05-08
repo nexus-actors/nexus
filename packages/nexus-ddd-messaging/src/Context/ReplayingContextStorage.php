@@ -33,6 +33,7 @@ final class ReplayingContextStorage implements ContextStorage
     #[Override]
     public function pop(): void
     {
+        // No-op — push() throws first; the stack is never populated during replay.
     }
 
     /** @return Option<MessageContext> */
@@ -46,5 +47,6 @@ final class ReplayingContextStorage implements ContextStorage
     #[Override]
     public function restore(array $stack): void
     {
+        // No-op — replay-mode storage carries no state to restore.
     }
 }

@@ -66,16 +66,10 @@ final class ObjectValueTest extends TestCase
 
 final readonly class FullName extends ObjectValue
 {
-    public function __construct(
-        public string $first,
-        public string $last,
-    ) {}
+    public function __construct(public string $first, public string $last,) {}
 }
 
 final readonly class OtherCompositeValue extends ObjectValue
 {
-    public function __construct(
-        public string $first,
-        public string $last,
-    ) {}
+    public function __construct(public string $first, public string $last,) {}
 }

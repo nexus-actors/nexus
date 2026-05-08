@@ -87,10 +87,7 @@ abstract class ExceptionDisjointnessTest extends TestCase
             $exception = new $class();
             $implementsBoth = ($exception instanceof TransientFailure) && ($exception instanceof TerminalFailure);
 
-            self::assertFalse(
-                $implementsBoth,
-                "{$class} must not implement both TransientFailure and TerminalFailure",
-            );
+            self::assertFalse($implementsBoth, "{$class} must not implement both TransientFailure and TerminalFailure");
         }
     }
 }

@@ -107,7 +107,19 @@ final class InMemoryMessageStaging implements MessageStaging
         $nodeId = $this->nodeId;
 
         return $this->stack->current()
-            ->map(fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage($id, $now, $nodeId))
-            ->getOrCall(fn(): MessageMetadata => MessageMetadata::root($this->clock, $this->nodeId)->forCausedMessage($id, $now, $this->nodeId));
+            ->map(
+                static fn(MessageContext $parent): MessageMetadata => $parent->metadata->forCausedMessage(
+                    $id,
+                    $now,
+                    $nodeId,
+                ),
+            )
+            ->getOrCall(
+                fn(): MessageMetadata => MessageMetadata::root($this->clock, $this->nodeId)->forCausedMessage(
+                    $id,
+                    $now,
+                    $this->nodeId,
+                ),
+            );
     }
 }

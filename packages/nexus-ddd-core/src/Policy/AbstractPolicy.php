@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Policy;
 
+use NoDiscard;
+
 /**
  * @psalm-api
  *
@@ -34,12 +36,6 @@ namespace Monadial\Nexus\Ddd\Core\Policy;
 abstract class AbstractPolicy
 {
     /**
-     * @param TIn $input
-     * @return TOut
-     */
-    abstract public function apply(mixed $input): mixed;
-
-    /**
      * Compose: this policy first, then $next on its output. The composed
      * Policy is itself a Policy — chains remain a domain concept.
      *
@@ -47,10 +43,16 @@ abstract class AbstractPolicy
      * @param AbstractPolicy<TOut, TNext> $next
      * @return AbstractPolicy<TIn, TNext>
      */
-    #[\NoDiscard('then() returns the composed policy — discarding it loses the composition')]
-    final public function then(AbstractPolicy $next): AbstractPolicy
+    #[NoDiscard('then() returns the composed policy — discarding it loses the composition')]
+    final public function then(self $next): self
     {
         /** @var AbstractPolicy<TIn, TNext> */
         return new ComposedPolicy($this, $next);
     }
+
+    /**
+     * @param TIn $input
+     * @return TOut
+     */
+    abstract public function apply(mixed $input): mixed;
 }

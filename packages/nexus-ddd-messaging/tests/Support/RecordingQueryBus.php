@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 use Monadial\Nexus\Ddd\Messaging\Bus\QueryBus;
 use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
 use Monadial\Nexus\Ddd\Messaging\Message\Query;
+use Override;
 
 /**
  * @psalm-api
@@ -29,7 +30,7 @@ final class RecordingQueryBus implements QueryBus
         $this->responses[$queryClass] = $response;
     }
 
-    #[\Override]
+    #[Override]
     public function dispatchQuery(Query $query): mixed
     {
         $this->recorded[] = $query;

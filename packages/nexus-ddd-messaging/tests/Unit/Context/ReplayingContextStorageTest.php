@@ -20,11 +20,6 @@ final class ReplayingContextStorageTest extends TestCase
 {
     private NodeId $nodeId;
 
-    protected function setUp(): void
-    {
-        $this->nodeId = NodeId::generate();
-    }
-
     #[Test]
     public function pushThrowsReplayDispatchAttempted(): void
     {
@@ -63,6 +58,11 @@ final class ReplayingContextStorageTest extends TestCase
         self::assertSame([], $storage->snapshot());
     }
 
+    protected function setUp(): void
+    {
+        $this->nodeId = NodeId::generate();
+    }
+
     private function fixedClock(): ClockInterface
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
@@ -70,7 +70,9 @@ final class ReplayingContextStorageTest extends TestCase
         return new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable { return $this->now; }
+            public function now(): DateTimeImmutable {
+return $this->now;
+ }
         };
     }
 }

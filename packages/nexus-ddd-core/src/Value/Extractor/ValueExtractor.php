@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Value\Extractor;
 
 use Monadial\Nexus\Ddd\Core\Value\WrappedValue;
+use NoDiscard;
 
 /**
  * @psalm-api
@@ -39,7 +40,7 @@ final readonly class ValueExtractor extends WrappedValue
      * @param WrappedValue<T> $valueObject
      * @return T
      */
-    #[\NoDiscard('extract() returns the inner value — its return is the entire purpose of the call')]
+    #[NoDiscard('extract() returns the inner value — its return is the entire purpose of the call')]
     public static function extract(WrappedValue $valueObject): mixed
     {
         return $valueObject->getValue();

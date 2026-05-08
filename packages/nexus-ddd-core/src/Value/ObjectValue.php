@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Value;
 
+use NoDiscard;
 use ReflectionObject;
 
 /**
@@ -44,18 +45,21 @@ abstract readonly class ObjectValue
      *
      * @psalm-suppress ImpureMethodCall,MixedAssignment
      */
-    public function equals(ObjectValue $other): bool
+    public function equals(self $other): bool
     {
-        if (static::class !== $other::class) {
+        if ($other::class !== static::class) {
             return false;
         }
+
         $thisReflection = new ReflectionObject($this);
         $otherReflection = new ReflectionObject($other);
+
         foreach ($thisReflection->getProperties() as $prop) {
             $name = $prop->getName();
             $thisVal = $prop->getValue($this);
             $otherProp = $otherReflection->getProperty($name);
             $otherVal = $otherProp->getValue($other);
+
             if ($thisVal !== $otherVal) {
                 return false;
             }
@@ -76,7 +80,7 @@ abstract readonly class ObjectValue
      * @param array<string, mixed> $changes property-name → new-value map
      * @psalm-suppress ImpureMethodCall,MixedAssignment,MixedArgument,UnsafeInstantiation
      */
-    #[\NoDiscard('with() returns the updated value object — discarding it loses the change')]
+    #[NoDiscard('with() returns the updated value object — discarding it loses the change')]
     public function with(array $changes): static
     {
         $reflection = new ReflectionObject($this);

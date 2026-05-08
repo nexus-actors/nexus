@@ -8,6 +8,7 @@ use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Specification\AbstractRichSpecification;
 use Monadial\Nexus\Ddd\Core\Specification\Failure;
 use Monadial\Nexus\Ddd\Core\Specification\Specification;
+use Override;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -51,7 +52,7 @@ final class RichSpecificationTest extends TestCase
 /** @extends AbstractRichSpecification<int> */
 final class IsPositiveRich extends AbstractRichSpecification
 {
-    #[\Override]
+    #[Override]
     public function evaluate(mixed $candidate): Either
     {
         if (is_int($candidate) && $candidate > 0) {

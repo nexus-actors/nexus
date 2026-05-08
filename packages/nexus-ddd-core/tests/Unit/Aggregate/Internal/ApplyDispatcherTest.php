@@ -9,6 +9,8 @@ use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodAmbiguousException;
 use Monadial\Nexus\Ddd\Core\Exception\ApplyMethodNotFoundException;
+use Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate\Internal\NamespaceA\Collided;
+use Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate\Internal\NamespaceB\Collided as CollidedB;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -86,12 +88,15 @@ final class ApplyDispatcherTest extends TestCase
         $dispatcher = new ApplyDispatcher();
 
         // First dispatch caches under conventional resolution.
-        $dispatcher->dispatch($aggregate, new \Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate\Internal\NamespaceA\Collided('a'));
+        $dispatcher->dispatch($aggregate, new Collided('a'));
 
         // Second event has same short name "Collided" but no #[AppliesTo] —
         // collision detected, exception thrown, prior cache invalidated.
         $this->expectException(ApplyMethodAmbiguousException::class);
-        $dispatcher->dispatch($aggregate, new \Monadial\Nexus\Ddd\Core\Tests\Unit\Aggregate\Internal\NamespaceB\Collided('b'));
+        $dispatcher->dispatch(
+            $aggregate,
+            new CollidedB('b'),
+        );
     }
 }
 

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Resolution;
 
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
-use Monadial\Nexus\Ddd\Messaging\Handler\EventListener;
 use Monadial\Nexus\Ddd\Messaging\Resolution\EventListenerLocator;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;

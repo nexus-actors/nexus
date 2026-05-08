@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Core\Tests\Unit\Identity;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Ddd\Core\Identity\AbstractCompositeIdentifier;
 use Monadial\Nexus\Ddd\Core\Identity\CompositeIdentifier;
-use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -76,7 +77,7 @@ final readonly class TenantOrderId extends AbstractCompositeIdentifier
         parent::__construct(['tenant' => $tenant, 'order' => $order]);
     }
 
-    #[\Override]
+    #[Override]
     public function value(): string
     {
         $components = $this->components();
@@ -84,15 +85,17 @@ final readonly class TenantOrderId extends AbstractCompositeIdentifier
         return $components['tenant']->value() . ':' . $components['order']->value();
     }
 
-    #[\Override]
+    #[Override]
     public static function fromString(string $value): static
     {
         $parts = explode(':', $value);
+
         if (count($parts) !== 2) {
-            throw new \InvalidArgumentException(
+            throw new InvalidArgumentException(
                 sprintf('TenantOrderId expects "tenant:order" canonical form; got "%s".', $value),
             );
         }
+
         [$tenant, $order] = $parts;
 
         return new self(

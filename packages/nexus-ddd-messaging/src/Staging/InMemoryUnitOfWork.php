@@ -19,7 +19,11 @@ final readonly class InMemoryUnitOfWork implements UnitOfWork
     public function __construct(private MessageStaging $staging) {}
 
     #[Override]
-    public function begin(): void {}
+    public function begin(): void
+    {
+        // No-op — in-memory UoW has no transactional boundary to open. Persistent
+        // implementations open the database transaction here.
+    }
 
     #[Override]
     public function commit(): void

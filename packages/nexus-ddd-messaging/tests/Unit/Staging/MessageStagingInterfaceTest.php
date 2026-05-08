@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use ReflectionMethod;
 
 #[CoversNothing]
 final class MessageStagingInterfaceTest extends TestCase
@@ -21,7 +22,7 @@ final class MessageStagingInterfaceTest extends TestCase
         self::assertTrue($reflection->isInterface());
 
         $methods = array_map(
-            static fn(\ReflectionMethod $m) => $m->getName(),
+            static fn(ReflectionMethod $m) => $m->getName(),
             $reflection->getMethods(),
         );
 

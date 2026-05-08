@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Override;
 
 /**
  * @psalm-api
@@ -22,7 +23,7 @@ final class RecordingEnvelopedCommandBus implements EnvelopedCommandBus
     /** @var list<Envelope<Command>> */
     private array $recordedEnvelopes = [];
 
-    #[\Override]
+    #[Override]
     public function dispatchCommand(Command $command): void
     {
         $this->recorded[] = $command;
@@ -31,7 +32,7 @@ final class RecordingEnvelopedCommandBus implements EnvelopedCommandBus
     /**
      * @param Envelope<Command> $envelope
      */
-    #[\Override]
+    #[Override]
     public function dispatchEnveloped(Envelope $envelope): void
     {
         $this->recordedEnvelopes[] = $envelope;

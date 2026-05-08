@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Override;
 
 /**
  * @psalm-api
@@ -22,7 +23,7 @@ final class RecordingEnvelopedEventBus implements EnvelopedEventBus
     /** @var list<Envelope<DomainEvent>> */
     private array $recordedEnvelopes = [];
 
-    #[\Override]
+    #[Override]
     public function publishEvent(DomainEvent $event): void
     {
         $this->recorded[] = $event;
@@ -31,7 +32,7 @@ final class RecordingEnvelopedEventBus implements EnvelopedEventBus
     /**
      * @param Envelope<DomainEvent> $envelope
      */
-    #[\Override]
+    #[Override]
     public function publishEnveloped(Envelope $envelope): void
     {
         $this->recordedEnvelopes[] = $envelope;

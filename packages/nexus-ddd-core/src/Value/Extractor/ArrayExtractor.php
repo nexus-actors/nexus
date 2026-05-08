@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Core\Value\Extractor;
 
 use Monadial\Nexus\Ddd\Core\Value\ArrayValue;
+use NoDiscard;
 
 /**
  * @psalm-api
@@ -23,7 +24,7 @@ final class ArrayExtractor
      * @param ArrayValue<TKey, TValue> $value
      * @return array<TKey, TValue>
      */
-    #[\NoDiscard('extract() returns the inner array — its return is the entire purpose of the call')]
+    #[NoDiscard('extract() returns the inner array — its return is the entire purpose of the call')]
     public static function extract(ArrayValue $value): array
     {
         return ValueExtractor::extract($value);

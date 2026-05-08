@@ -12,6 +12,7 @@ use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
 use Monadial\Nexus\Ddd\Core\Value\UlidValue;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -111,7 +112,7 @@ final class StatefulSample extends StatefulAggregateRoot
         return new self($id);
     }
 
-    #[\Override]
+    #[Override]
     public function id(): TestUlidId
     {
         /** @var TestUlidId */

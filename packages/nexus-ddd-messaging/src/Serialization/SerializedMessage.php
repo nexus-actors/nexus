@@ -10,9 +10,5 @@ namespace Monadial\Nexus\Ddd\Messaging\Serialization;
  */
 final readonly class SerializedMessage
 {
-    public function __construct(
-        public string $body,
-        public string $format,
-        public string $messageClass,
-    ) {}
+    public function __construct(public string $body, public string $format, public string $messageClass,) {}
 }

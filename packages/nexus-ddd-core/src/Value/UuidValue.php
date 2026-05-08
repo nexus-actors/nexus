@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Core\Value;
 
 use Monadial\Nexus\Ddd\Core\Exception\InvalidIdentifierException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
+use Override;
 use Symfony\Component\Uid\Uuid;
 
 /**
@@ -28,19 +29,20 @@ abstract readonly class UuidValue extends WrappedValue implements Identifier
         if (! Uuid::isValid($value)) {
             throw InvalidIdentifierException::malformed(static::class, $value, 'not a valid UUID');
         }
+
         parent::__construct($value);
     }
 
     /**
      * Class-level `@psalm-immutable` keeps this implicitly pure.
      */
-    #[\Override]
+    #[Override]
     public function value(): string
     {
         return $this->getValue();
     }
 
-    #[\Override]
+    #[Override]
     public static function fromString(string $value): static
     {
         return new static($value);

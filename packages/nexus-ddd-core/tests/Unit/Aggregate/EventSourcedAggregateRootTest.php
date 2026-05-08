@@ -9,6 +9,7 @@ use Monadial\Nexus\Ddd\Core\Aggregate\Internal\ApplyDispatcher;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Entity\EventSourceable;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -104,7 +105,12 @@ final class EsAggregate extends EventSourcedAggregateRoot
      * with state already populated, then sets version to the snapshot's
      * stream revision via the framework rehydration hook.
      */
-    public static function createWithSnapshotState(TestUlidId $id, int $total, int $atRevision, ApplyDispatcher $dispatcher): self
+    public static function createWithSnapshotState(
+        TestUlidId $id,
+        int $total,
+        int $atRevision,
+        ApplyDispatcher $dispatcher,
+    ): self
     {
         $a = new self($id, $dispatcher);
         $a->total = $total;
@@ -113,7 +119,7 @@ final class EsAggregate extends EventSourcedAggregateRoot
         return $a;
     }
 
-    #[\Override]
+    #[Override]
     public function id(): TestUlidId
     {
         /** @var TestUlidId */
