@@ -20,11 +20,11 @@ final class PerAggregateTypeStreamStrategyTest extends TestCase
         $id = $this->stubIdentifier('order-1');
         self::assertSame(
             'ddd_events_order',
-            $strategy->streamFor('App\\Order', $id)->value,
+            $strategy->streamFor('App\\Order', $id)->value(),
         );
         self::assertSame(
             'ddd_events_customer_account',
-            $strategy->streamFor('App\\CustomerAccount', $id)->value,
+            $strategy->streamFor('App\\CustomerAccount', $id)->value(),
         );
     }
 
@@ -34,8 +34,8 @@ final class PerAggregateTypeStreamStrategyTest extends TestCase
         $strategy = new PerAggregateTypeStreamStrategy();
         $id = $this->stubIdentifier('order-1');
         self::assertSame(
-            $strategy->streamFor('App\\Order', $id)->value,
-            $strategy->streamFor('Different\\Namespace\\Order', $id)->value,
+            $strategy->streamFor('App\\Order', $id)->value(),
+            $strategy->streamFor('Different\\Namespace\\Order', $id)->value(),
         );
     }
 

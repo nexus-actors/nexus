@@ -16,7 +16,7 @@ final class StreamNameTest extends TestCase
     public function constructsWithStringValue(): void
     {
         $name = new StreamName('ddd_events');
-        self::assertSame('ddd_events', $name->value);
+        self::assertSame('ddd_events', $name->value());
     }
 
     #[Test]
