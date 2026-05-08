@@ -53,15 +53,6 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
     private bool $isReplaying = false;
 
     /**
-     * Mutate state in response to a domain event. Runs both during command
-     * execution and during replay. Implementations are typically a
-     * `match (true) { $event instanceof X => $this->whenX($event), ... }`.
-     *
-     * @param TEvent $event
-     */
-    abstract protected function apply(DomainEvent $event): void;
-
-    /**
      * Record + apply: dispatch through `apply()` so state moves in lock-step
      * with the recorded stream, then append the event and bump version.
      *
@@ -82,6 +73,7 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
         }
 
         $this->apply($event);
+
         parent::recordThat($event);
     }
 
@@ -104,4 +96,13 @@ abstract class EventSourcedAggregateRoot extends AggregateRoot implements EventS
             $this->isReplaying = false;
         }
     }
+
+    /**
+     * Mutate state in response to a domain event. Runs both during command
+     * execution and during replay. Implementations are typically a
+     * `match (true) { $event instanceof X => $this->whenX($event), ... }`.
+     *
+     * @param TEvent $event
+     */
+    abstract protected function apply(DomainEvent $event): void;
 }

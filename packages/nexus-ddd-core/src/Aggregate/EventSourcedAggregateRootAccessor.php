@@ -38,18 +38,17 @@ final class EventSourcedAggregateRootAccessor extends EventSourcedAggregateRoot
     /**
      * @psalm-suppress UnsafeInstantiation
      */
-    public function __construct() {}
+    public function __construct()
+    {
+        // Intentionally empty — the parent's required Identifier param is bypassed
+        // because this class is never instantiated as a real aggregate; it exists
+        // only to inherit protected-access rights via PHP's class-hierarchy rule.
+    }
 
     #[Override]
     public function id(): Identifier
     {
         throw new LogicException(self::class . ' is a friend-class accessor; it carries no identity.');
-    }
-
-    #[Override]
-    protected function apply(DomainEvent $event): void
-    {
-        throw new LogicException(self::class . ' is a friend-class accessor; it cannot apply events.');
     }
 
     /**
@@ -93,5 +92,11 @@ final class EventSourcedAggregateRootAccessor extends EventSourcedAggregateRoot
     public function rehydrateVersionOn(AggregateRoot $aggregate, int $revision): void
     {
         $aggregate->rehydrateVersion($revision);
+    }
+
+    #[Override]
+    protected function apply(DomainEvent $event): void
+    {
+        throw new LogicException(self::class . ' is a friend-class accessor; it cannot apply events.');
     }
 }

@@ -14,14 +14,14 @@ use RecursiveIteratorIterator;
 final class ForbiddenImportsFitnessTest extends TestCase
 {
     private const array FORBIDDEN_PATTERNS = [
-        '/^use\s+Symfony\\\\(?!Component\\\\Uid\\\\)/m' => 'Symfony (except Component\\Uid)',
+        '/^use\s+Amp\\\\/m' => 'Amp',
         '/^use\s+Doctrine\\\\/m' => 'Doctrine',
+        '/^use\s+GuzzleHttp\\\\/m' => 'GuzzleHttp',
         '/^use\s+Illuminate\\\\/m' => 'Illuminate (Laravel)',
         '/^use\s+Laravel\\\\/m' => 'Laravel',
         '/^use\s+Monolog\\\\/m' => 'Monolog',
-        '/^use\s+GuzzleHttp\\\\/m' => 'GuzzleHttp',
         '/^use\s+React\\\\/m' => 'React',
-        '/^use\s+Amp\\\\/m' => 'Amp',
+        '/^use\s+Symfony\\\\(?!Component\\\\Uid\\\\)/m' => 'Symfony (except Component\\Uid)',
     ];
 
     #[Test]

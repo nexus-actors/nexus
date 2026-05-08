@@ -40,6 +40,7 @@ final class StaticStackContextStorageTest extends ContextStorageContractTest
     #[Override]
     protected function setUp(): void
     {
+        // Override the parent (TestCase default) — fixedClock() is local-only here.
     }
 
     #[Override]

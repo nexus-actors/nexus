@@ -37,12 +37,6 @@ final class StatefulAggregateRootTest extends TestCase
         self::assertSame(1, $c->version());
     }
 
-    #[Override]
-    protected function setUp(): void
-    {
-        $this->accessor = new EventSourcedAggregateRootAccessor();
-    }
-
     #[Test]
     public function statefulAggregateIsNotEventSourceable(): void
     {
@@ -53,6 +47,12 @@ final class StatefulAggregateRootTest extends TestCase
         // split: a stateful aggregate is NOT event-sourceable.
         self::assertNotInstanceOf(EventSourceable::class, $c);
         self::assertInstanceOf(StatefulAggregateRoot::class, $c);
+    }
+
+    #[Override]
+    protected function setUp(): void
+    {
+        $this->accessor = new EventSourcedAggregateRootAccessor();
     }
 }
 

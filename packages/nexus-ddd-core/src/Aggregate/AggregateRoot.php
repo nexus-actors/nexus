@@ -67,16 +67,6 @@ abstract class AggregateRoot implements Entity
         return $this->version;
     }
 
-    /** @return array<int, TEvent> */
-    #[NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
-    final protected function pullRecordedEvents(): array
-    {
-        $events = $this->recordedEvents;
-        $this->recordedEvents = [];
-
-        return $events;
-    }
-
     #[Override]
     final public function equals(Entity $other): bool
     {
@@ -86,6 +76,16 @@ abstract class AggregateRoot implements Entity
     /** @return TId */
     #[Override]
     abstract public function id(): Identifier;
+
+    /** @return array<int, TEvent> */
+    #[NoDiscard('pullRecordedEvents() drains the buffer — discarding the return loses every recorded event')]
+    final protected function pullRecordedEvents(): array
+    {
+        $events = $this->recordedEvents;
+        $this->recordedEvents = [];
+
+        return $events;
+    }
 
     /**
      * Rehydrate the aggregate version from a snapshot. Called by the

@@ -78,6 +78,7 @@
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
             <directory>packages/nexus-core/tests/Support</directory>
+            <directory>packages/nexus-ddd-core/src</directory>
             <directory>packages/nexus-ddd-messaging/src</directory>
             <directory>packages/nexus-ddd-messaging/tests/Support</directory>
         </include>
