@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -18,6 +20,7 @@ final class MessageMetadataDerivationTest extends TestCase
 {
     private MessageMetadata $root;
     private DateTimeImmutable $rootTime;
+    private NodeId $nodeId;
 
     protected function setUp(): void
     {
@@ -27,8 +30,8 @@ final class MessageMetadataDerivationTest extends TestCase
 
             public function now(): DateTimeImmutable { return $this->now; }
         };
-
-        $this->root = MessageMetadata::root($clock);
+        $this->nodeId = NodeId::generate();
+        $this->root = MessageMetadata::root($clock, $this->nodeId);
     }
 
     #[Test]
@@ -37,7 +40,7 @@ final class MessageMetadataDerivationTest extends TestCase
         $childId = MessageId::generate();
         $childTime = new DateTimeImmutable('2026-05-07T10:01:00+00:00');
 
-        $child = $this->root->forCausedMessage($childId, $childTime);
+        $child = $this->root->forCausedMessage($childId, $childTime, $this->nodeId);
 
         self::assertTrue($child->causationId->isSome());
         self::assertTrue($child->causationId->get()->equals($this->root->id));
@@ -49,7 +52,7 @@ final class MessageMetadataDerivationTest extends TestCase
         $childId = MessageId::generate();
         $childTime = new DateTimeImmutable('2026-05-07T10:01:00+00:00');
 
-        $child = $this->root->forCausedMessage($childId, $childTime);
+        $child = $this->root->forCausedMessage($childId, $childTime, $this->nodeId);
 
         self::assertTrue($child->correlationId->isSome());
         self::assertTrue($child->correlationId->get()->equals($this->root->id));
@@ -61,7 +64,7 @@ final class MessageMetadataDerivationTest extends TestCase
         $childId = MessageId::generate();
         $childTime = new DateTimeImmutable('2026-05-07T10:01:00+00:00');
 
-        $child = $this->root->forCausedMessage($childId, $childTime);
+        $child = $this->root->forCausedMessage($childId, $childTime, $this->nodeId);
 
         self::assertTrue($child->conversationId->isSome());
         self::assertTrue($child->conversationId->get()->equals($this->root->id));
@@ -81,10 +84,14 @@ final class MessageMetadataDerivationTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::none(),
+            vectorClock: VectorClock::empty()->tick($this->nodeId),
         );
 
-        $child = $parent->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $parent->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertTrue($child->correlationId->isSome());
         self::assertTrue($child->correlationId->get()->equals($correlationId));
@@ -104,10 +111,14 @@ final class MessageMetadataDerivationTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::none(),
+            vectorClock: VectorClock::empty()->tick($this->nodeId),
         );
 
-        $child = $parent->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $parent->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertTrue($child->conversationId->isSome());
         self::assertTrue($child->conversationId->get()->equals($conversationId));
@@ -117,7 +128,11 @@ final class MessageMetadataDerivationTest extends TestCase
     public function schemaVersionPropagates(): void
     {
         $parent = $this->root->withSchemaVersion(7);
-        $child = $parent->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $parent->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertSame(7, $child->schemaVersion);
     }
@@ -126,7 +141,11 @@ final class MessageMetadataDerivationTest extends TestCase
     public function traceContextPropagates(): void
     {
         $parent = $this->root->withTrace('00-trace-span-01', Option::some('vendor=foo'));
-        $child = $parent->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $parent->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertTrue($child->traceParent->isSome());
         self::assertSame('00-trace-span-01', $child->traceParent->get());
@@ -137,7 +156,11 @@ final class MessageMetadataDerivationTest extends TestCase
     public function expiresAtIsAlwaysNoneInDerivedMessage(): void
     {
         $parent = $this->root->withExpiresAt(new DateTimeImmutable('2026-05-07T12:00:00+00:00'));
-        $child = $parent->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $parent->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
 
         self::assertTrue($child->expiresAt->isNone());
     }
@@ -148,9 +171,28 @@ final class MessageMetadataDerivationTest extends TestCase
         $newId = MessageId::generate();
         $newTime = new DateTimeImmutable('2026-05-07T10:01:00+00:00');
 
-        $child = $this->root->forCausedMessage($newId, $newTime);
+        $child = $this->root->forCausedMessage($newId, $newTime, $this->nodeId);
 
         self::assertSame($newId, $child->id);
         self::assertSame($newTime, $child->occurredAt);
+    }
+
+    #[Test]
+    public function vectorClockTicksOnEveryCausalHop(): void
+    {
+        $child = $this->root->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:01:00+00:00'),
+            $this->nodeId,
+        );
+        $grandchild = $child->forCausedMessage(
+            MessageId::generate(),
+            new DateTimeImmutable('2026-05-07T10:02:00+00:00'),
+            $this->nodeId,
+        );
+
+        self::assertSame(1, $this->root->vectorClock->counters[$this->nodeId->value()]);
+        self::assertSame(2, $child->vectorClock->counters[$this->nodeId->value()]);
+        self::assertSame(3, $grandchild->vectorClock->counters[$this->nodeId->value()]);
     }
 }

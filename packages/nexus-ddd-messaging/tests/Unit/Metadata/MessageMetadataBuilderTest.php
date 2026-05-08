@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -28,7 +29,7 @@ final class MessageMetadataBuilderTest extends TestCase
             public function now(): DateTimeImmutable { return $this->now; }
         };
 
-        $this->base = MessageMetadata::root($clock);
+        $this->base = MessageMetadata::root($clock, NodeId::generate());
     }
 
     #[Test]
@@ -64,13 +65,13 @@ final class MessageMetadataBuilderTest extends TestCase
     }
 
     #[Test]
-    public function withVectorClockSetsVectorClock(): void
+    public function withVectorClockReplacesVectorClock(): void
     {
-        $vc = VectorClock::empty();
-        $updated = $this->base->withVectorClock($vc);
+        $replacement = VectorClock::empty()->tick(NodeId::generate())->tick(NodeId::generate());
+        $updated = $this->base->withVectorClock($replacement);
 
-        self::assertTrue($updated->vectorClock->isSome());
-        self::assertSame($vc, $updated->vectorClock->get());
+        self::assertSame($replacement, $updated->vectorClock);
+        self::assertNotSame($this->base->vectorClock, $updated->vectorClock);
         self::assertSame($this->base->id, $updated->id);
     }
 

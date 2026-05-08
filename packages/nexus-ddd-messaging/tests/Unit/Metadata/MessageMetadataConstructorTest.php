@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -17,7 +19,7 @@ use Psr\Clock\ClockInterface;
 final class MessageMetadataConstructorTest extends TestCase
 {
     #[Test]
-    public function rootProducesMetadataWithAllOptionalFieldsAbsent(): void
+    public function rootProducesMetadataWithVectorClockTickedForProducingNode(): void
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
         $clock = new class ($now) implements ClockInterface {
@@ -25,8 +27,9 @@ final class MessageMetadataConstructorTest extends TestCase
 
             public function now(): DateTimeImmutable { return $this->now; }
         };
+        $nodeId = NodeId::generate();
 
-        $meta = MessageMetadata::root($clock);
+        $meta = MessageMetadata::root($clock, $nodeId);
 
         self::assertInstanceOf(MessageId::class, $meta->id);
         self::assertSame($now, $meta->occurredAt);
@@ -37,7 +40,7 @@ final class MessageMetadataConstructorTest extends TestCase
         self::assertTrue($meta->traceParent->isNone());
         self::assertTrue($meta->traceState->isNone());
         self::assertTrue($meta->expiresAt->isNone());
-        self::assertTrue($meta->vectorClock->isNone());
+        self::assertSame(1, $meta->vectorClock->counters[$nodeId->value()]);
     }
 
     #[Test]
@@ -47,6 +50,7 @@ final class MessageMetadataConstructorTest extends TestCase
         $cause = MessageId::generate();
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
         $expires = new DateTimeImmutable('2026-05-07T11:00:00+00:00');
+        $vectorClock = VectorClock::empty()->tick(NodeId::generate());
 
         $meta = new MessageMetadata(
             id: $id,
@@ -58,11 +62,12 @@ final class MessageMetadataConstructorTest extends TestCase
             traceParent: Option::some('00-abc-def-01'),
             traceState: Option::none(),
             expiresAt: Option::some($expires),
-            vectorClock: Option::none(),
+            vectorClock: $vectorClock,
         );
 
         self::assertSame($id, $meta->id);
         self::assertTrue($meta->causationId->isSome());
         self::assertSame(3, $meta->schemaVersion);
+        self::assertSame($vectorClock, $meta->vectorClock);
     }
 }

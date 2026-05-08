@@ -9,18 +9,26 @@ use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClockOrdering;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Psr\Clock\ClockInterface;
 
 /**
  * @psalm-api
- * @psalm-immutable
  *
  * Required metadata on every Envelope. The fields are non-negotiable
  * because they're load-bearing for audit trails (causation), tracing
  * (correlation/conversation/W3C trace context), idempotency (id), schema
- * evolution (schemaVersion), and observability (W3C trace context).
+ * evolution (schemaVersion), observability (W3C trace context), and
+ * partial-order causality (vectorClock — always present, ticked on every
+ * causal hop).
  *
  * Anything *not* in this list lives in a Stamp.
+ *
+ * Structurally immutable (`final readonly class`, all "with" methods
+ * return new instances). The class is NOT marked `@psalm-immutable`
+ * because the body calls `Option::*` from `fp4php/functional`, which
+ * Psalm does not recognise as pure — the looser "immutable by
+ * construction" guarantee is what Psalm can verify here.
  */
 final readonly class MessageMetadata
 {
@@ -31,7 +39,6 @@ final readonly class MessageMetadata
      * @param Option<string> $traceParent
      * @param Option<string> $traceState
      * @param Option<DateTimeImmutable> $expiresAt
-     * @param Option<VectorClock> $vectorClock
      */
     public function __construct(
         public MessageId $id,
@@ -43,15 +50,18 @@ final readonly class MessageMetadata
         public Option $traceParent,
         public Option $traceState,
         public Option $expiresAt,
-        public Option $vectorClock,
+        public VectorClock $vectorClock,
     ) {}
 
     /**
      * Application-boundary factory: synthesize a root MessageMetadata for
      * the first message in a chain (HTTP controller, CLI, scheduled job).
+     * The producing node ticks its own counter so the resulting metadata
+     * carries a non-empty vector clock — every send is one logical event
+     * in Lamport-Mattern terms.
      */
     #[\NoDiscard('the constructed metadata is the entire point of this call')]
-    public static function root(ClockInterface $clock): self
+    public static function root(ClockInterface $clock, NodeId $nodeId): self
     {
         return new self(
             id: MessageId::generate(),
@@ -63,7 +73,7 @@ final readonly class MessageMetadata
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::none(),
+            vectorClock: VectorClock::empty()->tick($nodeId),
         );
     }
 
@@ -104,6 +114,11 @@ final readonly class MessageMetadata
         );
     }
 
+    /**
+     * Override the vector clock outright. Useful when receiving a message
+     * over the wire — the receiver merges the incoming clock with its own
+     * known clock and re-stamps before forwarding.
+     */
     #[\NoDiscard('withVectorClock() returns a new instance — the original is unchanged')]
     public function withVectorClock(VectorClock $vectorClock): self
     {
@@ -117,7 +132,7 @@ final readonly class MessageMetadata
             traceParent: $this->traceParent,
             traceState: $this->traceState,
             expiresAt: $this->expiresAt,
-            vectorClock: Option::some($vectorClock),
+            vectorClock: $vectorClock,
         );
     }
 
@@ -143,11 +158,13 @@ final readonly class MessageMetadata
      * message becomes the new message's causation; correlation and
      * conversation propagate (initialized to the original id if absent —
      * the very first message in a chain is its own correlation root);
-     * trace context, vector clock, schema version flow forward unchanged.
+     * trace context and schema version flow forward unchanged. The vector
+     * clock propagates *and is ticked* by the producing node so the new
+     * metadata strictly happens-after the parent.
      * `expiresAt` does NOT propagate — TTL is per-message, not per-chain.
      */
     #[\NoDiscard('the derived metadata is the entire point of this call')]
-    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now): self
+    public function forCausedMessage(MessageId $newId, DateTimeImmutable $now, NodeId $nodeId): self
     {
         return new self(
             id: $newId,
@@ -159,7 +176,7 @@ final readonly class MessageMetadata
             traceParent: $this->traceParent,
             traceState: $this->traceState,
             expiresAt: Option::none(),
-            vectorClock: $this->vectorClock,
+            vectorClock: $this->vectorClock->tick($nodeId),
         );
     }
 
@@ -233,42 +250,23 @@ final readonly class MessageMetadata
         );
     }
 
-    public function hasVectorClock(): bool
-    {
-        return $this->vectorClock->isSome();
-    }
-
     public function happensBefore(self $other): bool
     {
-        return $this->compareCausalityWith($other)
-            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensBefore)
-            ->getOrElse(false);
+        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::HappensBefore;
     }
 
     public function happensAfter(self $other): bool
     {
-        return $this->compareCausalityWith($other)
-            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::HappensAfter)
-            ->getOrElse(false);
+        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::HappensAfter;
     }
 
     public function isConcurrentWith(self $other): bool
     {
-        return $this->compareCausalityWith($other)
-            ->map(fn(VectorClockOrdering $o) => $o === VectorClockOrdering::Concurrent)
-            ->getOrElse(false);
+        return $this->vectorClock->compareTo($other->vectorClock) === VectorClockOrdering::Concurrent;
     }
 
-    /**
-     * @return Option<VectorClockOrdering> None when either side lacks a
-     *         vector clock — partial order is undefined without both.
-     */
-    public function compareCausalityWith(self $other): Option
+    public function compareCausalityWith(self $other): VectorClockOrdering
     {
-        return $this->vectorClock->flatMap(
-            fn(VectorClock $a) => $other->vectorClock->map(
-                fn(VectorClock $b) => $a->compareTo($b),
-            ),
-        );
+        return $this->vectorClock->compareTo($other->vectorClock);
     }
 }

@@ -37,36 +37,8 @@ final class MessageMetadataVectorClockTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::some($vc),
+            vectorClock: $vc,
         );
-    }
-
-    private function metaWithoutClock(): MessageMetadata
-    {
-        return new MessageMetadata(
-            id: MessageId::generate(),
-            occurredAt: $this->now,
-            causationId: Option::none(),
-            correlationId: Option::none(),
-            conversationId: Option::none(),
-            schemaVersion: 1,
-            traceParent: Option::none(),
-            traceState: Option::none(),
-            expiresAt: Option::none(),
-            vectorClock: Option::none(),
-        );
-    }
-
-    #[Test]
-    public function hasVectorClockReturnsFalseWhenAbsent(): void
-    {
-        self::assertFalse($this->metaWithoutClock()->hasVectorClock());
-    }
-
-    #[Test]
-    public function hasVectorClockReturnsTrueWhenPresent(): void
-    {
-        self::assertTrue($this->metaWithClock(VectorClock::empty())->hasVectorClock());
     }
 
     #[Test]
@@ -103,24 +75,23 @@ final class MessageMetadataVectorClockTest extends TestCase
     }
 
     #[Test]
-    public function compareCausalityWithReturnsNoneWhenEitherLacksClock(): void
-    {
-        $withClock = $this->metaWithClock(VectorClock::empty());
-        $withoutClock = $this->metaWithoutClock();
-
-        self::assertTrue($withClock->compareCausalityWith($withoutClock)->isNone());
-        self::assertTrue($withoutClock->compareCausalityWith($withClock)->isNone());
-    }
-
-    #[Test]
-    public function compareCausalityWithReturnsOrderingWhenBothHaveClocks(): void
+    public function compareCausalityWithReturnsHappensBefore(): void
     {
         $nodeId = NodeId::generate();
         $earlier = $this->metaWithClock(VectorClock::empty()->tick($nodeId));
         $later = $this->metaWithClock(VectorClock::empty()->tick($nodeId)->tick($nodeId));
 
-        $result = $earlier->compareCausalityWith($later);
-        self::assertTrue($result->isSome());
-        self::assertSame(VectorClockOrdering::HappensBefore, $result->get());
+        self::assertSame(VectorClockOrdering::HappensBefore, $earlier->compareCausalityWith($later));
+        self::assertSame(VectorClockOrdering::HappensAfter, $later->compareCausalityWith($earlier));
+    }
+
+    #[Test]
+    public function compareCausalityWithReturnsEqualForSameClock(): void
+    {
+        $vc = VectorClock::empty()->tick(NodeId::generate());
+        $a = $this->metaWithClock($vc);
+        $b = $this->metaWithClock($vc);
+
+        self::assertSame(VectorClockOrdering::Equal, $a->compareCausalityWith($b));
     }
 }

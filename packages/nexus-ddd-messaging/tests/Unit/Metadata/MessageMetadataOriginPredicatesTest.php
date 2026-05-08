@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -17,6 +19,7 @@ use Psr\Clock\ClockInterface;
 final class MessageMetadataOriginPredicatesTest extends TestCase
 {
     private MessageMetadata $root;
+    private NodeId $nodeId;
 
     protected function setUp(): void
     {
@@ -26,8 +29,8 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
 
             public function now(): DateTimeImmutable { return $this->now; }
         };
-
-        $this->root = MessageMetadata::root($clock);
+        $this->nodeId = NodeId::generate();
+        $this->root = MessageMetadata::root($clock, $this->nodeId);
     }
 
     #[Test]
@@ -39,7 +42,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isRootReturnsFalseWhenCausationIdPresent(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
 
         self::assertFalse($child->isRoot());
     }
@@ -47,7 +50,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isCausedByReturnsTrueForDirectParent(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
 
         self::assertTrue($child->isCausedBy($this->root->id));
     }
@@ -55,7 +58,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
     #[Test]
     public function isCausedByReturnsFalseForUnrelatedId(): void
     {
-        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'));
+        $child = $this->root->forCausedMessage(MessageId::generate(), new DateTimeImmutable('2026-05-07T10:01:00+00:00'), $this->nodeId);
         $unrelated = MessageId::generate();
 
         self::assertFalse($child->isCausedBy($unrelated));
@@ -81,7 +84,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::none(),
+            vectorClock: VectorClock::empty()->tick($this->nodeId),
         );
 
         self::assertTrue($meta->correlatesTo($correlationId));
@@ -107,7 +110,7 @@ final class MessageMetadataOriginPredicatesTest extends TestCase
             traceParent: Option::none(),
             traceState: Option::none(),
             expiresAt: Option::none(),
-            vectorClock: Option::none(),
+            vectorClock: VectorClock::empty()->tick($this->nodeId),
         );
 
         self::assertTrue($meta->isPartOfConversation($conversationId));

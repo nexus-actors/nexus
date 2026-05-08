@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Duration\FiniteDuration;
+use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -28,7 +29,7 @@ final class MessageMetadataExpiryTraceTest extends TestCase
             public function now(): DateTimeImmutable { return $this->now; }
         };
 
-        $this->base = MessageMetadata::root($clock);
+        $this->base = MessageMetadata::root($clock, NodeId::generate());
     }
 
     #[Test]
