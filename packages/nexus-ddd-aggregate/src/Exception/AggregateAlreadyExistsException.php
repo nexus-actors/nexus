@@ -9,9 +9,10 @@ use Monadial\Nexus\Ddd\Core\Exception\DomainException;
 /**
  * @psalm-api
  *
- * Thrown when `AggregateRepository::add()` (or `save()` of a v=0 aggregate)
- * collides with an aggregate of the same id already persisted. The collision
- * is a domain-level fact: someone else created this aggregate first.
+ * Thrown when `AggregateRepository::save()` of a brand-new aggregate
+ * (`expectedVersion === 0`) collides with an aggregate of the same id
+ * already persisted. The collision is a domain-level fact: someone else
+ * created this aggregate first.
  *
  * Terminal — middleware does NOT retry. The handler should surface the
  * conflict to the caller, who decides how to respond. Distinct from
@@ -27,7 +28,7 @@ final class AggregateAlreadyExistsException extends DomainException
     public static function for(string $aggregateClass, string $aggregateId): self
     {
         return new self(sprintf(
-            'Aggregate %s with id %s already exists. (add() or save(version=0) collided with a previously-persisted aggregate.)',
+            'Aggregate %s with id %s already exists. (save(expectedVersion=0) collided with a previously-persisted aggregate.)',
             $aggregateClass,
             $aggregateId,
         ));

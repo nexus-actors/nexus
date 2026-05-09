@@ -11,8 +11,8 @@ use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
  * @psalm-api
  * @psalm-immutable
  *
- * Persisted-snapshot wrapper. DDD-owned — replaces
- * nexus-persistence's `SnapshotEnvelope`.
+ * Persisted-snapshot wrapper. DDD-owned, so this package can be
+ * extracted without dragging the actor-system persistence layer along.
  *
  * Carries the aggregate's serialized state at a specific sequence
  * number. The state is `object` (already typed via Valinor at the
