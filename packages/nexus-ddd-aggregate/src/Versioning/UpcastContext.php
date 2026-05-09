@@ -10,16 +10,18 @@ use DateTimeImmutable;
  * @psalm-api
  * @psalm-immutable
  *
- * Read-only context passed to upcasters. Subset of the persisted envelope's
- * metadata that upcasters legitimately need (event name + the version
- * they're transforming FROM + occurredAt for time-aware upcasts).
+ * Read-only context passed to upcasters. Carries the diagnostic /
+ * time-aware fields the upcaster body may legitimately read. The
+ * upcaster's typed input event already encodes its own `(eventName,
+ * version)` via its `#[Event]` attribute; the context exists only for
+ * data that's NOT in the event itself.
  *
  * Local to nexus-ddd-aggregate so the package stays independent of
  * nexus-ddd-messaging (where the broader `MessageMetadata` lives).
  * `EventSourcingStrategy` constructs the context from the persisted
  * envelope's metadata at replay time.
  */
-final readonly class PayloadContext
+final readonly class UpcastContext
 {
     public function __construct(
         public string $eventName,

@@ -6,9 +6,10 @@ namespace Monadial\Nexus\Ddd\Aggregate\Tests\Unit\Versioning;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Ddd\Aggregate\Exception\UpcasterChainGapException;
-use Monadial\Nexus\Ddd\Aggregate\Versioning\PayloadContext;
+use Monadial\Nexus\Ddd\Aggregate\Versioning\UpcastContext;
 use Monadial\Nexus\Ddd\Aggregate\Versioning\Upcaster;
 use Monadial\Nexus\Ddd\Aggregate\Versioning\UpcasterRegistry;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -20,25 +21,25 @@ final class UpcasterRegistryTest extends TestCase
     public function scanWithEmptyInputReturnsEmptyPipeline(): void
     {
         $pipeline = UpcasterRegistry::scan([]);
-        $result = $pipeline->upcast('any.Event', 1, ['payload' => 'x'], $this->ctx());
-        self::assertSame(['payload' => 'x'], $result);
+        $event = new RegV1('id-1');
+        $result = $pipeline->upcast('any.Event', 1, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
     #[Test]
     public function scanWithSingleUpcasterReturnsWorkingPipeline(): void
     {
-        $pipeline = UpcasterRegistry::scan([SingleV1ToV2::class]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 1, ['payload' => 'v1'], $this->ctx());
-        self::assertEqualsCanonicalizing(['payload' => 'v1', 'v2' => true], $result);
+        $pipeline = UpcasterRegistry::scan([SingleRegV1ToV2::class]);
+        $result = $pipeline->upcast('orders.OrderPlaced', 1, new RegV1('id-1'), $this->ctx());
+        self::assertInstanceOf(RegV2::class, $result);
     }
 
     #[Test]
     public function scanWithChainV1ToV3RegistersBoth(): void
     {
-        $pipeline = UpcasterRegistry::scan([ChainV1ToV2::class, ChainV2ToV3::class]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 1, [], $this->ctx());
-        self::assertArrayHasKey('v2', $result);
-        self::assertArrayHasKey('v3', $result);
+        $pipeline = UpcasterRegistry::scan([ChainRegV1ToV2::class, ChainRegV2ToV3::class]);
+        $result = $pipeline->upcast('orders.OrderPlaced', 1, new RegV1('id-1'), $this->ctx());
+        self::assertInstanceOf(RegV3::class, $result);
     }
 
     #[Test]
@@ -46,16 +47,31 @@ final class UpcasterRegistryTest extends TestCase
     {
         $this->expectException(UpcasterChainGapException::class);
         $this->expectExceptionMessageMatches('/orders\.OrderPlaced.*v2.*v3/');
-        UpcasterRegistry::scan([GapV1ToV2::class, GapV3ToV4::class]);
+        UpcasterRegistry::scan([GapRegV1ToV2::class, GapRegV3ToV4::class]);
     }
 
-    private function ctx(): PayloadContext
+    private function ctx(): UpcastContext
     {
-        return new PayloadContext('orders.OrderPlaced', 1, new DateTimeImmutable('2026-05-08T12:00:00+00:00'));
+        return new UpcastContext('orders.OrderPlaced', 1, new DateTimeImmutable('2026-05-08T12:00:00+00:00'));
     }
 }
 
-final class SingleV1ToV2 implements Upcaster
+final readonly class RegV1 implements DomainEvent
+{
+    public function __construct(public string $id) {}
+}
+
+final readonly class RegV2 implements DomainEvent
+{
+    public function __construct(public string $id) {}
+}
+
+final readonly class RegV3 implements DomainEvent
+{
+    public function __construct(public string $id) {}
+}
+
+final class SingleRegV1ToV2 implements Upcaster
 {
     public function eventName(): string
     {
@@ -72,17 +88,15 @@ final class SingleV1ToV2 implements Upcaster
         return 2;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return [...$payload, 'v2' => true];
+        assert($event instanceof RegV1);
+
+        return new RegV2($event->id);
     }
 }
 
-final class ChainV1ToV2 implements Upcaster
+final class ChainRegV1ToV2 implements Upcaster
 {
     public function eventName(): string
     {
@@ -99,17 +113,15 @@ final class ChainV1ToV2 implements Upcaster
         return 2;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return [...$payload, 'v2' => true];
+        assert($event instanceof RegV1);
+
+        return new RegV2($event->id);
     }
 }
 
-final class ChainV2ToV3 implements Upcaster
+final class ChainRegV2ToV3 implements Upcaster
 {
     public function eventName(): string
     {
@@ -126,17 +138,15 @@ final class ChainV2ToV3 implements Upcaster
         return 3;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return [...$payload, 'v3' => true];
+        assert($event instanceof RegV2);
+
+        return new RegV3($event->id);
     }
 }
 
-final class GapV1ToV2 implements Upcaster
+final class GapRegV1ToV2 implements Upcaster
 {
     public function eventName(): string
     {
@@ -153,17 +163,13 @@ final class GapV1ToV2 implements Upcaster
         return 2;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return $payload;
+        return $event;
     }
 }
 
-final class GapV3ToV4 implements Upcaster
+final class GapRegV3ToV4 implements Upcaster
 {
     public function eventName(): string
     {
@@ -180,12 +186,8 @@ final class GapV3ToV4 implements Upcaster
         return 4;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return $payload;
+        return $event;
     }
 }

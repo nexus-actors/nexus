@@ -6,8 +6,9 @@ namespace Monadial\Nexus\Ddd\Aggregate\Tests\Unit\Versioning;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Ddd\Aggregate\Versioning\DefaultUpcasterPipeline;
-use Monadial\Nexus\Ddd\Aggregate\Versioning\PayloadContext;
+use Monadial\Nexus\Ddd\Aggregate\Versioning\UpcastContext;
 use Monadial\Nexus\Ddd\Aggregate\Versioning\Upcaster;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -16,21 +17,24 @@ use PHPUnit\Framework\TestCase;
 final class DefaultUpcasterPipelineTest extends TestCase
 {
     #[Test]
-    public function upcastWithNoUpcastersReturnsPayloadUnchanged(): void
+    public function upcastWithNoUpcastersReturnsEventUnchanged(): void
     {
         $pipeline = new DefaultUpcasterPipeline([]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 1, ['payload' => 'v1'], $this->ctx());
-        self::assertSame(['payload' => 'v1'], $result);
+        $event = new OrderPlacedV1('order-1');
+        $result = $pipeline->upcast('orders.OrderPlaced', 1, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
     #[Test]
-    public function upcastWithOneUpcasterTransformsPayload(): void
+    public function upcastWithOneUpcasterTransformsEvent(): void
     {
         $pipeline = new DefaultUpcasterPipeline([
-            'orders.OrderPlaced' => [1 => new V1ToV2()],
+            'orders.OrderPlaced' => [1 => new OrderPlacedV1ToV2()],
         ]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 1, ['payload' => 'v1'], $this->ctx());
-        self::assertEqualsCanonicalizing(['added_in_v2' => true, 'payload' => 'v1'], $result);
+        $result = $pipeline->upcast('orders.OrderPlaced', 1, new OrderPlacedV1('order-1'), $this->ctx());
+        self::assertInstanceOf(OrderPlacedV2::class, $result);
+        self::assertSame('order-1', $result->orderId);
+        self::assertNull($result->customerId);   // v2 default for the new field
     }
 
     #[Test]
@@ -38,35 +42,36 @@ final class DefaultUpcasterPipelineTest extends TestCase
     {
         $pipeline = new DefaultUpcasterPipeline([
             'orders.OrderPlaced' => [
-                1 => new V1ToV2(),
-                2 => new V2ToV3(),
+                1 => new OrderPlacedV1ToV2(),
+                2 => new OrderPlacedV2ToV3(),
             ],
         ]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 1, ['payload' => 'v1'], $this->ctx());
-        self::assertEqualsCanonicalizing(
-            ['added_in_v2' => true, 'added_in_v3' => 'three', 'payload' => 'v1'],
-            $result,
-        );
+        $result = $pipeline->upcast('orders.OrderPlaced', 1, new OrderPlacedV1('order-1'), $this->ctx());
+        self::assertInstanceOf(OrderPlacedV3::class, $result);
+        self::assertSame('order-1', $result->orderId);
+        self::assertSame('USD', $result->currency);   // v3 default
     }
 
     #[Test]
     public function upcastSkipsUpcastersForOtherEventNames(): void
     {
         $pipeline = new DefaultUpcasterPipeline([
-            'orders.OrderPlaced' => [1 => new V1ToV2()],
+            'orders.OrderPlaced' => [1 => new OrderPlacedV1ToV2()],
         ]);
-        $result = $pipeline->upcast('orders.OrderShipped', 1, ['payload' => 'shipping'], $this->ctx());
-        self::assertSame(['payload' => 'shipping'], $result);
+        $event = new OrderPlacedV1('order-1');
+        $result = $pipeline->upcast('orders.OrderShipped', 1, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
     #[Test]
     public function upcastStartingAboveRegisteredFromVersionReturnsUnchanged(): void
     {
         $pipeline = new DefaultUpcasterPipeline([
-            'orders.OrderPlaced' => [1 => new V1ToV2()],
+            'orders.OrderPlaced' => [1 => new OrderPlacedV1ToV2()],
         ]);
-        $result = $pipeline->upcast('orders.OrderPlaced', 2, ['payload' => 'v2'], $this->ctx());
-        self::assertSame(['payload' => 'v2'], $result);
+        $event = new OrderPlacedV2('order-1', null);
+        $result = $pipeline->upcast('orders.OrderPlaced', 2, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
     #[Test]
@@ -74,41 +79,65 @@ final class DefaultUpcasterPipelineTest extends TestCase
     {
         $pipeline = new DefaultUpcasterPipeline([
             'orders.OrderPlaced' => [
-                1 => new V1ToV2(),
-                2 => new V2ToV3(),
+                1 => new OrderPlacedV1ToV2(),
+                2 => new OrderPlacedV2ToV3(),
             ],
         ]);
-        $result = $pipeline->upcastTo('orders.OrderPlaced', 1, 2, ['payload' => 'v1'], $this->ctx());
-        self::assertEqualsCanonicalizing(['added_in_v2' => true, 'payload' => 'v1'], $result);
+        $result = $pipeline->upcastTo('orders.OrderPlaced', 1, 2, new OrderPlacedV1('order-1'), $this->ctx());
+        self::assertInstanceOf(OrderPlacedV2::class, $result);
     }
 
     #[Test]
     public function upcastToWithTargetEqualToFromReturnsUnchanged(): void
     {
         $pipeline = new DefaultUpcasterPipeline([
-            'orders.OrderPlaced' => [1 => new V1ToV2()],
+            'orders.OrderPlaced' => [1 => new OrderPlacedV1ToV2()],
         ]);
-        $result = $pipeline->upcastTo('orders.OrderPlaced', 1, 1, ['payload' => 'v1'], $this->ctx());
-        self::assertSame(['payload' => 'v1'], $result);
+        $event = new OrderPlacedV1('order-1');
+        $result = $pipeline->upcastTo('orders.OrderPlaced', 1, 1, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
     #[Test]
     public function upcastToWithTargetBelowFromReturnsUnchanged(): void
     {
         $pipeline = new DefaultUpcasterPipeline([
-            'orders.OrderPlaced' => [1 => new V1ToV2()],
+            'orders.OrderPlaced' => [1 => new OrderPlacedV1ToV2()],
         ]);
-        $result = $pipeline->upcastTo('orders.OrderPlaced', 2, 1, ['payload' => 'v2'], $this->ctx());
-        self::assertSame(['payload' => 'v2'], $result);
+        $event = new OrderPlacedV2('order-1', null);
+        $result = $pipeline->upcastTo('orders.OrderPlaced', 2, 1, $event, $this->ctx());
+        self::assertSame($event, $result);
     }
 
-    private function ctx(): PayloadContext
+    private function ctx(): UpcastContext
     {
-        return new PayloadContext('orders.OrderPlaced', 1, new DateTimeImmutable('2026-05-08T12:00:00+00:00'));
+        return new UpcastContext('orders.OrderPlaced', 1, new DateTimeImmutable('2026-05-08T12:00:00+00:00'));
     }
 }
 
-final class V1ToV2 implements Upcaster
+final readonly class OrderPlacedV1 implements DomainEvent
+{
+    public function __construct(public string $orderId) {}
+}
+
+final readonly class OrderPlacedV2 implements DomainEvent
+{
+    public function __construct(
+        public string $orderId,
+        public ?string $customerId,
+    ) {}
+}
+
+final readonly class OrderPlacedV3 implements DomainEvent
+{
+    public function __construct(
+        public string $orderId,
+        public ?string $customerId,
+        public string $currency,
+    ) {}
+}
+
+final class OrderPlacedV1ToV2 implements Upcaster
 {
     public function eventName(): string
     {
@@ -125,17 +154,15 @@ final class V1ToV2 implements Upcaster
         return 2;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return [...$payload, 'added_in_v2' => true];
+        assert($event instanceof OrderPlacedV1);
+
+        return new OrderPlacedV2($event->orderId, null);
     }
 }
 
-final class V2ToV3 implements Upcaster
+final class OrderPlacedV2ToV3 implements Upcaster
 {
     public function eventName(): string
     {
@@ -152,12 +179,10 @@ final class V2ToV3 implements Upcaster
         return 3;
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     * @return array<string, mixed>
-     */
-    public function upcast(array $payload, PayloadContext $context): array
+    public function upcast(DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        return [...$payload, 'added_in_v3' => 'three'];
+        assert($event instanceof OrderPlacedV2);
+
+        return new OrderPlacedV3($event->orderId, $event->customerId, 'USD');
     }
 }

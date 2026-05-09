@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Aggregate\Versioning;
 
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Override;
 
 /**
  * @psalm-api
  *
- * Default in-memory pipeline. Holds a `eventName -> fromVersion -> Upcaster`
+ * Default in-memory pipeline. Holds an `eventName -> fromVersion -> Upcaster`
  * lookup; walks it iteratively for both `upcast()` (to-latest) and
- * `upcastTo($targetVersion)` (pin).
+ * `upcastTo($targetVersion)` (pin). Each step transforms a typed
+ * `DomainEvent` to the next-version typed `DomainEvent`.
  */
 final readonly class DefaultUpcasterPipeline implements UpcasterPipeline
 {
@@ -21,9 +23,9 @@ final readonly class DefaultUpcasterPipeline implements UpcasterPipeline
     public function __construct(private array $byEventAndFrom) {}
 
     #[Override]
-    public function upcast(string $eventName, int $fromVersion, array $payload, PayloadContext $context): array
+    public function upcast(string $eventName, int $fromVersion, DomainEvent $event, UpcastContext $context): DomainEvent
     {
-        $current = $payload;
+        $current = $event;
         $version = $fromVersion;
 
         while (isset($this->byEventAndFrom[$eventName][$version])) {
@@ -40,14 +42,14 @@ final readonly class DefaultUpcasterPipeline implements UpcasterPipeline
         string $eventName,
         int $fromVersion,
         int $targetVersion,
-        array $payload,
-        PayloadContext $context,
-    ): array {
+        DomainEvent $event,
+        UpcastContext $context,
+    ): DomainEvent {
         if ($fromVersion >= $targetVersion) {
-            return $payload;
+            return $event;
         }
 
-        $current = $payload;
+        $current = $event;
         $version = $fromVersion;
 
         while ($version < $targetVersion && isset($this->byEventAndFrom[$eventName][$version])) {

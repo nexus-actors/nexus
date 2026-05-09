@@ -7,11 +7,15 @@ namespace Monadial\Nexus\Ddd\Aggregate\Versioning;
 /**
  * @psalm-api
  *
+ * @template TIn of object
+ * @template TOut of object
+ *
  * Pure transformation `(snapshotStateV_n, context) → snapshotStateV_n+1`
- * for ONE snapshot stateVersion transition. Snapshots store the
- * aggregate's full state at a sequence number; bumping `stateVersion()`
- * on the aggregate (because state shape changed) requires a snapshot
- * upcaster to migrate previously-written snapshots.
+ * for ONE snapshot stateVersion transition. Like `Upcaster` for events,
+ * snapshot upcasters work with typed state objects on both sides — the
+ * persistence layer Valinor-maps the persisted JSON to the typed v_n
+ * state class BEFORE the upcaster sees it, so the upcaster never
+ * touches arrays.
  *
  * Same purity rules as `Upcaster` — no clock, no RNG, no logger, no
  * aggregate state access.
@@ -30,8 +34,8 @@ interface SnapshotUpcaster
     public function toStateVersion(): int;
 
     /**
-     * @param array<string, mixed> $state
-     * @return array<string, mixed>
+     * @param TIn $state
+     * @return TOut
      */
-    public function upcast(array $state, PayloadContext $context): array;
+    public function upcast(object $state, UpcastContext $context): object;
 }
