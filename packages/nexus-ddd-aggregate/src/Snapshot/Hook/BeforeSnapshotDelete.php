@@ -12,7 +12,10 @@ use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
  *
  * Dispatched before SnapshotStore::delete() removes a snapshot.
  */
-final readonly class BeforeSnapshotDelete
+final readonly class BeforeSnapshotDelete extends SnapshotHookEvent
 {
-    public function __construct(public AggregateStreamId $streamId, public int $upToSequenceNr) {}
+    public function __construct(AggregateStreamId $streamId, public int $upToSequenceNr)
+    {
+        parent::__construct($streamId);
+    }
 }

@@ -14,13 +14,15 @@ use Monadial\Nexus\Ddd\Aggregate\Event\StoredEvent;
  * Dispatched after VersionedEventStore::load() materializes events.
  * Carries the loaded list so listeners can inspect what was read.
  */
-final readonly class AfterEventStoreLoad
+final readonly class AfterEventStoreLoad extends EventStoreHookEvent
 {
     /** @param list<StoredEvent> $events */
     public function __construct(
-        public AggregateStreamId $streamId,
+        AggregateStreamId $streamId,
         public int $fromSequenceNr,
         public int $toSequenceNr,
         public array $events,
-    ) {}
+    ) {
+        parent::__construct($streamId);
+    }
 }

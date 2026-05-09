@@ -12,7 +12,10 @@ use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
  *
  * Dispatched before SnapshotStore::load() looks up a snapshot.
  */
-final readonly class BeforeSnapshotLoad
+final readonly class BeforeSnapshotLoad extends SnapshotHookEvent
 {
-    public function __construct(public AggregateStreamId $streamId) {}
+    public function __construct(AggregateStreamId $streamId)
+    {
+        parent::__construct($streamId);
+    }
 }

@@ -13,7 +13,10 @@ use Monadial\Nexus\Ddd\Aggregate\Snapshot\Snapshot;
  *
  * Dispatched before SnapshotStore::save() persists a snapshot.
  */
-final readonly class BeforeSnapshotSave
+final readonly class BeforeSnapshotSave extends SnapshotHookEvent
 {
-    public function __construct(public AggregateStreamId $streamId, public Snapshot $snapshot) {}
+    public function __construct(AggregateStreamId $streamId, public Snapshot $snapshot)
+    {
+        parent::__construct($streamId);
+    }
 }

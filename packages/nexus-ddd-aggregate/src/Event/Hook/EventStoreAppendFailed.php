@@ -16,13 +16,15 @@ use Throwable;
  * an OptimisticLockException, but `$exception` is typed Throwable so any
  * failure surfaces here.
  */
-final readonly class EventStoreAppendFailed
+final readonly class EventStoreAppendFailed extends EventStoreHookEvent
 {
     /** @param list<StoredEvent> $events */
     public function __construct(
-        public AggregateStreamId $streamId,
+        AggregateStreamId $streamId,
         public int $expectedVersion,
         public array $events,
         public Throwable $exception,
-    ) {}
+    ) {
+        parent::__construct($streamId);
+    }
 }

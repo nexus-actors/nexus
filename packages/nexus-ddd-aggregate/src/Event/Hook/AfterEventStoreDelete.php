@@ -12,7 +12,10 @@ use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
  *
  * Dispatched after VersionedEventStore::deleteUpTo() completes.
  */
-final readonly class AfterEventStoreDelete
+final readonly class AfterEventStoreDelete extends EventStoreHookEvent
 {
-    public function __construct(public AggregateStreamId $streamId, public int $toSequenceNr) {}
+    public function __construct(AggregateStreamId $streamId, public int $toSequenceNr)
+    {
+        parent::__construct($streamId);
+    }
 }

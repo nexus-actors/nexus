@@ -12,11 +12,9 @@ use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
  *
  * Dispatched before VersionedEventStore::load() reads events.
  */
-final readonly class BeforeEventStoreLoad
+final readonly class BeforeEventStoreLoad extends EventStoreHookEvent
 {
-    public function __construct(
-        public AggregateStreamId $streamId,
-        public int $fromSequenceNr,
-        public int $toSequenceNr,
-    ) {}
+    public function __construct(AggregateStreamId $streamId, public int $fromSequenceNr, public int $toSequenceNr,) {
+        parent::__construct($streamId);
+    }
 }
