@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
 
+use Monadial\Nexus\Psalm\Hook\Aggregate\AggregateEmitsOnlyEventsRule;
+use Monadial\Nexus\Psalm\Hook\Aggregate\AggregateRepositoryReadOnlyBulkRule;
+use Monadial\Nexus\Psalm\Hook\Aggregate\FactoryAssignsOnlyIdRule;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
@@ -44,6 +47,9 @@ final class Plugin implements PluginEntryPointInterface
             QueryHandlerSignatureRule::class,
             EventListenerSignatureRule::class,
             OneCommandHandlerRule::class,
+            FactoryAssignsOnlyIdRule::class,
+            AggregateEmitsOnlyEventsRule::class,
+            AggregateRepositoryReadOnlyBulkRule::class,
         ];
 
         foreach ($hooks as $hook) {
