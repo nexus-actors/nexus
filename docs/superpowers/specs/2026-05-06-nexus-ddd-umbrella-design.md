@@ -1,8 +1,8 @@
 # Nexus DDD Framework — Umbrella Architecture Design
 
-- **Date:** 2026-05-06 (original); 2026-05-08 (v6 expert-panel revisions)
-- **Version:** v6 (post-implementation expert-panel revisions; nexus-ddd-aggregate scope tightened)
-- **Status:** Implemented through P0 (`nexus-ddd-core`, `nexus-ddd-messaging`); aggregate-package design tightened in v6 ahead of P1 implementation
+- **Date:** 2026-05-06 (original); 2026-05-08 (v6 expert-panel revisions); 2026-05-09 (v7 expert-panel revisions)
+- **Version:** v7 (post-implementation expert-panel revisions; nexus-ddd-bus scope tightened ahead of P0 implementation)
+- **Status:** Implemented through P0 (`nexus-ddd-core`, `nexus-ddd-messaging`); bus-package design tightened in v7 ahead of `nexus-ddd-bus` P0 implementation
 - **Scope:** Meta-architecture for the Nexus DDD/CQRS/ES framework. Locks cross-cutting decisions, package boundaries, philosophical position, and phasing. Each package gets its own follow-up design spec.
 
 This document is a *blueprint*. It exists to align cross-cutting rules so per-package specs can stay focused.
@@ -33,6 +33,31 @@ This document is a *blueprint*. It exists to align cross-cutting rules so per-pa
 > 18. **`StreamStrategy::tableFor()` removed from public surface** (§9.3): physical layout concern moves to internal DBAL/Doctrine impls behind a private `TableNameResolver`.
 > 19. **`AggregateRepository::remove()` explicitly NOT exposed** (§9.1.0.1): aggregate retirement is a domain event, not a Repository concern.
 > 20. **Known-limitations section added** (§25.6): documents causation-chain integrity across writer-id changes, multi-region scope, composite-id collisions under partition, and snapshot-vs-event-store divergence — all deferred or out of scope but now explicit.
+
+> **What changed from v6 → v7.** Expert-panel review (Vernon DDD/messaging-patterns / Young CQRS / Helland-Hohpe distributed-systems / Evans architectural) on the locked nexus-ddd-bus design surfaced 11 consensus + several single-expert findings; all folded inline ahead of P0 implementation.
+>
+> 1. **Idempotency key primitive supports domain keys** (§13). `messageId` default; `#[IdempotencyKey(field:)]` attribute names a property to derive from. Survives client-retry double-submits. New Psalm rule `IdempotencyKeyFieldExistsRule`.
+> 2. **`tryDispatch()` returns `Either<Throwable, Accepted>`** (§8.6, §8.1.1) — `Accepted` is a typed marker; the messageId no longer leaks into the return value. Tracing primitives ride on `MessageContext::current()->messageId()`. Strict CQS — no rope for adopters to build a command-status oracle.
+> 3. **Two-phase idempotency reservation** (§13.1). `IdempotencyStore::tryReserve` returns `Option<IdempotencyReservation>`; `markCompleted` runs in the handler's TX. Retry-on-OCC reuses the same token. Mirrors `MessageInbox` shape; resolves the "did dedup commit before retry?" ambiguity.
+> 4. **Pipeline default `Validate → Authorize` with per-handler override** (§8.5.1). `#[Authorize(before: 'validation')]` flips the order for resource-scoped policies. New Psalm rule `AuthorizeBeforeValidationRule`.
+> 5. **Composite routing strategy** (§8.2). Explicit-route → `#[OnBus]` attribute → namespace-pattern → default. Per-class routes don't scale past ~50 commands; the composite shape mirrors Symfony Messenger's evolution.
+> 6. **`Validator` slot widened + reframed** (§8.5.1.1). Signature now takes `ValidationContext` (groups/principal/headers); returns `Violations` (lifted to exception by middleware). Docs reframe `#[Validate]` as defense-in-depth — constructor invariants are the primary line.
+> 7. **`#[Authorize]::subject` is `string|callable`** (§8.5.1.2). String shortcut covers simple cases; callable receives `($cmd, MessageContext): mixed` for composite subjects.
+> 8. **`#[InProcess]` cross-DB has both static + runtime guard** (§11.2). Psalm rule catches obvious cases; `InProcessSameDbMiddleware` is the load-bearing runtime fence. Throws `InProcessConnectionMismatchException` on divergence.
+> 9. **Bus-vs-actor OCC retry resolved** (§8.5.1 step 8, §9.2.1). Host-aware: under `SyncHost` retries per `BackoffStrategy`; under `ActorHost` wraps `OptimisticLockException` in `ActorWriterInvariantViolation` immediately. Supervision (not retry) is the correct response to actor-mode OCC failure.
+> 10. **`OneAggregatePerCommandMiddleware` lives in `nexus-ddd-aggregate`** (§9.1.0.2). Bus package stays ignorant of "aggregate" as a domain concept; the aggregate package contributes its middleware to the bus pipeline at boot.
+> 11. **Single-expert additions:**
+>     - `degradeAsyncToSync` profile flag for dev-only async-route demotion with boot warnings (§8.2.1)
+>     - Marker interface (`implements CommandHandler`) is the canonical shape; `#[CommandHandler]` attribute is the exception (§8.3)
+>     - `X-Nexus-Idempotency-Key` HTTP header convention with adapter middleware (§13.4 new)
+>     - Causation-chain depth header + boot-configurable cap (default 32) (§8.5.1 step 1)
+>     - Relay impls MUST use `SELECT FOR UPDATE SKIP LOCKED` + lease-token check on mark-dispatched (§11.4)
+>     - Sync-route retry budget defaults to 5s; async budgets to 60s (§19a)
+>     - `#[InProcess]` × `#[SharedInvocation]` combination is a boot error (§11.2.1)
+>     - `bin/ddd routes show` CLI (§27.1)
+>     - Pure-CQS sync-confirmation cookbook (§8.6.1)
+>     - Explicit "handlers may read MessageContext::current()" line (§8.3)
+>     - `UnguardedExternalSideEffectRule` Psalm rule (§22)
 
 > **What changed from v5.3 → v5.4.** Feature-completeness pass — closed 6 gaps vs mature DDD/CQRS/ES frameworks: (1) **Continuous projection runner** — new `nexus-ddd-projection` (P3) package with `Projection` interface, `ddd_projection_position` tracking, `bin/ddd projection {run,rebuild,status,pause,resume}` CLI, failure-stops-not-skips semantics, schema-migration rebuild pattern. Closes the gap that Marten / Axon / EventStoreDB fill in their respective frameworks. (§18.1) (2) **Validation middleware slot** — `#[Validate]` attribute + project-supplied `Validator` interface; ValidationFailedException with field-level violations. (§8.5.1.1) (3) **Authorization middleware slot** — `#[Authorize(policy:, subject:)]` attribute + project-supplied `AuthorizationDecider`; subject resolves from message property; principal from MessageContext header. Fail-closed if attribute used without registered decider. (§8.5.1.2) (4) **Health checks** — `HealthCheck` interface + 6 built-in checks (outbox lag, DLQ depth, replay failures, projection status, idempotency table size, relay lease expiration); `bin/ddd health` CLI; `/ddd/health` HTTP endpoint via Symfony bundle. (§23.5) (5) **Operations introspection commands** — 11 new CLI commands in §27.1: aggregate inspection, PM inspection, event sequence validation, snapshot inspection, stuck PM listing, projection management, health. (6) **Published Language recipe** — JSON Schema-based contract pattern in §14.3; framework provides recipe + future `nexus-ddd-schema-registry` package deferred. Plus 14 explicit out-of-scope additions in §30 calibrating adopter expectations. Package count: 20 → 21.
 
@@ -690,15 +715,17 @@ The framework enforces this strictly:
 
 4. **Reads happen on `QueryBus`, after the fact.** When the caller needs to know the result of a command, the pattern is: emit a domain event from the command handler → projection updates a read model → caller queries via `QueryBus::ask()`. This is the eventual-consistency model (§3 property #1, §25.1).
 
-5. **Tracking async commands via `messageId`.** Callers needing to *trace* an async command (not retrieve its result) use `tryDispatch()`:
+5. **Tracing async commands via `MessageContext`.** Callers needing to *trace* an async command (not retrieve its result) use `tryDispatch()`:
    ```php
-   $result = $bus->tryDispatch($cmd);   // Either<Throwable, Identifier>
+   $result = $bus->tryDispatch($cmd);   // Either<Throwable, Accepted>
    $result->fold(
        onLeft: fn($e) => $logger->error('dispatch failed', ['error' => $e]),
-       onRight: fn($messageId) => $logger->info('dispatched', ['message_id' => $messageId->value()]),
+       onRight: fn(Accepted $_) => $logger->info('dispatched', [
+           'message_id' => MessageContext::current()->messageId()->value(),
+       ]),
    );
    ```
-   The `messageId` flows into causation metadata; the caller can later query observability surfaces (`ddd.command.duration_ms{message_id=$id}`) or correlated read-model state. The framework provides no built-in command-status oracle — apps build their own from emitted events.
+   `Accepted` is a typed marker (no fields, no factory) signalling "the dispatcher accepted this command; sync handler completed OR async enqueue succeeded." Tracing primitives ride on `MessageContext`, not on the return value. The framework refuses to surface a `messageId` from `tryDispatch()` because the convenience invites adopters to build a command-status oracle the framework cannot honor at-least-once. The `messageId` flows into causation metadata via the active `MessageContext`; the caller can later query observability surfaces (`ddd.command.duration_ms{message_id=$id}`) or correlated read-model state. The framework provides no built-in command-status oracle — apps build their own from emitted events.
 
 6. **Synchronous failure surfaces immediately.** `dispatch()` throws synchronously when:
    - The bus implementation rejects the command (no handler registered, profile incompatibility).
@@ -714,22 +741,31 @@ This is the Axon/Akka-Persistence/PF model — commands are pure intent declarat
 
 ### 8.2 Routing Selects the Bus
 
-Multiple bus instances are registered in the container; routing config picks per command class:
+Multiple bus instances are registered in the container; routing resolves per command class via a **composite strategy** with first-match-wins ordering:
+
+```
+Routing resolution order (first match wins):
+  1. Explicit per-class route ($r->explicit(BulkImport::class, on: 'long-running'))
+  2. #[OnBus('name')] attribute on the command class
+  3. Namespace pattern match ($r->namespace('App\\Reports\\*', on: 'long-running'))
+  4. Default bus
+```
+
+Each strategy is a separately-registered `RoutingStrategy` class; the framework provides `ExplicitOnly`, `AttributeBased`, `NamespacePattern`, and `Composite`. Apps with simple routing wire `Composite::default()`; apps that want strict explicit routing only wire `ExplicitOnly`. Per-class explicit routes don't scale past ~50 commands; the composite shape mirrors Symfony Messenger's evolution.
 
 ```php
 $ddd
     ->buses(fn(BusRegistry $b) => $b
-        ->command('default', SyncCommandBus::class)        // default bus for commands
-        ->command('long-running', AsyncCommandBus::class)  // alternate async bus
-    )
-    ->commands(fn(CommandRouter $r) => $r
-        ->route(PlaceOrder::class, PlaceOrderHandler::class)                      // -> default (sync)
-        ->route(BulkImport::class, BulkImportHandler::class, on: 'long-running')  // -> async
-        ->route(GenerateReport::class, ReportHandler::class, on: 'long-running')
-    );
+        ->command('default', SyncCommandBus::class)
+        ->command('long-running', AsyncCommandBus::class))
+    ->commandRouting(fn(CompositeRouter $r) => $r
+        ->explicit(BulkImport::class, on: 'long-running')
+        ->attribute()                                            // honor #[OnBus('name')]
+        ->namespace('App\\Reports\\*', on: 'long-running')
+        ->default('default'));
 ```
 
-When a caller invokes `$bus->dispatch($cmd)`, the routing layer resolves which concrete bus owns this command class and forwards. Application code calls a single facade `$bus`; under the hood, it's a router that delegates to the appropriate bus instance.
+When a caller invokes `$bus->dispatch($cmd)`, the routing layer resolves which concrete bus owns this command class via the composite chain and forwards. Application code calls a single facade `$bus`; under the hood, it's a router that delegates to the appropriate bus instance.
 
 This design matches Symfony Messenger's "buses" concept and mirrors how Prooph organized command/event/query buses. Async vs sync becomes a *deployment* decision, not a *domain* concern.
 
@@ -754,6 +790,8 @@ A second validation pass catches **bus-name typos**: a route specifying `on: 'lo
 
 This is intentional friction — async vs sync is a deployment-wide property; silently demoting it to sync risks production data correctness. The trade-off is that test environments using `sync` profile must either use `sync`-only routing or have a separate routing config for tests.
 
+A `degradeAsyncToSync` profile flag (default off) demotes async-only routes to the sync default bus when active. Available only when the active profile is `sync` AND `APP_ENV=dev` (or equivalent dev sentinel). Each demotion logs a boot-time WARNING listing the affected route. Production profiles ignore the flag.
+
 ### 8.3 Handler Shapes
 
 Two equivalent shapes — both compile to the same DSL routing entry:
@@ -774,6 +812,10 @@ final class OrdersService
 ```
 
 Marker interfaces (`CommandHandler`, `QueryHandler`, `EventHandler`) AND attributes are both supported. Symfony bundle uses compiler-pass autoconfigure on marker interfaces; framework-agnostic mode uses an attribute scanner.
+
+The marker interface (`implements CommandHandler`) is the canonical shape — the class IS-A handler in the domain's vocabulary. The `#[CommandHandler]` attribute is a discoverability shortcut for multi-method services where grouping aggregate operations on a single application service is preferred. Most projects should use the marker interface; the attribute is the exception, not the rule.
+
+Handlers are application services and may read `MessageContext::current()` for diagnostics, logging, or branching on metadata. The `DomainContextLeakRule` Psalm rule targets aggregates / value objects / specifications / policies — the boundary is at the domain layer, not the handler.
 
 ### 8.4 Bus Semantics
 
@@ -797,14 +839,14 @@ Bus implementations apply middlewares in a fixed canonical order. Diverging from
 
 ```
 Inbound dispatch
-  ├─ 1. Causation propagation       — establish/extend MessageContext from current scope
+  ├─ 1. Causation propagation       — establish/extend MessageContext; increment nexus.causation.depth header
   ├─ 2. OpenTelemetry span          — wrap everything below in a traced span
   ├─ 3. Logging (start)             — INFO log with metadata (no payload at INFO; payload at DEBUG)
   ├─ 4. Metrics (start)             — start `ddd.{kind}.duration_ms` timer
-  ├─ 5. Validation                  — runs project-supplied Validator if #[Validate] is present
-  ├─ 6. Authorization               — runs project-supplied AuthorizationDecider if #[Authorize] is present
+  ├─ 5. Validation                  — runs project-supplied Validator if #[Validate] is present (default order)
+  ├─ 6. Authorization               — runs project-supplied AuthorizationDecider if #[Authorize] is present (default order)
   ├─ 7. Idempotency check           — for async paths only; skip handler if already handled
-  ├─ 8. OCC retry (handler wrapper) — re-invokes handler on OptimisticLockException per BackoffStrategy
+  ├─ 8. OCC retry (handler wrapper) — host-aware: SyncHost retries per BackoffStrategy; ActorHost wraps OptimisticLockException as ActorWriterInvariantViolation and propagates
   │   ├─ HANDLER (sync invocation, async enqueue, or actor route)
   │   └─ EVENT DRAIN (CommandBus only) — pull recorded aggregate events, write to outbox
   ├─ 9. Metrics (end)               — record duration, outcome (success/failure)
@@ -812,7 +854,15 @@ Inbound dispatch
   └─ 11. Span close
 ```
 
+The default order is `Validate → Authorize`. Resource-scoped policies that need the resource resolved before validation (e.g., "you can only validate orders you own") opt-in via `#[Authorize(before: 'validation')]` on the handler. The pipeline middleware reads the attribute and reorders these two stages for that handler. The Psalm rule `AuthorizeBeforeValidationRule` ensures the `before:` argument is one of the canonical pipeline stage names.
+
+**Causation-chain depth:** each dispatch increments a `nexus.causation.depth` header. The framework's default cap is 32; exceeding it throws `CausationDepthExceededException` (terminal). Apps with legitimately deep PM cycles raise the cap via configuration. The cap protects against a buggy PM that emits a command in response to its own emitted event.
+
+**Host-aware OCC retry (step 8):** under `SyncHost`, the wrapper retries per `BackoffStrategy` (the default `JitteredExponentialBackoff`, configurable per command via `#[Retry]`). Under `ActorHost`, the wrapper does NOT retry — it wraps the `OptimisticLockException` in `ActorWriterInvariantViolation` and lets it propagate. The actor system's supervision strategy decides whether to restart the actor or escalate. A failed OCC under actor mode means the mailbox-ack invariant was violated; restart, not retry, is the correct response. The bus middleware consults the active host (boot-time configuration) to choose strategy.
+
 #### 8.5.1.1 Validation Slot (locked)
+
+> **Bus-level `#[Validate]` is defense-in-depth, not the primary line of defense.** Commands SHOULD validate their own invariants in the constructor (`new PlaceOrder($negativeQuantity)` should throw, not "validate later"). The `#[Validate]` slot exists for cross-field rules that are awkward in a constructor (e.g., "shipDate after orderDate when orderType=Express") and for catching boundary input before it reaches the constructor. Apps reaching for `#[Validate]` to validate every command field should reconsider — that work belongs in the command's constructor or in a value-object inside the command.
 
 Commands and queries can declare validation requirements via `#[Validate]`. The framework provides the **slot**; the project supplies the validator (Symfony Validator, Respect, custom):
 
@@ -825,12 +875,41 @@ final class PlaceOrderHandler implements CommandHandler
 
 interface Validator
 {
-    /** @throws ValidationFailedException with field-level violations */
-    public function validate(object $message): void;
+    /**
+     * @return Violations  Empty when no violations.
+     * @throws never        — violations returned as values, not exceptions
+     */
+    public function validate(object $message, ValidationContext $context): Violations;
+}
+
+final readonly class ValidationContext
+{
+    public function __construct(
+        /** @var list<string> Validation groups (Symfony Validator semantics; default empty list = "default group") */
+        public array $groups = [],
+        /** Project-supplied principal; null at unauthenticated boundaries */
+        public mixed $principal = null,
+        /** @var array<string, mixed> Free-form headers from MessageContext */
+        public array $headers = [],
+    ) {
+    }
+
+    public static function default(): self
+    {
+        return new self();
+    }
+}
+
+final readonly class Violations
+{
+    /** @param list<Violation> $violations */
+    public function __construct(public array $violations) {}
+
+    public function isEmpty(): bool { return $this->violations === []; }
 }
 ```
 
-Project registers a `Validator` implementation in DI; without one, `#[Validate]` is no-op (with boot warning). `ValidationFailedException` carries a `Violations` collection (field path → reasons). Bus middleware lifts to `Either::left(ValidationFailedException)` for `tryDispatch()` callers.
+Project registers a `Validator` implementation in DI; without one, `#[Validate]` is no-op (with boot warning). The validator returns `Violations` as a value; bus middleware lifts non-empty `Violations` to `ValidationFailedException` (or to `Either::left(ValidationFailedException)` for `tryDispatch()` callers). `ValidationFailedException` carries the `Violations` collection (field path → reasons).
 
 The Psalm rule `ValidatedCommandReadonlyRule` ensures `#[Validate]`-tagged commands are `readonly` (no late mutation between validation and handler).
 
@@ -841,7 +920,19 @@ Commands and queries can declare authorization requirements via `#[Authorize]`. 
 ```php
 final class CancelOrderHandler implements CommandHandler
 {
+    // String shortcut — resolves $cmd->orderId
     #[Authorize(policy: 'order.cancel', subject: 'orderId')]
+    public function __invoke(CancelOrder $cmd): void { /* ... */ }
+}
+
+final class CancelOrderWithCompositeSubjectHandler implements CommandHandler
+{
+    // Callable form — composite subject with full control
+    #[Authorize(
+        policy: 'order.cancel',
+        subject: fn(CancelOrder $cmd, MessageContext $ctx)
+            => new OrderAccessSubject($cmd->orderId, $cmd->status, $ctx->headers()->get('tenant')),
+    )]
     public function __invoke(CancelOrder $cmd): void { /* ... */ }
 }
 
@@ -854,13 +945,13 @@ interface AuthorizationDecider
 }
 ```
 
-`subject:` argument names a property on the message that identifies the resource (e.g., `'orderId'` resolves to `$cmd->orderId`). The principal comes from `MessageContext::current()->headers()->get('nexus.principal')` — set by inbound HTTP middleware, console identity, or scheduled-job identity.
+`subject:` accepts either `string` or `callable`. The string form (e.g., `'orderId'`) names a property on the message that identifies the resource — a starter shortcut for simple cases. The callable form receives `($cmd, MessageContext): mixed` and returns the resolved subject for composite or state-dependent cases. Production authorization with state-dependent or composite subjects MUST use the callable form. The principal comes from `MessageContext::current()->headers()->get('nexus.principal')` — set by inbound HTTP middleware, console identity, or scheduled-job identity.
 
 The framework provides the slot; the project supplies the decider (Symfony Security voters, Casbin, custom). Without a registered decider, `#[Authorize]` fails closed (`MissingAuthorizationDeciderException` at boot if any handler uses the attribute without a decider registered).
 
 `AccessDeniedException` is converted to `Either::left` for `tryDispatch()` callers.
 
-The Psalm rule `AuthorizeAttributeSubjectRule` validates that `subject:` references an existing property on the command class.
+The Psalm rule `AuthorizeAttributeSubjectRule` validates that `subject:` (string form) references an existing property on the command class. The Psalm rule `AuthorizeBeforeValidationRule` validates that `#[Authorize(before: ...)]` arguments name a canonical pipeline stage.
 
 **Critical ordering invariants:**
 
@@ -876,7 +967,7 @@ Custom middlewares can be inserted by adopters at named pipeline positions (`bef
 ```php
 // CommandBus — tell-and-forget; never returns the handler's value
 $bus->dispatch($command): void;                // throws on failure (sync handler error, async-enqueue error)
-$bus->tryDispatch($command): Either;           // Either<Throwable, Identifier> — left = failure, right = messageId
+$bus->tryDispatch($command): Either;           // Either<Throwable, Accepted> — left = failure, right = Accepted marker
 
 // QueryBus — request-response, always synchronous within the bus call
 $queryBus->ask($query): mixed;                 // throws on failure
@@ -884,12 +975,24 @@ $queryBus->tryAsk($query): Either;             // Either<Throwable, ResultType>
 
 // EventBus — publish, fan-out via outbox or sync
 $eventBus->publish($event): void;              // throws if outbox writes fail (sync) or in-tx subscribers throw
-$eventBus->tryPublish($event): Either;         // Either<Throwable, Identifier> — right = event's messageId
+$eventBus->tryPublish($event): Either;         // Either<Throwable, Accepted> — right = Accepted marker
 ```
 
-**CommandBus surface is two methods.** `dispatch()` is `void` (pure CQS — never returns handler value, never returns metadata). `tryDispatch()` returns `Either<Throwable, Identifier>` — the right-side `Identifier` is the bus's own metadata about its dispatch (the messageId it minted), useful for observability and tracing. This satisfies both the strict CQS rule (no handler response) and the practical need for tracking. Callers wanting tracking use `tryDispatch()` and ignore the left-or-right distinction beyond logging.
+**CommandBus surface is two methods.** `dispatch()` is `void` (pure CQS — never returns handler value, never returns metadata). `tryDispatch()` returns `Either<Throwable, Accepted>` — `Accepted` is a typed marker (no fields, no factory) signalling "the dispatcher accepted this command; sync handler completed OR async enqueue succeeded." Callers who need a tracing primitive read `MessageContext::current()->messageId()` after dispatch — observability, not return value. The framework refuses to surface a `messageId` from `tryDispatch()` because the convenience invites adopters to build a command-status oracle the framework cannot honor at-least-once.
 
 There is intentionally no `dispatchTracked()` overload — `tryDispatch()` covers the use case in two methods rather than three.
+
+#### 8.6.1 Sync confirmation pattern (cookbook)
+
+A controller calling `dispatch(PlaceOrder)` and rendering a confirmation page does not need eventual consistency under `SyncCommandBus` — the handler's TX has committed by the time `dispatch()` returns, and the read model is queryable in the same TX. Pattern:
+
+```php
+$bus->dispatch(new PlaceOrder($orderId, $customer, $lines));
+$confirmation = $queryBus->ask(new GetOrderById($orderId));
+// ... render confirmation page from $confirmation
+```
+
+Read-your-write is honored under `SyncCommandBus` because the read goes through the same DB connection. Under `AsyncCommandBus` / `ActorCommandBus`, the controller must accept eventual consistency (or use `#[InProcess]` projection if the read model is in the same DB).
 
 ## 9. Persistence Layer (`nexus-ddd-aggregate`, `nexus-ddd-dbal`, `nexus-ddd-doctrine`)
 
@@ -959,7 +1062,9 @@ Both paths use the same physical primitive (`appendIfVersion` on `VersionedEvent
 
 A command handler MUST persist at most **one** aggregate (by identity). Cross-aggregate consistency is achieved via outbox-dispatched commands (§11) handled by process managers (§16), never via multi-aggregate transactions.
 
-**Enforcement:** the bus middleware that opens the transaction tracks the first `add()` / `save()` call's aggregate identity. A second `add()` / `save()` with a different identity in the same transaction throws `MultiAggregateTransactionException` (terminal). Same-aggregate re-save in the same TX (rare; idempotent retry path) is allowed. The rule is bus-middleware enforced, not repository enforced — because a handler that takes two repositories isn't doing anything wrong at the type level; it only crosses the line when both write.
+**Enforcement:** `nexus-ddd-aggregate` ships a `OneAggregatePerCommandMiddleware` that registers itself in the bus pipeline (between OCC retry and handler invocation). The middleware tracks the first `add()` / `save()` call's aggregate identity. A second `add()` / `save()` with a different identity in the same transaction throws `MultiAggregateTransactionException` (terminal). Same-aggregate re-save in the same TX (rare; idempotent retry path) is allowed. The rule is bus-middleware enforced, not repository enforced — because a handler that takes two repositories isn't doing anything wrong at the type level; it only crosses the line when both write.
+
+The bus package depends on the messaging-package's bus contracts; it does NOT import `AggregateRoot` or any aggregate-package types. Domain-aware middleware (one-aggregate-per-tx) lives in the package that owns the concept — `nexus-ddd-aggregate` contributes its middleware to the bus pipeline at boot via the framework's register-middleware-in-pipeline mechanism (DSL or DI tag).
 
 Aggregate-specific bulk loaders belong in dedicated `Repository` subclasses for the rare case a single command needs to load multiple aggregates as one *read-only* unit (typically batch processing where the command persists at most one aggregate per loaded item):
 
@@ -1198,6 +1303,8 @@ interface VersionedEventStore extends EventStore
 The existing `nexus-persistence` `EventStore` impls (`InMemoryEventStore`, `DoctrineEventStore`) remain unchanged — they continue to work for actor-based ES which doesn't need versioned append.
 
 **`EventSourcingStrategy` always uses `VersionedEventStore` (locked).** Under `ActorHost`, the actor is the writer of record — the mailbox serializes commands per aggregate, and the in-memory `version()` advances in lockstep with each `recordThat()`. But "the actor is the single writer" is not always true: if the actor crashes mid-handler after `appendIfVersion` succeeded but before mailbox ack, the supervisor restarts it; the actor rehydrates from the store at version `N+1`; the message is redelivered from the mailbox; the handler sees `N+1` but was generated against `N`. Versioned-append is the *durability backstop* that catches this. The framing "OCC is no-op equivalent in actor mode" is wrong: it is a real check that fires in a real failure mode. Under `ActorHost`, an `OptimisticLockException` from the store SHOULD escalate via supervision (it indicates the mailbox-ack invariant is violated), not be silently retried — handlers in actor mode use the at-most-once-effect path and let the actor system replay.
+
+Under `ActorHost`, the bus middleware wraps `OptimisticLockException` in `ActorWriterInvariantViolation` instead of retrying. Supervision is the right correction mechanism — a failed OCC under actor mode means the mailbox-ack invariant was violated; restart, not retry, is the correct response.
 
 ### 9.3 Event Store Stream Strategy (Prooph-style)
 
@@ -1502,9 +1609,11 @@ Inbound message
    ↓
 [1] MessageInbox::tryReserve($handlerClass, $messageId)   -- transport-level gate
    ↓ (passed)
-[2] handler dispatch
+[2] IdempotencyStore::tryReserve($handlerClass, $idempotencyKey)   -- application-level gate (Some(token))
+   ↓ (passed)
+[3] handler dispatch
    ↓
-[3] IdempotencyStore::recordHandled($idempotencyKey)       -- application-level gate
+[4] IdempotencyStore::markCompleted($token)               -- application-level commit
    ↓
 COMMIT
 ```
@@ -1527,7 +1636,13 @@ final class OrderReadModelProjector implements EventHandler
 }
 ```
 
-Constraints (Psalm-enforced): idempotent, local (no network), fast (sub-50ms p99). **Plus a hard constraint: an `#[InProcess]` subscriber MUST write to the same database connection as the source aggregate's persistence target.** Cross-database in-tx subscriptions would require XA/2PC, which the framework rejects (§11.3). The Psalm rule `InProcessHandlerSameDbRule` flags handlers that target a different connection than the source aggregate's bound connection.
+Constraints (Psalm-enforced): idempotent, local (no network), fast (sub-50ms p99). **Plus a hard constraint: an `#[InProcess]` subscriber MUST write to the same database connection as the source aggregate's persistence target.** Cross-database in-tx subscriptions would require XA/2PC, which the framework rejects (§11.3).
+
+**Cross-DB enforcement is two layers:**
+- **Static (Psalm):** `InProcessHandlerSameDbRule` catches the obvious cases — `Connection $conn` injection of a different connection name, repository injection bound to a different connection.
+- **Runtime:** `InProcessSameDbMiddleware` wraps every `#[InProcess]` handler invocation. At handler entry, asserts the active TX's connection equals the source aggregate's bound connection. Throws `InProcessConnectionMismatchException` if they diverge.
+
+The runtime middleware is the load-bearing fence; Psalm is the early-warning helper. Static analysis cannot follow every connection-resolution path (e.g., a connection chosen via runtime config), so the middleware closes the gap.
 
 Failure model:
 - If `#[InProcess]` subscriber throws, the *entire transaction rolls back* — aggregate state is not persisted, outbox rows for OTHER subscribers are not written, no event is published downstream.
@@ -1550,7 +1665,7 @@ The four resulting combinations:
 | ✗ (default) | ✗ (default) | Outbox + independent fan-out: N subscribers each get their own outbox row, dispatched independently (R5 — the canonical production model) |
 | ✓ | ✗ | In-tx + independent fan-out: N subscribers each invoked synchronously inside source tx, each isolated (rare; useful for multiple atomic projections) |
 | ✗ | ✓ | Outbox + shared invocation: one outbox row, one consumer invocation runs all subscribers in sequence (rare; only when subscribers genuinely share work) |
-| ✓ | ✓ | In-tx + shared invocation: one synchronous invocation in source tx (rarest; specific consistency need) |
+| ✓ | ✓ | **Boot error** — combining shared-invocation with in-tx fan-out cascades any subscriber's failure into rollback of all subscribers' state including their idempotency reservations. Use independent fan-out OR distinct in-process projectors instead. |
 
 The Psalm rule `EventDispatchAttributesRule` validates that attribute combinations are coherent and that handlers used with `#[SharedInvocation]` accept all subscribed event subclasses.
 
@@ -1616,6 +1731,8 @@ Default partition count = 16 (configurable). Throughput target v1: 1k–5k msgs/
 
 **Failure handling per row:** dispatch failure increments `attempts` and schedules `available_at = NOW() + BackoffStrategy::delayFor(attempts, $cause)`. Default `JitteredExponentialBackoff(base=1s, cap=10m, maxAttempts=10)`. After exhausted retries, row moves to `ddd_outbox_dlq` (per-handler DLQ via the `subscriber` column). Per-event override via `#[Retry]`.
 
+**Locking discipline (locked, MUST):** Relay implementations MUST use `SELECT ... FOR UPDATE SKIP LOCKED` to claim outbox rows AND validate the lease token on `mark-dispatched`: `UPDATE ... WHERE leased_by = $self AND leased_until > NOW()`. This prevents lease theft after partition healing — two relays that both believe they own a partition cannot both successfully mark a row dispatched. The mark-dispatched UPDATE returns the affected row count; if zero, the relay knows it lost the lease and must abort the dispatch attempt (the row will be re-claimed by the new owner).
+
 ## 12. Concurrency Host (`nexus-ddd-actor`, P4)
 
 ```php
@@ -1657,11 +1774,42 @@ V1 of `ActorHost` is single-machine multi-thread. Cross-machine clustering is `n
 
 ### 13.1 Pluggable Store
 
+The store contract is **two-phase**, mirroring `MessageInbox` (§11.1.1). Reservation happens before the handler runs (gates redelivery + concurrent retries); commit happens inside the handler's TX after the handler succeeds.
+
 ```php
 interface IdempotencyStore
 {
-    /** @return bool true if newly recorded, false if already handled */
-    public function recordHandled(string $handlerClass, Identifier $messageId): bool;
+    /**
+     * Returns Some(token) if the (handlerClass, idempotencyKey) was not
+     * previously committed; the token is held in the caller's open
+     * transaction. None means "already handled" — caller skips the handler.
+     *
+     * @return Option<IdempotencyReservation>
+     */
+    public function tryReserve(string $handlerClass, string $idempotencyKey): Option;
+
+    /**
+     * Mark the reservation as committed. Called inside the handler's TX
+     * after the handler succeeds. The dedup row is durable from this
+     * point; subsequent tryReserve($same key) returns None.
+     */
+    public function markCompleted(IdempotencyReservation $token): void;
+
+    /**
+     * Release a reservation (called on handler failure that is NOT going
+     * to retry — e.g., terminal exceptions, retry-budget exhaustion).
+     * Allows future redelivery to attempt the handler again.
+     */
+    public function release(IdempotencyReservation $token): void;
+}
+
+final readonly class IdempotencyReservation
+{
+    public function __construct(
+        public string $handlerClass,
+        public string $idempotencyKey,
+        // implementation-private fields (e.g., DB row id) for the impl to consume on markCompleted
+    ) {}
 }
 
 final class PostgresIdempotencyStore implements IdempotencyStore { /* default */ }
@@ -1675,16 +1823,18 @@ final class RedisIdempotencyStore implements IdempotencyStore {
 final class NoOpIdempotencyStore implements IdempotencyStore { /* opt-out */ }
 ```
 
+The pipeline calls `tryReserve` BEFORE the OCC retry loop (§8.5.1 step 7 → step 8); the OCC retry loop reuses the same token across retry attempts; final `markCompleted` runs in the handler's TX once the OCC append commits. Retry-on-OCC sees the same active reservation — no false "already handled" short-circuit. On terminal failure (retry-budget exhaustion, non-retryable exception), the middleware calls `release(token)` so future redelivery can attempt the handler again.
+
 The default `PostgresIdempotencyStore` uses range partitioning by `handled_at`:
 
 ```sql
 CREATE TABLE ddd_message_handled (
-    handler_class   VARCHAR(255) NOT NULL,
-    message_id      VARCHAR(26)  NOT NULL,
-    context         VARCHAR(64)  NOT NULL,
-    handled_at      TIMESTAMPTZ  NOT NULL,
+    handler_class    VARCHAR(255) NOT NULL,
+    idempotency_key  VARCHAR(255) NOT NULL,
+    context          VARCHAR(64)  NOT NULL,
+    handled_at       TIMESTAMPTZ  NOT NULL,
     -- Partition column MUST be in the primary key for Postgres declarative partitioning.
-    PRIMARY KEY (handler_class, message_id, handled_at)
+    PRIMARY KEY (handler_class, idempotency_key, handled_at)
 ) PARTITION BY RANGE (handled_at);
 -- daily partitions; old partitions dropped by `bin/ddd idempotency gc`
 ```
@@ -1710,11 +1860,40 @@ Profile defaults:
 - `sync` profile: idempotency off everywhere (handlers run in-tx, retry semantics make it irrelevant).
 - `async` and `actor` profiles: idempotency on for async handlers; off for `#[InProcess]` handlers (in-tx).
 
+#### 13.2.1 Idempotency Key Resolution (locked)
+
+`MessageInbox::tryReserve` (§11.1.1) keys on `messageId` (transport-level dedup). The application-level `IdempotencyStore` keys on a derived value — by default the same `messageId`, overridable per command:
+
+```php
+// Default: framework uses $envelope->metadata->messageId
+final class NotifyCustomer implements EventHandler { /* ... */ }
+
+// Override: client-supplied request id (survives client retries that mint fresh messageIds)
+#[IdempotencyKey(field: 'clientRequestId')]
+readonly class PlaceOrder implements Command
+{
+    public function __construct(
+        public OrderId $orderId,
+        public string $clientRequestId,    // named via #[IdempotencyKey]
+        public CustomerId $customer,
+        public OrderLines $lines,
+    ) {}
+}
+```
+
+The framework reads the attribute at dispatch time. No attribute → use `messageId`. The `#[IdempotencyKey(field:)]` attribute names a property whose value is used as the application-level idempotency key. The Psalm rule `IdempotencyKeyFieldExistsRule` validates the named property exists on the command class and returns string.
+
+**Handlers with non-DB-local side effects (HTTP, email, payments) SHOULD declare an explicit `#[IdempotencyKey]`** to survive client retries. The framework-internal `messageId` covers framework-internal retries; only a client-derived key (request id, idempotency token, business-process correlation) covers client-retry double-submits.
+
 ### 13.3 Application-Level Idempotency
 
-For handlers whose work isn't database-local (sending an email, calling an API), the framework offers `IdempotencyKey::for(Envelope $envelope): string` derived from `$envelope->metadata->messageId` so external systems can dedupe consistently. The signature is locked to `Envelope` (not raw payload) — the messageId lives on metadata, not on the domain payload. Application code calls this helper inside the handler, passing the inbound envelope received via `MessageContext::current()->envelope()` (or the parameter-injected `MessageContext`).
+For handlers whose work isn't database-local (sending an email, calling an API), the framework offers `IdempotencyKey::for(Envelope $envelope): string` derived from the resolved key (per §13.2.1 — the `#[IdempotencyKey]`-named field, falling back to `$envelope->metadata->messageId`) so external systems can dedupe consistently. The signature is locked to `Envelope` (not raw payload) — the framework needs both the metadata and the resolved key. Application code calls this helper inside the handler, passing the inbound envelope received via `MessageContext::current()->envelope()` (or the parameter-injected `MessageContext`).
 
-### 13.4 Garbage Collection
+### 13.4 ClientIdempotencyKey HTTP header (locked)
+
+The framework defines a standard HTTP header `X-Nexus-Idempotency-Key` for client-supplied idempotency. Adapter middleware in `nexus-ddd-symfony` and `nexus-ddd-context` (P4) auto-populates `MessageContext` headers from the request, and the framework's `IdempotencyKey` resolver reads from `MessageContext::headers()->get('nexus.idempotency-key')` when no `#[IdempotencyKey]` attribute is present on the command. Apps that want client-driven idempotency send the header on every retry-able write.
+
+### 13.5 Garbage Collection
 
 `bin/ddd idempotency gc --older-than=30d` drops old partitions cheaply. Retention window is application policy.
 
@@ -2217,7 +2396,7 @@ Symfony adapter (`nexus-ddd-symfony`, P4) provides bundle config schema, compile
 
 The framework has retry at multiple layers — OCC, PM lock contention, outbox relay, async transport, PM event handling, PM command emission, PM deadlines. Without a global cap, retries can compose multiplicatively (5 OCC × 10 PM-lock × 10 transport × ... = pathological tail latency).
 
-**Locked:** every root request has a **global retry budget** (default 60 seconds) carried in `MessageContext`. Each retry layer consults the remaining budget before scheduling its next attempt; when the budget is exhausted, the layer gives up regardless of its own retry strategy's `maxAttempts`. The remaining budget propagates into causally-derived messages via `MessageMetadata::headers().get('nexus.retry.budget_remaining_ms')`.
+**Locked:** every root request has a **global retry budget** (default **5 seconds for sync routes, 60 seconds for async routes**) carried in `MessageContext`. Sync callers (HTTP request handlers) cannot tolerate a 60s OCC retry storm; async pipelines absorb longer budgets without user-facing latency. Each retry layer consults the remaining budget before scheduling its next attempt; when the budget is exhausted, the layer gives up regardless of its own retry strategy's `maxAttempts`. The remaining budget propagates into causally-derived messages via `MessageMetadata::headers().get('nexus.retry.budget_remaining_ms')`. Per-command override via `#[RetryBudget(seconds: N)]`.
 
 ```php
 // Configure per-profile or per-aggregate
@@ -2282,6 +2461,9 @@ The Psalm plugin's `NoNullInDddRule` flags `null` in framework-namespace signatu
   - `CommandReturnValueIgnoredRule` — assigning `$bus->dispatch($cmd)` to a variable is flagged (the call is `void`)
   - `NoGettersSettersOnAggregateRule` — aggregates / process managers / sub-entities cannot have `get*` or `set*` methods; pure-read accessors flagged. Framework-required accessors (`id()`, `version()`, `equals()`, `isFinished()`, etc.) and `#[FrameworkAccessor]`-tagged exceptions are exempt. Tell-don't-ask enforcement.
   - `AsyncHandlerSyncDispatchRule` — async handlers cannot call `$bus->dispatch()` mid-flight expecting response (use `ctx::tell()` for deferred or `QueryBus::ask()` for synchronous reads)
+  - `IdempotencyKeyFieldExistsRule` — `#[IdempotencyKey(field:)]` names a property that exists on the command class and returns string
+  - `AuthorizeBeforeValidationRule` — `#[Authorize(before: ...)]` arguments name a canonical pipeline stage
+  - `UnguardedExternalSideEffectRule` — flags handlers calling external-side-effect APIs (e.g., `Mailer::send`, `HttpClient::send`, `PaymentGateway::charge`) without an active `#[IdempotencyKey]` declaration on the command. Configurable allow-list of "external" classes; the rule warns rather than errors (apps with their own idempotency layer can suppress).
 
 ## 23. Logging and Observability
 
@@ -2565,6 +2747,7 @@ Full enumerated CLI surface (commands referenced throughout the spec, gathered h
 |---|---|---|
 | `bin/ddd consume` | Run an async consumer for a named handler / queue | P3 |
 | `bin/ddd route-map` | Print the canonical routing table | P0 |
+| `bin/ddd routes show [<command-class>]` | Print the routing table; with a class arg, show how that class resolves through the composite strategy (explicit / attribute / namespace / default) | P0 |
 | `bin/ddd config validate` | Validate config (XA constraint, profile×routing, etc.) | P0 |
 | `bin/ddd schema migrate` | Run framework migrations across all packages in dependency order | P1 |
 | `bin/ddd schema migrate-aggregate --type=X` | Generate per-type stream tables for a new aggregate type | P1 |
@@ -2625,6 +2808,8 @@ Full enumerated CLI surface (commands referenced throughout the spec, gathered h
 | P5 | `nexus-ddd-cryptoshred` | `nexus-ddd-aggregate`, `psr/cache` |
 
 Future, separate package: `nexus-ddd-psalm` (Psalm plugin) — ships when stable.
+
+> **`nexus-ddd-bus` does not depend on `nexus-ddd-aggregate`.** The bus package stays ignorant of "aggregate" as a domain concept. Aggregate-aware middleware (e.g., `OneAggregatePerCommandMiddleware`, §9.1.0.2) lives in `nexus-ddd-aggregate` and contributes to the bus pipeline at boot via the framework's register-middleware-in-pipeline mechanism (DSL or DI tag). Same pattern applies to other domain-aware middleware shipped by higher-tier packages.
 
 PHP namespace: `Monadial\Nexus\Ddd\…` for every package.
 
@@ -2744,7 +2929,7 @@ For traceability, all auto-locks applied across v3 → v3.1 → v4 → v5 → v5
 | L20 | Test-kit phasing | Split into `nexus-ddd-testkit-core` (P0), `nexus-ddd-testkit-aggregate` (P1), `nexus-ddd-testkit-pm` (P2). 20 packages total. |
 | L21 | Per-type stream + outbox | All event tables and shared outbox MUST live in same database; XA configurations rejected at boot via `XAConfigurationException`. (§11.3) |
 | L22 | OCC at EventStore contract | `VersionedEventStore extends EventStore` with `appendIfVersion()`; UNIQUE constraint on `(aggregate_id, aggregate_version)` is the OCC primitive; isolation `READ COMMITTED`; existing `nexus-persistence` `EventStore` preserved unchanged. (§9.2.1) |
-| L23 | Pure-CQS command bus | `CommandBus::dispatch()` returns `void` always; `tryDispatch(): Either<Throwable, Identifier>` for tracking. (§8.1.1, §8.6) |
+| L23 | Pure-CQS command bus | `CommandBus::dispatch()` returns `void` always; `tryDispatch(): Either<Throwable, Accepted>` (v7 — `Accepted` typed marker, no messageId leaked) for tracking. Tracing primitives ride on `MessageContext`. (§8.1.1, §8.6) |
 | L24 | Profile × routing validation | Boot fails with `BusNotAvailableInProfileException` when route specifies bus not available in profile. (§8.2.1) |
 
 ### Round 3 follow-up (v4) — 23 locks
@@ -2785,7 +2970,7 @@ For traceability, all auto-locks applied across v3 → v3.1 → v4 → v5 → v5
 | L51 | Aggregate creation pattern | Static factory + upsert save; OCC + unique-id constraint. (§9.1.1) |
 | L52 | Replay failure recovery | Throws `ReplayFailedException`; aggregate unloadable until fixed; metric. (§6.4.0) |
 | L53 | `OrderRepository` example fix | `inBatch()` for command-side bulk; lists go through QueryBus. (§9.1) |
-| L54 | `CommandBus` API simplified | Two methods: `dispatch(): void`, `tryDispatch(): Either<Throwable,Identifier>`. (§8.6) |
+| L54 | `CommandBus` API simplified | Two methods: `dispatch(): void`, `tryDispatch(): Either<Throwable, Accepted>` (v7 — typed marker, no messageId leaked). Tracing rides on `MessageContext`. (§8.6) |
 | L55 | PM emissions terminology | "outbox" = abstract dispatch-deferral; transport varies by profile. (§16.1.1) |
 | L56 | Per-type/per-context table naming | `{context_prefix}ddd_events_{aggregate_short}`; 63-char Postgres limit. (§9.3) |
 | L57 | ACL `translate(): iterable<object>` | 0..N output; cross-context fan-out at-least-once + idempotent. (§14.2) |
@@ -2803,7 +2988,7 @@ For traceability, all auto-locks applied across v3 → v3.1 → v4 → v5 → v5
 | ID | Topic | Resolution |
 |---|---|---|
 | L66 | Replay failure type | Throws `ReplayFailedException`; `load()` keeps `Option<T>` signature. (§6.4.0) |
-| L67 | Postgres partitioned PK | `PRIMARY KEY (handler_class, message_id, handled_at)` for declarative partitioning. (§13.1) |
+| L67 | Postgres partitioned PK | `PRIMARY KEY (handler_class, idempotency_key, handled_at)` for declarative partitioning (v7 — column renamed from `message_id` to reflect the per-command idempotency-key resolution). (§13.1) |
 | L68 | `Identifier::fromString()` factory | Static factory for stored-value rehydration. (§6.1) |
 | L69 | PM events separate table | `ddd_pm_events`, distinct from `ddd_events`; mirrors schema. (§16.1.4) |
 | L70 | Schema column terminology | `aggregate_*` columns read as "event-sourced entity's *" semantically. (§9.4) |
