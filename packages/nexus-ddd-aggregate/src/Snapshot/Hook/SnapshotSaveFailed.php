@@ -16,7 +16,8 @@ use Throwable;
  */
 final readonly class SnapshotSaveFailed extends SnapshotHookEvent
 {
-    public function __construct(AggregateStreamId $streamId, public Snapshot $snapshot, public Throwable $exception,) {
+    public function __construct(AggregateStreamId $streamId, public Snapshot $snapshot, public Throwable $exception)
+    {
         parent::__construct($streamId);
     }
 }

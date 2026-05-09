@@ -17,7 +17,8 @@ use Monadial\Nexus\Ddd\Aggregate\Event\StoredEvent;
 final readonly class AfterEventStoreAppend extends EventStoreHookEvent
 {
     /** @param list<StoredEvent> $events */
-    public function __construct(AggregateStreamId $streamId, public int $finalVersion, public array $events,) {
+    public function __construct(AggregateStreamId $streamId, public int $finalVersion, public array $events)
+    {
         parent::__construct($streamId);
     }
 }
