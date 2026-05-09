@@ -37,22 +37,26 @@ final class AggregateRepositoryInterfaceTest extends TestCase
     }
 
     #[Test]
-    public function addAndSaveAcceptAggregateRootAndReturnVoid(): void
+    public function saveAcceptsAggregateRootAndReturnsVoid(): void
     {
         $reflection = new ReflectionClass(AggregateRepository::class);
+        $method = $reflection->getMethod('save');
+        $params = $method->getParameters();
 
-        foreach (['add', 'save'] as $methodName) {
-            $method = $reflection->getMethod($methodName);
-            $params = $method->getParameters();
+        self::assertCount(1, $params);
+        $aggregateType = $params[0]->getType();
+        self::assertInstanceOf(ReflectionNamedType::class, $aggregateType);
+        self::assertSame(AggregateRoot::class, $aggregateType->getName());
 
-            self::assertCount(1, $params);
-            $aggregateType = $params[0]->getType();
-            self::assertInstanceOf(ReflectionNamedType::class, $aggregateType);
-            self::assertSame(AggregateRoot::class, $aggregateType->getName());
+        $returnType = $method->getReturnType();
+        self::assertInstanceOf(ReflectionNamedType::class, $returnType);
+        self::assertSame('void', $returnType->getName());
+    }
 
-            $returnType = $method->getReturnType();
-            self::assertInstanceOf(ReflectionNamedType::class, $returnType);
-            self::assertSame('void', $returnType->getName());
-        }
+    #[Test]
+    public function interfaceDoesNotExposeAddMethod(): void
+    {
+        $reflection = new ReflectionClass(AggregateRepository::class);
+        self::assertFalse($reflection->hasMethod('add'));
     }
 }

@@ -19,15 +19,25 @@ use Monadial\Nexus\Ddd\Core\Identity\Identifier;
  * ONLY on this interface; the strategy/persister layer is invisible
  * to them.
  *
- * Three methods, mapping to spec v6 §9.1:
+ * Two methods:
  *   - `find()`: command-side loader. NEVER for queries — read-side
  *     queries go through QueryBus + projection tables.
- *   - `add()`: persist a brand-new aggregate. Asserts version=0.
- *     Uniqueness collision raises AggregateAlreadyExistsException
- *     (terminal — bus middleware does NOT retry).
- *   - `save()`: upsert. v=0 behaves like add(); v>0 versioned-append
- *     raises OptimisticLockException on stale-write (retried by
- *     bus middleware).
+ *   - `save()`: upsert. The strategy classifies the failure mode:
+ *     uniqueness collision (brand-new aggregate id collides) raises
+ *     `AggregateAlreadyExistsException` (terminal — bus middleware
+ *     does NOT retry); versioned-append mismatch (concurrent writer
+ *     advanced the version after we loaded) raises
+ *     `OptimisticLockException` (retried by bus middleware).
+ *
+ * Earlier drafts split `add()` from `save()` to surface call-site
+ * intent ("I'm creating" vs "I'm updating"). The split was dropped
+ * because it doesn't compose with the canonical event-sourced
+ * static-factory pattern: `Order::placeNew(...)` calls `recordThat(new
+ * OrderPlaced(...))` which advances `version()` to 1 before the caller
+ * can invoke any repository method, making `version() === 0` an
+ * unreachable check for ES aggregates. The strategy's
+ * `expectedVersion = version - count(events)` math correctly classifies
+ * both cases without the API split.
  *
  * NOT exposed: `remove()` / `delete()`. Aggregate retirement is a
  * domain event (e.g., `OrderArchived`); retention/GC is an
@@ -44,16 +54,9 @@ interface AggregateRepository
     public function find(Identifier $id): Option;
 
     /**
-     * Persist a brand-new aggregate. Asserts `$aggregate->version() === 0`.
-     *
-     * @param T $aggregate
-     *
-     * @throws AggregateAlreadyExistsException uniqueness collision (terminal)
-     */
-    public function add(AggregateRoot $aggregate): void;
-
-    /**
-     * Upsert. v=0 -> behaves like add(); v>0 -> versioned-append.
+     * Upsert. Strategy classifies the failure path:
+     *   - new-aggregate-id collision → AggregateAlreadyExistsException
+     *   - stale-write on loaded aggregate → OptimisticLockException
      *
      * @param T $aggregate
      *

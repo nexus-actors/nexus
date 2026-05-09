@@ -5,13 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Aggregate\Repository;
 
 use Fp\Functional\Option\Option;
-use LogicException;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\PersistenceStrategy;
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
 use Override;
-
-use function sprintf;
 
 /**
  * @psalm-api
@@ -55,29 +52,13 @@ final readonly class GenericAggregateRepository implements AggregateRepository
     }
 
     /**
-     * Persist a brand-new aggregate. Asserts version=0; otherwise this
-     * is a programmer error (caller should have used save() for a
-     * loaded-and-modified aggregate).
+     * Upsert — delegates to the strategy, which routes:
+     *   - expectedVersion === 0 (brand-new aggregate id) collision → AggregateAlreadyExistsException
+     *   - expectedVersion > 0 (loaded aggregate's version no longer current) → OptimisticLockException
      *
-     * @param T $aggregate
-     */
-    #[Override]
-    public function add(AggregateRoot $aggregate): void
-    {
-        if ($aggregate->version() !== 0) {
-            throw new LogicException(sprintf(
-                'add() invoked on an aggregate with version %d; add() requires version 0. Use save() for previously-loaded aggregates.',
-                $aggregate->version(),
-            ));
-        }
-
-        $this->strategy->persist($aggregate);
-    }
-
-    /**
-     * Upsert — delegates straight to the strategy, which routes
-     * version=0 to AggregateAlreadyExistsException on collision and
-     * version>0 to OptimisticLockException on stale-write.
+     * The expectedVersion arithmetic happens inside the strategy via
+     * `aggregate.version() - count(recordedEvents)` — fresh aggregates
+     * yield expectedVersion=0 because version equals event count.
      *
      * @param T $aggregate
      */

@@ -10,8 +10,8 @@ use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
 use Monadial\Nexus\Ddd\Aggregate\Repository\GenericAggregateRepository;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\PersistenceStrategy;
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
+use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
-use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
@@ -52,40 +52,6 @@ final class GenericAggregateRepositoryTest extends TestCase
     }
 
     #[Test]
-    public function addOfFreshAggregateDelegatesPersistToStrategy(): void
-    {
-        $strategy = new RecordingPersistenceStrategy(Option::none());
-        $repo = new GenericAggregateRepository(TinyOrder::class, $strategy);
-        $aggregate = TinyOrder::createBlank(self::newId());
-
-        self::assertSame(0, $aggregate->version());
-
-        $repo->add($aggregate);
-
-        self::assertSame($aggregate, $strategy->lastPersisted);
-    }
-
-    #[Test]
-    public function addOfNonFreshAggregateThrowsLogicException(): void
-    {
-        $strategy = new RecordingPersistenceStrategy(Option::none());
-        $repo = new GenericAggregateRepository(TinyOrder::class, $strategy);
-        $aggregate = TinyOrder::createBlank(self::newId());
-
-        new EventSourcedAggregateRootAccessor()->rehydrateVersionOn($aggregate, 5);
-
-        try {
-            $repo->add($aggregate);
-            self::fail('Expected LogicException for add() of non-fresh aggregate.');
-        } catch (LogicException $e) {
-            self::assertStringContainsString('add()', $e->getMessage());
-            self::assertStringContainsString('5', $e->getMessage());
-        }
-
-        self::assertNull($strategy->lastPersisted);
-    }
-
-    #[Test]
     public function saveOfFreshAggregateDelegatesPersistToStrategy(): void
     {
         $strategy = new RecordingPersistenceStrategy(Option::none());
@@ -106,7 +72,7 @@ final class GenericAggregateRepositoryTest extends TestCase
         $repo = new GenericAggregateRepository(TinyOrder::class, $strategy);
         $aggregate = TinyOrder::placeNew(self::newId());
 
-        new EventSourcedAggregateRootAccessor()->rehydrateVersionOn($aggregate, 7);
+        new AggregateRootAccessor()->rehydrateVersionOn($aggregate, 7);
 
         $repo->save($aggregate);
 
@@ -114,11 +80,11 @@ final class GenericAggregateRepositoryTest extends TestCase
     }
 
     #[Test]
-    public function saveDoesNotCheckVersionGuard(): void
+    public function saveAcceptsBothFreshAndLoadedAggregates(): void
     {
         $strategy = new RecordingPersistenceStrategy(Option::none());
         $repo = new GenericAggregateRepository(TinyOrder::class, $strategy);
-        $accessor = new EventSourcedAggregateRootAccessor();
+        $accessor = new AggregateRootAccessor();
 
         $fresh = TinyOrder::createBlank(self::newId());
         $repo->save($fresh);
@@ -149,7 +115,7 @@ final class GenericAggregateRepositoryTest extends TestCase
         $strategy2 = new RecordingPersistenceStrategy(Option::none(), persistThrows: $optimisticLock);
         $repo2 = new GenericAggregateRepository(TinyOrder::class, $strategy2);
         $loaded = TinyOrder::createBlank(self::newId());
-        new EventSourcedAggregateRootAccessor()->rehydrateVersionOn($loaded, 3);
+        new AggregateRootAccessor()->rehydrateVersionOn($loaded, 3);
 
         try {
             $repo2->save($loaded);
