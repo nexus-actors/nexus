@@ -24,6 +24,14 @@ use Override;
  * `EventSourcedAggregateRoot`. Stateless; share one instance across
  * all repositories in the application.
  *
+ * For stateful aggregates that need only the AggregateRoot-level hooks
+ * (no replay), use the parallel `AggregateRootAccessor` instead. The
+ * two accessors are parallel — not parent/child — because PHP's
+ * protected-access rule requires the calling context to be a subclass
+ * of the declaring class; a cousin relationship is rejected at runtime,
+ * so the AggregateRoot-level methods are duplicated across both
+ * accessors rather than inherited.
+ *
  * Domain code MUST NOT instantiate or use this. The constructor is
  * intentionally empty — this class is never used as a real aggregate,
  * only as a typed accessor.

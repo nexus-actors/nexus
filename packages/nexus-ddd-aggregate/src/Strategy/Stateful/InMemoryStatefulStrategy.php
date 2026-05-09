@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Ddd\Aggregate\Strategy\Stateful;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\StatefulPersister;
-use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
+use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Aggregate\StatefulAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
@@ -30,20 +30,20 @@ use function count;
  * OCC mirrors the event-sourced flow: `expectedVersion = aggregateVersion
  * - count(recordedEvents)`. `expectedVersion === 0` means "fresh aggregate"
  * and takes the INSERT path; `expectedVersion > 0` means "loaded then
- * mutated" and takes the UPDATE-WHERE-version path. The accessor friend
- * class is reused because `popRecordedEventsFrom` / `extractVersion`
- * accept any `AggregateRoot` — not solely event-sourced ones.
+ * mutated" and takes the UPDATE-WHERE-version path. Stateful strategies
+ * use `AggregateRootAccessor` (parent friend-class) — replay is the only
+ * event-sourced-specific hook and it is not needed here.
  */
 final class InMemoryStatefulStrategy implements StatefulPersister
 {
     /** @var array<string, array{aggregate: StatefulAggregateRoot, version: int}> */
     private array $entries = [];
 
-    private readonly EventSourcedAggregateRootAccessor $accessor;
+    private readonly AggregateRootAccessor $accessor;
 
     public function __construct()
     {
-        $this->accessor = new EventSourcedAggregateRootAccessor();
+        $this->accessor = new AggregateRootAccessor();
     }
 
     /**
