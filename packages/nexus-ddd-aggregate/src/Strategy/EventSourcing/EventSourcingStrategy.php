@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcing;
 
 use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
+use Monadial\Nexus\Ddd\Aggregate\Event\StoredEvent;
 use Monadial\Nexus\Ddd\Aggregate\Event\Stream\StreamStrategy;
 use Monadial\Nexus\Ddd\Aggregate\Event\VersionedEventStore;
 use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
+use Monadial\Nexus\Ddd\Aggregate\Snapshot\SnapshotStore;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcedPersister;
 use Monadial\Nexus\Ddd\Aggregate\Versioning\UpcasterPipeline;
 use Monadial\Nexus\Ddd\Core\Aggregate\AggregateRoot;
@@ -16,9 +19,6 @@ use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRootAccessor;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Core\Identity\Identifier;
-use Monadial\Nexus\Persistence\Event\EventEnvelope;
-use Monadial\Nexus\Persistence\PersistenceId;
-use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Override;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
@@ -110,9 +110,9 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
     #[Override]
     public function load(string $entityClass, Identifier $id): Option
     {
-        $persistenceId = PersistenceId::of($entityClass, $id->value());
+        $streamId = AggregateStreamId::for($entityClass, $id);
 
-        $snapshotOpt = Option::fromNullable($this->snapshots->load($persistenceId));
+        $snapshotOpt = $this->snapshots->load($streamId);
         $snapshotBaseline = 0;
         $startFromSeq = 1;
 
@@ -136,16 +136,15 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
             }
         }
 
-        $envelopes = iterator_to_array($this->store->load($persistenceId, $startFromSeq), false);
+        $storedEvents = iterator_to_array($this->store->load($streamId, $startFromSeq), false);
 
-        if ($snapshotBaseline === 0 && $envelopes === []) {
+        if ($snapshotBaseline === 0 && $storedEvents === []) {
             return Option::none();
         }
 
         $aggregate = $this->instantiateBlank($entityClass, $id);
 
-        /** @var list<DomainEvent> $events */
-        $events = array_map(static fn(EventEnvelope $e): object => $e->event, $envelopes);
+        $events = array_map(static fn(StoredEvent $e): DomainEvent => $e->event, $storedEvents);
         $this->accessor->replayOn($aggregate, $events);
 
         $totalVersion = $snapshotBaseline + count($events);
@@ -172,20 +171,20 @@ final readonly class EventSourcingStrategy implements EventSourcedPersister
             return;
         }
 
-        $persistenceId = PersistenceId::of($entity::class, $entity->id()->value());
+        $streamId = AggregateStreamId::for($entity::class, $entity->id());
         $aggregateVersion = $this->accessor->extractVersion($entity);
         $expectedVersion = $aggregateVersion - count($events);
 
-        $envelopes = [];
+        $storedEvents = [];
         $seq = $expectedVersion + 1;
         $now = $this->clock->now();
 
         foreach ($events as $event) {
-            $envelopes[] = new EventEnvelope($persistenceId, $seq++, $event, $event::class, $now);
+            $storedEvents[] = new StoredEvent($streamId, $seq++, $event, $event::class, $now);
         }
 
         try {
-            $this->store->appendIfVersion($persistenceId, $expectedVersion, ...$envelopes);
+            $this->store->appendIfVersion($streamId, $expectedVersion, ...$storedEvents);
         } catch (OptimisticLockException $e) {
             if ($expectedVersion === 0) {
                 throw AggregateAlreadyExistsException::for($entity::class, $entity->id()->value());

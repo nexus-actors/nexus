@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Aggregate\Tests\Unit\Strategy\EventSourcing;
 
 use DateTimeImmutable;
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
 use Monadial\Nexus\Ddd\Aggregate\Event\InMemoryVersionedEventStore;
+use Monadial\Nexus\Ddd\Aggregate\Event\StoredEvent;
 use Monadial\Nexus\Ddd\Aggregate\Event\Stream\SingleStreamStrategy;
 use Monadial\Nexus\Ddd\Aggregate\Event\VersionedEventStore;
 use Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException;
+use Monadial\Nexus\Ddd\Aggregate\Snapshot\InMemorySnapshotStore;
+use Monadial\Nexus\Ddd\Aggregate\Snapshot\Snapshot;
+use Monadial\Nexus\Ddd\Aggregate\Snapshot\SnapshotStore;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcing\EventSourcingStrategy;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcing\InMemoryEventSourcingStrategy;
 use Monadial\Nexus\Ddd\Aggregate\Strategy\EventSourcing\NeverSnapshot;
@@ -17,11 +23,6 @@ use Monadial\Nexus\Ddd\Core\Aggregate\EventSourcedAggregateRoot;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Core\Tests\Support\TestUlidId;
-use Monadial\Nexus\Persistence\Event\EventEnvelope;
-use Monadial\Nexus\Persistence\PersistenceId;
-use Monadial\Nexus\Persistence\Snapshot\InMemorySnapshotStore;
-use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
-use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -46,7 +47,7 @@ final class EventSourcingStrategyTest extends TestCase
 
         self::assertSame(
             1,
-            $store->highestSequenceNr(PersistenceId::of(Order::class, $orderId->value())),
+            $store->highestSequenceNr(new AggregateStreamId(Order::class, $orderId->value())),
         );
     }
 
@@ -67,7 +68,7 @@ final class EventSourcingStrategyTest extends TestCase
 
         self::assertSame(
             2,
-            $store->highestSequenceNr(PersistenceId::of(Order::class, $orderId->value())),
+            $store->highestSequenceNr(new AggregateStreamId(Order::class, $orderId->value())),
         );
     }
 
@@ -138,7 +139,7 @@ final class EventSourcingStrategyTest extends TestCase
     {
         $innerStore = new InMemoryVersionedEventStore();
         $orderId = self::newId();
-        $persistenceId = PersistenceId::of(Order::class, $orderId->value());
+        $streamId = new AggregateStreamId(Order::class, $orderId->value());
 
         // Persist an aggregate with 4 events (version becomes 4).
         $strategy = $this->buildStrategy($innerStore);
@@ -153,12 +154,13 @@ final class EventSourcingStrategyTest extends TestCase
         // resulting aggregate version must be 4 (snapshot baseline 2 + 2 events).
         $recordingStore = new RecordingVersionedEventStore($innerStore);
         $snapshotStore = new RecordingSnapshotStore();
-        $snapshotStore->primed = new SnapshotEnvelope(
-            $persistenceId,
+        $snapshotStore->primed = new Snapshot(
+            $streamId,
             sequenceNr: 2,
             state: new OrderSnapshotState(),
             stateType: Order::class,
-            timestamp: new DateTimeImmutable('2026-05-08T12:00:00+00:00'),
+            stateVersion: 1,
+            occurredAt: new DateTimeImmutable('2026-05-08T12:00:00+00:00'),
         );
         $strategyWithSnapshot = $this->buildStrategy($recordingStore, $snapshotStore);
 
@@ -198,14 +200,15 @@ final class EventSourcingStrategyTest extends TestCase
         $original->addLine('sku-2');
         $strategy->persist($original);
 
-        $persistenceId = PersistenceId::of(Order::class, $orderId->value());
+        $streamId = new AggregateStreamId(Order::class, $orderId->value());
         $snapshotStore = new RecordingSnapshotStore();
-        $snapshotStore->primed = new SnapshotEnvelope(
-            $persistenceId,
+        $snapshotStore->primed = new Snapshot(
+            $streamId,
             sequenceNr: 1,
             state: new OrderSnapshotState(),
             stateType: 'SomeOtherClass\\ThatNoLongerExists',
-            timestamp: new DateTimeImmutable('2026-05-08T12:00:00+00:00'),
+            stateVersion: 1,
+            occurredAt: new DateTimeImmutable('2026-05-08T12:00:00+00:00'),
         );
         $strategyWithSnapshot = $this->buildStrategy($store, $snapshotStore);
 
@@ -250,27 +253,28 @@ final class FixedClock implements ClockInterface
 }
 
 /**
- * Test double: returns a primed envelope from `load()`. Save/delete are
+ * Test double: returns a primed snapshot from `load()`. Save/delete are
  * no-ops sufficient for the load-path tests.
  */
 final class RecordingSnapshotStore implements SnapshotStore
 {
-    public ?SnapshotEnvelope $primed = null;
+    public ?Snapshot $primed = null;
 
     #[Override]
-    public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
+    public function save(Snapshot $snapshot): void
     {
         $this->primed = $snapshot;
     }
 
+    /** @return Option<Snapshot> */
     #[Override]
-    public function load(PersistenceId $id): ?SnapshotEnvelope
+    public function load(AggregateStreamId $streamId): Option
     {
-        return $this->primed;
+        return Option::fromNullable($this->primed);
     }
 
     #[Override]
-    public function delete(PersistenceId $id, int $maxSequenceNr): void
+    public function delete(AggregateStreamId $streamId, int $upToSequenceNr): void
     {
         // no-op
     }
@@ -288,36 +292,34 @@ final class RecordingVersionedEventStore implements VersionedEventStore
     public function __construct(private readonly InMemoryVersionedEventStore $inner) {}
 
     #[Override]
-    public function appendIfVersion(PersistenceId $persistenceId, int $expectedVersion, EventEnvelope ...$events): void
+    public function appendIfVersion(AggregateStreamId $streamId, int $expectedVersion, StoredEvent ...$events): void
     {
-        $this->inner->appendIfVersion($persistenceId, $expectedVersion, ...$events);
+        $this->inner->appendIfVersion($streamId, $expectedVersion, ...$events);
     }
 
+    /** @return iterable<StoredEvent> */
     #[Override]
-    public function persist(PersistenceId $id, EventEnvelope ...$events): void
-    {
-        $this->inner->persist($id, ...$events);
-    }
-
-    /** @return iterable<EventEnvelope> */
-    #[Override]
-    public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
+    public function load(
+        AggregateStreamId $streamId,
+        int $fromSequenceNr = 0,
+        int $toSequenceNr = PHP_INT_MAX,
+    ): iterable
     {
         $this->lastLoadFrom = $fromSequenceNr;
 
-        return $this->inner->load($id, $fromSequenceNr, $toSequenceNr);
+        return $this->inner->load($streamId, $fromSequenceNr, $toSequenceNr);
     }
 
     #[Override]
-    public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
+    public function deleteUpTo(AggregateStreamId $streamId, int $toSequenceNr): void
     {
-        $this->inner->deleteUpTo($id, $toSequenceNr);
+        $this->inner->deleteUpTo($streamId, $toSequenceNr);
     }
 
     #[Override]
-    public function highestSequenceNr(PersistenceId $id): int
+    public function highestSequenceNr(AggregateStreamId $streamId): int
     {
-        return $this->inner->highestSequenceNr($id);
+        return $this->inner->highestSequenceNr($streamId);
     }
 }
 

@@ -7,7 +7,6 @@
         "php": ">=8.5",
         "fp4php/functional": "^6.0",
         "nexus-actors/ddd-core": "dev-main",
-        "nexus-actors/persistence": "dev-main",
         "psr/clock": "^1.0"
     },
     "require-dev": {

@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Aggregate\Tests\Support;
 
 use DateTimeImmutable;
+use Monadial\Nexus\Ddd\Aggregate\Event\AggregateStreamId;
+use Monadial\Nexus\Ddd\Aggregate\Event\StoredEvent;
 use Monadial\Nexus\Ddd\Aggregate\Event\VersionedEventStore;
+use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
-use Monadial\Nexus\Persistence\Event\EventEnvelope;
-use Monadial\Nexus\Persistence\PersistenceId;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use stdClass;
 
 abstract class VersionedEventStoreContractTest extends TestCase
 {
@@ -21,8 +21,8 @@ abstract class VersionedEventStoreContractTest extends TestCase
     public function appendIfVersionWithExpectedZeroSucceedsOnEmptyStream(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
-        $store->appendIfVersion($id, 0, $this->buildEnvelope(1, new stdClass()));
+        $id = new AggregateStreamId('Order', 'order-1');
+        $store->appendIfVersion($id, 0, $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()));
 
         self::assertSame(1, $store->highestSequenceNr($id));
     }
@@ -31,9 +31,9 @@ abstract class VersionedEventStoreContractTest extends TestCase
     public function appendIfVersionWithMatchingExpectedSucceeds(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
-        $store->appendIfVersion($id, 0, $this->buildEnvelope(1, new stdClass()));
-        $store->appendIfVersion($id, 1, $this->buildEnvelope(2, new stdClass()));
+        $id = new AggregateStreamId('Order', 'order-1');
+        $store->appendIfVersion($id, 0, $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()));
+        $store->appendIfVersion($id, 1, $this->buildStoredEvent(2, new VersionedEventStoreContractTestEvent()));
 
         self::assertSame(2, $store->highestSequenceNr($id));
     }
@@ -42,34 +42,34 @@ abstract class VersionedEventStoreContractTest extends TestCase
     public function appendIfVersionWithStaleExpectedThrowsOptimisticLockException(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
-        $store->appendIfVersion($id, 0, $this->buildEnvelope(1, new stdClass()));
+        $id = new AggregateStreamId('Order', 'order-1');
+        $store->appendIfVersion($id, 0, $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()));
 
         $this->expectException(OptimisticLockException::class);
-        $store->appendIfVersion($id, 0, $this->buildEnvelope(1, new stdClass()));
+        $store->appendIfVersion($id, 0, $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()));
     }
 
     #[Test]
     public function appendIfVersionWithFutureExpectedThrowsOptimisticLockException(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
+        $id = new AggregateStreamId('Order', 'order-1');
 
         $this->expectException(OptimisticLockException::class);
-        $store->appendIfVersion($id, 5, $this->buildEnvelope(6, new stdClass()));
+        $store->appendIfVersion($id, 5, $this->buildStoredEvent(6, new VersionedEventStoreContractTestEvent()));
     }
 
     #[Test]
     public function appendIfVersionMultipleEventsAppliedAtomically(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
+        $id = new AggregateStreamId('Order', 'order-1');
         $store->appendIfVersion(
             $id,
             0,
-            $this->buildEnvelope(1, new stdClass()),
-            $this->buildEnvelope(2, new stdClass()),
-            $this->buildEnvelope(3, new stdClass()),
+            $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(2, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(3, new VersionedEventStoreContractTestEvent()),
         );
 
         self::assertSame(3, $store->highestSequenceNr($id));
@@ -79,9 +79,9 @@ abstract class VersionedEventStoreContractTest extends TestCase
     public function loadReturnsEventsInSequenceOrder(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
-        $e1 = $this->buildEnvelope(1, new stdClass());
-        $e2 = $this->buildEnvelope(2, new stdClass());
+        $id = new AggregateStreamId('Order', 'order-1');
+        $e1 = $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent());
+        $e2 = $this->buildStoredEvent(2, new VersionedEventStoreContractTestEvent());
         $store->appendIfVersion($id, 0, $e1, $e2);
         $loaded = iterator_to_array($store->load($id), false);
 
@@ -92,29 +92,29 @@ abstract class VersionedEventStoreContractTest extends TestCase
     public function loadWithSequenceRangeReturnsSubrange(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
-        $envelopes = [
-            $this->buildEnvelope(1, new stdClass()),
-            $this->buildEnvelope(2, new stdClass()),
-            $this->buildEnvelope(3, new stdClass()),
+        $id = new AggregateStreamId('Order', 'order-1');
+        $events = [
+            $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(2, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(3, new VersionedEventStoreContractTestEvent()),
         ];
-        $store->appendIfVersion($id, 0, ...$envelopes);
+        $store->appendIfVersion($id, 0, ...$events);
         $sub = iterator_to_array($store->load($id, 2, 3), false);
 
-        self::assertSame([$envelopes[1], $envelopes[2]], $sub);
+        self::assertSame([$events[1], $events[2]], $sub);
     }
 
     #[Test]
     public function deleteUpToRemovesEventsThroughGivenSequence(): void
     {
         $store = $this->createStore();
-        $id = PersistenceId::of('Order', 'order-1');
+        $id = new AggregateStreamId('Order', 'order-1');
         $store->appendIfVersion(
             $id,
             0,
-            $this->buildEnvelope(1, new stdClass()),
-            $this->buildEnvelope(2, new stdClass()),
-            $this->buildEnvelope(3, new stdClass()),
+            $this->buildStoredEvent(1, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(2, new VersionedEventStoreContractTestEvent()),
+            $this->buildStoredEvent(3, new VersionedEventStoreContractTestEvent()),
         );
         $store->deleteUpTo($id, 2);
         $remaining = iterator_to_array($store->load($id), false);
@@ -125,13 +125,16 @@ abstract class VersionedEventStoreContractTest extends TestCase
     #[Test]
     public function highestSequenceNrIsZeroForEmptyStream(): void
     {
-        self::assertSame(0, $this->createStore()->highestSequenceNr(PersistenceId::of('Order', 'absent')));
+        self::assertSame(
+            0,
+            $this->createStore()->highestSequenceNr(new AggregateStreamId('Order', 'absent')),
+        );
     }
 
-    protected function buildEnvelope(int $sequenceNr, object $event): EventEnvelope
+    protected function buildStoredEvent(int $sequenceNr, DomainEvent $event): StoredEvent
     {
-        return new EventEnvelope(
-            PersistenceId::of('Order', 'order-1'),
+        return new StoredEvent(
+            new AggregateStreamId('Order', 'order-1'),
             $sequenceNr,
             $event,
             $event::class,
@@ -139,3 +142,5 @@ abstract class VersionedEventStoreContractTest extends TestCase
         );
     }
 }
+
+final readonly class VersionedEventStoreContractTestEvent implements DomainEvent {}

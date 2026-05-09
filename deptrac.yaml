@@ -142,4 +142,3 @@ deptrac:
       - DddCore
     DddAggregate:
       - DddCore
-      - Persistence
