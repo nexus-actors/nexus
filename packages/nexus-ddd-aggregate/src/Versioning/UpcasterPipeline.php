@@ -30,7 +30,12 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
  */
 interface UpcasterPipeline
 {
-    public function upcast(string $eventName, int $fromVersion, DomainEvent $event, UpcastContext $context): DomainEvent;
+    public function upcast(
+        string $eventName,
+        int $fromVersion,
+        DomainEvent $event,
+        UpcastContext $context,
+    ): DomainEvent;
 
     public function upcastTo(
         string $eventName,

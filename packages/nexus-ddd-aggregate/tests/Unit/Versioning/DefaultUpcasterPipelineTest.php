@@ -122,19 +122,12 @@ final readonly class OrderPlacedV1 implements DomainEvent
 
 final readonly class OrderPlacedV2 implements DomainEvent
 {
-    public function __construct(
-        public string $orderId,
-        public ?string $customerId,
-    ) {}
+    public function __construct(public string $orderId, public ?string $customerId,) {}
 }
 
 final readonly class OrderPlacedV3 implements DomainEvent
 {
-    public function __construct(
-        public string $orderId,
-        public ?string $customerId,
-        public string $currency,
-    ) {}
+    public function __construct(public string $orderId, public ?string $customerId, public string $currency,) {}
 }
 
 final class OrderPlacedV1ToV2 implements Upcaster
