@@ -41,7 +41,7 @@ final class InMemoryCommandBusTest extends TestCase
 
         $bus->dispatchEnveloped($envelope);
 
-        self::assertSame(['tryReserve', 'markProcessed'], $inbox->calls);
+        self::assertSame(['tryReserve', 'markCompleted'], $inbox->calls);
     }
 
     #[Test]
@@ -149,9 +149,9 @@ final class RecordingInbox implements MessageInbox
      * @param Option<DateTimeImmutable> $at
      */
     #[Override]
-    public function markProcessed(string $handlerClass, MessageId $messageId, Option $at): void
+    public function markCompleted(string $handlerClass, MessageId $messageId, Option $at): void
     {
-        $this->calls[] = 'markProcessed';
+        $this->calls[] = 'markCompleted';
     }
 
     /**

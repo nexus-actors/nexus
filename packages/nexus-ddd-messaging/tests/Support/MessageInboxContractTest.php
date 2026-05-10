@@ -53,13 +53,13 @@ abstract class MessageInboxContractTest extends TestCase
     }
 
     #[Test]
-    public function markProcessedDoesNotReleaseReservation(): void
+    public function markCompletedDoesNotReleaseReservation(): void
     {
         $inbox = $this->createInbox();
         $id = MessageId::generate();
 
         $inbox->tryReserve(self::class, $id);
-        $inbox->markProcessed(self::class, $id, Option::none());
+        $inbox->markCompleted(self::class, $id, Option::none());
 
         self::assertFalse($inbox->tryReserve(self::class, $id));
     }

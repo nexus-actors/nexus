@@ -27,7 +27,7 @@ final class MessageInboxInterfaceTest extends TestCase
         );
 
         self::assertContains('tryReserve', $methods);
-        self::assertContains('markProcessed', $methods);
+        self::assertContains('markCompleted', $methods);
         self::assertContains('release', $methods);
     }
 }

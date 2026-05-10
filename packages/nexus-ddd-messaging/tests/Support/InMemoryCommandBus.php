@@ -101,7 +101,7 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
                     $handler($envelope->message);
                 },
             );
-            $this->inbox->markProcessed($handlerClass, $messageId, Option::some($this->clock->now()));
+            $this->inbox->markCompleted($handlerClass, $messageId, Option::some($this->clock->now()));
         } catch (Throwable $e) {
             $this->inbox->release($handlerClass, $messageId);
 

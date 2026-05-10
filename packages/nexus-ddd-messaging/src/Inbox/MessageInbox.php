@@ -25,14 +25,17 @@ interface MessageInbox
     public function tryReserve(string $handlerClass, MessageId $messageId): bool;
 
     /**
-     * Mark a previously-reserved (handler, messageId) as fully processed.
-     * Persistent implementations record the timestamp; in-memory may no-op
-     * because the reservation itself is already permanent in the local map.
+     * Mark a previously-reserved (handler, messageId) as fully completed.
+     * Verb pairs with the upcoming IdempotencyStore::markCompleted (spec
+     * section 13.1) — "completed" is the dedup-state transition, not a
+     * statement about handler-side work. Persistent implementations record
+     * the timestamp; in-memory may no-op because the reservation itself is
+     * already permanent in the local map.
      *
      * @param class-string $handlerClass
      * @param Option<DateTimeImmutable> $at
      */
-    public function markProcessed(string $handlerClass, MessageId $messageId, Option $at): void;
+    public function markCompleted(string $handlerClass, MessageId $messageId, Option $at): void;
 
     /**
      * Release a reservation (called on handler failure / rollback) so the

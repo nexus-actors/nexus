@@ -47,13 +47,13 @@ final class InMemoryMessageInboxTest extends TestCase
     }
 
     #[Test]
-    public function markProcessedKeepsReservationLocked(): void
+    public function markCompletedKeepsReservationLocked(): void
     {
         $inbox = new InMemoryMessageInbox();
         $id = MessageId::generate();
 
         $inbox->tryReserve(self::class, $id);
-        $inbox->markProcessed(self::class, $id, Option::none());
+        $inbox->markCompleted(self::class, $id, Option::none());
 
         self::assertFalse($inbox->tryReserve(self::class, $id));
     }
