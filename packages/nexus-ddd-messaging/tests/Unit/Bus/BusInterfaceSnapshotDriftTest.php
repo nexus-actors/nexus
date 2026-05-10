@@ -18,30 +18,44 @@ use ReflectionNamedType;
 final class BusInterfaceSnapshotDriftTest extends TestCase
 {
     #[Test]
-    public function commandBusHasExactlyOnePublicMethodNamedDispatchCommand(): void
+    public function commandBusExposesDispatchAndTryDispatch(): void
     {
-        $methods = (new ReflectionClass(CommandBus::class))->getMethods(ReflectionMethod::IS_PUBLIC);
-        self::assertCount(1, $methods);
-        self::assertSame('dispatchCommand', $methods[0]->getName());
-        self::assertCount(1, $methods[0]->getParameters());
+        $names = self::publicMethodNames(CommandBus::class);
+
+        self::assertSame(['dispatchCommand', 'tryDispatch'], $names);
     }
 
     #[Test]
-    public function queryBusHasExactlyOnePublicMethodNamedDispatchQuery(): void
+    public function queryBusExposesDispatchAndTryAsk(): void
     {
-        $methods = (new ReflectionClass(QueryBus::class))->getMethods(ReflectionMethod::IS_PUBLIC);
-        self::assertCount(1, $methods);
-        self::assertSame('dispatchQuery', $methods[0]->getName());
+        $names = self::publicMethodNames(QueryBus::class);
+
+        self::assertSame(['dispatchQuery', 'tryAsk'], $names);
     }
 
     #[Test]
-    public function eventBusHasExactlyOnePublicMethodNamedPublishEvent(): void
+    public function eventBusExposesPublishAndTryPublish(): void
     {
-        $methods = (new ReflectionClass(EventBus::class))->getMethods(ReflectionMethod::IS_PUBLIC);
-        self::assertCount(1, $methods);
-        self::assertSame('publishEvent', $methods[0]->getName());
-        $returnType = $methods[0]->getReturnType();
+        $reflection = new ReflectionClass(EventBus::class);
+        $names = self::publicMethodNames(EventBus::class);
+
+        self::assertSame(['publishEvent', 'tryPublish'], $names);
+
+        $returnType = $reflection->getMethod('publishEvent')->getReturnType();
         self::assertInstanceOf(ReflectionNamedType::class, $returnType);
         self::assertSame('void', $returnType->getName());
+    }
+
+    /**
+     * @param class-string $interface
+     * @return list<string>
+     */
+    private static function publicMethodNames(string $interface): array
+    {
+        $methods = (new ReflectionClass($interface))->getMethods(ReflectionMethod::IS_PUBLIC);
+        $names = array_map(static fn(ReflectionMethod $m) => $m->getName(), $methods);
+        sort($names);
+
+        return $names;
     }
 }

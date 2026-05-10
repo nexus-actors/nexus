@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Bus;
 
+use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
+use Monadial\Nexus\Ddd\Messaging\Marker\Accepted;
+use NoDiscard;
+use Throwable;
 
 /**
  * @psalm-api
@@ -16,4 +20,13 @@ use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 interface EventBus
 {
     public function publishEvent(DomainEvent $event): void;
+
+    /**
+     * Lifts publication failures into Either::left instead of throwing.
+     * Boot-time invariants (BusInvariantException) still propagate.
+     *
+     * @return Either<Throwable, Accepted>
+     */
+    #[NoDiscard('tryPublish returns Either; ignoring the result discards the error path')]
+    public function tryPublish(DomainEvent $event): Either;
 }

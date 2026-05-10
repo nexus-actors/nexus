@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
+use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Messaging\Bus\QueryBus;
 use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
 use Monadial\Nexus\Ddd\Messaging\Message\Query;
 use Override;
+use Throwable;
 
 /**
  * @psalm-api
@@ -42,6 +44,24 @@ final class RecordingQueryBus implements QueryBus
         }
 
         return $this->responses[$query::class];
+    }
+
+    /**
+     * @template TResult
+     * @param Query<TResult> $query
+     * @return Either<Throwable, TResult>
+     */
+    #[Override]
+    public function tryAsk(Query $query): Either
+    {
+        try {
+            /** @var TResult $result */
+            $result = $this->dispatchQuery($query);
+
+            return Either::right($result);
+        } catch (Throwable $e) {
+            return Either::left($e);
+        }
     }
 
     /** @return list<Query> */

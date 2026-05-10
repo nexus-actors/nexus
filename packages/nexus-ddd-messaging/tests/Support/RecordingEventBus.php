@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
+use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Core\Entity\DomainEvent;
 use Monadial\Nexus\Ddd\Messaging\Bus\EventBus;
+use Monadial\Nexus\Ddd\Messaging\Marker\Accepted;
 use Override;
+use Throwable;
 
 /**
  * @psalm-api
@@ -23,6 +26,15 @@ final class RecordingEventBus implements EventBus
     public function publishEvent(DomainEvent $event): void
     {
         $this->recorded[] = $event;
+    }
+
+    /** @return Either<Throwable, Accepted> */
+    #[Override]
+    public function tryPublish(DomainEvent $event): Either
+    {
+        $this->recorded[] = $event;
+
+        return Either::right(new Accepted());
     }
 
     /** @return list<DomainEvent> */

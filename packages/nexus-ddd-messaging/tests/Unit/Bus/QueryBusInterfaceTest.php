@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Bus;
 
+use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Messaging\Bus\QueryBus;
 use Monadial\Nexus\Ddd\Messaging\Message\Query;
 use PHPUnit\Framework\Attributes\CoversNothing;
@@ -42,5 +43,34 @@ final class QueryBusInterfaceTest extends TestCase
         self::assertIsString($doc);
         self::assertStringContainsString('@template TResult', $doc);
         self::assertStringContainsString('@return TResult', $doc);
+    }
+
+    #[Test]
+    public function tryAskTakesQueryAndReturnsEither(): void
+    {
+        $reflection = new ReflectionClass(QueryBus::class);
+        $method = $reflection->getMethod('tryAsk');
+
+        self::assertCount(1, $method->getParameters());
+
+        $param = $method->getParameters()[0];
+        $type = $param->getType();
+        self::assertInstanceOf(ReflectionNamedType::class, $type);
+        self::assertSame(Query::class, $type->getName());
+
+        $returnType = $method->getReturnType();
+        self::assertInstanceOf(ReflectionNamedType::class, $returnType);
+        self::assertSame(Either::class, $returnType->getName());
+    }
+
+    #[Test]
+    public function tryAskDocblockCarriesEitherThrowableTResult(): void
+    {
+        $reflection = new ReflectionClass(QueryBus::class);
+        $doc = $reflection->getMethod('tryAsk')->getDocComment();
+
+        self::assertIsString($doc);
+        self::assertStringContainsString('@template TResult', $doc);
+        self::assertStringContainsString('@return Either<Throwable, TResult>', $doc);
     }
 }

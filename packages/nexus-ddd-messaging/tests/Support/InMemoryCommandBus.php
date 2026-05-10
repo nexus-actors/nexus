@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Messaging\Tests\Support;
 
+use Fp\Functional\Either\Either;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
@@ -11,6 +12,7 @@ use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Inbox\MessageInbox;
+use Monadial\Nexus\Ddd\Messaging\Marker\Accepted;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
@@ -63,6 +65,19 @@ final readonly class InMemoryCommandBus implements EnvelopedCommandBus
             );
 
         $this->dispatchEnveloped(new Envelope($command, $metadata));
+    }
+
+    /** @return Either<Throwable, Accepted> */
+    #[Override]
+    public function tryDispatch(Command $command): Either
+    {
+        try {
+            $this->dispatchCommand($command);
+
+            return Either::right(new Accepted());
+        } catch (Throwable $e) {
+            return Either::left($e);
+        }
     }
 
     /**
