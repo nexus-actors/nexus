@@ -22,6 +22,7 @@
         <directory name="packages/nexus-persistence-dbal/src" />
         <directory name="packages/nexus-persistence-doctrine/src" />
         <directory name="packages/nexus-ddd-aggregate/src" />
+        <directory name="packages/nexus-ddd-bus/src" />
         <directory name="packages/nexus-ddd-core/src" />
         <directory name="packages/nexus-ddd-messaging/src" />
         <ignoreFiles>

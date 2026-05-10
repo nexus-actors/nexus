@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<ruleset name="NexusDddBus">
+    <description>Nexus DDD Bus coding standard (inherits from monorepo root phpcs.xml when run via root).</description>
+
+    <arg name="extensions" value="php" />
+    <arg name="colors" />
+    <arg value="sp" />
+
+    <file>src</file>
+    <file>tests</file>
+</ruleset>

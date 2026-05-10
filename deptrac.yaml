@@ -92,6 +92,11 @@ deptrac:
         - type: directory
           value: packages/nexus-ddd-aggregate/src/.*
 
+    - name: DddBus
+      collectors:
+        - type: directory
+          value: packages/nexus-ddd-bus/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -142,3 +147,6 @@ deptrac:
       - DddCore
     DddAggregate:
       - DddCore
+    DddBus:
+      - DddCore
+      - DddMessaging

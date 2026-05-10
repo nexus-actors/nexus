@@ -34,6 +34,8 @@
     <file>packages/nexus-persistence-doctrine/tests</file>
     <file>packages/nexus-ddd-aggregate/src</file>
     <file>packages/nexus-ddd-aggregate/tests</file>
+    <file>packages/nexus-ddd-bus/src</file>
+    <file>packages/nexus-ddd-bus/tests</file>
     <file>packages/nexus-ddd-core/src</file>
     <file>packages/nexus-ddd-core/tests</file>
     <file>packages/nexus-ddd-messaging/src</file>
