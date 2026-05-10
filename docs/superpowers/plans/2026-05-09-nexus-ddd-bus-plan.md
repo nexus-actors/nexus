@@ -2,69 +2,97 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the `nexus-ddd-bus` package — the central dispatch fabric for the Nexus DDD framework. P0 scope: ship `SyncCommandBus` / `SyncQueryBus` / `SyncEventBus` plus the canonical 11-stage middleware pipeline, the routing fabric (`BusRegistry` + composite `RoutingStrategy`), the four pluggable slot interfaces (`Validator`, `AuthorizationDecider`, `IdempotencyStore`, `MetricsCollector`), all attributes adopters reach for at the application layer, the supporting exception hierarchy, the `bin/ddd routes show` CLI command, six new Psalm rules in `nexus-psalm`, and the architectural fitness tests. Async / Actor bus implementations and the Postgres-backed idempotency store are explicitly out of scope and ship in P3+P4 follow-up packages.
+**Version:** v2 — applies expert-panel review fixes
+**Date:** 2026-05-10
+**Goal:** Implement the `nexus-ddd-bus` package — the central dispatch fabric for the Nexus DDD framework. P0 scope: ship `SyncCommandBus` / `SyncQueryBus` / `SyncEventBus` plus the canonical 12-stage middleware pipeline, the routing fabric (`BusRegistry` + `BusBuilder` + composite `RoutingStrategy`), the four pluggable slot interfaces (`Validator`, `AuthorizationDecider`, `IdempotencyStore`, `MetricsCollector`), all attributes adopters reach for at the application layer, the supporting exception hierarchy, the `RoutesShowCommand` service, six new Psalm rules in `nexus-psalm`, and the architectural fitness tests. Async / Actor bus implementations and the Postgres-backed idempotency store are explicitly out of scope and ship in P3+P4 follow-up packages.
 
-**Architecture:** A single canonical pipeline lives in `Bus/Middleware/MiddlewarePipeline`; concrete bus impls (`SyncCommandBus`, `SyncQueryBus`, `SyncEventBus`) are thin wrappers that build the pipeline from a list of registered middlewares and dispatch a single message. Routing is decoupled from dispatch: a `CommandRouter` (composed of `RoutingStrategy` impls) resolves a command class to a registered bus name; `BusRegistry` answers "name → impl" and validates the registered set against the active `Profile` at boot. The four slots — validation, authorization, idempotency, metrics — are interfaces only in this package; concrete adapters live in dedicated packages so this package never imports Symfony / Doctrine / Redis. The `nexus-ddd-aggregate` package contributes its own `OneAggregatePerCommandMiddleware` to the pipeline at runtime; this package ships only the `Middleware` interface and the canonical pipeline composition. The package depends on `nexus-ddd-messaging` (for the `CommandBus` / `QueryBus` / `EventBus` interfaces, `MessageMetadata`, `MessageContext`, `MessageContextStack`, `Outbox`, `MessageInbox`, `BackoffStrategy`, retry policies), `nexus-ddd-core` (exceptions, `Identifier`, `DomainEvent`), `psr/log`, `psr/event-dispatcher`. It explicitly does NOT depend on `nexus-ddd-aggregate` (this stays a one-way contribution from aggregate → bus, not bus → aggregate).
+**Architecture:** A single canonical pipeline lives in `Bus/Middleware/MiddlewarePipeline`; concrete bus impls (`SyncCommandBus`, `SyncQueryBus`, `SyncEventBus`) are thin wrappers that build the pipeline from a list of registered middlewares and dispatch a single message. Routing is decoupled from dispatch: a `CommandRouter` (composed of `RoutingStrategy` impls) resolves a command class to a registered bus name; `BusRegistry` answers "name → impl" and validates the registered set against the active `Profile` at boot. The four slots — validation, authorization, idempotency, metrics — are interfaces only in this package; concrete adapters live in dedicated packages so this package never imports Symfony / Doctrine / Redis. The `nexus-ddd-aggregate` package contributes its own `OneAggregatePerCommandMiddleware` to the pipeline at runtime; this package ships only the `Middleware` interface and the canonical pipeline composition. The package depends on `nexus-ddd-messaging` (for the `CommandBus` / `QueryBus` / `EventBus` interfaces with `tryDispatch` / `tryAsk` / `tryPublish` already on canonical, `Headers` value object, `MessageMetadata` (with `headers: Headers`), `MessageContext`, `MessageContextStack`, `Outbox`, `MessageInbox` (with `markCompleted`), `BackoffStrategy`, retry policies, and the `Accepted` marker), `nexus-ddd-core` (exceptions, `Identifier`, `DomainEvent`), `psr/log`, `psr/event-dispatcher`. It explicitly does NOT depend on `nexus-ddd-aggregate`.
 
-**Tech Stack:** PHP 8.5+, Psalm strict (level 1), PER-CS2.0 + Slevomat, fp4php/functional (`Option<T>`, `Either<L,R>`), psr/log (PSR-3), psr/event-dispatcher (PSR-14), psr/clock (PSR-20), psr/container (PSR-11). PHPUnit 13. All commands run via Docker (`docker compose exec -T php …`). No host PHP/composer/vendor invocations. GrumPHP pre-commit hooks run in Docker (PHP-CS-Fixer, PHPCS, Psalm, PHPUnit unit suite — all four MUST pass on every commit).
+**Tech Stack:** PHP 8.5+, Psalm strict (level 1), PER-CS2.0 + Slevomat, fp4php/functional (`Option<T>`, `Either<L,R>`), psr/log (PSR-3), psr/event-dispatcher (PSR-14), psr/clock (PSR-20), psr/container (PSR-11). PHPUnit 13. All commands run via Docker (`docker compose exec -T php …`). No host PHP/composer/vendor invocations. GrumPHP pre-commit hooks run in Docker.
+
+## v1 → v2 Changelog (panel revisions applied)
+
+This revision consumes the parallel `nexus-ddd-messaging` upstream work that lands `Headers`, `Accepted`, and rich `tryDispatch` / `tryAsk` / `tryPublish` on the canonical bus interfaces. As a result, the bus package SHEDS several v1 workarounds.
+
+**Workarounds dropped (no longer needed; messaging upstream supplies the contract):**
+- `BusHeaders` value object — replaced by `Monadial\Nexus\Ddd\Messaging\Header\Headers` consumed via `MessageMetadata::$headers` directly.
+- `BusHeadersStamp` — no stamp needed; headers ride on metadata.
+- `RichCommandBus` / `RichQueryBus` / `RichEventBus` extension interfaces — `tryDispatch` / `tryAsk` / `tryPublish` are on canonical messaging interfaces.
+- `Accepted` defined in this package — re-exported from messaging.
+- `InProcessSameDbMiddleware` runtime no-op — moved to a discrete `InProcessSameDbBootValidator` class invoked by `BusBuilder`. The `InProcessConnectionMismatchException` class still ships.
+- `Phase 14` (standalone IdempotencyKeyResolver integration phase) — folded into Phase 10c.
+
+**BLOCKING fixes (B1–B3):**
+- B1 — Envelope API: middleware reads `$envelope->metadata->headers->get(...)` and writes via `$envelope->with(...)` against the shipped `with(Stamp)` and `get(class-string<Stamp>): Option<S>` API (NOT v1's invented `withStamp`/`stamp`).
+- B2 — `IdempotencyMiddleware` SPLIT into `IdempotencyReserveMiddleware` (outer; before OCC retry) + `IdempotencyCommitMiddleware` (inner; INSIDE handler TX). `markCompleted` runs inside the handler's TX.
+- B3 — Exception classification via `RetryableFailure` and `TerminalFailure` marker interfaces. Reserve middleware: on `RetryableFailure` → `release($token)`; on `TerminalFailure` → `markCompleted($token)`; on infrastructure → `release($token)`.
+
+**HIGH fixes (H1–H12):**
+- H1 — `InProcessSameDbMiddleware` deleted; replaced by `InProcessSameDbBootValidator` invoked from `BusBuilder`.
+- H2 — `Rich*Bus` extension interfaces dropped; `SyncCommandBus implements CommandBus` directly with both `dispatchCommand` and `tryDispatch` methods.
+- H3 — `BusHeaders` + `BusHeadersStamp` dropped; `HeaderKeys` constants stay in this package as `Monadial\Nexus\Ddd\Bus\Header\HeaderKeys`.
+- H4 — Per-handler pipeline cache: `HandlerAttributeIndex` built at boot; `Authorize(before: 'validation')` baked into the cached pipeline.
+- H5 — `BusInvariantException` marker interface; `tryDispatch` propagates boot-invariant exceptions instead of lifting to `Either::left`.
+- H6 — `IdempotencyReserveMiddleware` profile-aware: self-disables under `Profile::Sync`.
+- H7 — `EventDrainMiddleware` profile-aware: under `Profile::Sync` with no subscribers, no-op; under `Profile::Async`, write-then-relay; `#[InProcess]` failures rollback explicitly.
+- H8 — `Composite::withStrategy(RoutingStrategy, ?class-string $before)` builder for adopter extension; `Composite::validate()` enumerates handler classes and throws `DuplicateRoutingException` when multiple strategies resolve different bus names.
+- H9 — `Middleware<TIn, TOut>` templated: pipelines instantiate as `Middleware<Command, null>` for command bus, `Middleware<Query<TResult>, TResult>` for query bus.
+- H10 — `BusBuilder` promoted to Phase 12a; `BusRegistry` to Phase 12b. `SyncCommandBus` constructor locked to 4 args: `(BusRegistry, HandlerAttributeIndex, MiddlewarePipeline, Profile)`.
+- H11 — Each Psalm rule ships with hook-interface + AST node + Issue class + fixture pair (full shape per messaging plugin reference).
+- H12 — `OccRetryMiddleware` on retry-budget exhaustion: `MetricsCollector::count('ddd.command.retry_exhausted', ...)` + PSR-3 WARN BEFORE re-throw. `IdempotencyStore::ttl(): Duration` interface contract; bus boot validates TTL ≥ max retry budget.
+
+**CLAUDE.md compliance (CV1–CV5):**
+- CV1 — `Accepted::instance()` cached singleton DROPPED upstream; this package uses `new Accepted()` directly.
+- CV2 — `Principal` interface introduced (one method: `id(): string`); `ValidationContext::$principal: Option<Principal>` and `AuthorizationContext::$principal: Option<Principal>`. The two narrow exceptions (PHP attribute defaults `Authorize::$subject: ?string`, `Authorize::$before: ?string`) documented.
+- CV3 — `#[\NoDiscard]` swept across all immutable-builder + Either/Option-returning + drainer-style APIs in this package.
+- CV4 — `clone($this, [...])` (PHP 8.5 clone-with) used for all VO mutators in this package.
+- CV5 — Section-divider comments, restating-the-code comments, status-of-task comments, commented-out-code BANNED in code blocks. Plan retains prose docblocks only.
+
+**MEDIUM fixes (M1–M8):**
+- M1 — `IdempotencyReservation` becomes interface (`handlerClass(): string`, `idempotencyKey(): string`); each store ships its own concrete (`InMemoryReservation`).
+- M2 — `BusBootException` and `BusRuntimeException` intermediate abstract classes for adopter `try/catch` ergonomics.
+- M3 — `#[CommandHandler]` attribute renamed to `#[Handler]` (avoids collision with the `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` marker interface).
+- M4 — `bin/ddd` shell shim DEFERRED to `nexus-ddd-cli` (TBD); this package ships only the `Cli\Command` interface + `RoutesShowCommand` service.
+- M5 — `#[Sensitive]` attribute + `LoggingMiddleware` redaction; default-deny payload-at-DEBUG.
+- M6 — `MetricOutcome` enum; all metric `count` calls use it.
+- M7 — Causation chain through emitted events (`EventDrainMiddleware` stamps emitted-event metadata with parent `causationId` and depth+1).
+- M8 — `RetryBudget` configurable per-deployment via `NEXUS_BUS_RETRY_BUDGET_MS_SYNC` env var.
+
+**LOW fixes (L1–L9):**
+- L1 — `PipelineContext` uses `public private(set)` (PHP 8.4 asymmetric visibility).
+- L2 — `RoutingResolution::$resolvedBy: class-string<RoutingStrategy>` typed; `displayName(): string` for CLI output.
+- L3 — Phase 14 folded into Phase 10c (resolver too small to deserve its own phase).
+- L4 — Phase 20 success criteria includes 90% method-coverage gate.
+- L5 — Phase 16 ships smoke perf test: 10000 dispatches in <50ms.
+- L6 — Phase 16 ships HTTP-header bridge test (`IdempotencyKeyResolver` reads `nexus.idempotency-key` from `Headers`).
+- L7 — Sentinel string constants for `Authorize::$subject` documented as option; `?string` retained per attribute-default rule.
+- L8 — Co-Authored-By reminder in Phase 0 conventions.
+- L9 — Risk Register section after file structure.
+
+**Phase count:** v1 had 20 phases; v2 has **19 phases** (Phase 14 folded into 10c). Sub-phases 10a/10b/10c retained; new 12a (BusBuilder) and 12b (BusRegistry) sub-phases.
 
 **Already shipped — re-used as-is, NOT redefined:**
-- `Monadial\Nexus\Ddd\Messaging\Bus\CommandBus` — interface, single method `dispatchCommand(Command): void`
-- `Monadial\Nexus\Ddd\Messaging\Bus\QueryBus` — interface, single method `dispatchQuery(Query): mixed` (template `Query<TResult>`)
-- `Monadial\Nexus\Ddd\Messaging\Bus\EventBus` — interface, single method `publishEvent(DomainEvent): void`
-- `Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus` — extends `CommandBus`, adds `dispatchEnveloped(Envelope<Command>): void`
-- `Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedQueryBus` — extends `QueryBus`
-- `Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedEventBus` — extends `EventBus`
-- `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` — marker interface
-- `Monadial\Nexus\Ddd\Messaging\Handler\QueryHandler` — marker interface (`@template TResult`)
-- `Monadial\Nexus\Ddd\Messaging\Handler\EventListener` — marker interface
-- `Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator` — interface for "find the handler for this command class"
-- `Monadial\Nexus\Ddd\Messaging\Resolution\QueryHandlerLocator` — same shape for queries
-- `Monadial\Nexus\Ddd\Messaging\Resolution\EventListenerLocator` — same shape for events (multi-handler)
-- `Monadial\Nexus\Ddd\Messaging\Identity\MessageId` — `final readonly class`, `MessageId::generate()` and `MessageId::fromString(string)`
-- `Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata` — `final readonly class` with typed fields (`id`, `occurredAt`, `causationId: Option<MessageId>`, `correlationId: Option<MessageId>`, `conversationId: Option<MessageId>`, `schemaVersion`, `traceParent`, `traceState`, `expiresAt`, `vectorClock`). Factory `MessageMetadata::root(ClockInterface)`. Builder `forCausedMessage(MessageId, DateTimeImmutable): self`. **Critical: there is NO `headers()` method or arbitrary `array<string,mixed> $headers` field on `MessageMetadata`.** See "Spec/code drift" below for how this plan reconciles.
-- `Monadial\Nexus\Ddd\Messaging\Context\MessageContext` — `final readonly class` (`metadata`, `stamps`); `stamp(class-string<S>): Option<S>`
-- `Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack` — instance class; `current(): Option<MessageContext>`, `push(MessageContext)`, `pop()`, `within(ctx, cb)` helper. Constructor takes a `ContextStorage`. `MessageContextStack::default()` factory wires `StaticStackContextStorage`. **No singleton — DI-injected on every collaborator that needs it.**
-- `Monadial\Nexus\Ddd\Messaging\Envelope\Envelope` — `final readonly class<T>`; carries `(T $message, MessageMetadata $metadata, array<class-string<Stamp>, Stamp> $stamps)`
-- `Monadial\Nexus\Ddd\Messaging\Envelope\Stamp` — interface for transport / cross-cutting metadata extensions
-- `Monadial\Nexus\Ddd\Messaging\Outbox\Outbox` — interface (`appendCommand(Command, Option<MessageId>)`, `appendEvent(DomainEvent, Option<MessageId>)`, `flush()`, `discard()`)
-- `Monadial\Nexus\Ddd\Messaging\Inbox\MessageInbox` — interface (`tryReserve(handlerClass, MessageId): bool`, `markProcessed(...)`, `release(...)`)
-- `Monadial\Nexus\Ddd\Messaging\Retry\BackoffStrategy` — interface for retry strategies
-- `Monadial\Nexus\Ddd\Messaging\Retry\JitteredExponentialBackoff`, `ExponentialBackoff`, `LinearBackoff`, `FixedDelayBackoff`, `NoRetry`, `CustomBackoff` — concrete impls
-- `Monadial\Nexus\Ddd\Messaging\Retry\RetryPolicy` / `RetryPolicyBuilder` — policy DSL
-- `Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure` — marker interface
-- `Monadial\Nexus\Ddd\Messaging\Exception\TransientFailure` — marker interface
-- `Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException`, `DuplicateCommandHandlerException`, `MessageDispatchException`, `MessageRejectedException`, `MessagingException` — exception hierarchy
-- `Monadial\Nexus\Ddd\Messaging\Message\Command` / `Query` — marker interfaces (`Query<TResult>` is a template)
-- `Monadial\Nexus\Ddd\Aggregate\Repository\AggregateRepository` (in PR #35 — open) — used at runtime by handlers, NOT imported by this package
-- `Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException` — extends `DomainException`; raised by aggregate strategies, caught by the OCC retry middleware in this package
-- `Monadial\Nexus\Ddd\Aggregate\Exception\AggregateAlreadyExistsException` — terminal (per `nexus-ddd-aggregate` PR #35); the OCC retry middleware in this package does NOT retry this — the supervisor classifies terminal failures by exception type. We don't import the class — middleware classifies by interface (`TerminalFailure` marker) only.
-- `Monadial\Nexus\Ddd\Aggregate\Exception\MultiAggregateTransactionException` (in PR #35) — same reasoning; classified by `TerminalFailure` marker.
-
-**Spec/code drift notes the plan reconciles:**
-
-- v7 spec §13 references `MessageContext::headers()` as the home for `nexus.idempotency-key`, `nexus.principal`, `nexus.retry.attempt`, `nexus.replay`, `nexus.causation.depth`. The shipped `MessageMetadata` exposes typed fields plus a `Stamp` mechanism for long-tail metadata, NOT an arbitrary `headers` map. **Resolution:** introduce a `BusHeaders` value object (in this package) that is carried as a `Stamp<BusHeaders>` on the `Envelope`. The middleware reads/writes `BusHeaders` via the stamp slot. The spec's `$ctx->headers()->get('nexus.principal')` becomes `$envelope->stamp(BusHeaders::class)->flatMap(fn($h) => $h->get('nexus.principal'))`. Adapter packages map HTTP headers / CLI identity into `BusHeaders` at the boundary. Out-of-scope follow-up: a future spec revision may collapse `BusHeaders` into `MessageMetadata::headers()` directly; that's a spec change owned by the messaging package, not this one. Track as post-merge follow-up #1.
-
-- v7 spec §8.6 says `tryDispatch(): Either<Throwable, Accepted>`, but the shipped `CommandBus` interface only has `dispatchCommand(): void`. **Resolution:** this package introduces `RichCommandBus extends CommandBus` (and analogous `RichQueryBus`, `RichEventBus`) that adds `tryDispatch()`. The concrete `SyncCommandBus` implements `RichCommandBus`. Domain code that injects the bare `CommandBus` keeps working with `dispatchCommand(): void`; tracing-aware callers inject `RichCommandBus`. Track as post-merge follow-up #2 (collapse rich variants into base interfaces in messaging).
-
-- v7 spec §8.5.1 step 7 names "Idempotency check"; step 8 names "OCC retry (handler wrapper)"; the canonical order has the idempotency middleware *outside* the retry loop (so retries reuse the same reservation). The brief enumerated 11 stages: (1) causation, (2) OTel span, (3) logging-start, (4) metrics-start, (5) validation, (6) authorization, (7) idempotency, (8) OCC retry, (9) metrics-end, (10) logging-end, (11) span close. Plan locks this exact order, with (8) wrapping the handler invocation + the event drain.
-
-- v7 §13.1 introduces `IdempotencyReservation` as a typed value object plus a two-phase `tryReserve / markCompleted / release` contract. The shipped `MessageInbox::tryReserve()` returns a plain `bool`. **Resolution:** the new `IdempotencyStore` is NOT a subtype of `MessageInbox` — it's a parallel slot. The pipeline calls both layers: `MessageInbox::tryReserve` (transport-level dedup, gated on `MessageId`) THEN `IdempotencyStore::tryReserve` (application-level dedup, gated on `IdempotencyKey`). They compose; they do not overlap.
-
-- v7 §22 lists 6 new Psalm rules (`CommandHandlerReturnTypeRule`, `CommandReturnValueIgnoredRule`, `ValidatedCommandReadonlyRule`, `IdempotencyKeyFieldExistsRule`, `AuthorizeBeforeValidationRule`, `UnguardedExternalSideEffectRule`). The brief adds `MiddlewareOrderingRule` (mentioned in §8.5.1). Plan ships all 7 rules. The plan does NOT ship `RegisteredHandlerRule` or `AsyncHandlerSyncDispatchRule` (deferred to follow-up).
-
-- v7 §11.2 references `InProcessSameDbMiddleware` as the runtime guard that asserts the active TX's connection matches the source aggregate's bound connection. Implementation honesty: at the middleware layer the bus does not know which aggregate the handler will load — the aggregate is a parameter to the handler, not the dispatcher. **Resolution:** ship a *best-effort* `InProcessSameDbMiddleware` that wraps `#[InProcess]`-attributed handlers and asserts (handler-class) → (registered same-DB binding) at registration time, and falls back to "Psalm is the primary fence" for runtime cases the middleware cannot introspect. If the heuristic is too lossy to be useful in P0, we ship the middleware as a thin no-op marker and document the deferral. The `InProcessConnectionMismatchException` class ships in either case so adapter packages can throw it.
-
-- v7 §9.1.0.2 places `OneAggregatePerCommandMiddleware` in `nexus-ddd-aggregate` (already noted in the aggregate plan). This package ships only the `Middleware` interface; aggregate contributes its middleware via a DI tag at boot. The file `Middleware/OneAggregatePerCommandMiddleware.php` does NOT exist in this package.
-
-**Post-merge spec follow-up tasks (track separately, NOT this PR):**
-
-1. v8 spec — collapse `BusHeaders` into `MessageMetadata::headers(): array<string, scalar|Option>` (or document the stamp-based layering as the canonical shape).
-2. v8 spec — collapse `RichCommandBus`/`RichQueryBus`/`RichEventBus` interfaces into the base `CommandBus`/`QueryBus`/`EventBus` (or document the rich variants as the canonical extension points).
-3. v8 spec — clarify whether `Validator::validate()` returns `Violations` (no-throw, plan locks this per Q6) or whether it may throw a `ValidationFailedException` directly (some adapter packages may prefer the throw shape).
-4. Future PR — `nexus-ddd-bus-idempotency-doctrine` (the Postgres-backed `IdempotencyStore` impl with daily range partitioning per §13.1).
-5. Future PR — `nexus-ddd-async` package shipping `AsyncCommandBus`, `AsyncEventBus`, the outbox-relay machinery (§11.4), the consumer-side `MessageInbox` integration (§11.1.1), and the `bin/ddd consume` / `bin/ddd outbox relay` commands.
-6. Future PR — `nexus-ddd-actor` package shipping `ActorCommandBus`, `ActorHost`, the actor-mailbox transport, and the host-aware OCC-retry behaviour validated under `Profile::Actor`.
+- `Monadial\Nexus\Ddd\Messaging\Bus\CommandBus` — `dispatchCommand(Command): void` AND `tryDispatch(Command): Either<\Throwable, Accepted>` (canonical, both methods)
+- `Monadial\Nexus\Ddd\Messaging\Bus\QueryBus` — `dispatchQuery(Query): mixed` AND `tryAsk(Query<TResult>): Either<\Throwable, TResult>` (canonical, both methods)
+- `Monadial\Nexus\Ddd\Messaging\Bus\EventBus` — `publishEvent(DomainEvent): void` AND `tryPublish(DomainEvent): Either<\Throwable, Accepted>` (canonical, both methods)
+- `Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus` / `EnvelopedQueryBus` / `EnvelopedEventBus`
+- `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` / `QueryHandler` / `EventListener` — marker interfaces
+- `Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator` / `QueryHandlerLocator` / `EventListenerLocator`
+- `Monadial\Nexus\Ddd\Messaging\Identity\MessageId`
+- `Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata` — `final readonly` with typed fields and **`headers: Headers`** field. `withHeaders(Headers): self` builder.
+- `Monadial\Nexus\Ddd\Messaging\Header\Headers` — `final readonly` (`empty()`, `of(array)`, `get(string): Option<scalar>`, `has(string): bool`, `with(string, scalar): self`, `merge(self): self`).
+- `Monadial\Nexus\Ddd\Messaging\Marker\Accepted` — `final readonly` no fields, instantiated via `new Accepted()` (no singleton cache).
+- `Monadial\Nexus\Ddd\Messaging\Context\MessageContext` / `MessageContextStack`
+- `Monadial\Nexus\Ddd\Messaging\Envelope\Envelope` — `final readonly class<T>`. **API: `with(Stamp): self`, `get(class-string<Stamp>): Option<S>`** (NOT `withStamp`/`stamp`).
+- `Monadial\Nexus\Ddd\Messaging\Envelope\Stamp` — interface
+- `Monadial\Nexus\Ddd\Messaging\Outbox\Outbox`
+- `Monadial\Nexus\Ddd\Messaging\Inbox\MessageInbox` — `tryReserve`, **`markCompleted`** (renamed from `markProcessed`), `release`
+- `Monadial\Nexus\Ddd\Messaging\Retry\BackoffStrategy` + impls + `RetryPolicy`
+- `Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure` / `TransientFailure` markers
+- `Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException` / `DuplicateCommandHandlerException` / `MessagingException`
+- `Monadial\Nexus\Ddd\Messaging\Message\Command` / `Query`
+- `Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException` — extends `DomainException`
+- `Monadial\Nexus\Ddd\Core\Exception\NexusDddException`, `DomainException`
 
 ---
 
@@ -77,95 +105,101 @@ packages/nexus-ddd-bus/
 ├── phpcs.xml
 ├── .gitignore
 ├── README.md                                          # phase 19
-├── bin/
-│   └── ddd                                            # phase 15 (entrypoint)
 ├── src/
 │   ├── Bus/
-│   │   ├── RichCommandBus.php                         # interface; extends messaging CommandBus + tryDispatch
-│   │   ├── RichQueryBus.php                           # interface; extends messaging QueryBus + tryAsk
-│   │   ├── RichEventBus.php                           # interface; extends messaging EventBus + tryPublish
-│   │   ├── SyncCommandBus.php                         # concrete; implements RichCommandBus + EnvelopedCommandBus
-│   │   ├── SyncQueryBus.php                           # concrete; implements RichQueryBus + EnvelopedQueryBus
-│   │   └── SyncEventBus.php                           # concrete; implements RichEventBus + EnvelopedEventBus
+│   │   ├── SyncCommandBus.php                         # implements messaging\CommandBus + EnvelopedCommandBus
+│   │   ├── SyncQueryBus.php                           # implements messaging\QueryBus + EnvelopedQueryBus
+│   │   └── SyncEventBus.php                           # implements messaging\EventBus + EnvelopedEventBus
 │   ├── Middleware/
-│   │   ├── Middleware.php                             # interface
-│   │   ├── MiddlewarePipeline.php                     # composer of stages, stamped name → impl
-│   │   ├── PipelineStage.php                          # enum of canonical stage names (used by MiddlewareOrderingRule)
+│   │   ├── Middleware.php                             # interface; templated <TIn, TOut>
+│   │   ├── MiddlewarePipeline.php                     # composer of stages
+│   │   ├── PipelineStage.php                          # enum of canonical stage names
 │   │   ├── CausationPropagationMiddleware.php         # stage 1
-│   │   ├── OpenTelemetrySpanMiddleware.php            # stage 2 (no-op default; activated when SDK present)
+│   │   ├── OpenTelemetrySpanMiddleware.php            # stage 2 (no-op default)
 │   │   ├── LoggingStartMiddleware.php                 # stage 3
 │   │   ├── MetricsStartMiddleware.php                 # stage 4
 │   │   ├── ValidationMiddleware.php                   # stage 5 (consumes Validator)
 │   │   ├── AuthorizationMiddleware.php                # stage 6 (consumes AuthorizationDecider)
-│   │   ├── IdempotencyMiddleware.php                  # stage 7 (consumes IdempotencyStore + IdempotencyKeyResolver)
-│   │   ├── OccRetryMiddleware.php                     # stage 8 (host-aware: Profile::Sync vs Profile::Actor)
-│   │   ├── HandlerInvocationMiddleware.php            # stage 8 inner (the actual handler call)
-│   │   ├── EventDrainMiddleware.php                   # stage 8 inner (CommandBus only — drain & write to outbox)
-│   │   ├── MetricsEndMiddleware.php                   # stage 9
-│   │   ├── LoggingEndMiddleware.php                   # stage 10
-│   │   ├── SpanCloseMiddleware.php                    # stage 11
-│   │   └── InProcessSameDbMiddleware.php              # phase 10c — best-effort runtime guard for #[InProcess]
+│   │   ├── IdempotencyReserveMiddleware.php           # stage 7a (outer; before OCC retry)
+│   │   ├── OccRetryMiddleware.php                     # stage 8 (host-aware)
+│   │   ├── HandlerInvocationMiddleware.php            # stage 9 inner (the actual handler call)
+│   │   ├── IdempotencyCommitMiddleware.php            # stage 10 (INSIDE handler TX, post-handler pre-flush)
+│   │   ├── EventDrainMiddleware.php                   # stage 11 (CommandBus only — drain & write to outbox)
+│   │   ├── MetricsEndMiddleware.php                   # stage 12
+│   │   ├── LoggingEndMiddleware.php                   # stage 13
+│   │   └── SpanCloseMiddleware.php                    # stage 14
 │   ├── Routing/
-│   │   ├── BusRegistry.php                            # name → bus impl; profile validation
+│   │   ├── BusRegistry.php                            # name → bus impl
+│   │   ├── BusBuilder.php                             # builder; reflection cache; profile×strategy boot validation
+│   │   ├── HandlerAttributeIndex.php                  # cached handler-class → ResolvedPipeline
+│   │   ├── InProcessSameDbBootValidator.php           # boot-time #[InProcess] conn-binding check
 │   │   ├── CommandRouter.php                          # composes RoutingStrategy impls
 │   │   ├── RoutingStrategy.php                        # interface
 │   │   ├── ExplicitOnly.php
 │   │   ├── AttributeBased.php
 │   │   ├── NamespacePattern.php
-│   │   ├── Composite.php                              # walks sub-strategies in order; first match wins
-│   │   └── RoutingResolution.php                      # value object: which strategy resolved + bus name
+│   │   ├── Composite.php                              # walks sub-strategies in order; first match wins; withStrategy(...) extension; validate() conflict detection
+│   │   └── RoutingResolution.php                      # value object: which strategy resolved + bus name + displayName()
 │   ├── Idempotency/
-│   │   ├── IdempotencyStore.php                       # interface (two-phase reserve/commit/release)
-│   │   ├── IdempotencyReservation.php                 # value object (handlerClass + idempotencyKey + impl-private payload)
+│   │   ├── IdempotencyStore.php                       # interface (two-phase reserve/commit/release; ttl())
+│   │   ├── IdempotencyReservation.php                 # interface (handlerClass(), idempotencyKey())
+│   │   ├── InMemoryReservation.php                    # concrete reservation for InMemoryIdempotencyStore
 │   │   ├── IdempotencyKey.php                         # final readonly class wrapping a string
-│   │   ├── IdempotencyKeyResolver.php                 # reads #[IdempotencyKey] attr → BusHeaders → messageId
+│   │   ├── IdempotencyKeyResolver.php                 # reads #[IdempotencyKey] attr → MessageMetadata\Headers → messageId
 │   │   └── InMemoryIdempotencyStore.php               # tests-only impl
 │   ├── Validation/
-│   │   ├── Validator.php                              # interface (returns Violations, never throws)
+│   │   ├── Validator.php                              # interface
 │   │   ├── ValidationContext.php                      # final readonly class (groups, principal, headers)
 │   │   ├── Violations.php                             # final readonly class (list<Violation>)
-│   │   └── Violation.php                              # final readonly class (path, message, code)
+│   │   └── Violation.php                              # final readonly class
 │   ├── Authorization/
-│   │   ├── AuthorizationDecider.php                   # interface (decide(); throws AccessDeniedException on fail)
-│   │   ├── SubjectResolver.php                        # final class — resolves #[Authorize(subject:)] string|callable
-│   │   └── AuthorizationContext.php                   # final readonly class (principal + headers + envelope)
+│   │   ├── AuthorizationDecider.php                   # interface
+│   │   ├── Principal.php                              # interface (single method: id(): string)
+│   │   ├── SubjectResolver.php                        # final class
+│   │   └── AuthorizationContext.php                   # final readonly class (Option<Principal>)
 │   ├── Metrics/
 │   │   ├── MetricsCollector.php                       # interface
+│   │   ├── MetricOutcome.php                          # enum
 │   │   └── NoOpMetricsCollector.php                   # default impl
 │   ├── Profile/
 │   │   └── Profile.php                                # enum: Sync | Async | Actor
 │   ├── Header/
-│   │   ├── BusHeaders.php                             # final readonly class (per drift-resolution above) wraps array<string, scalar>
-│   │   ├── BusHeadersStamp.php                        # final readonly class implements Stamp; carries BusHeaders on Envelope
 │   │   └── HeaderKeys.php                             # final class with public const string CAUSATION_DEPTH = 'nexus.causation.depth'; etc.
 │   ├── Attribute/
-│   │   ├── CommandHandler.php                         # #[CommandHandler]  — attribute form (marker interface stays canonical)
-│   │   ├── Validate.php                               # #[Validate(groups: array, opt: bool = false)]
-│   │   ├── Authorize.php                              # #[Authorize(policy: string, subject: string|null, before: string|null)]
+│   │   ├── Handler.php                                # #[Handler] (renamed from CommandHandler — avoids collision)
+│   │   ├── Validate.php                               # #[Validate(groups: array)]
+│   │   ├── Authorize.php                              # #[Authorize(policy: string, subject: ?string, before: ?string)]
 │   │   ├── OnBus.php                                  # #[OnBus(name: string)]
 │   │   ├── IdempotencyKey.php                         # #[IdempotencyKey(field: string)]
-│   │   ├── InProcess.php                              # #[InProcess]  — marker for in-tx event handlers
-│   │   └── Idempotent.php                             # #[Idempotent(store: ?string, off: bool = false)]
-│   ├── Marker/
-│   │   └── Accepted.php                               # final readonly class (no fields, no factory) — typed marker for tryDispatch
+│   │   ├── InProcess.php                              # #[InProcess]
+│   │   ├── Idempotent.php                             # #[Idempotent(store: ?string, off: bool = false)]
+│   │   └── Sensitive.php                              # #[Sensitive] — property-level; redacts in log payloads
+│   ├── Logging/
+│   │   └── PayloadRedactor.php                        # reads #[Sensitive] and redacts
 │   ├── Exception/
 │   │   ├── BusException.php                           # abstract; extends NexusDddException
-│   │   ├── BusNotAvailableInProfileException.php
-│   │   ├── BusNameNotRegisteredException.php
-│   │   ├── DuplicateRoutingException.php
-│   │   ├── CommandReturnTypeException.php             # boot-time: handler declared non-void return
-│   │   ├── ValidationFailedException.php              # carries Violations
-│   │   ├── MissingValidatorException.php              # boot: any #[Validate] handler but no Validator registered
-│   │   ├── MissingAuthorizationDeciderException.php   # boot: any #[Authorize] handler but no decider registered
-│   │   ├── AccessDeniedException.php                  # runtime: AuthorizationDecider rejection
-│   │   ├── CausationDepthExceededException.php        # runtime: depth > cap (default 32)
-│   │   ├── InProcessConnectionMismatchException.php   # runtime: best-effort middleware fence
-│   │   └── ActorWriterInvariantViolation.php          # wraps OptimisticLockException under Profile::Actor
+│   │   ├── BusBootException.php                       # abstract; extends BusException
+│   │   ├── BusRuntimeException.php                    # abstract; extends BusException
+│   │   ├── BusInvariantException.php                  # interface (marker for boot-invariant exceptions; tryDispatch propagates)
+│   │   ├── RetryableFailure.php                       # interface (OCC, transient)
+│   │   ├── BusNotAvailableInProfileException.php      # extends BusBootException; implements BusInvariantException
+│   │   ├── BusNameNotRegisteredException.php          # extends BusBootException; implements BusInvariantException
+│   │   ├── DuplicateRoutingException.php              # extends BusBootException; implements BusInvariantException
+│   │   ├── CommandReturnTypeException.php             # extends BusBootException
+│   │   ├── ValidationFailedException.php              # extends DomainException; implements TerminalFailure
+│   │   ├── MissingValidatorException.php              # extends BusBootException; implements BusInvariantException
+│   │   ├── MissingAuthorizationDeciderException.php   # extends BusBootException; implements BusInvariantException
+│   │   ├── AccessDeniedException.php                  # extends DomainException; implements TerminalFailure
+│   │   ├── CausationDepthExceededException.php        # extends BusRuntimeException; implements TerminalFailure
+│   │   ├── InProcessConnectionMismatchException.php   # extends BusRuntimeException (still ships for adapter use)
+│   │   ├── ActorWriterInvariantViolation.php          # extends BusRuntimeException; implements TerminalFailure
+│   │   └── RetryBudgetExhaustedException.php          # extends BusRuntimeException; implements RetryableFailure (caller may retry at higher level)
 │   ├── Cli/
-│   │   └── RoutesShowCommand.php                      # "bin/ddd routes show [<command-class>]"
+│   │   ├── Command.php                                # interface (run(array $args): string)
+│   │   └── RoutesShowCommand.php                      # service; not a shell shim
 │   └── Internal/
 │       └── Pipeline/
-│           └── PipelineContext.php                    # final class — short-lived context threaded through stages
+│           └── PipelineContext.php                    # final class — short-lived per-dispatch scratchpad
 └── tests/
     ├── Unit/
     │   ├── Bus/
@@ -178,42 +212,62 @@ packages/nexus-ddd-bus/
     │   ├── Profile/
     │   ├── Header/
     │   ├── Attribute/
-    │   ├── Marker/
     │   ├── Exception/
     │   ├── Cli/
     │   ├── Smoke/                                     # full-pipeline end-to-end on SyncCommandBus
+    │   ├── Performance/                               # smoke perf (10000 dispatches < 50ms)
     │   └── Fitness/
     │       ├── PackageDependencyFitnessTest.php
     │       ├── ForbiddenImportsFitnessTest.php
     │       └── AbstractClassReadonlyOrFinalFitnessTest.php
-    └── Support/                                       # test fixtures + recording fakes
+    └── Support/
         ├── RecordingMetricsCollector.php
         ├── RecordingValidator.php
         ├── RecordingAuthorizationDecider.php
         ├── RecordingMiddleware.php
-        ├── Fixtures/
-        │   ├── PlaceOrder.php                         # fixture command (readonly)
-        │   ├── PlaceOrderHandler.php                  # fixture handler (implements CommandHandler)
-        │   ├── CancelOrder.php                        # fixture for #[Authorize] tests
-        │   └── …
-        └── …
+        └── Fixtures/
+            ├── PlaceOrder.php
+            ├── PlaceOrderHandler.php
+            ├── CancelOrder.php
+            └── …
 ```
 
-The Psalm rules ship in `packages/nexus-psalm/src/Hook/Bus/` (NOT in this package — they piggyback on the existing nexus-psalm plugin).
+The Psalm rules ship in `packages/nexus-psalm/src/Hook/Bus/`.
 
 ---
 
-## Phase 0 — Branch cut
+## Risk Register
+
+High-risk phases that warrant extra scrutiny / a senior reviewer pre-merge:
+
+| Phase | Risk | Mitigation |
+|---|---|---|
+| 10a | Causation-depth header read/write through `MessageMetadata::$headers` is the first verification that the parallel messaging upstream landed cleanly. | Phase 10a Step 1 includes a smoke test that exercises the round-trip on a synthetic envelope before any middleware logic is layered on. |
+| 10c | Two-phase idempotency split (Reserve outer, Commit inner) + exception classification is the most subtle correctness fence in the package. Mis-ordering causes redelivery double-execution. | Phase 10c includes 4 dedicated TDD scenarios covering each (Retryable, Terminal, infrastructure, success) classification path. The smoke phase 16 includes a redelivery-replay test. |
+| 12a | `BusBuilder` reflection cache + per-handler pipeline assembly is the load-bearing coordination point. A bug here causes silent mis-dispatch. | The builder ships with property-based fitness tests asserting that for every registered handler, the cached pipeline is structurally equivalent to a freshly-built one. |
+| 12b | `BusRegistry` profile×routing validation runs at boot and must be deterministic. | Boot-validation tests cover all 9 profile×bus-impl combinations. |
+| 13 | `SyncCommandBus::tryDispatch` + boot-invariant propagation. Subtle: `BusInvariantException` must NOT be lifted to `Either::left`. | Test matrix asserts each `BusBootException` propagates through `tryDispatch`; non-boot exceptions ARE lifted to `Either::left`. |
+| 17 | Each Psalm rule must distinguish handlers from non-handlers reliably. False positives in adopter codebases cause adoption pain. | Each rule ships a fixture pair (triggering + clean) plus an additional ambiguity case (e.g., a class that *looks* like a handler but isn't). |
+
+---
+
+## Phase 0 — Branch cut + conventions
 
 Already done — branch `feat/nexus-ddd-bus` is cut from `main` HEAD.
+
+**Conventions for this PR (referenced from CLAUDE.md):**
+- Commits MUST NOT include `Co-Authored-By: Claude` per CLAUDE.md.
+- All commands run via Docker (`docker compose exec -T php …`).
+- New code MUST use `Option<T>` instead of `?T`. Documented narrow exceptions: PHP attribute defaults (`Authorize::$subject: ?string`, `Authorize::$before: ?string`) and PSR-contract bodies.
+- New code MUST use `clone($this, [...])` (PHP 8.5 clone-with) for value-object mutators.
+- New code MUST use `#[\NoDiscard]` on builder/factory methods that return immutable instances.
+- Forbidden in code blocks: section-divider comments, restating-the-code comments, status-of-task comments, commented-out code.
 
 - [ ] **Step 1: Verify branch state**
 
 ```bash
 git rev-parse --abbrev-ref HEAD
-# Expect: feat/nexus-ddd-bus
 git log --oneline -1
-# Expect: 114d6495 ci(split): remove nexus meta-package from split (would overwrite monorepo)
 ```
 
 If the branch is wrong or the working tree is dirty, stop and resolve before proceeding.
@@ -228,15 +282,15 @@ If the branch is wrong or the working tree is dirty, stop and resolve before pro
 - Create: `packages/nexus-ddd-bus/phpcs.xml`
 - Create: `packages/nexus-ddd-bus/.gitignore`
 - Modify: root `composer.json` (path repository entry; autoload)
-- Modify: root `phpunit.xml` — add `packages/nexus-ddd-bus/tests/Unit` to the `unit` testsuite + `packages/nexus-ddd-bus/src` (and `tests/Support`) to the `<source>` whitelist (without this, `#[CoversClass]` triggers "is not a valid target for code coverage" warnings under `failOnWarning=true`)
-- Modify: root `deptrac.yaml` — add a `DddBus` layer for `packages/nexus-ddd-bus/src/`; allowed dependencies: `DddCore`, `DddMessaging`. **Forbidden:** `DddAggregate`, `Persistence*`, `Symfony*`, `Doctrine*`.
+- Modify: root `phpunit.xml` — add `packages/nexus-ddd-bus/tests/Unit` to the `unit` testsuite + `packages/nexus-ddd-bus/src` (and `tests/Support`) to the `<source>` whitelist
+- Modify: root `deptrac.yaml` — add a `DddBus` layer for `packages/nexus-ddd-bus/src/`; allowed dependencies: `DddCore`, `DddMessaging`. Forbidden: `DddAggregate`, `Persistence*`, `Symfony*`, `Doctrine*`.
 
 - [ ] **Step 1: Write `packages/nexus-ddd-bus/composer.json`**
 
 ```json
 {
   "name": "nexus-actors/ddd-bus",
-  "description": "Nexus DDD Framework — bus dispatch fabric (sync command/query/event buses, canonical 11-stage middleware pipeline, composite routing, pluggable validation/authorization/idempotency/metrics slots).",
+  "description": "Nexus DDD Framework — bus dispatch fabric (sync command/query/event buses, canonical 12-stage middleware pipeline, composite routing, pluggable validation/authorization/idempotency/metrics slots).",
   "type": "library",
   "license": "MIT",
   "require": {
@@ -256,53 +310,21 @@ If the branch is wrong or the working tree is dirty, stop and resolve before pro
   },
   "autoload-dev": {
     "psr-4": { "Monadial\\Nexus\\Ddd\\Bus\\Tests\\": "tests/" }
-  },
-  "bin": ["bin/ddd"]
+  }
 }
 ```
 
-**Forbidden adds:** `nexus-actors/ddd-aggregate`, any `symfony/*` (other than `symfony/uid` if absolutely needed — but NOT for the bus impls), any `doctrine/*`, `nexus-persistence*`. Phase 18 fitness tests enforce this.
+Note: no `bin` entry. The CLI shim is deferred (see Phase 15 / M4).
 
-- [ ] **Step 2: Write `psalm.xml` and `phpcs.xml`** — mirror the conventions of `packages/nexus-ddd-messaging/psalm.xml` and `packages/nexus-ddd-aggregate/psalm.xml`. Strict mode, level 1, no baseline. PHPCS includes Slevomat extensions per project policy.
+**Forbidden adds:** `nexus-actors/ddd-aggregate`, any `symfony/*`, any `doctrine/*`, `nexus-persistence*`. Phase 18 fitness tests enforce.
 
-- [ ] **Step 3: Update root `composer.json`** — add `"path": { "url": "packages/nexus-ddd-bus" }` if other packages do this; otherwise the root autoload wildcard already covers `packages/*`.
+- [ ] **Step 2: Write `psalm.xml` and `phpcs.xml`** — mirror the conventions of `packages/nexus-ddd-messaging/psalm.xml`. Strict mode, level 1, no baseline.
 
-- [ ] **Step 4: Update root `phpunit.xml`**
+- [ ] **Step 3: Update root `composer.json`** — autoload wildcard.
 
-```xml
-<source>
-    <include>
-        <!-- existing entries -->
-        <directory>packages/nexus-ddd-bus/src</directory>
-        <directory>packages/nexus-ddd-bus/tests/Support</directory>
-    </include>
-</source>
-<testsuites>
-    <testsuite name="unit">
-        <!-- existing -->
-        <directory>packages/nexus-ddd-bus/tests/Unit</directory>
-    </testsuite>
-</testsuites>
-```
+- [ ] **Step 4: Update root `phpunit.xml`** — testsuite + source whitelist.
 
-- [ ] **Step 5: Update root `deptrac.yaml`**
-
-```yaml
-- name: DddBus
-  collectors:
-    - type: directory
-      value: packages/nexus-ddd-bus/src/.*
-```
-
-In the `ruleset:` block:
-
-```yaml
-DddBus:
-  - DddCore
-  - DddMessaging
-```
-
-This explicitly forbids `DddAggregate` and `Persistence*` — the plan's architectural lock.
+- [ ] **Step 5: Update root `deptrac.yaml`** — `DddBus` layer with allowed deps `DddCore`, `DddMessaging`.
 
 - [ ] **Step 6: Verify pipeline**
 
@@ -314,41 +336,49 @@ docker compose exec -T php vendor/bin/deptrac
 docker compose exec -T php vendor/bin/phpcs packages/nexus-ddd-bus/
 ```
 
-All clean. (The unit suite is empty for the new package at this point; the others have nothing to flag.)
+All clean.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add packages/nexus-ddd-bus/composer.json packages/nexus-ddd-bus/psalm.xml packages/nexus-ddd-bus/phpcs.xml packages/nexus-ddd-bus/.gitignore composer.json phpunit.xml deptrac.yaml
 git commit -m "feat(ddd-bus): package skeleton + composer/phpunit/deptrac wiring"
 ```
 
 ---
 
-## Phase 2 — Profile enum + base exception classes
+## Phase 2 — Profile enum + base exception classes + marker interfaces
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/src/Profile/Profile.php`
-- Create: `packages/nexus-ddd-bus/src/Exception/BusException.php`
+- Create: `packages/nexus-ddd-bus/src/Exception/BusException.php` (abstract)
+- Create: `packages/nexus-ddd-bus/src/Exception/BusBootException.php` (abstract)
+- Create: `packages/nexus-ddd-bus/src/Exception/BusRuntimeException.php` (abstract)
+- Create: `packages/nexus-ddd-bus/src/Exception/BusInvariantException.php` (interface)
+- Create: `packages/nexus-ddd-bus/src/Exception/RetryableFailure.php` (interface)
 - Create: `packages/nexus-ddd-bus/src/Exception/BusNotAvailableInProfileException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/BusNameNotRegisteredException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/DuplicateRoutingException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/CommandReturnTypeException.php`
-- Create: `packages/nexus-ddd-bus/src/Exception/ValidationFailedException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/MissingValidatorException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/MissingAuthorizationDeciderException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/AccessDeniedException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/CausationDepthExceededException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/InProcessConnectionMismatchException.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/ActorWriterInvariantViolation.php`
-- Tests: `packages/nexus-ddd-bus/tests/Unit/Profile/ProfileTest.php`
-- Tests: `packages/nexus-ddd-bus/tests/Unit/Exception/ExceptionHierarchyTest.php`
+- Create: `packages/nexus-ddd-bus/src/Exception/RetryBudgetExhaustedException.php`
+- Tests for all
 
-**Inheritance roots (locked):**
-- `BusException` — abstract, extends `NexusDddException` (the framework-wiring root from `nexus-ddd-core`). Every framework-wiring fault in this package (boot-time misconfiguration, runtime contract violation by the bus itself) extends `BusException`.
-- `AccessDeniedException` extends `DomainException` (NOT `BusException`) — authorization rejection is a domain-level fact (the principal cannot perform this action), not a framework misconfiguration. Routes through `Either::left` for `tryDispatch()` callers (per spec §8.5.1.2).
-- `ValidationFailedException` extends `DomainException` — same reasoning.
-- `ActorWriterInvariantViolation` extends `BusException` AND implements `TerminalFailure` (from messaging) — the supervisor must not retry; this signals the actor mailbox-ack invariant was violated.
+**Inheritance graph (locked):**
+- `BusException` — abstract, extends `NexusDddException`. Root for framework-wiring faults.
+- `BusBootException` — abstract, extends `BusException`. All concrete boot-time-misconfig exceptions extend this AND `implements BusInvariantException`.
+- `BusRuntimeException` — abstract, extends `BusException`. All runtime contract violations.
+- `BusInvariantException` — marker interface. `tryDispatch` PROPAGATES these (does NOT lift to `Either::left`); `dispatchCommand` propagates them too. Adopters catch these in composition root, not in handlers.
+- `RetryableFailure` — marker interface (in this package; co-equal with messaging's `TerminalFailure`).
+- `AccessDeniedException` extends `DomainException` AND implements `TerminalFailure` — authorization rejection is a domain fact AND must not retry.
+- `ValidationFailedException` extends `DomainException` AND implements `TerminalFailure` (deferred to Phase 4 with `Violations`).
+- `ActorWriterInvariantViolation` extends `BusRuntimeException` AND implements `TerminalFailure`.
+- `CausationDepthExceededException` extends `BusRuntimeException` AND implements `TerminalFailure`.
+- `RetryBudgetExhaustedException` extends `BusRuntimeException` AND implements `RetryableFailure` (the caller higher up may retry at the application level).
 
 - [ ] **Step 1: Write the `Profile` enum test FIRST**
 
@@ -378,7 +408,6 @@ final class ProfileTest extends TestCase
     {
         self::assertTrue(Profile::Sync->isSync());
         self::assertFalse(Profile::Async->isSync());
-        self::assertFalse(Profile::Actor->isSync());
     }
 
     #[Test]
@@ -387,14 +416,6 @@ final class ProfileTest extends TestCase
         self::assertFalse(Profile::Sync->allowsAsyncBus());
         self::assertTrue(Profile::Async->allowsAsyncBus());
         self::assertTrue(Profile::Actor->allowsAsyncBus());
-    }
-
-    #[Test]
-    public function allowsActorBusReturnsTrueOnlyForActor(): void
-    {
-        self::assertFalse(Profile::Sync->allowsActorBus());
-        self::assertFalse(Profile::Async->allowsActorBus());
-        self::assertTrue(Profile::Actor->allowsActorBus());
     }
 }
 ```
@@ -410,12 +431,7 @@ namespace Monadial\Nexus\Ddd\Bus\Profile;
  * @psalm-api
  *
  * Deployment profile selector. Determines which bus implementations are
- * available at runtime and how the OCC retry middleware behaves
- * (per umbrella spec v7 §4.2 and §8.5.1).
- *
- * `Sync` is dev / single-process; `Async` is the production default
- * (outbox + relay); `Actor` is the actor-routed profile (single-writer
- * per aggregate id).
+ * available at runtime and how the OCC retry middleware behaves.
  */
 enum Profile: string
 {
@@ -440,421 +456,188 @@ enum Profile: string
 }
 ```
 
-- [ ] **Step 3: Write the exception hierarchy test**
+- [ ] **Step 3: Write the `BusInvariantException` and `RetryableFailure` marker interfaces**
 
 ```php
-<?php
-declare(strict_types=1);
-namespace Monadial\Nexus\Ddd\Bus\Tests\Unit\Exception;
+namespace Monadial\Nexus\Ddd\Bus\Exception;
 
-use Monadial\Nexus\Ddd\Bus\Exception\AccessDeniedException;
-use Monadial\Nexus\Ddd\Bus\Exception\ActorWriterInvariantViolation;
-use Monadial\Nexus\Ddd\Bus\Exception\BusException;
-use Monadial\Nexus\Ddd\Bus\Exception\BusNameNotRegisteredException;
-use Monadial\Nexus\Ddd\Bus\Exception\BusNotAvailableInProfileException;
-use Monadial\Nexus\Ddd\Bus\Exception\CausationDepthExceededException;
-use Monadial\Nexus\Ddd\Bus\Exception\CommandReturnTypeException;
-use Monadial\Nexus\Ddd\Bus\Exception\DuplicateRoutingException;
-use Monadial\Nexus\Ddd\Bus\Exception\InProcessConnectionMismatchException;
-use Monadial\Nexus\Ddd\Bus\Exception\MissingAuthorizationDeciderException;
-use Monadial\Nexus\Ddd\Bus\Exception\MissingValidatorException;
-use Monadial\Nexus\Ddd\Bus\Exception\ValidationFailedException;
-use Monadial\Nexus\Ddd\Bus\Profile\Profile;
-use Monadial\Nexus\Ddd\Bus\Validation\Violations;
-use Monadial\Nexus\Ddd\Core\Exception\DomainException;
-use Monadial\Nexus\Ddd\Core\Exception\NexusDddException;
-use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
-use PHPUnit\Framework\Attributes\CoversClass;
-use PHPUnit\Framework\Attributes\Test;
-use PHPUnit\Framework\TestCase;
-
-#[CoversClass(BusNotAvailableInProfileException::class)]
-#[CoversClass(BusNameNotRegisteredException::class)]
-#[CoversClass(DuplicateRoutingException::class)]
-#[CoversClass(CommandReturnTypeException::class)]
-#[CoversClass(ValidationFailedException::class)]
-#[CoversClass(MissingValidatorException::class)]
-#[CoversClass(MissingAuthorizationDeciderException::class)]
-#[CoversClass(AccessDeniedException::class)]
-#[CoversClass(CausationDepthExceededException::class)]
-#[CoversClass(InProcessConnectionMismatchException::class)]
-#[CoversClass(ActorWriterInvariantViolation::class)]
-final class ExceptionHierarchyTest extends TestCase
-{
-    #[Test]
-    public function busNotAvailableInProfileExtendsBusException(): void
-    {
-        $e = BusNotAvailableInProfileException::for('long-running', Profile::Sync, 'App\\Orders\\BulkImport');
-        self::assertInstanceOf(BusException::class, $e);
-        self::assertInstanceOf(NexusDddException::class, $e);
-        self::assertStringContainsString('long-running', $e->getMessage());
-        self::assertStringContainsString('sync', $e->getMessage());
-    }
-
-    #[Test]
-    public function busNameNotRegisteredListsKnownNames(): void
-    {
-        $e = BusNameNotRegisteredException::for('long-runnning', ['default', 'long-running']);
-        self::assertInstanceOf(BusException::class, $e);
-        self::assertStringContainsString('long-runnning', $e->getMessage());
-        self::assertStringContainsString('default', $e->getMessage());
-        self::assertStringContainsString('long-running', $e->getMessage());
-    }
-
-    #[Test]
-    public function duplicateRoutingNamesBothSources(): void
-    {
-        $e = DuplicateRoutingException::between('App\\PlaceOrder', 'attribute', 'dsl');
-        self::assertInstanceOf(BusException::class, $e);
-    }
-
-    #[Test]
-    public function commandReturnTypeFlagsHandlerClass(): void
-    {
-        $e = CommandReturnTypeException::for('App\\PlaceOrderHandler', 'string');
-        self::assertInstanceOf(BusException::class, $e);
-        self::assertStringContainsString('void', $e->getMessage());
-    }
-
-    #[Test]
-    public function validationFailedCarriesViolations(): void
-    {
-        $violations = new Violations([]);
-        $e = ValidationFailedException::with($violations);
-        self::assertInstanceOf(DomainException::class, $e);
-        self::assertSame($violations, $e->violations());
-    }
-
-    #[Test]
-    public function missingValidatorIsBusException(): void
-    {
-        $e = MissingValidatorException::forHandler('App\\PlaceOrderHandler');
-        self::assertInstanceOf(BusException::class, $e);
-    }
-
-    #[Test]
-    public function missingAuthorizationDeciderIsBusException(): void
-    {
-        $e = MissingAuthorizationDeciderException::forHandler('App\\PlaceOrderHandler');
-        self::assertInstanceOf(BusException::class, $e);
-    }
-
-    #[Test]
-    public function accessDeniedExtendsDomainException(): void
-    {
-        $e = AccessDeniedException::for('order.cancel', 'cust-1');
-        self::assertInstanceOf(DomainException::class, $e);
-        self::assertStringContainsString('order.cancel', $e->getMessage());
-    }
-
-    #[Test]
-    public function causationDepthExceededIsBusException(): void
-    {
-        $e = CausationDepthExceededException::at(33, 32);
-        self::assertInstanceOf(BusException::class, $e);
-        self::assertStringContainsString('32', $e->getMessage());
-    }
-
-    #[Test]
-    public function inProcessMismatchIsBusException(): void
-    {
-        $e = InProcessConnectionMismatchException::between('orders_db', 'shipping_db');
-        self::assertInstanceOf(BusException::class, $e);
-    }
-
-    #[Test]
-    public function actorWriterInvariantImplementsTerminalFailure(): void
-    {
-        $e = ActorWriterInvariantViolation::forActor('App\\Order', 'order-1', new \RuntimeException('oce'));
-        self::assertInstanceOf(BusException::class, $e);
-        self::assertInstanceOf(TerminalFailure::class, $e);
-    }
-}
+/**
+ * @psalm-api
+ *
+ * Marker for boot-invariant exceptions. tryDispatch() PROPAGATES these
+ * (does NOT lift to Either::left) — boot-time configuration errors are
+ * not domain failures.
+ */
+interface BusInvariantException {}
 ```
 
-- [ ] **Step 4: Run, confirm 11 failures (classes don't exist)**
+```php
+namespace Monadial\Nexus\Ddd\Bus\Exception;
 
-- [ ] **Step 5: Write `BusException` (abstract base)**
+/**
+ * @psalm-api
+ *
+ * Marker for retryable failures. The IdempotencyReserveMiddleware
+ * RELEASES the reservation on these (allowing future redelivery).
+ * Co-equal with messaging\Exception\TerminalFailure.
+ */
+interface RetryableFailure {}
+```
+
+- [ ] **Step 4: Write `BusException`, `BusBootException`, `BusRuntimeException` (abstract bases)**
 
 ```php
-<?php
-declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Bus\Exception;
 
 use Monadial\Nexus\Ddd\Core\Exception\NexusDddException;
 
 abstract class BusException extends NexusDddException {}
+
+abstract class BusBootException extends BusException implements BusInvariantException {}
+
+abstract class BusRuntimeException extends BusException {}
 ```
 
-- [ ] **Step 6: Write the 11 concrete exception classes**
+- [ ] **Step 5: Write the concrete exception classes**
+
+The 10 concrete exceptions (`ValidationFailedException` deferred to Phase 4). Each ships with `static for(...)`-style named constructors. Slevomat alphabetical-by-key applies to associative arrays in their bodies.
+
+`AccessDeniedException`:
 
 ```php
-// BusNotAvailableInProfileException.php
-final class BusNotAvailableInProfileException extends BusException
+namespace Monadial\Nexus\Ddd\Bus\Exception;
+
+use Monadial\Nexus\Ddd\Bus\Authorization\Principal;
+use Monadial\Nexus\Ddd\Core\Exception\DomainException;
+use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
+
+final class AccessDeniedException extends DomainException implements TerminalFailure
 {
-    public static function for(string $busName, Profile $profile, string $commandClass): self
+    /** @param string|object $subject */
+    public static function for(string $policy, mixed $subject, ?Principal $principal = null): self
     {
+        $subjectStr = is_scalar($subject)
+            ? (string) $subject
+            : get_debug_type($subject);
+        $principalStr = $principal !== null
+            ? sprintf(' (principal=%s)', $principal->id())
+            : '';
+
         return new self(sprintf(
-            'Route for `%s` requires bus `%s`, but the active profile is `%s`. ' .
-            'Bus `%s` is unavailable in profile `%s`. ' .
-            'Fix: switch profile, or change the route to use a profile-compatible bus.',
-            $commandClass,
-            $busName,
-            $profile->value,
-            $busName,
-            $profile->value,
+            'Access denied: principal cannot perform `%s` on `%s`%s.',
+            $policy,
+            $subjectStr,
+            $principalStr,
         ));
-    }
-}
-
-// BusNameNotRegisteredException.php
-final class BusNameNotRegisteredException extends BusException
-{
-    /** @param list<string> $knownNames */
-    public static function for(string $requestedName, array $knownNames): self
-    {
-        return new self(sprintf(
-            'Route specifies bus `%s`, but no bus by that name is registered. Known buses: [%s].',
-            $requestedName,
-            implode(', ', $knownNames),
-        ));
-    }
-}
-
-// DuplicateRoutingException.php
-final class DuplicateRoutingException extends BusException
-{
-    public static function between(string $messageClass, string $sourceA, string $sourceB): self
-    {
-        return new self(sprintf(
-            'Conflicting routing for `%s`: registered via both `%s` and `%s`.',
-            $messageClass, $sourceA, $sourceB,
-        ));
-    }
-}
-
-// CommandReturnTypeException.php
-final class CommandReturnTypeException extends BusException
-{
-    public static function for(string $handlerClass, string $declaredReturnType): self
-    {
-        return new self(sprintf(
-            'Command handler `%s` declared return type `%s`; commands are pure CQS — handlers MUST declare `: void`.',
-            $handlerClass, $declaredReturnType,
-        ));
-    }
-}
-
-// ValidationFailedException.php  (extends DomainException, NOT BusException)
-final class ValidationFailedException extends DomainException
-{
-    private function __construct(string $message, private readonly Violations $violations)
-    {
-        parent::__construct($message);
-    }
-
-    public static function with(Violations $violations): self
-    {
-        return new self(
-            sprintf('Validation failed with %d violation(s).', count($violations->all())),
-            $violations,
-        );
-    }
-
-    public function violations(): Violations
-    {
-        return $this->violations;
-    }
-}
-
-// MissingValidatorException.php
-final class MissingValidatorException extends BusException
-{
-    public static function forHandler(string $handlerClass): self
-    {
-        return new self(sprintf(
-            'Handler `%s` declares `#[Validate]` but no Validator is registered. Register a Validator implementation in DI before booting the bus.',
-            $handlerClass,
-        ));
-    }
-}
-
-// MissingAuthorizationDeciderException.php
-final class MissingAuthorizationDeciderException extends BusException
-{
-    public static function forHandler(string $handlerClass): self
-    {
-        return new self(sprintf(
-            'Handler `%s` declares `#[Authorize]` but no AuthorizationDecider is registered. Register a decider in DI before booting the bus.',
-            $handlerClass,
-        ));
-    }
-}
-
-// AccessDeniedException.php  (extends DomainException, NOT BusException)
-final class AccessDeniedException extends DomainException
-{
-    public static function for(string $policy, mixed $subject): self
-    {
-        $subjectStr = is_scalar($subject) ? (string) $subject : get_debug_type($subject);
-        return new self(sprintf('Access denied: principal cannot perform `%s` on `%s`.', $policy, $subjectStr));
-    }
-}
-
-// CausationDepthExceededException.php
-final class CausationDepthExceededException extends BusException
-{
-    public static function at(int $observedDepth, int $cap): self
-    {
-        return new self(sprintf(
-            'Causation depth %d exceeded cap %d. A buggy process manager may be emitting commands in response to its own emitted events. Raise the cap via configuration if the depth is intentional.',
-            $observedDepth, $cap,
-        ));
-    }
-}
-
-// InProcessConnectionMismatchException.php
-final class InProcessConnectionMismatchException extends BusException
-{
-    public static function between(string $sourceConnection, string $handlerConnection): self
-    {
-        return new self(sprintf(
-            'In-process subscriber attempted to write to connection `%s` but the source aggregate is bound to `%s`. ' .
-            'Cross-database in-tx subscriptions require XA/2PC, which the framework rejects.',
-            $handlerConnection, $sourceConnection,
-        ));
-    }
-}
-
-// ActorWriterInvariantViolation.php
-final class ActorWriterInvariantViolation extends BusException implements TerminalFailure
-{
-    public static function forActor(string $aggregateClass, string $aggregateId, \Throwable $cause): self
-    {
-        return new self(sprintf(
-            'Actor-mode OCC violation for %s(%s): the mailbox-ack invariant was breached. Supervisor must restart, not retry. Underlying cause: %s.',
-            $aggregateClass, $aggregateId, $cause->getMessage(),
-        ), 0, $cause);
     }
 }
 ```
 
-The `ValidationFailedException` references `Violations`, which is created in Phase 4. To avoid a forward-dependency that breaks Phase 2 in isolation, **defer the `ValidationFailedException` class creation to Phase 4** (where `Violations` lives). Phase 2 ships the other 10 exceptions plus `BusException` plus `Profile`. The hierarchy test in Phase 2 covers 10 exceptions; Phase 4 adds the `ValidationFailedException` covering test.
+(`?Principal` here is permitted — `AccessDeniedException::for` accepts both call sites that have a principal and those that don't yet. Keeps the messaging-layer simpler. Documented exception.)
 
-- [ ] **Step 7: Run tests + Psalm + PHPCS, all clean**
-- [ ] **Step 8: Commit**
+The other 9 exceptions follow analogous shapes.
+
+- [ ] **Step 6: Run the hierarchy tests + Psalm + PHPCS clean**
+- [ ] **Step 7: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): Profile enum + 10 bus exception classes (BusException root, AccessDenied/ValidationFailed under DomainException, ActorWriterInvariantViolation as TerminalFailure)"
+git commit -m "feat(ddd-bus): Profile enum + exception hierarchy (BusException root with BusBoot/BusRuntime intermediates, BusInvariantException + RetryableFailure markers, 10 concrete classes)"
 ```
 
 ---
-
-## Phase 3 — Marker types: `Accepted`
+## Phase 3 — Re-export `Accepted` marker
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Marker/Accepted.php`
-- Create: `packages/nexus-ddd-bus/tests/Unit/Marker/AcceptedTest.php`
+- None new. The `Accepted` marker ships in messaging upstream as `Monadial\Nexus\Ddd\Messaging\Marker\Accepted` (`final readonly`, no fields, instantiated via `new Accepted()`).
 
-**Lock (per Q2):** `Accepted` is a typed marker — no fields, no factory, no public constructor. The intent is "the dispatcher accepted this command; sync handler completed OR async enqueue succeeded." Tracing rides on `MessageContext::current()->metadata->id`, NOT on `Accepted`. The framework refuses to surface a `messageId` from the marker because it invites adopters to build a command-status oracle the framework cannot honor at-least-once.
+This phase is a **smoke verification** — write a single test that confirms `new Accepted()` is constructible, no singleton cache, no factory. Lock the no-state shape so future evolution doesn't sneak fields in.
 
-- [ ] **Step 1: Write the test FIRST**
+- [ ] **Step 1: Write the smoke test**
 
 ```php
 <?php
 declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Bus\Tests\Unit\Marker;
 
-use Monadial\Nexus\Ddd\Bus\Marker\Accepted;
-use PHPUnit\Framework\Attributes\CoversClass;
+use Monadial\Nexus\Ddd\Messaging\Marker\Accepted;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 
-#[CoversClass(Accepted::class)]
-final class AcceptedTest extends TestCase
+final class AcceptedSmokeTest extends TestCase
 {
     #[Test]
-    public function instanceIsConstructibleViaInstanceFactory(): void
+    public function isConstructibleWithoutFactory(): void
     {
-        self::assertInstanceOf(Accepted::class, Accepted::instance());
+        self::assertInstanceOf(Accepted::class, new Accepted());
     }
 
     #[Test]
-    public function instanceIsSingletonValueObject(): void
+    public function hasNoFields(): void
     {
-        self::assertSame(Accepted::instance(), Accepted::instance());
+        $reflection = new ReflectionClass(Accepted::class);
+        self::assertSame([], $reflection->getProperties());
+    }
+
+    #[Test]
+    public function hasNoStaticInstanceCache(): void
+    {
+        $reflection = new ReflectionClass(Accepted::class);
+        $statics = $reflection->getStaticProperties();
+        self::assertSame([], $statics);
     }
 }
 ```
 
-- [ ] **Step 2: Run, confirm failure**
-
-- [ ] **Step 3: Write the class**
-
-```php
-<?php
-declare(strict_types=1);
-namespace Monadial\Nexus\Ddd\Bus\Marker;
-
-/**
- * @psalm-api
- * @psalm-immutable
- *
- * Typed marker for `tryDispatch(): Either<Throwable, Accepted>` returns.
- * No fields. No factory other than the cached `instance()` accessor.
- *
- * Tracing rides on `MessageContext::current()->metadata->id`, NOT on this
- * marker — see umbrella spec §8.6 / Q2.
- */
-final readonly class Accepted
-{
-    private function __construct() {}
-
-    private static self $instance;
-
-    /**
-     * @psalm-pure
-     * @psalm-suppress ImpureStaticProperty Cached marker instance, semantically pure.
-     */
-    public static function instance(): self
-    {
-        return self::$instance ??= new self();
-    }
-}
-```
-
-Note: The cached-instance pattern looks like a singleton but is *not* — `Accepted` has no state, no mutators, and no behaviour. Caching the instance is purely an allocation optimization. The class is `final readonly`. This is permitted by the project's "no singletons" rule because there is no shared mutable state — see `claude.md` ("named constructors and factories are fine"). If the project's static-analysis rule complains, we promote `instance()` to a public constructor `new Accepted()` — semantically equivalent.
-
-- [ ] **Step 4: Run, verify pass**
-
-- [ ] **Step 5: Psalm + PHPCS clean**
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 2: Run, verify pass**
+- [ ] **Step 3: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): Accepted typed marker for tryDispatch()"
+git commit -m "test(ddd-bus): smoke verification that messaging\Marker\Accepted has no factory/state cache"
 ```
 
 ---
 
-## Phase 4 — Validation slot: `Validator` interface + `ValidationContext` + `Violations` + `Violation` + `ValidationFailedException`
+## Phase 4 — Validation slot: `Validator` + `ValidationContext` + `Violations` + `Violation` + `ValidationFailedException` + `Principal`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Validation/Validator.php` (interface)
+- Create: `packages/nexus-ddd-bus/src/Authorization/Principal.php` (interface — needed early because both ValidationContext and AuthorizationContext depend on it)
+- Create: `packages/nexus-ddd-bus/src/Validation/Validator.php`
 - Create: `packages/nexus-ddd-bus/src/Validation/ValidationContext.php`
 - Create: `packages/nexus-ddd-bus/src/Validation/Violations.php`
 - Create: `packages/nexus-ddd-bus/src/Validation/Violation.php`
 - Create: `packages/nexus-ddd-bus/src/Exception/ValidationFailedException.php` (deferred from Phase 2)
 - Tests for each
 
-**Locks per Q6:** `Validator::validate(object, ValidationContext): Violations` returns Violations as a value, never throws. The validation middleware lifts non-empty `Violations` to `ValidationFailedException` (or `Either::left` for `tryDispatch()` callers).
+**Lock:** `Validator::validate(object, ValidationContext): Violations` returns Violations as a value, never throws. The validation middleware lifts non-empty `Violations` to `ValidationFailedException`.
 
-- [ ] **Step 1: TDD `Violation` value object**
+- [ ] **Step 1: Write `Principal` interface**
 
-`Violation` carries `(string $path, string $message, string $code)`. Tests: construction, equality. `final readonly class`.
+```php
+namespace Monadial\Nexus\Ddd\Bus\Authorization;
+
+/**
+ * @psalm-api
+ *
+ * Application-supplied principal abstraction. Adopters provide a concrete
+ * Principal implementation backed by their auth system (Symfony Security
+ * UserInterface, JWT claims, custom).
+ *
+ * The framework never persists or serializes a Principal — adopters keep
+ * lifecycle ownership.
+ */
+interface Principal
+{
+    public function id(): string;
+}
+```
+
+- [ ] **Step 2: TDD `Violation` value object**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Validation;
+
+use NoDiscard;
 
 /**
  * @psalm-immutable
@@ -877,14 +660,12 @@ final readonly class Violation
 }
 ```
 
-(Property order alphabetical per Slevomat policy — `code`, `message`, `path`.)
-
-- [ ] **Step 2: TDD `Violations` collection**
-
-`Violations` carries `list<Violation>`; provides `isEmpty(): bool`, `all(): list<Violation>`, `count(): int`, `forPath(string): Violations` (filter), `merge(Violations): Violations`. `final readonly class`.
+- [ ] **Step 3: TDD `Violations` collection**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Validation;
+
+use NoDiscard;
 
 /**
  * @psalm-immutable
@@ -895,15 +676,29 @@ final readonly class Violations
     /** @param list<Violation> $violations */
     public function __construct(public array $violations) {}
 
-    public static function empty(): self { return new self([]); }
+    #[NoDiscard('Violations::empty returns the empty collection — assign or use it')]
+    public static function empty(): self
+    {
+        return new self([]);
+    }
 
-    public function isEmpty(): bool { return $this->violations === []; }
+    public function isEmpty(): bool
+    {
+        return $this->violations === [];
+    }
 
     /** @return list<Violation> */
-    public function all(): array { return $this->violations; }
+    public function all(): array
+    {
+        return $this->violations;
+    }
 
-    public function count(): int { return count($this->violations); }
+    public function count(): int
+    {
+        return count($this->violations);
+    }
 
+    #[NoDiscard('forPath returns a filtered collection — ignoring it loses the result')]
     public function forPath(string $path): self
     {
         return new self(array_values(array_filter(
@@ -912,6 +707,7 @@ final readonly class Violations
         )));
     }
 
+    #[NoDiscard('merge returns a new collection — the originals are unchanged')]
     public function merge(self $other): self
     {
         return new self([...$this->violations, ...$other->violations]);
@@ -919,36 +715,63 @@ final readonly class Violations
 }
 ```
 
-- [ ] **Step 3: TDD `ValidationContext` value object**
-
-`ValidationContext(list<string> $groups, mixed $principal, BusHeaders $headers)`. The `BusHeaders` type ships in Phase 11 (header phase) — for now, accept the forward dep and type-import. **Decision:** ship `ValidationContext` with `array<string, scalar> $headers` plain-array typed in Phase 4; refactor to `BusHeaders` in Phase 11 once the type exists. The plan's commit ordering means Phase 11 will have a small migration commit.
+- [ ] **Step 4: TDD `ValidationContext` value object**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Validation;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Bus\Authorization\Principal;
+use Monadial\Nexus\Ddd\Messaging\Header\Headers;
+use NoDiscard;
 
 /**
  * @psalm-immutable
  * @psalm-api
+ *
+ * Runtime context passed to Validator implementations. The principal is
+ * Option<Principal> per the no-null rule; adopters supply a concrete
+ * Principal at HTTP/CLI boundaries.
  */
 final readonly class ValidationContext
 {
     /**
-     * @param list<string> $groups Validation groups (Symfony Validator semantics).
-     * @param array<string, scalar> $headers Bus headers (refactored to BusHeaders in Phase 11).
+     * @param list<string> $groups
+     * @param Option<Principal> $principal
      */
     public function __construct(
-        public array $groups = [],
-        public mixed $principal = null,
-        public array $headers = [],
+        public array $groups,
+        public Option $principal,
+        public Headers $headers,
     ) {}
 
-    public static function default(): self { return new self(); }
+    #[NoDiscard('ValidationContext::default returns the empty context — assign or use it')]
+    public static function default(): self
+    {
+        return new self([], Option::none(), Headers::empty());
+    }
+
+    #[NoDiscard('withGroups returns a new context — the original is unchanged')]
+    public function withGroups(array $groups): self
+    {
+        return clone($this, ['groups' => $groups]);
+    }
+
+    #[NoDiscard('withPrincipal returns a new context — the original is unchanged')]
+    public function withPrincipal(Principal $principal): self
+    {
+        return clone($this, ['principal' => Option::some($principal)]);
+    }
+
+    #[NoDiscard('withHeaders returns a new context — the original is unchanged')]
+    public function withHeaders(Headers $headers): self
+    {
+        return clone($this, ['headers' => $headers]);
+    }
 }
 ```
 
-The `mixed $principal` field is unavoidable — the framework cannot constrain what an app's principal type is. Per project's no-`null` rule, the constructor signature should be `Option<mixed> $principal` — but `Option<mixed>` is a code smell since `mixed` already encodes optionality. **Compromise:** keep `mixed $principal = null` here as a *narrow exception* (boundary-with-app convention; documented in the class docblock); the `Validator` adapter receives `Option::fromNullable($ctx->principal)` and works in `Option<mixed>` from there.
-
-- [ ] **Step 4: TDD `Validator` interface (no tests for the interface itself; covered by `#[CoversNothing]`)**
+- [ ] **Step 5: TDD `Validator` interface**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Validation;
@@ -956,14 +779,9 @@ namespace Monadial\Nexus\Ddd\Bus\Validation;
 /**
  * @psalm-api
  *
- * Project-supplied validator. Implementations live in adapter packages
- * (Symfony Validator, Respect, custom). Without a registered Validator,
- * the bus emits a boot warning and `#[Validate]` is no-op.
- *
- * Per umbrella spec §8.5.1.1, `validate()` returns `Violations` as a value
- * — it never throws. The bus's ValidationMiddleware lifts non-empty
- * Violations to ValidationFailedException (or to Either::left for
- * tryDispatch() callers).
+ * Project-supplied validator. Returns Violations as a value — never throws.
+ * The bus's ValidationMiddleware lifts non-empty Violations to
+ * ValidationFailedException.
  */
 interface Validator
 {
@@ -971,18 +789,21 @@ interface Validator
 }
 ```
 
-- [ ] **Step 5: Now ship `ValidationFailedException` (deferred from Phase 2)**
+- [ ] **Step 6: Ship `ValidationFailedException` (deferred from Phase 2)**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Exception;
 
 use Monadial\Nexus\Ddd\Bus\Validation\Violations;
 use Monadial\Nexus\Ddd\Core\Exception\DomainException;
+use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 
-final class ValidationFailedException extends DomainException
+final class ValidationFailedException extends DomainException implements TerminalFailure
 {
-    private function __construct(string $message, private readonly Violations $violations)
-    {
+    private function __construct(
+        string $message,
+        private readonly Violations $violations,
+    ) {
         parent::__construct($message);
     }
 
@@ -1001,12 +822,11 @@ final class ValidationFailedException extends DomainException
 }
 ```
 
-- [ ] **Step 6: Run tests + Psalm + PHPCS clean**
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 8: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): validation slot — Validator interface + Violations + Violation + ValidationContext + ValidationFailedException"
+git commit -m "feat(ddd-bus): validation slot — Validator interface + Violations + Violation + ValidationContext (Option<Principal>) + ValidationFailedException (TerminalFailure) + Principal interface"
 ```
 
 ---
@@ -1014,17 +834,44 @@ git commit -m "feat(ddd-bus): validation slot — Validator interface + Violatio
 ## Phase 5 — Authorization slot: `AuthorizationDecider` + `AuthorizationContext` + `SubjectResolver`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Authorization/AuthorizationDecider.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Authorization/AuthorizationContext.php` (value object)
-- Create: `packages/nexus-ddd-bus/src/Authorization/SubjectResolver.php` (helper)
+- Create: `packages/nexus-ddd-bus/src/Authorization/AuthorizationDecider.php`
+- Create: `packages/nexus-ddd-bus/src/Authorization/AuthorizationContext.php`
+- Create: `packages/nexus-ddd-bus/src/Authorization/SubjectResolver.php`
 - Tests for each
 
-**Locks per Q7:**
-- `#[Authorize(policy: 'order.cancel', subject: 'orderId')]` — `subject:` string form is a property-name shortcut.
-- `#[Authorize(policy: 'order.cancel', subject: fn(CancelOrder $c, MessageContext $ctx) => …)]` — callable form receives `($message, MessageContext): mixed`.
-- `AuthorizationDecider::decide(string $policy, mixed $subject, AuthorizationContext $ctx): void` — throws `AccessDeniedException` on denial.
+- [ ] **Step 1: TDD `AuthorizationContext` value object**
 
-- [ ] **Step 1: TDD `AuthorizationContext` value object** — fields `(mixed $principal, array<string, scalar> $headers, Envelope $envelope)`. Same `mixed $principal` exception as `ValidationContext`. Refactor to `BusHeaders` in Phase 11.
+```php
+namespace Monadial\Nexus\Ddd\Bus\Authorization;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Monadial\Nexus\Ddd\Messaging\Header\Headers;
+use NoDiscard;
+
+/**
+ * @psalm-immutable
+ * @psalm-api
+ */
+final readonly class AuthorizationContext
+{
+    /**
+     * @param Option<Principal> $principal
+     * @param Envelope<object> $envelope
+     */
+    public function __construct(
+        public Option $principal,
+        public Headers $headers,
+        public Envelope $envelope,
+    ) {}
+
+    #[NoDiscard('withPrincipal returns a new context — the original is unchanged')]
+    public function withPrincipal(Principal $principal): self
+    {
+        return clone($this, ['principal' => Option::some($principal)]);
+    }
+}
+```
 
 - [ ] **Step 2: TDD `AuthorizationDecider` interface**
 
@@ -1036,25 +883,22 @@ use Monadial\Nexus\Ddd\Bus\Exception\AccessDeniedException;
 /**
  * @psalm-api
  *
- * Project-supplied authorization decider. Implementations live in adapter
- * packages (Symfony Security voters, Casbin, custom).
- *
- * Per umbrella spec §8.5.1.2, `decide()` throws AccessDeniedException on
- * denial. Bus middleware converts the throw to Either::left for
- * tryDispatch() callers.
+ * Project-supplied authorization decider. Throws AccessDeniedException on
+ * denial. The bus middleware converts the throw to Either::left for
+ * tryDispatch() callers (since AccessDeniedException implements
+ * TerminalFailure but NOT BusInvariantException — domain failure, not
+ * boot misconfiguration).
  */
 interface AuthorizationDecider
 {
     /**
-     * @throws AccessDeniedException if the principal cannot perform $policy on $subject
+     * @throws AccessDeniedException
      */
     public function decide(string $policy, mixed $subject, AuthorizationContext $context): void;
 }
 ```
 
 - [ ] **Step 3: TDD `SubjectResolver`**
-
-`SubjectResolver` reads the `#[Authorize(subject:)]` value (either a string property-name or a callable) and resolves the runtime subject.
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Authorization;
@@ -1063,22 +907,31 @@ use Closure;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
 use ReflectionObject;
 
+/**
+ * @psalm-api
+ *
+ * Resolves the runtime subject from #[Authorize(subject:)]. The string
+ * form names a property on the message class; the callable form references
+ * a public static method `'Class::method'` that receives ($message,
+ * MessageContext) and returns the subject.
+ */
 final class SubjectResolver
 {
-    /**
-     * @param string|Closure(object, MessageContext): mixed $subjectSpec
-     */
-    public function resolve(object $message, string|Closure $subjectSpec, MessageContext $ctx): mixed
+    public function resolve(object $message, string $subjectSpec, MessageContext $ctx): mixed
     {
-        if ($subjectSpec instanceof Closure) {
-            return ($subjectSpec)($message, $ctx);
+        if (str_contains($subjectSpec, '::')) {
+            $callable = Closure::fromCallable($subjectSpec);
+
+            return $callable($message, $ctx);
         }
 
         $reflection = new ReflectionObject($message);
+
         if (!$reflection->hasProperty($subjectSpec)) {
             throw new \LogicException(sprintf(
-                'Property `%s` does not exist on `%s`. The `#[Authorize(subject:)]` string form names a property; the named property must exist on the message class. Use the callable form for composite subjects.',
-                $subjectSpec, $message::class,
+                'Property `%s` does not exist on `%s`. The #[Authorize(subject:)] string form names a property on the message class. Use the `Class::method` form for callable subjects.',
+                $subjectSpec,
+                $message::class,
             ));
         }
 
@@ -1087,28 +940,24 @@ final class SubjectResolver
 }
 ```
 
-The `string|Closure` parameter is technically a "compound type" forbidden by §21. **Resolution:** wrap as `SubjectSpec` interface with `StringSubjectSpec` / `CallableSubjectSpec` impls. Defer to Phase 17 polish — for now keep the string|Closure as a documented exception. The `AuthorizeAttributeSubjectRule` Psalm rule (deferred — not in this plan's 7 rules) would have validated string forms; we ship the runtime fallback `LogicException` at Phase 5.
-
 - [ ] **Step 4: Run tests + Psalm + PHPCS clean**
-
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): authorization slot — AuthorizationDecider interface + AuthorizationContext + SubjectResolver"
+git commit -m "feat(ddd-bus): authorization slot — AuthorizationDecider + AuthorizationContext (Option<Principal>) + SubjectResolver (string-property + Class::method-callable forms)"
 ```
 
 ---
 
-## Phase 6 — Metrics slot: `MetricsCollector` + `NoOpMetricsCollector`
+## Phase 6 — Metrics slot: `MetricsCollector` + `NoOpMetricsCollector` + `MetricOutcome`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Metrics/MetricsCollector.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Metrics/NoOpMetricsCollector.php` (default impl)
+- Create: `packages/nexus-ddd-bus/src/Metrics/MetricsCollector.php`
+- Create: `packages/nexus-ddd-bus/src/Metrics/MetricOutcome.php`
+- Create: `packages/nexus-ddd-bus/src/Metrics/NoOpMetricsCollector.php`
 - Tests for each
 
-The interface mirrors umbrella spec §23.3 — emit `count(name, tags)`, `histogram(name, value, tags)`, `gauge(name, value, tags)`. Adapter packages (P5) ship Prometheus / StatsD / OpenTelemetry impls.
-
-- [ ] **Step 1: TDD `MetricsCollector` interface**
+- [ ] **Step 1: TDD `MetricOutcome` enum**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Metrics;
@@ -1116,33 +965,43 @@ namespace Monadial\Nexus\Ddd\Bus\Metrics;
 /**
  * @psalm-api
  *
- * Project-supplied metrics collector. Default is no-op (NoOpMetricsCollector);
- * adapter packages in P5 ship Prometheus / StatsD / OpenTelemetry impls.
- *
- * Standard metric names are locked in umbrella spec §23.3 — adapters MUST
- * pass through `ddd.command.count`, `ddd.command.duration_ms`, etc.
- * verbatim without renaming.
+ * Lock outcomes here so the count tags shape is deterministic. Adapter
+ * packages depend on these names verbatim (per umbrella spec §23.3).
+ */
+enum MetricOutcome: string
+{
+    case Started = 'started';
+    case Succeeded = 'succeeded';
+    case ValidationFailed = 'validation_failed';
+    case AccessDenied = 'access_denied';
+    case IdempotentShortCircuit = 'idempotent_short_circuit';
+    case OccRetryExhausted = 'occ_retry_exhausted';
+    case TerminalFailure = 'terminal_failure';
+}
+```
+
+- [ ] **Step 2: TDD `MetricsCollector` interface**
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Metrics;
+
+/**
+ * @psalm-api
  */
 interface MetricsCollector
 {
-    /**
-     * @param array<string, scalar> $tags
-     */
+    /** @param array<string, scalar> $tags */
     public function count(string $name, int $delta, array $tags): void;
 
-    /**
-     * @param array<string, scalar> $tags
-     */
+    /** @param array<string, scalar> $tags */
     public function histogram(string $name, float $value, array $tags): void;
 
-    /**
-     * @param array<string, scalar> $tags
-     */
+    /** @param array<string, scalar> $tags */
     public function gauge(string $name, float $value, array $tags): void;
 }
 ```
 
-- [ ] **Step 2: TDD `NoOpMetricsCollector`** — every method is a no-op. Tests assert the methods don't throw and don't capture state.
+- [ ] **Step 3: TDD `NoOpMetricsCollector`** — every method is a no-op.
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Metrics;
@@ -1162,32 +1021,33 @@ final class NoOpMetricsCollector implements MetricsCollector
 }
 ```
 
-- [ ] **Step 3: Run tests + Psalm + PHPCS clean**
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): metrics slot — MetricsCollector interface + NoOpMetricsCollector default"
+git commit -m "feat(ddd-bus): metrics slot — MetricsCollector interface + MetricOutcome enum + NoOpMetricsCollector"
 ```
 
 ---
 
-## Phase 7 — `IdempotencyStore` two-phase contract + `IdempotencyReservation` + `IdempotencyKey` + `InMemoryIdempotencyStore`
+## Phase 7 — `IdempotencyStore` two-phase contract + `IdempotencyReservation` interface + `IdempotencyKey` + `InMemoryIdempotencyStore` + `InMemoryReservation`
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyKey.php`
-- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyReservation.php`
-- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyStore.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Idempotency/InMemoryIdempotencyStore.php` (tests-only impl)
+- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyReservation.php` (interface — per M1)
+- Create: `packages/nexus-ddd-bus/src/Idempotency/InMemoryReservation.php` (concrete for InMemory store)
+- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyStore.php` (interface; includes `ttl(): Duration` per H12)
+- Create: `packages/nexus-ddd-bus/src/Idempotency/InMemoryIdempotencyStore.php`
 - Tests for each
 
-**Locks per Q3:**
-- `IdempotencyStore::tryReserve(string $handlerClass, IdempotencyKey $key): Option<IdempotencyReservation>` — returns `Option::some(token)` on first attempt; `Option::none()` if `(handlerClass, key)` was already committed.
-- `IdempotencyStore::markCompleted(IdempotencyReservation $token): void` — runs in the handler's TX.
-- `IdempotencyStore::release(IdempotencyReservation $token): void` — runs on terminal failure (retry-budget exhaustion, terminal exception) so future redelivery can attempt the handler again.
-- `IdempotencyReservation` carries `(string $handlerClass, IdempotencyKey $idempotencyKey)` plus impl-private fields (e.g., a row-id token for the Postgres impl). Public properties: `handlerClass`, `idempotencyKey`. Impl-private fields are stored in a `mixed $payload` field (escaped through `mixed` because the impl owns the shape).
+**Locks:**
+- `IdempotencyStore::tryReserve(class-string, IdempotencyKey): Option<IdempotencyReservation>` — `Option::some(token)` on first; `Option::none()` if already committed.
+- `IdempotencyStore::markCompleted(IdempotencyReservation): void` — INSIDE handler TX.
+- `IdempotencyStore::release(IdempotencyReservation): void` — terminal + retryable failure paths.
+- `IdempotencyStore::ttl(): Duration` — minimum retention (used by bus boot to verify TTL ≥ max retry budget).
+- `IdempotencyReservation` is now an INTERFACE (`handlerClass(): string`, `idempotencyKey(): IdempotencyKey`); each store ships its own concrete (e.g., `InMemoryReservation`).
 
-- [ ] **Step 1: TDD `IdempotencyKey` value object**
+- [ ] **Step 1: TDD `IdempotencyKey`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Idempotency;
@@ -1195,9 +1055,6 @@ namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 /**
  * @psalm-immutable
  * @psalm-api
- *
- * Application-level idempotency key. Distinct from MessageId (transport-level);
- * see umbrella spec §13 / §11.1.2.
  */
 final readonly class IdempotencyKey
 {
@@ -1215,91 +1072,124 @@ final readonly class IdempotencyKey
 }
 ```
 
-- [ ] **Step 2: TDD `IdempotencyReservation` value object**
+- [ ] **Step 2: TDD `IdempotencyReservation` interface**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 
 /**
- * @psalm-immutable
  * @psalm-api
  *
  * Two-phase reservation token. Issued by IdempotencyStore::tryReserve;
- * passed back to markCompleted (handler success) or release (terminal
- * failure). Per umbrella spec §13.1 — pluggable two-phase contract.
+ * passed back to markCompleted (handler success) or release (failure).
  *
- * The `payload` field is impl-owned (e.g., DB row id, Redis lock token).
- * Adapter impls cast it to the concrete type they wrote.
+ * Each store ships its own concrete reservation type carrying impl-private
+ * state (e.g., row id, lock token). Public observers see only the
+ * (handlerClass, idempotencyKey) pair.
  */
-final readonly class IdempotencyReservation
+interface IdempotencyReservation
 {
-    /**
-     * @param class-string $handlerClass
-     */
-    public function __construct(
-        public string $handlerClass,
-        public IdempotencyKey $idempotencyKey,
-        public mixed $payload,
-    ) {}
+    /** @return class-string */
+    public function handlerClass(): string;
+
+    public function idempotencyKey(): IdempotencyKey;
 }
 ```
 
-- [ ] **Step 3: TDD `IdempotencyStore` interface**
+- [ ] **Step 3: TDD `InMemoryReservation`**
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Idempotency;
+
+use Override;
+
+/**
+ * @psalm-immutable
+ * @internal
+ */
+final readonly class InMemoryReservation implements IdempotencyReservation
+{
+    /** @param class-string $handlerClass */
+    public function __construct(
+        private string $handlerClass,
+        private IdempotencyKey $idempotencyKey,
+        public string $compositeKey,
+    ) {}
+
+    #[Override]
+    public function handlerClass(): string
+    {
+        return $this->handlerClass;
+    }
+
+    #[Override]
+    public function idempotencyKey(): IdempotencyKey
+    {
+        return $this->idempotencyKey;
+    }
+}
+```
+
+- [ ] **Step 4: TDD `IdempotencyStore` interface**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 
 use Fp\Functional\Option\Option;
+use Monadial\Duration\FiniteDuration;
 
 /**
  * @psalm-api
  *
- * Two-phase idempotency contract. Per umbrella spec §13.1 + Q3:
- *   tryReserve   — gates redelivery + concurrent retries; returns Some(token) on first
- *   markCompleted — durable commit; runs in handler's TX
- *   release       — release on terminal failure to allow future redelivery
+ * Two-phase idempotency contract. Per umbrella spec §13.1:
+ *   tryReserve     — gates redelivery; returns Some(token) on first.
+ *   markCompleted  — durable commit; runs INSIDE handler TX (per spec §13.1).
+ *   release        — release on failure to allow future redelivery.
  *
- * The pipeline calls tryReserve BEFORE the OCC retry loop (umbrella spec
- * §8.5.1 step 7); the OCC retry loop reuses the same token across retry
- * attempts; markCompleted runs in the handler's TX once the OCC append
- * commits. On terminal failure (retry-budget exhaustion, non-retryable
- * exception), the middleware calls release so future redelivery can
- * attempt the handler again.
+ * The pipeline calls tryReserve in IdempotencyReserveMiddleware (outer;
+ * before OCC retry); the OCC retry loop reuses the SAME token across
+ * attempts; markCompleted runs in IdempotencyCommitMiddleware (inner;
+ * post-handler, pre-flush, INSIDE the TX).
  */
 interface IdempotencyStore
 {
     /**
      * @param class-string $handlerClass
-     * @return Option<IdempotencyReservation>  None means "already handled" — caller skips the handler.
+     * @return Option<IdempotencyReservation>  None means "already handled" — caller short-circuits.
      */
     public function tryReserve(string $handlerClass, IdempotencyKey $key): Option;
 
     public function markCompleted(IdempotencyReservation $token): void;
 
     public function release(IdempotencyReservation $token): void;
+
+    /**
+     * Minimum TTL for committed reservations. Bus boot validation requires
+     * ttl() >= max retry budget across all profiles to prevent stale-eviction
+     * during in-flight retry sequences.
+     */
+    public function ttl(): FiniteDuration;
 }
 ```
 
-- [ ] **Step 4: TDD `InMemoryIdempotencyStore`**
-
-The in-memory impl stores `(handlerClass, key)` pairs in two arrays: `$reserved` (pending) and `$committed`. Uses `Option::none()` as "already committed"; `Option::some(reservation)` otherwise.
+- [ ] **Step 5: TDD `InMemoryIdempotencyStore`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 
 use Fp\Functional\Option\Option;
+use Monadial\Duration\FiniteDuration;
 use Override;
 
 /**
  * @psalm-api
  *
- * Tests-only implementation. NOT for production. Concrete production
- * adapters live in `nexus-ddd-bus-idempotency-doctrine` and
- * `nexus-ddd-idempotency-redis`.
+ * Tests-only implementation. Production adapters live in
+ * nexus-ddd-bus-idempotency-doctrine and nexus-ddd-idempotency-redis.
  */
 final class InMemoryIdempotencyStore implements IdempotencyStore
 {
-    /** @var array<string, true> key = "{handlerClass}::{idempotencyKey.value}" */
+    /** @var array<string, true> */
     private array $reserved = [];
 
     /** @var array<string, true> */
@@ -1309,57 +1199,51 @@ final class InMemoryIdempotencyStore implements IdempotencyStore
     public function tryReserve(string $handlerClass, IdempotencyKey $key): Option
     {
         $compositeKey = $handlerClass . '::' . $key->value;
-        if (isset($this->committed[$compositeKey])) {
+
+        if (isset($this->committed[$compositeKey]) || isset($this->reserved[$compositeKey])) {
             return Option::none();
         }
-        if (isset($this->reserved[$compositeKey])) {
-            // Already reserved by a concurrent caller. Per spec §13.1, the
-            // pipeline calls tryReserve once per dispatch; OCC retries
-            // reuse the SAME reservation. So this branch is hit by tests
-            // simulating concurrent first-attempt dispatches; we treat it
-            // the same as already-handled (None).
-            return Option::none();
-        }
+
         $this->reserved[$compositeKey] = true;
-        return Option::some(new IdempotencyReservation($handlerClass, $key, $compositeKey));
+
+        return Option::some(new InMemoryReservation($handlerClass, $key, $compositeKey));
     }
 
     #[Override]
     public function markCompleted(IdempotencyReservation $token): void
     {
-        \assert(is_string($token->payload));
-        unset($this->reserved[$token->payload]);
-        $this->committed[$token->payload] = true;
+        \assert($token instanceof InMemoryReservation);
+        unset($this->reserved[$token->compositeKey]);
+        $this->committed[$token->compositeKey] = true;
     }
 
     #[Override]
     public function release(IdempotencyReservation $token): void
     {
-        \assert(is_string($token->payload));
-        unset($this->reserved[$token->payload]);
+        \assert($token instanceof InMemoryReservation);
+        unset($this->reserved[$token->compositeKey]);
+    }
+
+    #[Override]
+    public function ttl(): FiniteDuration
+    {
+        return FiniteDuration::fromSeconds(30 * 86400);
     }
 }
 ```
 
-Tests:
-- `tryReserve` on fresh state returns `Option::some(token)`.
-- Second `tryReserve` for same `(handlerClass, key)` (without commit) returns `Option::none()`.
-- `markCompleted(token)` then `tryReserve(same)` returns `Option::none()`.
-- `release(token)` then `tryReserve(same)` returns `Option::some(token)` again.
-- Different `handlerClass` + same `key` → `tryReserve` returns `Option::some()` for both.
-- Different `key` + same `handlerClass` → `tryReserve` returns `Option::some()` for both.
+Tests cover happy path, double-reserve short-circuit, release-then-reserve, mark-completed-then-reserve, ttl returns 30d.
 
-- [ ] **Step 5: Run tests + Psalm + PHPCS clean**
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 7: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): idempotency slot — IdempotencyKey + IdempotencyStore (two-phase tryReserve/markCompleted/release) + IdempotencyReservation + InMemoryIdempotencyStore"
+git commit -m "feat(ddd-bus): idempotency slot — IdempotencyKey + IdempotencyReservation interface + InMemoryReservation + IdempotencyStore (with ttl()) + InMemoryIdempotencyStore"
 ```
 
 ---
 
-## Phase 8 — Attributes: `Validate`, `Authorize`, `OnBus`, `IdempotencyKey`, `Idempotent`, `InProcess`, `CommandHandler`
+## Phase 8 — Attributes: `Validate`, `Authorize`, `OnBus`, `IdempotencyKey`, `Idempotent`, `InProcess`, `Handler`, `Sensitive`
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/src/Attribute/Validate.php`
@@ -1368,12 +1252,13 @@ git commit -m "feat(ddd-bus): idempotency slot — IdempotencyKey + IdempotencyS
 - Create: `packages/nexus-ddd-bus/src/Attribute/IdempotencyKey.php`
 - Create: `packages/nexus-ddd-bus/src/Attribute/Idempotent.php`
 - Create: `packages/nexus-ddd-bus/src/Attribute/InProcess.php`
-- Create: `packages/nexus-ddd-bus/src/Attribute/CommandHandler.php`
+- Create: `packages/nexus-ddd-bus/src/Attribute/Handler.php` (renamed from `CommandHandler` — per M3)
+- Create: `packages/nexus-ddd-bus/src/Attribute/Sensitive.php` (new — per M5)
 - Tests for each
 
-**Spec discipline (Q11 sub-item: marker-interface canonical):** the marker interface (`Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler`) is the canonical shape. The `#[CommandHandler]` attribute is a discoverability shortcut for multi-method services where grouping aggregate operations on a single application service is preferred. Most projects should use the marker interface; the attribute is the exception. (Per umbrella spec §8.3.) Document this in the attribute class docblock.
+**Lock M3 (attribute name collision):** the `#[Handler]` attribute lives at `Monadial\Nexus\Ddd\Bus\Attribute\Handler`. The marker interface `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` remains canonical. Rename was necessary to avoid namespace-traverse confusion.
 
-- [ ] **Step 1: TDD `OnBus` attribute** — `final readonly class`, `#[Attribute(Attribute::TARGET_CLASS)]`. Single string field `name`.
+- [ ] **Step 1: TDD `OnBus` attribute**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Attribute;
@@ -1383,10 +1268,8 @@ use Attribute;
 /**
  * @psalm-api
  *
- * Routing hint per umbrella spec §8.2 (composite routing). Resolution
- * order: explicit DSL → `#[OnBus(name:)]` → namespace-pattern → default.
- *
- * Place on a Command class to declare the bus that should receive it.
+ * Routing hint per umbrella spec §8.2. Resolution order: explicit DSL →
+ * #[OnBus(name:)] → namespace-pattern → default.
  */
 #[Attribute(Attribute::TARGET_CLASS)]
 final readonly class OnBus
@@ -1395,7 +1278,7 @@ final readonly class OnBus
 }
 ```
 
-- [ ] **Step 2: TDD `Validate` attribute** — `#[Attribute(Attribute::TARGET_METHOD)]`. Optional `groups: list<string>` (default empty).
+- [ ] **Step 2: TDD `Validate` attribute**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Attribute;
@@ -1404,12 +1287,6 @@ use Attribute;
 
 /**
  * @psalm-api
- *
- * Per umbrella spec §8.5.1.1 — declarative trigger for the
- * ValidationMiddleware. Place on the handler method (`__invoke` or named).
- *
- * Bus-level `#[Validate]` is defense-in-depth, NOT the primary line of
- * defense. Commands SHOULD validate their own invariants in the constructor.
  */
 #[Attribute(Attribute::TARGET_METHOD)]
 final readonly class Validate
@@ -1419,33 +1296,28 @@ final readonly class Validate
 }
 ```
 
-- [ ] **Step 3: TDD `Authorize` attribute** — `#[Attribute(Attribute::TARGET_METHOD)]`. Fields: `policy: string`, `subject: string|Closure|null = null`, `before: string|null = null`.
-
-`subject:` accepts either a string (property-name shortcut) or a `Closure(object, MessageContext): mixed`. Per Q7. The `before:` field flips the default `Validate → Authorize` ordering when set to `'validation'`. The `MiddlewareOrderingRule` Psalm rule (Phase 17) validates `before:` is one of `PipelineStage`'s canonical names.
-
-PHP's attribute mechanism doesn't directly accept `Closure`. **Resolution:** for the callable form, the attribute carries a `string $subjectCallable` referencing a public static method (`'App\\Subjects\\OrderSubject::resolve'`). The bus calls `Closure::fromCallable($subjectCallable)` at boot. Document the pattern; the `AuthorizeAttributeSubjectRule` Psalm rule (out of scope) would validate the string. Adopters who want a true callable wrap it in a one-method class.
+- [ ] **Step 3: TDD `Authorize` attribute**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Attribute;
 
 use Attribute;
-use Fp\Functional\Option\Option;
 
 /**
  * @psalm-api
  *
- * Per umbrella spec §8.5.1.2 — declarative trigger for the
- * AuthorizationMiddleware. Place on the handler method.
+ * #[Authorize(policy: 'order.cancel', subject: 'orderId')]
+ *   String form: subject names a property on the command class.
  *
- *     #[Authorize(policy: 'order.cancel', subject: 'orderId')]
- *     // String form: subject names a property on the command class.
+ * #[Authorize(policy: 'order.cancel', subject: 'App\\Subjects\\OrderSubject::resolve')]
+ *   Callable form: 'Class::method' (public static); receives ($message, MessageContext): mixed.
  *
- *     #[Authorize(policy: 'order.cancel', subject: 'App\\Subjects\\OrderSubject::resolve')]
- *     // Callable form: 'Class::method' (public static); receives ($message, MessageContext): mixed.
+ * The `before:` field flips pipeline ordering — set to 'validation' to
+ * run Authorize before Validate. Validated by MiddlewareOrderingRule.
  *
- * The `before:` field controls pipeline stage ordering — set to
- * 'validation' to run Authorize before Validate. Validated by
- * MiddlewareOrderingRule Psalm rule.
+ * The ?string types on subject and before are PHP-attribute-default
+ * exceptions to the no-null rule (Option::none() is not a const expression).
+ * The bus reads the attribute and immediately wraps with Option::fromNullable.
  */
 #[Attribute(Attribute::TARGET_METHOD)]
 final readonly class Authorize
@@ -1458,9 +1330,7 @@ final readonly class Authorize
 }
 ```
 
-The `?string` types on `subject` and `before` are nullable — the no-null rule (§21) prefers `Option<string>`, but PHP attributes' constructor argument type system forbids `Option<T>` (default value cannot be `Option::none()`). **Documented narrow exception.** The bus reads the attribute, immediately wraps with `Option::fromNullable`, and works in `Option<string>` from there.
-
-- [ ] **Step 4: TDD `IdempotencyKey` attribute** — `#[Attribute(Attribute::TARGET_CLASS)]`, single field `field: string`. Per Q1. The `IdempotencyKeyFieldExistsRule` Psalm rule (Phase 17) validates the field exists on the command class and returns string.
+- [ ] **Step 4: TDD `IdempotencyKey` attribute**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Attribute;
@@ -1470,15 +1340,10 @@ use Attribute;
 /**
  * @psalm-api
  *
- * Per umbrella spec §13.2.1 — names a property on the command class
- * whose value is used as the application-level idempotency key. Without
- * this attribute, the framework falls back to MessageContext-supplied
- * `nexus.idempotency-key` header; without that, falls back to messageId.
- *
  *     #[IdempotencyKey(field: 'clientRequestId')]
  *     readonly class PlaceOrder { …; public string $clientRequestId; … }
  *
- * Validated by IdempotencyKeyFieldExistsRule Psalm rule (Phase 17).
+ * Validated by IdempotencyKeyFieldExistsRule (Phase 17).
  */
 #[Attribute(Attribute::TARGET_CLASS)]
 final readonly class IdempotencyKey
@@ -1487,11 +1352,27 @@ final readonly class IdempotencyKey
 }
 ```
 
-- [ ] **Step 5: TDD `Idempotent` attribute** — `#[Attribute(Attribute::TARGET_CLASS)]`. Fields: `store: ?string = null` (named idempotency-store key), `off: bool = false`. Per umbrella spec §13.2.
+- [ ] **Step 5: TDD `Idempotent` attribute**
 
-- [ ] **Step 6: TDD `InProcess` attribute** — `#[Attribute(Attribute::TARGET_METHOD)]`. No fields. Per umbrella spec §11.2 — marks an event handler as in-tx.
+```php
+namespace Monadial\Nexus\Ddd\Bus\Attribute;
 
-- [ ] **Step 7: TDD `CommandHandler` attribute** — `#[Attribute(Attribute::TARGET_METHOD)]`. No fields. Per umbrella spec §8.3 — the secondary discoverability path. Document that the marker interface (`Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler`) is canonical.
+use Attribute;
+
+/**
+ * @psalm-api
+ */
+#[Attribute(Attribute::TARGET_CLASS)]
+final readonly class Idempotent
+{
+    public function __construct(
+        public ?string $store = null,
+        public bool $off = false,
+    ) {}
+}
+```
+
+- [ ] **Step 6: TDD `InProcess` attribute**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Attribute;
@@ -1501,45 +1382,86 @@ use Attribute;
 /**
  * @psalm-api
  *
- * Per umbrella spec §8.3 — secondary discoverability shortcut for
- * multi-method services. The canonical shape is implementing the
- * `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` marker
- * interface; this attribute is the exception, not the rule.
+ * Marks an event-handler method as in-tx. Validated at boot by
+ * InProcessSameDbBootValidator (Phase 12a).
+ */
+#[Attribute(Attribute::TARGET_METHOD)]
+final readonly class InProcess {}
+```
+
+- [ ] **Step 7: TDD `Handler` attribute** (renamed from CommandHandler)
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Attribute;
+
+use Attribute;
+
+/**
+ * @psalm-api
+ *
+ * Secondary discoverability shortcut for multi-method services. The
+ * canonical shape is implementing the
+ * Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler marker interface;
+ * this attribute is the exception, not the rule.
  *
  *     final class OrdersService {
- *         #[CommandHandler]
+ *         #[Handler]
  *         public function place(PlaceOrder $cmd): void { … }
  *
- *         #[CommandHandler]
+ *         #[Handler]
  *         public function cancel(CancelOrder $cmd): void { … }
  *     }
  */
 #[Attribute(Attribute::TARGET_METHOD)]
-final readonly class CommandHandler {}
+final readonly class Handler {}
 ```
 
-- [ ] **Step 8: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 8: TDD `Sensitive` attribute** (new — per M5)
 
-- [ ] **Step 9: Commit**
+```php
+namespace Monadial\Nexus\Ddd\Bus\Attribute;
+
+use Attribute;
+
+/**
+ * @psalm-api
+ *
+ * Property-level marker. The LoggingMiddleware redacts attributed
+ * properties from log payloads at DEBUG.
+ *
+ *     readonly class PlaceOrder {
+ *         public function __construct(
+ *             public string $orderId,
+ *             #[Sensitive] public string $cardToken,
+ *         ) {}
+ *     }
+ */
+#[Attribute(Attribute::TARGET_PROPERTY)]
+final readonly class Sensitive {}
+```
+
+- [ ] **Step 9: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 10: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): seven attributes — Validate, Authorize, OnBus, IdempotencyKey, Idempotent, InProcess, CommandHandler"
+git commit -m "feat(ddd-bus): eight attributes — Validate, Authorize, OnBus, IdempotencyKey, Idempotent, InProcess, Handler (renamed from CommandHandler to avoid messaging marker collision), Sensitive (payload redaction)"
 ```
 
 ---
 
-## Phase 9 — `Middleware` interface + `MiddlewarePipeline` + `PipelineStage` enum + `PipelineContext`
+## Phase 9 — `Middleware` interface (templated) + `MiddlewarePipeline` + `PipelineStage` enum + `PipelineContext`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Middleware/Middleware.php` (interface)
+- Create: `packages/nexus-ddd-bus/src/Middleware/Middleware.php` (templated)
 - Create: `packages/nexus-ddd-bus/src/Middleware/MiddlewarePipeline.php`
-- Create: `packages/nexus-ddd-bus/src/Middleware/PipelineStage.php` (enum)
+- Create: `packages/nexus-ddd-bus/src/Middleware/PipelineStage.php`
 - Create: `packages/nexus-ddd-bus/src/Internal/Pipeline/PipelineContext.php`
 - Tests
 
-**Lock:** the `Middleware` interface uses an Onion-style pipeline — each middleware receives `(Envelope, NextHandler)` and either calls `$next($envelope)` or short-circuits. The `NextHandler` is a `Closure(Envelope): mixed`.
-
-The `PipelineStage` enum lists all 11 canonical stages. `MiddlewarePipeline` registers middlewares against stages; the `MiddlewareOrderingRule` Psalm rule (Phase 17) validates that `before:` / `after:` arguments name canonical stages.
+**Locks:**
+- `Middleware<TIn, TOut>` is a generic interface (per H9). Pipelines instantiate as `Middleware<Command, null>` for command bus, `Middleware<Query<TResult>, TResult>` for query bus.
+- `PipelineStage` enum lists 14 canonical stages (was 11 in v1; the IdempotencyMiddleware split into Reserve+Commit adds 1; HandlerInvocation + EventDrain are now distinct stages 9, 11; the renumbering reflects the actual middleware-stack layout).
+- `PipelineContext` is short-lived per-dispatch scratchpad with `public private(set)` asymmetric visibility (PHP 8.4) — middlewares read publicly, mutate via dedicated methods.
 
 - [ ] **Step 1: TDD `PipelineStage` enum**
 
@@ -1549,24 +1471,15 @@ namespace Monadial\Nexus\Ddd\Bus\Middleware;
 /**
  * @psalm-api
  *
- * Canonical pipeline stage names per umbrella spec §8.5.1. Lock the
- * sequence here; MiddlewareOrderingRule (Phase 17) validates that
- * adopter-supplied `before:` / `after:` arguments name an existing case.
+ * Canonical 14-stage pipeline. Lock the sequence here;
+ * MiddlewareOrderingRule (Phase 17) validates that adopter-supplied
+ * `before:` / `after:` arguments name an existing case.
  *
- * Stages:
- *   1. Causation (causation propagation, depth check)
- *   2. OtelSpan (OpenTelemetry span open; no-op default)
- *   3. LoggingStart (INFO log with metadata)
- *   4. MetricsStart (start timer)
- *   5. Validation
- *   6. Authorization
- *   7. Idempotency (application-level dedup; outside retry loop)
- *   8. OccRetry (host-aware: SyncHost retries, ActorHost wraps as ActorWriterInvariantViolation)
- *      ↳ Handler (the actual handler invocation)
- *      ↳ EventDrain (CommandBus only — drain recorded events to outbox)
- *   9. MetricsEnd (record duration, outcome)
- *   10. LoggingEnd (INFO log with outcome)
- *   11. SpanClose
+ * v2 split: stages 7a (IdempotencyReserve, outer; before OCC retry) and
+ * 10 (IdempotencyCommit, inner; INSIDE handler TX, post-handler pre-flush).
+ * Reserve runs OUTSIDE the OCC retry loop so retries reuse the same token;
+ * Commit runs INSIDE the TX so it lands or rolls back atomically with the
+ * handler's writes.
  */
 enum PipelineStage: string
 {
@@ -1576,9 +1489,10 @@ enum PipelineStage: string
     case MetricsStart = 'metrics-start';
     case Validation = 'validation';
     case Authorization = 'authorization';
-    case Idempotency = 'idempotency';
+    case IdempotencyReserve = 'idempotency-reserve';
     case OccRetry = 'occ-retry';
     case Handler = 'handler';
+    case IdempotencyCommit = 'idempotency-commit';
     case EventDrain = 'event-drain';
     case MetricsEnd = 'metrics-end';
     case LoggingEnd = 'logging-end';
@@ -1592,7 +1506,7 @@ enum PipelineStage: string
 }
 ```
 
-- [ ] **Step 2: TDD `Middleware` interface**
+- [ ] **Step 2: TDD `Middleware` interface (templated)**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
@@ -1604,26 +1518,24 @@ use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
  * @psalm-api
  *
  * Onion-style middleware. Implementations may transform the envelope
- * before calling `$next($envelope)`, short-circuit (skip the handler),
+ * before calling $next($envelope), short-circuit (skip the handler),
  * inspect the return value, or wrap exceptions.
  *
- * The return value flows back through `$next` — for void-returning
- * commands, it's null; for queries, the typed result; for events, null.
+ * @template TIn of object
+ * @template TOut
  */
 interface Middleware
 {
     /**
-     * @template TMessage of object
-     * @param Envelope<TMessage> $envelope
-     * @param Closure(Envelope<TMessage>): mixed $next
+     * @param Envelope<TIn> $envelope
+     * @param Closure(Envelope<TIn>): TOut $next
+     * @return TOut
      */
     public function process(Envelope $envelope, Closure $next): mixed;
 }
 ```
 
 - [ ] **Step 3: TDD `MiddlewarePipeline`**
-
-The pipeline composes a list of middlewares into a single closure. Building order matters — outermost middleware runs first.
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
@@ -1634,44 +1546,46 @@ use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 /**
  * @psalm-api
  *
- * Composes a list of Middleware impls into a single Closure that
- * dispatches an Envelope through the canonical pipeline. Built once at
- * boot from the registered middlewares (in PipelineStage order); reused
- * across every dispatch.
+ * Composes a list of Middleware impls into a single Closure dispatching
+ * an Envelope through the canonical pipeline. Built once at boot per
+ * handler (cached in HandlerAttributeIndex).
+ *
+ * @template TIn of object
+ * @template TOut
  */
 final class MiddlewarePipeline
 {
     /**
-     * @param list<Middleware> $middlewares  Outermost first; innermost last.
-     * @param Closure(Envelope): mixed $core  The terminal handler (the actual dispatch).
+     * @param list<Middleware<TIn, TOut>> $middlewares  Outermost first; innermost last.
+     * @param Closure(Envelope<TIn>): TOut $core
      */
     public function __construct(
         private readonly array $middlewares,
         private readonly Closure $core,
     ) {}
 
+    /**
+     * @param Envelope<TIn> $envelope
+     * @return TOut
+     */
     public function dispatch(Envelope $envelope): mixed
     {
         $next = $this->core;
-        // Walk from innermost to outermost so each middleware wraps the next.
+
         foreach (array_reverse($this->middlewares) as $middleware) {
             $current = $middleware;
             $previous = $next;
             $next = static fn(Envelope $env): mixed => $current->process($env, $previous);
         }
+
         return $next($envelope);
     }
 }
 ```
 
-Tests:
-- Empty middleware list calls `$core` directly.
-- Single middleware wraps `$core`.
-- Multiple middlewares wrap in registration order (outermost first).
-- A middleware short-circuiting (returning early without calling `$next`) prevents inner middlewares from running.
-- Exceptions thrown by inner middlewares propagate up; outer middlewares can catch.
+Tests cover empty list, single middleware wraps core, multi-middleware ordering (outermost runs first), short-circuit by inner middleware skips outer-residual stages, exceptions propagate up.
 
-- [ ] **Step 4: TDD `PipelineContext`** — short-lived mutable object threaded through stages for cross-stage state (e.g., the `IdempotencyReservation` that the OCC retry middleware needs to release on terminal failure). The `PipelineContext` is *not* a value object — it's a per-dispatch scratchpad.
+- [ ] **Step 4: TDD `PipelineContext`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Internal\Pipeline;
@@ -1682,57 +1596,69 @@ use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyReservation;
 /**
  * @internal
  *
- * Per-dispatch scratchpad. Threaded through the pipeline via a `Stamp` on
- * the Envelope (`PipelineContextStamp`) so middlewares can read/write
- * cross-stage state without leaking it into MessageMetadata.
+ * Per-dispatch scratchpad. Asymmetric visibility (PHP 8.4) keeps reads
+ * public while writes go through dedicated methods.
  *
- * NOT a value object — short-lived, mutable. Thread one per dispatch.
+ * NOT a value object — short-lived, mutable. One per dispatch.
  */
 final class PipelineContext
 {
     /** @var Option<IdempotencyReservation> */
-    public Option $idempotencyReservation;
+    public private(set) Option $idempotencyReservation;
 
-    public int $causationDepth = 0;
-    public int $retryAttempt = 0;
+    public private(set) int $causationDepth = 0;
+
+    public private(set) int $retryAttempt = 0;
 
     public function __construct()
     {
         $this->idempotencyReservation = Option::none();
     }
+
+    public function rememberReservation(IdempotencyReservation $reservation): void
+    {
+        $this->idempotencyReservation = Option::some($reservation);
+    }
+
+    public function setCausationDepth(int $depth): void
+    {
+        $this->causationDepth = $depth;
+    }
+
+    public function incrementRetryAttempt(): void
+    {
+        $this->retryAttempt++;
+    }
 }
 ```
 
 - [ ] **Step 5: Run tests + Psalm + PHPCS clean**
-
 - [ ] **Step 6: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): Middleware interface + MiddlewarePipeline + PipelineStage enum + PipelineContext scratchpad"
+git commit -m "feat(ddd-bus): templated Middleware<TIn,TOut> + MiddlewarePipeline + PipelineStage enum (14 stages with Idempotency split into Reserve+Commit) + PipelineContext (asymmetric visibility)"
 ```
 
 ---
-
 ## Phase 10 — Individual middleware impls
 
-Split into 3 sub-phases per the brief.
+Split into 3 sub-phases.
 
 ### Phase 10a — Causation, OTel-span, logging-start
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/src/Header/HeaderKeys.php`
-- Create: `packages/nexus-ddd-bus/src/Header/BusHeaders.php`
-- Create: `packages/nexus-ddd-bus/src/Header/BusHeadersStamp.php`
 - Create: `packages/nexus-ddd-bus/src/Middleware/CausationPropagationMiddleware.php`
 - Create: `packages/nexus-ddd-bus/src/Middleware/OpenTelemetrySpanMiddleware.php`
+- Create: `packages/nexus-ddd-bus/src/Logging/PayloadRedactor.php`
 - Create: `packages/nexus-ddd-bus/src/Middleware/LoggingStartMiddleware.php`
 - Tests for each
 
-**Locks per Q11 sub-items:**
-- Causation depth cap = 32 (configurable via `CausationPropagationMiddleware` constructor). Exceeded → `CausationDepthExceededException`. Increment on each dispatch.
-- The depth is persisted on the envelope as `BusHeaders[HeaderKeys::CAUSATION_DEPTH]`.
-- The `OpenTelemetrySpanMiddleware` is a no-op by default; activated when `open-telemetry/sdk` is detected. We ship the no-op slot here.
-- `LoggingStartMiddleware` writes INFO log with structured fields (`messageType`, `messageId`, `correlationId`, `causationId`); payload at DEBUG (gated). Per umbrella spec §23.1.
+**Locks:**
+- Causation depth cap = 32 (configurable via `CausationPropagationMiddleware` constructor). Exceeded → `CausationDepthExceededException`.
+- Depth persisted on the envelope as `MessageMetadata::$headers[HeaderKeys::CAUSATION_DEPTH]`.
+- `OpenTelemetrySpanMiddleware` is a no-op default; activated when `open-telemetry/sdk` is detected.
+- `LoggingStartMiddleware` writes INFO log with structured fields. Payload at DEBUG only, redacted via `PayloadRedactor` (reads `#[Sensitive]`). Default-deny: payload-at-DEBUG only when explicitly enabled by constructor flag.
 
 - [ ] **Step 1: TDD `HeaderKeys` constants class**
 
@@ -1742,8 +1668,10 @@ namespace Monadial\Nexus\Ddd\Bus\Header;
 /**
  * @psalm-api
  *
- * String constants for bus header names. All keys share the `nexus.` prefix
- * to namespace against application headers.
+ * String constants for bus header names. All keys share the `nexus.`
+ * prefix to namespace against application headers. Headers ride on
+ * MessageMetadata::$headers (canonical Headers value object from
+ * messaging upstream).
  */
 final class HeaderKeys
 {
@@ -1756,71 +1684,24 @@ final class HeaderKeys
 }
 ```
 
-- [ ] **Step 2: TDD `BusHeaders` value object**
+- [ ] **Step 2: TDD `CausationPropagationMiddleware`**
 
-```php
-namespace Monadial\Nexus\Ddd\Bus\Header;
-
-use Fp\Functional\Option\Option;
-
-/**
- * @psalm-immutable
- * @psalm-api
- *
- * Bus-side headers carried as a Stamp on the Envelope. Per drift-resolution
- * note in this plan's header — the shipped MessageMetadata has no
- * arbitrary-key bag, so bus headers ride here. Future spec revision may
- * collapse into MessageMetadata::headers().
- */
-final readonly class BusHeaders
-{
-    /** @param array<string, scalar> $values */
-    public function __construct(public array $values) {}
-
-    public static function empty(): self { return new self([]); }
-
-    /** @return Option<scalar> */
-    public function get(string $key): Option
-    {
-        return Option::fromNullable($this->values[$key] ?? null);
-    }
-
-    /** @param scalar $value */
-    public function with(string $key, mixed $value): self
-    {
-        return new self([...$this->values, $key => $value]);
-    }
-}
-```
-
-- [ ] **Step 3: TDD `BusHeadersStamp`**
-
-```php
-namespace Monadial\Nexus\Ddd\Bus\Header;
-
-use Monadial\Nexus\Ddd\Messaging\Envelope\Stamp;
-
-final readonly class BusHeadersStamp implements Stamp
-{
-    public function __construct(public BusHeaders $headers) {}
-}
-```
-
-- [ ] **Step 4: TDD `CausationPropagationMiddleware`**
-
-Reads the inbound envelope, increments the depth, writes back via `BusHeadersStamp`. If depth exceeds cap, throw `CausationDepthExceededException`.
+Reads `Headers` directly from `MessageMetadata`; writes back via `Envelope::with(metadata->withHeaders(newHeaders))`. The Envelope API uses `metadata` directly (not via stamp).
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
 use Monadial\Nexus\Ddd\Bus\Exception\CausationDepthExceededException;
-use Monadial\Nexus\Ddd\Bus\Header\BusHeaders;
-use Monadial\Nexus\Ddd\Bus\Header\BusHeadersStamp;
 use Monadial\Nexus\Ddd\Bus\Header\HeaderKeys;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Override;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class CausationPropagationMiddleware implements Middleware
 {
     public function __construct(private readonly int $depthCap = 32) {}
@@ -1828,32 +1709,30 @@ final class CausationPropagationMiddleware implements Middleware
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
-        $headers = $envelope->stamp(BusHeadersStamp::class)
-            ->map(static fn(BusHeadersStamp $s): BusHeaders => $s->headers)
-            ->getOrElse(BusHeaders::empty());
+        $headers = $envelope->metadata->headers;
 
         $currentDepth = $headers->get(HeaderKeys::CAUSATION_DEPTH)
             ->map(static fn(int|string|float|bool $v): int => (int) $v)
             ->getOrElse(0);
 
         $newDepth = $currentDepth + 1;
+
         if ($newDepth > $this->depthCap) {
             throw CausationDepthExceededException::at($newDepth, $this->depthCap);
         }
 
         $newHeaders = $headers->with(HeaderKeys::CAUSATION_DEPTH, $newDepth);
-        $newEnvelope = $envelope->withStamp(new BusHeadersStamp($newHeaders));
-        // ↑ Envelope::withStamp is shipped on messaging package's Envelope.
-        // If not, this plan documents the gap; we add a helper.
+        $newMetadata = $envelope->metadata->withHeaders($newHeaders);
+        $newEnvelope = new Envelope($envelope->message, $newMetadata, $envelope->stamps);
 
         return $next($newEnvelope);
     }
 }
 ```
 
-**Open question to surface during execution:** does `Envelope::withStamp(Stamp): Envelope` exist? Phase 1's TDD step verifies. If not, the bus middleware uses a local helper or contributes the method upstream.
+(Note: `MessageMetadata::withHeaders(Headers): self` lands in messaging upstream alongside the new `headers` field. If the parallel agent ships a different builder shape, adapt at execution time.)
 
-- [ ] **Step 5: TDD `OpenTelemetrySpanMiddleware` (no-op default)**
+- [ ] **Step 3: TDD `OpenTelemetrySpanMiddleware` (no-op default)**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
@@ -1863,10 +1742,9 @@ use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Override;
 
 /**
- * @psalm-api
- *
- * No-op default. Adapter packages (P5) replace with a real OTel span impl
- * that reads/writes traceparent/tracestate per umbrella spec §23.4.
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
  */
 final class OpenTelemetrySpanMiddleware implements Middleware
 {
@@ -1878,74 +1756,112 @@ final class OpenTelemetrySpanMiddleware implements Middleware
 }
 ```
 
-- [ ] **Step 6: TDD `LoggingStartMiddleware`**
+- [ ] **Step 4: TDD `PayloadRedactor`**
 
-Writes a single INFO log line with structured fields (per umbrella spec §23.1).
+```php
+namespace Monadial\Nexus\Ddd\Bus\Logging;
+
+use Monadial\Nexus\Ddd\Bus\Attribute\Sensitive;
+use ReflectionObject;
+
+/**
+ * @psalm-api
+ *
+ * Reflects on a message and returns an array<string, mixed> with
+ * #[Sensitive]-attributed properties replaced by '[REDACTED]'.
+ */
+final class PayloadRedactor
+{
+    /** @return array<string, mixed> */
+    public function redact(object $message): array
+    {
+        $reflection = new ReflectionObject($message);
+        $output = [];
+
+        foreach ($reflection->getProperties() as $property) {
+            $hasSensitive = $property->getAttributes(Sensitive::class) !== [];
+            $output[$property->getName()] = $hasSensitive
+                ? '[REDACTED]'
+                : $property->getValue($message);
+        }
+
+        return $output;
+    }
+}
+```
+
+- [ ] **Step 5: TDD `LoggingStartMiddleware`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
+use Monadial\Nexus\Ddd\Bus\Logging\PayloadRedactor;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Override;
 use Psr\Log\LoggerInterface;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class LoggingStartMiddleware implements Middleware
 {
-    public function __construct(private readonly LoggerInterface $logger) {}
+    public function __construct(
+        private readonly LoggerInterface $logger,
+        private readonly PayloadRedactor $redactor,
+        private readonly bool $logPayloadAtDebug = false,
+    ) {}
 
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
-        $this->logger->info('ddd.command.dispatched', [
+        $context = [
             'causationId' => $envelope->metadata->causationId
                 ->map(static fn($id): string => $id->toString())->getOrElse(''),
             'correlationId' => $envelope->metadata->correlationId
                 ->map(static fn($id): string => $id->toString())->getOrElse(''),
             'messageId' => $envelope->metadata->id->toString(),
             'messageType' => $envelope->message::class,
-        ]);
+        ];
+
+        if ($this->logPayloadAtDebug) {
+            $this->logger->debug(
+                'ddd.command.dispatched.payload',
+                [...$context, 'payload' => $this->redactor->redact($envelope->message)],
+            );
+        }
+
+        $this->logger->info('ddd.command.dispatched', $context);
+
         return $next($envelope);
     }
 }
 ```
 
-(LoggingEndMiddleware in Phase 10c is the symmetric exit log.)
-
-- [ ] **Step 7: Run tests + Psalm + PHPCS clean**
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 7: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): pipeline stages 1-3 — causation propagation (depth cap 32), OTel span (no-op default), logging start"
+git commit -m "feat(ddd-bus): pipeline stages 1-3 — causation propagation (depth cap 32; reads/writes via MessageMetadata::headers), OTel span (no-op default), logging start (default-deny payload-at-DEBUG; #[Sensitive] redaction)"
 ```
 
 ### Phase 10b — Validation, Authorization
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Middleware/MetricsStartMiddleware.php` (stage 4)
-- Create: `packages/nexus-ddd-bus/src/Middleware/ValidationMiddleware.php` (stage 5)
-- Create: `packages/nexus-ddd-bus/src/Middleware/AuthorizationMiddleware.php` (stage 6)
+- Create: `packages/nexus-ddd-bus/src/Middleware/MetricsStartMiddleware.php`
+- Create: `packages/nexus-ddd-bus/src/Middleware/ValidationMiddleware.php`
+- Create: `packages/nexus-ddd-bus/src/Middleware/AuthorizationMiddleware.php`
 - Tests for each
 
-The `MetricsStartMiddleware` reads the `MetricsCollector` from constructor injection; starts a wall-clock timer for `ddd.{kind}.duration_ms`; passes through.
+`MetricsStartMiddleware` reads `MetricsCollector` and `MetricOutcome::Started`; passes through.
 
-The `ValidationMiddleware` reads the handler's `#[Validate]` attribute (resolved via reflection at boot, cached per handler class), invokes the project's `Validator::validate(message, ValidationContext)`, and lifts non-empty `Violations` to `ValidationFailedException` (or `Either::left` for `tryDispatch`). If the bus has no `Validator` registered AND any handler has `#[Validate]`, boot fails with `MissingValidatorException`.
+`ValidationMiddleware` reads the handler's `#[Validate]` attribute (resolved via the cached `HandlerAttributeIndex` from Phase 12a). On non-empty Violations: throws `ValidationFailedException`.
 
-The `AuthorizationMiddleware` reads the handler's `#[Authorize]` attribute, resolves the subject via `SubjectResolver`, calls `AuthorizationDecider::decide(policy, subject, AuthorizationContext)`. The decider throws `AccessDeniedException` on denial. If the bus has no decider registered AND any handler has `#[Authorize]`, boot fails with `MissingAuthorizationDeciderException`.
+`AuthorizationMiddleware` reads the handler's `#[Authorize]` attribute, resolves the subject via `SubjectResolver`, calls `AuthorizationDecider::decide`. On `AccessDeniedException`: propagates.
 
-**Lock per Q4:** default order is Validate → Authorize. The `#[Authorize(before: 'validation')]` flag flips to Authorize → Validate. The middleware order is determined at registration time; the bus reads the attribute and reorders these two stages for that handler. The `MiddlewareOrderingRule` Psalm rule validates `before:` is a `PipelineStage::names()` value.
-
-**Implementation note:** the simpler model is to ship the pipeline with both middlewares always present and have each middleware check whether it should run for the current handler. The "before:" reordering is then a matter of *which middleware runs first* for that one handler — this is more easily modeled as a *single* "validation+authorization" middleware that sequences internally per-handler rather than two independent middlewares. Plan picks the latter — cleaner. Pseudo-shape:
-
-```php
-final class ValidateThenAuthorizeMiddleware implements Middleware
-{
-    // Reads the handler's #[Authorize(before:)] flag and runs validation + authorization
-    // in the order indicated. If neither attribute is present, both phases no-op.
-}
-```
-
-But this hides the canonical 11-stage shape. **Compromise:** ship two distinct middlewares (`ValidationMiddleware`, `AuthorizationMiddleware`) and document in the bus boot code that for handlers with `#[Authorize(before: 'validation')]`, the bus reverses their relative order in the pipeline composition. The reversal is per-handler — the bus cannot reverse globally. This means the pipeline is *not* exactly the canonical sequence at the implementation level for those handlers. The Psalm rule documents this.
+**Per H4:** the per-handler `#[Authorize(before: 'validation')]` flip is baked into the cached pipeline by `BusBuilder` at boot. Each handler-class has its own pre-built `MiddlewarePipeline` instance. Runtime dispatch resolves the handler's pipeline from the index — no runtime reorder logic.
 
 - [ ] **Step 1: TDD `MetricsStartMiddleware`**
 
@@ -1953,39 +1869,34 @@ But this hides the canonical 11-stage shape. **Compromise:** ship two distinct m
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
 use Monadial\Nexus\Ddd\Bus\Metrics\MetricsCollector;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Override;
-use Psr\Clock\ClockInterface;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class MetricsStartMiddleware implements Middleware
 {
-    public function __construct(
-        private readonly ClockInterface $clock,
-        private readonly MetricsCollector $metrics,
-    ) {}
+    public function __construct(private readonly MetricsCollector $metrics) {}
 
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
         $this->metrics->count('ddd.command.count', 1, [
-            'outcome' => 'started',
+            'outcome' => MetricOutcome::Started->value,
             'type' => $envelope->message::class,
         ]);
+
         return $next($envelope);
     }
 }
 ```
 
-(The duration measurement happens in `MetricsEndMiddleware` — Phase 10c. Threading the start time across middlewares uses the `PipelineContext` scratchpad from Phase 9.)
-
 - [ ] **Step 2: TDD `ValidationMiddleware`**
-
-Tests:
-- Handler without `#[Validate]` → middleware passes through.
-- Handler with `#[Validate]`, validator returns empty Violations → passes through.
-- Handler with `#[Validate]`, validator returns non-empty Violations → throws `ValidationFailedException` carrying those violations.
-- Bus instantiated without a Validator AND a handler with `#[Validate]` is registered → boot throws `MissingValidatorException`. (This test belongs in Phase 12 boot validation.)
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
@@ -1993,79 +1904,148 @@ namespace Monadial\Nexus\Ddd\Bus\Middleware;
 use Closure;
 use Monadial\Nexus\Ddd\Bus\Attribute\Validate;
 use Monadial\Nexus\Ddd\Bus\Exception\ValidationFailedException;
+use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Bus\Validation\ValidationContext;
 use Monadial\Nexus\Ddd\Bus\Validation\Validator;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
 use Override;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class ValidationMiddleware implements Middleware
 {
     public function __construct(
         private readonly Validator $validator,
-        private readonly CommandHandlerLocator $locator,
+        private readonly HandlerAttributeIndex $index,
     ) {}
 
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
-        $handlerInfo = $this->locator->locate($envelope->message::class);
-        // ↑ The locator returns Option<HandlerInfo> with the handler class
-        // and a precomputed list of attributes. If the handler does not
-        // declare #[Validate], skip validation. (Caching this lookup
-        // happens in the locator impl.)
+        $entry = $this->index->lookup($envelope->message::class);
 
-        $hasValidate = $handlerInfo
-            ->flatMap(static fn($info) => $info->attribute(Validate::class))
-            ->isSome();
-        if (!$hasValidate) {
+        if ($entry->isNone() || $entry->get()->attribute(Validate::class)->isNone()) {
             return $next($envelope);
         }
 
-        $context = ValidationContext::default();  // populated from MessageContext in real impl
+        $context = ValidationContext::default()
+            ->withHeaders($envelope->metadata->headers);
+
         $violations = $this->validator->validate($envelope->message, $context);
+
         if (!$violations->isEmpty()) {
             throw ValidationFailedException::with($violations);
         }
+
         return $next($envelope);
     }
 }
 ```
 
-The `CommandHandlerLocator` shape comes from messaging — verify exact API at execution time. If `locate()` doesn't expose attribute reflection, the bus introduces a small `HandlerAttributeIndex` helper.
-
 - [ ] **Step 3: TDD `AuthorizationMiddleware`**
 
-Mirror shape. Reads `#[Authorize]`, resolves subject via `SubjectResolver`, calls `AuthorizationDecider::decide`. On `AccessDeniedException`, propagates.
+```php
+namespace Monadial\Nexus\Ddd\Bus\Middleware;
+
+use Closure;
+use Monadial\Nexus\Ddd\Bus\Attribute\Authorize;
+use Monadial\Nexus\Ddd\Bus\Authorization\AuthorizationContext;
+use Monadial\Nexus\Ddd\Bus\Authorization\AuthorizationDecider;
+use Monadial\Nexus\Ddd\Bus\Authorization\SubjectResolver;
+use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
+use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
+use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Override;
+use Fp\Functional\Option\Option;
+
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
+final class AuthorizationMiddleware implements Middleware
+{
+    public function __construct(
+        private readonly AuthorizationDecider $decider,
+        private readonly SubjectResolver $subjectResolver,
+        private readonly HandlerAttributeIndex $index,
+        private readonly MessageContextStack $contextStack,
+    ) {}
+
+    #[Override]
+    public function process(Envelope $envelope, Closure $next): mixed
+    {
+        $entry = $this->index->lookup($envelope->message::class);
+
+        if ($entry->isNone()) {
+            return $next($envelope);
+        }
+
+        $authorize = $entry->get()->attribute(Authorize::class);
+
+        if ($authorize->isNone()) {
+            return $next($envelope);
+        }
+
+        $attribute = $authorize->get();
+        $subject = $attribute->subject !== null
+            ? $this->subjectResolver->resolve(
+                $envelope->message,
+                $attribute->subject,
+                $this->contextStack->current()->getOrElse(/* synthesize from envelope */),
+            )
+            : null;
+
+        $authContext = new AuthorizationContext(
+            Option::none(),
+            $envelope->metadata->headers,
+            $envelope,
+        );
+
+        $this->decider->decide($attribute->policy, $subject, $authContext);
+
+        return $next($envelope);
+    }
+}
+```
 
 - [ ] **Step 4: Run tests + Psalm + PHPCS clean**
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): pipeline stages 4-6 — metrics start, validation (lifts Violations to ValidationFailedException), authorization (consumes AuthorizationDecider, default Validate→Authorize)"
+git commit -m "feat(ddd-bus): pipeline stages 4-6 — metrics start (MetricOutcome enum), validation (lifts Violations to ValidationFailedException; reads via HandlerAttributeIndex), authorization (consumes AuthorizationDecider; default Validate→Authorize, per-handler reorder via cached pipeline)"
 ```
 
-### Phase 10c — Idempotency, OCC retry, handler invocation, event drain, metrics-end, logging-end, span-close, in-process-same-db
+### Phase 10c — IdempotencyKeyResolver + IdempotencyReserve + OccRetry + HandlerInvocation + IdempotencyCommit + EventDrain + MetricsEnd + LoggingEnd + SpanClose
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Middleware/IdempotencyMiddleware.php` (stage 7)
-- Create: `packages/nexus-ddd-bus/src/Middleware/OccRetryMiddleware.php` (stage 8 outer)
-- Create: `packages/nexus-ddd-bus/src/Middleware/HandlerInvocationMiddleware.php` (stage 8 inner)
-- Create: `packages/nexus-ddd-bus/src/Middleware/EventDrainMiddleware.php` (stage 8 inner; CommandBus only)
-- Create: `packages/nexus-ddd-bus/src/Middleware/MetricsEndMiddleware.php` (stage 9)
-- Create: `packages/nexus-ddd-bus/src/Middleware/LoggingEndMiddleware.php` (stage 10)
-- Create: `packages/nexus-ddd-bus/src/Middleware/SpanCloseMiddleware.php` (stage 11)
-- Create: `packages/nexus-ddd-bus/src/Middleware/InProcessSameDbMiddleware.php` (best-effort guard)
-- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyKeyResolver.php` (used by IdempotencyMiddleware)
+- Create: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyKeyResolver.php`
+- Create: `packages/nexus-ddd-bus/src/Middleware/IdempotencyReserveMiddleware.php` (stage 7a; OUTER, before OCC retry)
+- Create: `packages/nexus-ddd-bus/src/Middleware/OccRetryMiddleware.php` (stage 8)
+- Create: `packages/nexus-ddd-bus/src/Middleware/HandlerInvocationMiddleware.php` (stage 9)
+- Create: `packages/nexus-ddd-bus/src/Middleware/IdempotencyCommitMiddleware.php` (stage 10; INNER, INSIDE handler TX)
+- Create: `packages/nexus-ddd-bus/src/Middleware/EventDrainMiddleware.php` (stage 11; CommandBus only)
+- Create: `packages/nexus-ddd-bus/src/Middleware/MetricsEndMiddleware.php`
+- Create: `packages/nexus-ddd-bus/src/Middleware/LoggingEndMiddleware.php`
+- Create: `packages/nexus-ddd-bus/src/Middleware/SpanCloseMiddleware.php`
 - Tests for each
 
-**Locks per Q3 + Q9 + Q11:**
-- Idempotency runs *outside* OCC retry. Same `messageId` + same `IdempotencyKey` across retries reuses the same reservation.
-- OCC retry is host-aware. Constructor takes `Profile`. Under `Profile::Sync`, retries per `BackoffStrategy` (default `JitteredExponentialBackoff(base=50ms, cap=2s, maxAttempts=5)`). Under `Profile::Actor`, wraps `OptimisticLockException` in `ActorWriterInvariantViolation` and propagates — supervision handles. Under `Profile::Async`, retry config is per-route.
-- Sync-route retry budget defaults to 5s; async budgets to 60s (per §19a). The OCC retry middleware reads `BusHeaders[HeaderKeys::RETRY_BUDGET_REMAINING_MS]` if present, else falls back to the profile default.
-- Handler invocation is the innermost middleware. It calls the resolved `CommandHandler`/`QueryHandler`/`EventListener`.
-- Event drain happens *only on CommandBus*. After the handler returns, the middleware reads recorded events from the active aggregate (via the `Outbox::flush()` path the messaging package owns) and writes them to the outbox.
-- `InProcessSameDbMiddleware` is a *best-effort* runtime guard. Per the implementation note in the plan header — at the bus-middleware layer, the bus does not know which aggregate the handler will load. The middleware ships as a *registration-time* check: if the adopter registers `#[InProcess]`-attributed handlers AND specifies a `connectionName` for them at registration, the middleware compares against the source aggregate's bound connection (also at registration). If mismatch → boot-time `InProcessConnectionMismatchException`. **No runtime check** — that level requires aggregate-package collaboration which we deferred. Document the deferral.
+**This phase folds in v1's Phase 14 (`IdempotencyKeyResolver` integration) — the resolver is small enough to live alongside the middleware that consumes it.**
+
+**Locks (B2 + B3 + H6 + H7 + H12):**
+- IdempotencyReserve runs OUTSIDE OCC retry; same `messageId` + same `IdempotencyKey` across retries reuses the same reservation. Self-disables under `Profile::Sync` per H6.
+- IdempotencyCommit runs INSIDE handler TX, after handler success, BEFORE EventDrain flush. `markCompleted` lands or rolls back atomically.
+- Reserve middleware exception classification (B3):
+  - `RetryableFailure` → `release($token)` (allow future redelivery)
+  - `TerminalFailure` → `markCompleted($token)` (commit negative outcome — dedup row persists)
+  - Other (infrastructure): `release($token)` (let retry resolve)
+- OCC retry is host-aware. Constructor takes `Profile`. Under `Profile::Sync`, retries per `BackoffStrategy`. Under `Profile::Actor`, wraps `OptimisticLockException` in `ActorWriterInvariantViolation` and propagates. On retry-budget exhaustion: `MetricsCollector::count('ddd.command.retry_exhausted', ...)` + PSR-3 WARN BEFORE re-throw.
+- Sync-route retry budget defaults to 5000ms; configurable via `NEXUS_BUS_RETRY_BUDGET_MS_SYNC` env var (M8).
+- EventDrain profile-aware (H7): under `Profile::Sync` with no in-process subscribers, no-op; under `Profile::Async`, write-then-relay; `#[InProcess]` failures rollback (the handler's TX boundary is the rollback unit).
+- EventDrain stamps emitted-event metadata with `causationId = sourceCommand.messageId` and depth+1 (M7).
 
 - [ ] **Step 1: TDD `IdempotencyKeyResolver`**
 
@@ -2073,33 +2053,36 @@ git commit -m "feat(ddd-bus): pipeline stages 4-6 — metrics start, validation 
 namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 
 use Monadial\Nexus\Ddd\Bus\Attribute\IdempotencyKey as IdempotencyKeyAttribute;
-use Monadial\Nexus\Ddd\Bus\Header\BusHeadersStamp;
 use Monadial\Nexus\Ddd\Bus\Header\HeaderKeys;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use ReflectionClass;
 use ReflectionObject;
 
+/**
+ * @psalm-api
+ *
+ * Resolution order per umbrella spec §13.2.1 + §13.4:
+ *   1. #[IdempotencyKey(field:)] attribute on the message class.
+ *   2. MessageMetadata::$headers[nexus.idempotency-key].
+ *   3. Fall back to messageId.
+ */
 final class IdempotencyKeyResolver
 {
-    /**
-     * Per umbrella spec §13.2.1 + §13.4 + Q1:
-     *   1. Read #[IdempotencyKey(field:)] attribute on the message class — use the named property's value.
-     *   2. Read MessageContext-supplied `nexus.idempotency-key` header (X-Nexus-Idempotency-Key).
-     *   3. Fall back to messageId.
-     */
     public function resolve(Envelope $envelope): IdempotencyKey
     {
         $messageClass = $envelope->message::class;
         $attrs = (new ReflectionClass($messageClass))->getAttributes(IdempotencyKeyAttribute::class);
+
         if ($attrs !== []) {
             $attribute = $attrs[0]->newInstance();
             $reflection = new ReflectionObject($envelope->message);
             $value = $reflection->getProperty($attribute->field)->getValue($envelope->message);
+
             return new IdempotencyKey((string) $value);
         }
 
-        $headerValue = $envelope->stamp(BusHeadersStamp::class)
-            ->flatMap(static fn(BusHeadersStamp $s) => $s->headers->get(HeaderKeys::IDEMPOTENCY_KEY));
+        $headerValue = $envelope->metadata->headers->get(HeaderKeys::IDEMPOTENCY_KEY);
+
         if ($headerValue->isSome()) {
             return new IdempotencyKey((string) $headerValue->get());
         }
@@ -2109,106 +2092,131 @@ final class IdempotencyKeyResolver
 }
 ```
 
-Tests:
-- Message class with `#[IdempotencyKey(field: 'clientRequestId')]` → returns property value.
-- Message class without attribute, BusHeadersStamp has `nexus.idempotency-key` → returns header value.
-- Message class without attribute, no header → returns `messageId.toString()`.
+Tests cover all three resolution paths.
 
-- [ ] **Step 2: TDD `IdempotencyMiddleware`**
+- [ ] **Step 2: TDD `IdempotencyReserveMiddleware`** (B2 + B3 + H6)
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
+use Monadial\Nexus\Ddd\Bus\Exception\RetryableFailure;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKeyResolver;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyStore;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
+use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 use Override;
+use Throwable;
 
-final class IdempotencyMiddleware implements Middleware
+/**
+ * Outer half of the two-phase idempotency split. Runs OUTSIDE the OCC
+ * retry loop so retries reuse the same reservation token.
+ *
+ * Self-disables under Profile::Sync (per panel H6) — sync profile has no
+ * redelivery surface, so reservation is a no-op cost. Under Async/Actor,
+ * the reserve+commit pair gates redelivery dedup.
+ *
+ * Exception classification (per panel B3):
+ *   - RetryableFailure (e.g., OCC, transient infra): release($token).
+ *   - TerminalFailure (validation, access-denied): markCompleted($token).
+ *     Negative outcome — dedup row persists so redelivery short-circuits.
+ *   - Other (uncategorized infrastructure): release($token).
+ *
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
+final class IdempotencyReserveMiddleware implements Middleware
 {
     public function __construct(
         private readonly IdempotencyStore $store,
         private readonly IdempotencyKeyResolver $resolver,
-        private readonly CommandHandlerLocator $locator,
+        private readonly HandlerAttributeIndex $index,
+        private readonly Profile $profile,
     ) {}
 
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
-        // Per umbrella spec §13.2 — handlers opt out via #[Idempotent(off: true)].
-        // Profile defaults: sync = off; async/actor = on.
-        // For the P0 sync-only impl, idempotency is opt-in via attribute.
-
-        $handlerInfo = $this->locator->locate($envelope->message::class);
-        $isOptedOut = $handlerInfo
-            ->flatMap(/* check #[Idempotent(off: true)] */)
-            ->isSome();
-        if ($isOptedOut) {
+        if ($this->profile === Profile::Sync) {
             return $next($envelope);
         }
 
-        $key = $this->resolver->resolve($envelope);
-        $handlerClass = $handlerInfo->map(/* extract handler class */)->getOrElse('unknown');
+        $entry = $this->index->lookup($envelope->message::class);
 
+        if ($entry->isSome() && $entry->get()->isIdempotencyOptedOut()) {
+            return $next($envelope);
+        }
+
+        $handlerClass = $entry->map(static fn($e) => $e->handlerClass())->getOrElse('unknown');
+        $key = $this->resolver->resolve($envelope);
         $reservation = $this->store->tryReserve($handlerClass, $key);
+
         if ($reservation->isNone()) {
-            // Already handled — short-circuit; return null (commands void; queries n/a in idempotency for P0).
             return null;
         }
 
         $token = $reservation->get();
+        $newEnvelope = $envelope->with(new ReservationStamp($token));
+
         try {
-            $result = $next($envelope);
-            $this->store->markCompleted($token);
-            return $result;
-        } catch (\Throwable $e) {
-            // Per Q3 — release on terminal failure to allow future redelivery.
-            // The OCC retry middleware (next stage in) must NOT wrap commit/release —
-            // if OCC retries, the same reservation is reused.
-            // For P0 we release on every exception; the OCC retry middleware
-            // catches OptimisticLockException above us, retries internally,
-            // and only re-raises after retry exhaustion.
-            $this->store->release($token);
+            return $next($newEnvelope);
+        } catch (Throwable $e) {
+            if ($e instanceof TerminalFailure) {
+                $this->store->markCompleted($token);
+            } else {
+                $this->store->release($token);
+            }
+
             throw $e;
         }
     }
 }
 ```
 
-Tests cover happy-path (`tryReserve` → handler succeeds → `markCompleted`), short-circuit on already-handled (`tryReserve → None`), terminal failure (`tryReserve` → handler throws → `release`).
+(`ReservationStamp` is a small `final readonly class implements Stamp` carrying the reservation across the OCC retry boundary; `IdempotencyCommitMiddleware` reads it from the envelope.)
 
-- [ ] **Step 3: TDD `OccRetryMiddleware`**
+- [ ] **Step 3: TDD `OccRetryMiddleware`** (H12)
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
 use Monadial\Nexus\Ddd\Bus\Exception\ActorWriterInvariantViolation;
+use Monadial\Nexus\Ddd\Bus\Exception\RetryBudgetExhaustedException;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricsCollector;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Retry\BackoffStrategy;
 use Override;
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class OccRetryMiddleware implements Middleware
 {
     public function __construct(
         private readonly Profile $profile,
         private readonly BackoffStrategy $backoff,
         private readonly ClockInterface $clock,
-        private readonly int $defaultBudgetMs,  // 5000 sync, 60000 async
+        private readonly LoggerInterface $logger,
+        private readonly MetricsCollector $metrics,
+        private readonly int $defaultBudgetMs,
     ) {}
 
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
         if ($this->profile === Profile::Actor) {
-            // Per Q9 — under ActorHost, do NOT retry. Wrap any OCC violation
-            // as ActorWriterInvariantViolation and let supervision restart
-            // the actor.
             try {
                 return $next($envelope);
             } catch (OptimisticLockException $e) {
@@ -2220,11 +2228,7 @@ final class OccRetryMiddleware implements Middleware
             }
         }
 
-        // Sync (and Async route under Sync host) — retry per BackoffStrategy.
-        // Budget tracking via wall-clock; retry attempt advances; messageId/correlationId
-        // preserved per umbrella spec §8.5.1 critical-ordering invariants.
-
-        $deadline = $this->clock->now()->add(new \DateInterval(sprintf('PT%dS', (int) ceil($this->defaultBudgetMs / 1000))));
+        $start = $this->clock->now();
         $attempt = 0;
 
         while (true) {
@@ -2232,16 +2236,29 @@ final class OccRetryMiddleware implements Middleware
                 return $next($envelope);
             } catch (OptimisticLockException $e) {
                 $attempt++;
-                if ($this->clock->now() >= $deadline) {
-                    throw $e;  // budget exhausted — surface
+                $elapsedMs = ($this->clock->now()->getTimestamp() - $start->getTimestamp()) * 1000;
+
+                if ($elapsedMs >= $this->defaultBudgetMs) {
+                    $this->metrics->count('ddd.command.retry_exhausted', 1, [
+                        'type' => $envelope->message::class,
+                    ]);
+                    $this->logger->log(LogLevel::WARNING, 'ddd.command.retry_exhausted', [
+                        'attempts' => $attempt,
+                        'budget_ms' => $this->defaultBudgetMs,
+                        'cause' => $e->getMessage(),
+                        'messageId' => $envelope->metadata->id->toString(),
+                        'type' => $envelope->message::class,
+                    ]);
+
+                    throw RetryBudgetExhaustedException::after($attempt, $this->defaultBudgetMs, $e);
                 }
+
                 $delay = $this->backoff->delayFor($attempt);
+
                 if ($delay !== null) {
                     usleep((int) ($delay->toMicroseconds()));
                 }
-                // Continue loop. The same envelope (same messageId) is reused —
-                // the IdempotencyMiddleware already reserved; the same reservation
-                // is held across retries.
+
                 continue;
             }
         }
@@ -2250,15 +2267,13 @@ final class OccRetryMiddleware implements Middleware
 ```
 
 Tests:
-- `Profile::Sync`, handler succeeds first try → no retry, returns result.
-- `Profile::Sync`, handler throws `OptimisticLockException` once, then succeeds → retries once.
-- `Profile::Sync`, handler throws repeatedly until budget exhausted → re-throws `OptimisticLockException`.
-- `Profile::Sync`, handler throws non-`OptimisticLockException` → propagates immediately, no retry.
-- `Profile::Actor`, handler throws `OptimisticLockException` → wraps as `ActorWriterInvariantViolation`, no retry.
+- `Profile::Sync`, succeeds first try → no retry.
+- `Profile::Sync`, throws once then succeeds → one retry.
+- `Profile::Sync`, throws repeatedly until budget exhausted → metrics + WARN + `RetryBudgetExhaustedException`.
+- `Profile::Sync`, throws non-OCC → propagates.
+- `Profile::Actor`, throws OCC → wraps as `ActorWriterInvariantViolation`.
 
 - [ ] **Step 4: TDD `HandlerInvocationMiddleware`**
-
-The terminal middleware. Resolves the handler from the locator, invokes it.
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
@@ -2269,6 +2284,11 @@ use Monadial\Nexus\Ddd\Messaging\Exception\HandlerNotFoundException;
 use Monadial\Nexus\Ddd\Messaging\Resolution\CommandHandlerLocator;
 use Override;
 
+/**
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
 final class HandlerInvocationMiddleware implements Middleware
 {
     public function __construct(private readonly CommandHandlerLocator $locator) {}
@@ -2277,109 +2297,144 @@ final class HandlerInvocationMiddleware implements Middleware
     public function process(Envelope $envelope, Closure $next): mixed
     {
         $info = $this->locator->locate($envelope->message::class);
-        $handler = $info
-            ->map(/* extract handler instance */)
-            ->getOrElse(null);
-        if ($handler === null) {
-            throw HandlerNotFoundException::forCommand($envelope->message::class);
-        }
-        // Invoke. CommandBus: void; QueryBus: typed return; EventBus: void per subscriber (handled in SyncEventBus, not here).
+        $handler = $info->getOrElseThrow(
+            static fn() => HandlerNotFoundException::forCommand($envelope->message::class),
+        );
+
         $handler($envelope->message);
-        return $next($envelope);  // For composition; this is the innermost layer.
-    }
-}
-```
 
-(The actual handler invocation shape depends on whether the handler is a marker-interface impl or an `#[CommandHandler]`-attributed method. The locator handles that resolution.)
-
-- [ ] **Step 5: TDD `EventDrainMiddleware`** (CommandBus only)
-
-After the handler returns, drain recorded events from the active aggregate(s) and write to outbox.
-
-```php
-namespace Monadial\Nexus\Ddd\Bus\Middleware;
-
-use Closure;
-use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Monadial\Nexus\Ddd\Messaging\Outbox\Outbox;
-use Override;
-
-final class EventDrainMiddleware implements Middleware
-{
-    public function __construct(private readonly Outbox $outbox) {}
-
-    #[Override]
-    public function process(Envelope $envelope, Closure $next): mixed
-    {
-        $result = $next($envelope);  // Run the handler first.
-        // Per umbrella spec §11.1 — bus middleware drains recorded events
-        // from the aggregate and writes to outbox in the same TX.
-        $this->outbox->flush();
-        return $result;
-    }
-}
-```
-
-The drain happens by `Outbox::flush()` — the messaging-package outbox is responsible for collecting events recorded inside the handler (typically via `AggregateRepository::save` writing to a transactional staging area). For the sync profile, "outbox" is the in-memory unit of work; in the async profile, it's the DB-backed outbox table.
-
-- [ ] **Step 6: TDD `MetricsEndMiddleware`, `LoggingEndMiddleware`, `SpanCloseMiddleware`** — symmetric exits to phase 10a's start middlewares.
-
-- [ ] **Step 7: TDD `InProcessSameDbMiddleware` (best-effort)**
-
-```php
-namespace Monadial\Nexus\Ddd\Bus\Middleware;
-
-use Closure;
-use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
-use Override;
-
-/**
- * @psalm-api
- *
- * Best-effort runtime guard for #[InProcess] event handlers. Compares the
- * handler's bound connection (registered at boot) against the source
- * aggregate's bound connection (registered at boot); throws
- * InProcessConnectionMismatchException at *registration* time if mismatched.
- *
- * **Limitation:** at runtime, the bus cannot introspect every connection
- * resolution path (per Q8 implementation note). Static analysis (Psalm's
- * InProcessHandlerSameDbRule, deferred to a follow-up package) is the
- * primary line. This middleware closes the obvious cases.
- */
-final class InProcessSameDbMiddleware implements Middleware
-{
-    #[Override]
-    public function process(Envelope $envelope, Closure $next): mixed
-    {
-        // P0: pass through. Boot-time validation is the load-bearing fence.
         return $next($envelope);
     }
 }
 ```
 
-The *boot-time* validation (Phase 12) is where `InProcessConnectionMismatchException` is actually thrown. The runtime middleware is a placeholder; document the deferral in the README.
+- [ ] **Step 5: TDD `IdempotencyCommitMiddleware`** (B2)
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Middleware;
+
+use Closure;
+use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyStore;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Override;
+
+/**
+ * Inner half of the two-phase idempotency split. Runs INSIDE the handler
+ * TX, AFTER HandlerInvocation, BEFORE EventDrain flush. markCompleted()
+ * lands or rolls back atomically with the handler's writes (per spec §13.1).
+ *
+ * Self-disables under Profile::Sync (mirrors IdempotencyReserveMiddleware
+ * H6). The Reserve middleware doesn't reserve under Sync, so there's no
+ * token to commit.
+ *
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
+final class IdempotencyCommitMiddleware implements Middleware
+{
+    public function __construct(
+        private readonly IdempotencyStore $store,
+        private readonly Profile $profile,
+    ) {}
+
+    #[Override]
+    public function process(Envelope $envelope, Closure $next): mixed
+    {
+        $result = $next($envelope);
+
+        if ($this->profile === Profile::Sync) {
+            return $result;
+        }
+
+        $stamp = $envelope->get(ReservationStamp::class);
+
+        if ($stamp->isSome()) {
+            $this->store->markCompleted($stamp->get()->reservation);
+        }
+
+        return $result;
+    }
+}
+```
+
+- [ ] **Step 6: TDD `EventDrainMiddleware`** (H7 + M7)
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Middleware;
+
+use Closure;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Monadial\Nexus\Ddd\Messaging\Outbox\Outbox;
+use Override;
+
+/**
+ * Drains recorded events from the active aggregate(s) into the outbox.
+ *
+ * Profile-aware (per panel H7):
+ *   - Sync + no in-process subscribers: no-op.
+ *   - Sync + in-process subscribers: drain in-tx; #[InProcess] failure
+ *     causes the handler's TX boundary to roll back.
+ *   - Async / Actor: write-then-relay; the relay process runs
+ *     independently after commit.
+ *
+ * Causation chain (per panel M7): emitted events stamp metadata with
+ * causationId = sourceCommand.messageId and depth+1 — handled by the
+ * Outbox::flush() implementation downstream.
+ *
+ * @template TIn of object
+ * @template TOut
+ * @implements Middleware<TIn, TOut>
+ */
+final class EventDrainMiddleware implements Middleware
+{
+    public function __construct(
+        private readonly Outbox $outbox,
+        private readonly Profile $profile,
+    ) {}
+
+    #[Override]
+    public function process(Envelope $envelope, Closure $next): mixed
+    {
+        $result = $next($envelope);
+
+        $this->outbox->flush();
+
+        return $result;
+    }
+}
+```
+
+(The profile branching in `Outbox::flush()` lives in messaging upstream — the outbox impl is profile-aware. From the bus side, we always call `flush()` and let the impl decide. The middleware constructor takes `Profile` for future use — adapter packages that need profile-aware behavior at the middleware layer can subclass / replace.)
+
+- [ ] **Step 7: TDD `MetricsEndMiddleware`, `LoggingEndMiddleware`, `SpanCloseMiddleware`** — symmetric exits.
 
 - [ ] **Step 8: Run tests + Psalm + PHPCS clean**
 - [ ] **Step 9: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): pipeline stages 7-11 — IdempotencyKeyResolver + IdempotencyMiddleware (two-phase, outside retry) + OccRetryMiddleware (host-aware: Sync retries, Actor wraps as ActorWriterInvariantViolation; sync budget 5s, async 60s) + HandlerInvocation + EventDrain (CommandBus only) + MetricsEnd + LoggingEnd + SpanClose + InProcessSameDbMiddleware (best-effort, boot-time fence)"
+git commit -m "feat(ddd-bus): pipeline stages 7-14 — IdempotencyKeyResolver + IdempotencyReserveMiddleware (outer; profile-aware self-disable on Sync; Retryable→release / Terminal→markCompleted classification) + OccRetryMiddleware (host-aware: Sync retries with budget + metrics + WARN on exhaustion; Actor wraps as ActorWriterInvariantViolation) + HandlerInvocation + IdempotencyCommitMiddleware (INSIDE handler TX; profile-aware) + EventDrain (profile-aware; causation chain) + MetricsEnd + LoggingEnd + SpanClose"
 ```
 
 ---
 
-## Phase 11 — `RoutingStrategy` interface + 4 impls (`ExplicitOnly`, `AttributeBased`, `NamespacePattern`, `Composite`)
+## Phase 11 — `RoutingStrategy` interface + 4 impls (`ExplicitOnly`, `AttributeBased`, `NamespacePattern`, `Composite`) + `RoutingResolution`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Routing/RoutingStrategy.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Routing/RoutingResolution.php` (value object)
+- Create: `packages/nexus-ddd-bus/src/Routing/RoutingStrategy.php`
+- Create: `packages/nexus-ddd-bus/src/Routing/RoutingResolution.php`
 - Create: `packages/nexus-ddd-bus/src/Routing/ExplicitOnly.php`
 - Create: `packages/nexus-ddd-bus/src/Routing/AttributeBased.php`
 - Create: `packages/nexus-ddd-bus/src/Routing/NamespacePattern.php`
 - Create: `packages/nexus-ddd-bus/src/Routing/Composite.php`
 - Tests for each
 
-**Locks per Q5:** four `RoutingStrategy` impls. The `Composite` chains them in order; first match wins. The order per umbrella spec §8.2 is: (1) explicit DSL routes → (2) `#[OnBus]` attribute → (3) namespace pattern → (4) default.
+**Locks (H8 + L2):**
+- `Composite::withStrategy(RoutingStrategy, ?class-string<RoutingStrategy> $before = null)` builder for adopter extension. Insert at position before another strategy class.
+- `Composite::validate(iterable<class-string> $handlerClasses): void` — enumerates handler classes and throws `DuplicateRoutingException` when multiple strategies resolve different bus names for the same class.
+- `RoutingResolution::$resolvedBy: class-string<RoutingStrategy>` (typed); `displayName(): string` for CLI output.
 
 - [ ] **Step 1: TDD `RoutingStrategy` interface**
 
@@ -2390,9 +2445,6 @@ use Fp\Functional\Option\Option;
 
 /**
  * @psalm-api
- *
- * Resolves a command class to a registered bus name. Returns Option::none()
- * if the strategy cannot resolve — Composite walks to the next strategy.
  */
 interface RoutingStrategy
 {
@@ -2415,40 +2467,46 @@ namespace Monadial\Nexus\Ddd\Bus\Routing;
  */
 final readonly class RoutingResolution
 {
+    /** @param class-string<RoutingStrategy> $resolvedBy */
     public function __construct(
         public string $busName,
-        public string $resolvedBy,  // strategy class-name (for tooling — `bin/ddd routes show`)
+        public string $resolvedBy,
     ) {}
+
+    public function displayName(): string
+    {
+        $parts = explode('\\', $this->resolvedBy);
+
+        return end($parts);
+    }
 }
 ```
 
 - [ ] **Step 3: TDD `ExplicitOnly`**
 
-Holds a static `array<class-string, busName>` map. Returns `Option::some($map[$class])` if mapped, else `Option::none()`.
-
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Routing;
 
 use Fp\Functional\Option\Option;
+use NoDiscard;
 use Override;
 
 /**
  * @psalm-api
  *
- * Static map of class-string → bus-name. Per umbrella spec §8.2, this is the
- * highest-priority routing strategy in the Composite chain.
+ * Highest-priority strategy in the Composite chain.
  */
 final class ExplicitOnly implements RoutingStrategy
 {
     /** @var array<class-string, string> */
     private array $routes = [];
 
-    /**
-     * @param class-string $messageClass
-     */
+    /** @param class-string $messageClass */
+    #[NoDiscard('explicit() returns this — assign or chain')]
     public function explicit(string $messageClass, string $busName): self
     {
         $this->routes[$messageClass] = $busName;
+
         return $this;
     }
 
@@ -2462,8 +2520,6 @@ final class ExplicitOnly implements RoutingStrategy
 ```
 
 - [ ] **Step 4: TDD `AttributeBased`**
-
-Reads `#[OnBus]` from the message class via reflection.
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Routing;
@@ -2479,10 +2535,13 @@ final class AttributeBased implements RoutingStrategy
     public function resolve(string $messageClass): Option
     {
         $attrs = (new ReflectionClass($messageClass))->getAttributes(OnBus::class);
+
         if ($attrs === []) {
             return Option::none();
         }
+
         $name = $attrs[0]->newInstance()->name;
+
         return Option::some(new RoutingResolution($name, self::class));
     }
 }
@@ -2490,22 +2549,23 @@ final class AttributeBased implements RoutingStrategy
 
 - [ ] **Step 5: TDD `NamespacePattern`**
 
-Matches namespace patterns like `'App\\Reports\\*'`.
-
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Routing;
 
 use Fp\Functional\Option\Option;
+use NoDiscard;
 use Override;
 
 final class NamespacePattern implements RoutingStrategy
 {
-    /** @var list<array{pattern: string, busName: string}> */
+    /** @var list<array{busName: string, pattern: string}> */
     private array $patterns = [];
 
+    #[NoDiscard('namespace() returns this — assign or chain')]
     public function namespace(string $pattern, string $busName): self
     {
         $this->patterns[] = ['busName' => $busName, 'pattern' => $pattern];
+
         return $this;
     }
 
@@ -2517,27 +2577,33 @@ final class NamespacePattern implements RoutingStrategy
                 return Option::some(new RoutingResolution($entry['busName'], self::class));
             }
         }
+
         return Option::none();
     }
 }
 ```
 
-(`fnmatch` with `*` matches PHP namespaces sufficiently for the namespace-pattern use case. Document that `**` is *not* required — `*` is a flat wildcard within the namespace tail.)
-
-- [ ] **Step 6: TDD `Composite`**
+- [ ] **Step 6: TDD `Composite`** (H8)
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Routing;
 
 use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Bus\Exception\DuplicateRoutingException;
+use NoDiscard;
 use Override;
 
 /**
  * @psalm-api
  *
  * Walks sub-strategies in registration order; first Some(...) wins. Per
- * umbrella spec §8.2, the standard order is: ExplicitOnly →
- * AttributeBased → NamespacePattern → (fallback to default).
+ * umbrella spec §8.2, the standard order is ExplicitOnly →
+ * AttributeBased → NamespacePattern → fallback to default.
+ *
+ * `withStrategy(...)` appends a new strategy or inserts before another by
+ * class name. `validate(handlerClasses)` enumerates each class and
+ * throws DuplicateRoutingException when multiple strategies resolve
+ * different bus names — useful at boot time to catch misconfiguration.
  */
 final class Composite implements RoutingStrategy
 {
@@ -2552,12 +2618,63 @@ final class Composite implements RoutingStrategy
     {
         foreach ($this->strategies as $strategy) {
             $resolution = $strategy->resolve($messageClass);
+
             if ($resolution->isSome()) {
                 return $resolution;
             }
         }
-        // Fallback to default — always Some.
+
         return Option::some(new RoutingResolution($this->defaultBusName, self::class));
+    }
+
+    /**
+     * @param class-string<RoutingStrategy>|null $before  Insert before this strategy class; null = append.
+     */
+    #[NoDiscard('withStrategy returns a new Composite — the original is unchanged')]
+    public function withStrategy(RoutingStrategy $strategy, ?string $before = null): self
+    {
+        if ($before === null) {
+            return new self([...$this->strategies, $strategy], $this->defaultBusName);
+        }
+
+        $output = [];
+
+        foreach ($this->strategies as $existing) {
+            if ($existing::class === $before) {
+                $output[] = $strategy;
+            }
+
+            $output[] = $existing;
+        }
+
+        return new self($output, $this->defaultBusName);
+    }
+
+    /**
+     * @param iterable<class-string> $handlerClasses
+     * @throws DuplicateRoutingException when two strategies resolve different busNames for the same class.
+     */
+    public function validate(iterable $handlerClasses): void
+    {
+        foreach ($handlerClasses as $handlerClass) {
+            $resolutions = [];
+
+            foreach ($this->strategies as $strategy) {
+                $resolution = $strategy->resolve($handlerClass);
+
+                if ($resolution->isSome()) {
+                    $resolutions[$strategy::class] = $resolution->get()->busName;
+                }
+            }
+
+            $unique = array_unique(array_values($resolutions));
+
+            if (count($unique) > 1) {
+                $sources = array_keys($resolutions);
+
+                throw DuplicateRoutingException::between($handlerClass, $sources[0], $sources[1]);
+            }
+        }
     }
 }
 ```
@@ -2566,36 +2683,439 @@ final class Composite implements RoutingStrategy
 - [ ] **Step 8: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): RoutingStrategy interface + 4 impls (ExplicitOnly, AttributeBased, NamespacePattern, Composite) + RoutingResolution VO"
+git commit -m "feat(ddd-bus): RoutingStrategy interface + 4 impls (ExplicitOnly, AttributeBased, NamespacePattern, Composite with withStrategy(before:) extension + validate() conflict detection) + RoutingResolution VO with displayName()"
+```
+
+---
+## Phase 12a — `BusBuilder` + `HandlerAttributeIndex` + `InProcessSameDbBootValidator`
+
+**Files:**
+- Create: `packages/nexus-ddd-bus/src/Routing/BusBuilder.php`
+- Create: `packages/nexus-ddd-bus/src/Routing/HandlerAttributeIndex.php`
+- Create: `packages/nexus-ddd-bus/src/Routing/InProcessSameDbBootValidator.php`
+- Tests
+
+**Locks (H4 + H10 + H1):**
+- `BusBuilder` is the boot orchestrator. Reflects all registered handler classes; builds a `HandlerAttributeIndex` (cache: `class-string<handler> → ResolvedAttributesEntry`); assembles the per-handler `MiddlewarePipeline` with the `#[Authorize(before: 'validation')]` flip baked in.
+- `HandlerAttributeIndex::lookup(class-string<message>): Option<ResolvedAttributesEntry>` — middlewares consume this at runtime instead of doing reflection on every dispatch.
+- `InProcessSameDbBootValidator` (replaces v1's `InProcessSameDbMiddleware` no-op) — boot-time only; checks that every `#[InProcess]`-attributed handler's bound connection matches its source aggregate's bound connection. Throws `InProcessConnectionMismatchException` if mismatch.
+
+- [ ] **Step 1: TDD `HandlerAttributeIndex`**
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Bus\Attribute\Authorize;
+use Monadial\Nexus\Ddd\Bus\Attribute\Idempotent;
+use Monadial\Nexus\Ddd\Bus\Attribute\Validate;
+
+/**
+ * @psalm-api
+ *
+ * Pre-computed cache built once at boot. Lookups are O(1) by message class.
+ * Each entry carries the resolved handler class and its attribute set.
+ */
+final class HandlerAttributeIndex
+{
+    /** @var array<class-string, ResolvedAttributesEntry> */
+    private readonly array $entries;
+
+    /** @param array<class-string, ResolvedAttributesEntry> $entries */
+    public function __construct(array $entries)
+    {
+        $this->entries = $entries;
+    }
+
+    /**
+     * @param class-string $messageClass
+     * @return Option<ResolvedAttributesEntry>
+     */
+    public function lookup(string $messageClass): Option
+    {
+        return Option::fromNullable($this->entries[$messageClass] ?? null);
+    }
+
+    /** @return iterable<class-string, ResolvedAttributesEntry> */
+    public function all(): iterable
+    {
+        return $this->entries;
+    }
+}
+```
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Fp\Functional\Option\Option;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ */
+final readonly class ResolvedAttributesEntry
+{
+    /**
+     * @param class-string $handlerClass
+     * @param array<class-string, object> $attributes
+     */
+    public function __construct(
+        public string $handlerClass,
+        public array $attributes,
+        public bool $authorizeBeforeValidate,
+        public bool $idempotencyOptedOut,
+    ) {}
+
+    /**
+     * @template T of object
+     * @param class-string<T> $attributeClass
+     * @return Option<T>
+     */
+    public function attribute(string $attributeClass): Option
+    {
+        return Option::fromNullable($this->attributes[$attributeClass] ?? null);
+    }
+
+    public function handlerClass(): string
+    {
+        return $this->handlerClass;
+    }
+
+    public function isIdempotencyOptedOut(): bool
+    {
+        return $this->idempotencyOptedOut;
+    }
+}
+```
+
+- [ ] **Step 2: TDD `InProcessSameDbBootValidator`**
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Monadial\Nexus\Ddd\Bus\Attribute\InProcess;
+use Monadial\Nexus\Ddd\Bus\Exception\InProcessConnectionMismatchException;
+use ReflectionClass;
+use ReflectionMethod;
+
+/**
+ * @psalm-api
+ *
+ * Boot-time validator (replaces v1's runtime no-op middleware per panel
+ * H1). For every #[InProcess]-attributed handler, asserts that the
+ * handler's declared connection name matches the source aggregate's
+ * connection name as registered in $bindings.
+ *
+ * Adopters supply $bindings as a map class-string → connection-name at
+ * application bootstrap. Without bindings, the validator passes (no
+ * basis for comparison).
+ */
+final class InProcessSameDbBootValidator
+{
+    /**
+     * @param array<class-string, string> $bindings
+     */
+    public function __construct(private readonly array $bindings) {}
+
+    /**
+     * @param iterable<class-string> $handlerClasses
+     * @throws InProcessConnectionMismatchException
+     */
+    public function validate(iterable $handlerClasses): void
+    {
+        foreach ($handlerClasses as $handlerClass) {
+            $reflection = new ReflectionClass($handlerClass);
+
+            foreach ($reflection->getMethods() as $method) {
+                if ($method->getAttributes(InProcess::class) === []) {
+                    continue;
+                }
+
+                $this->checkMethodBinding($method);
+            }
+        }
+    }
+
+    private function checkMethodBinding(ReflectionMethod $method): void
+    {
+        $params = $method->getParameters();
+
+        if ($params === []) {
+            return;
+        }
+
+        $eventClass = $params[0]->getType();
+
+        if ($eventClass === null) {
+            return;
+        }
+
+        $aggregateConn = $this->bindings[$eventClass->__toString()] ?? null;
+        $handlerConn = $this->bindings[$method->getDeclaringClass()->getName()] ?? null;
+
+        if ($aggregateConn !== null && $handlerConn !== null && $aggregateConn !== $handlerConn) {
+            throw InProcessConnectionMismatchException::between($aggregateConn, $handlerConn);
+        }
+    }
+}
+```
+
+- [ ] **Step 3: TDD `BusBuilder`**
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Closure;
+use Monadial\Nexus\Ddd\Bus\Attribute\Authorize;
+use Monadial\Nexus\Ddd\Bus\Attribute\Idempotent;
+use Monadial\Nexus\Ddd\Bus\Attribute\Validate;
+use Monadial\Nexus\Ddd\Bus\Exception\MissingAuthorizationDeciderException;
+use Monadial\Nexus\Ddd\Bus\Exception\MissingValidatorException;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use ReflectionClass;
+use ReflectionMethod;
+
+/**
+ * @psalm-api
+ *
+ * Boot orchestrator. Reflects all registered handler classes once;
+ * builds the HandlerAttributeIndex (cached) and the per-handler
+ * MiddlewarePipeline; runs all boot validators (missing-validator,
+ * missing-decider, in-process-same-db, composite-routing-conflict).
+ *
+ * The builder is final + non-readonly because it accumulates registrations
+ * during construction. After build(), it produces an immutable BusRegistry
+ * + HandlerAttributeIndex.
+ */
+final class BusBuilder
+{
+    /** @var array<class-string, class-string> message-class → handler-class */
+    private array $handlers = [];
+
+    /** @var array<string, string> connection bindings */
+    private array $bindings = [];
+
+    /**
+     * @param class-string $messageClass
+     * @param class-string $handlerClass
+     */
+    public function registerHandler(string $messageClass, string $handlerClass): self
+    {
+        $this->handlers[$messageClass] = $handlerClass;
+
+        return $this;
+    }
+
+    /** @param class-string $boundClass */
+    public function bindConnection(string $boundClass, string $connectionName): self
+    {
+        $this->bindings[$boundClass] = $connectionName;
+
+        return $this;
+    }
+
+    public function build(
+        Profile $profile,
+        bool $hasValidator,
+        bool $hasDecider,
+        Composite $routing,
+    ): BusBuildResult {
+        $entries = [];
+
+        foreach ($this->handlers as $messageClass => $handlerClass) {
+            $resolved = $this->reflectHandler($handlerClass);
+
+            if ($resolved->attribute(Validate::class)->isSome() && !$hasValidator) {
+                throw MissingValidatorException::forHandler($handlerClass);
+            }
+
+            if ($resolved->attribute(Authorize::class)->isSome() && !$hasDecider) {
+                throw MissingAuthorizationDeciderException::forHandler($handlerClass);
+            }
+
+            $entries[$messageClass] = $resolved;
+        }
+
+        $inProcessValidator = new InProcessSameDbBootValidator($this->bindings);
+        $inProcessValidator->validate($this->handlers);
+
+        $routing->validate(array_keys($this->handlers));
+
+        return new BusBuildResult(
+            new HandlerAttributeIndex($entries),
+            $this->handlers,
+        );
+    }
+
+    /** @param class-string $handlerClass */
+    private function reflectHandler(string $handlerClass): ResolvedAttributesEntry
+    {
+        $reflection = new ReflectionClass($handlerClass);
+        $attributes = [];
+        $authorizeBeforeValidate = false;
+        $idempotencyOptedOut = false;
+
+        foreach ($reflection->getAttributes() as $attr) {
+            $attributes[$attr->getName()] = $attr->newInstance();
+        }
+
+        foreach ($reflection->getMethods() as $method) {
+            foreach ($method->getAttributes() as $attr) {
+                $attributes[$attr->getName()] = $attr->newInstance();
+            }
+        }
+
+        $authorize = $attributes[Authorize::class] ?? null;
+
+        if ($authorize !== null && $authorize->before === 'validation') {
+            $authorizeBeforeValidate = true;
+        }
+
+        $idempotent = $attributes[Idempotent::class] ?? null;
+
+        if ($idempotent !== null && $idempotent->off) {
+            $idempotencyOptedOut = true;
+        }
+
+        return new ResolvedAttributesEntry(
+            $handlerClass,
+            $attributes,
+            $authorizeBeforeValidate,
+            $idempotencyOptedOut,
+        );
+    }
+}
+```
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ */
+final readonly class BusBuildResult
+{
+    /** @param array<class-string, class-string> $handlerMap */
+    public function __construct(
+        public HandlerAttributeIndex $index,
+        public array $handlerMap,
+    ) {}
+}
+```
+
+- [ ] **Step 4: Tests cover**
+  - Register handler, build, verify index lookup.
+  - Register handler with `#[Validate]`, no validator → `MissingValidatorException`.
+  - Register handler with `#[Authorize]`, no decider → `MissingAuthorizationDeciderException`.
+  - Register `#[InProcess]` handler with mismatched conn binding → `InProcessConnectionMismatchException`.
+  - Register handlers that two routing strategies resolve differently → `DuplicateRoutingException`.
+  - Register handler with `#[Authorize(before: 'validation')]` → entry's `authorizeBeforeValidate` is true.
+
+- [ ] **Step 5: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 6: Commit**
+
+```bash
+git commit -m "feat(ddd-bus): BusBuilder boot orchestrator + HandlerAttributeIndex (cached reflection) + InProcessSameDbBootValidator (replaces v1 runtime no-op middleware) + per-handler authorize-before-validate flip baked into cached pipeline"
 ```
 
 ---
 
-## Phase 12 — `BusRegistry` + `CommandRouter` + boot-time profile×routing validation
+## Phase 12b — `BusRegistry` + `CommandRouter` + boot-time profile validation
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/src/Routing/BusRegistry.php`
 - Create: `packages/nexus-ddd-bus/src/Routing/CommandRouter.php`
 - Tests
 
-**Locks per Q11 (degradeAsyncToSync, bus-name typo, InProcess+SharedInvocation boot error):**
-- `BusRegistry` holds `array<busName, CommandBus|QueryBus|EventBus>` (separate registries per kind, or one tagged registry — pick one impl).
-- At construction, `BusRegistry::validate(Profile, RoutingStrategy)` walks the routing decisions for every registered message class and asserts:
-  - The named bus exists → else `BusNameNotRegisteredException`.
-  - The named bus is allowed under the profile → else `BusNotAvailableInProfileException`.
-- `degradeAsyncToSync` flag (per umbrella spec §8.2.1): when active AND `Profile::Sync` AND dev sentinel, async-only routes are demoted to default. Each demotion logs a boot-time WARNING.
-
-The `CommandRouter` wraps a `BusRegistry` + a `Composite` routing strategy, exposing `routeFor(class-string): CommandBus`.
+**Locks:**
+- `BusRegistry` holds `array<busName, CommandBus>` and parallel maps for `QueryBus` / `EventBus`. At construction, validates Profile×bus availability per the ruleset:
+  - Sync profile: only sync impls allowed.
+  - Async profile: sync + async impls allowed.
+  - Actor profile: any impl allowed.
+- `CommandRouter` wraps `BusRegistry` + `Composite`; exposes `routeFor(class-string): CommandBus`.
 
 - [ ] **Step 1: TDD `BusRegistry`**
 
-Tests:
-- Register `('default', SyncCommandBus)` + `('long-running', /* mocked AsyncCommandBus */)`. Lookup by name returns the registered impl.
-- `validate(Profile::Sync, …)` with a route to `'long-running'` → throws `BusNotAvailableInProfileException`.
-- `validate(Profile::Async, …)` with a route to `'long-running'` → no throw.
-- Routing to `'long-runnning'` (typo) → throws `BusNameNotRegisteredException` listing `['default', 'long-running']`.
-- `degradeAsyncToSync = true` + `Profile::Sync` + APP_ENV=dev → no throw, logs WARNING.
-- `degradeAsyncToSync = true` + `Profile::Sync` + APP_ENV=prod → throws (degrade flag is dev-only).
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Fp\Functional\Option\Option;
+use Monadial\Nexus\Ddd\Bus\Exception\BusNameNotRegisteredException;
+use Monadial\Nexus\Ddd\Bus\Exception\BusNotAvailableInProfileException;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Messaging\Bus\CommandBus;
+use Monadial\Nexus\Ddd\Messaging\Bus\EventBus;
+use Monadial\Nexus\Ddd\Messaging\Bus\QueryBus;
+
+/**
+ * @psalm-api
+ *
+ * Immutable map name → bus impl. Built once via the BusBuilder pipeline
+ * after all handlers are registered. Validates Profile × bus-impl
+ * compatibility at construction.
+ */
+final readonly class BusRegistry
+{
+    /**
+     * @param array<string, CommandBus> $commandBuses
+     * @param array<string, QueryBus> $queryBuses
+     * @param array<string, EventBus> $eventBuses
+     */
+    public function __construct(
+        public Profile $profile,
+        public array $commandBuses,
+        public array $queryBuses,
+        public array $eventBuses,
+    ) {}
+
+    /** @return Option<CommandBus> */
+    public function command(string $name): Option
+    {
+        return Option::fromNullable($this->commandBuses[$name] ?? null);
+    }
+
+    /** @return list<string> */
+    public function commandNames(): array
+    {
+        return array_keys($this->commandBuses);
+    }
+
+    /**
+     * @param iterable<class-string, RoutingResolution> $resolutions  message-class → resolved-route
+     * @throws BusNameNotRegisteredException
+     * @throws BusNotAvailableInProfileException
+     */
+    public function validateRoutes(iterable $resolutions): void
+    {
+        foreach ($resolutions as $messageClass => $resolution) {
+            if (!isset($this->commandBuses[$resolution->busName])) {
+                throw BusNameNotRegisteredException::for(
+                    $resolution->busName,
+                    $this->commandNames(),
+                );
+            }
+
+            $bus = $this->commandBuses[$resolution->busName];
+
+            if (!$this->profileAllows($bus)) {
+                throw BusNotAvailableInProfileException::for(
+                    $resolution->busName,
+                    $this->profile,
+                    $messageClass,
+                );
+            }
+        }
+    }
+
+    private function profileAllows(CommandBus $bus): bool
+    {
+        return true;
+    }
+}
+```
+
+(The exact `profileAllows` shape depends on whether bus impls expose a `profile()` accessor — adapt at execution time. For P0 with only `SyncCommandBus`, the check is trivially true.)
 
 - [ ] **Step 2: TDD `CommandRouter`**
 
@@ -2612,38 +3132,26 @@ final class CommandRouter
         private readonly RoutingStrategy $strategy,
     ) {}
 
-    /**
-     * @param class-string $messageClass
-     */
+    /** @param class-string $messageClass */
     public function routeFor(string $messageClass): CommandBus
     {
-        $resolution = $this->strategy->resolve($messageClass)->get();  // Composite always Some
-        $bus = $this->registry->command($resolution->busName);
-        return $bus->getOrElseThrow(fn() => BusNameNotRegisteredException::for(
-            $resolution->busName,
-            $this->registry->commandNames(),
-        ));
+        $resolution = $this->strategy->resolve($messageClass)->get();
+
+        return $this->registry->command($resolution->busName)->getOrElseThrow(
+            fn() => BusNameNotRegisteredException::for(
+                $resolution->busName,
+                $this->registry->commandNames(),
+            ),
+        );
     }
 }
 ```
 
-(Analogous `QueryRouter` and `EventRouter` skipped from the plan as boilerplate-after-pattern-locked. Add as needed in Phase 13's bus impls.)
-
-- [ ] **Step 3: TDD `MissingValidatorException` + `MissingAuthorizationDeciderException` boot validation**
-
-These are validated by the bus boot code (the `NexusDddBusBuilder` or analogous orchestrator — name TBD; for P0 we ship a `BusBuilder` factory). At construction, the builder walks all registered handlers; if any has `#[Validate]` and no `Validator` is registered → throw `MissingValidatorException`. Same for `#[Authorize]`.
-
-This is implemented as a small `BusBuilder::validate()` step. Place it in `Routing/BusBuilder.php` or in `Bus/SyncCommandBus.php` constructor — pick the cleaner shape at execution time.
-
-- [ ] **Step 4: TDD `InProcess` + `SharedInvocation` boot error** (per umbrella spec §11.2.1)
-
-Combining `#[InProcess]` + `#[SharedInvocation]` on the same handler is a boot error. The boot code (in `BusBuilder` or `EventRouter` registration) walks registered event handlers and throws on the combination. (`SharedInvocation` is from messaging — verify the attribute exists. If not, this validation defers to follow-up.)
-
-- [ ] **Step 5: Run tests + Psalm + PHPCS clean**
-- [ ] **Step 6: Commit**
+- [ ] **Step 3: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): BusRegistry + CommandRouter + boot-time profile×routing validation (BusNotAvailableInProfile/BusNameNotRegistered) + missing-validator/decider boot checks + degradeAsyncToSync dev-only fallback"
+git commit -m "feat(ddd-bus): BusRegistry (immutable; Profile × bus-impl validation) + CommandRouter"
 ```
 
 ---
@@ -2651,248 +3159,259 @@ git commit -m "feat(ddd-bus): BusRegistry + CommandRouter + boot-time profile×r
 ## Phase 13 — `SyncCommandBus`, `SyncQueryBus`, `SyncEventBus`
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Bus/RichCommandBus.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Bus/RichQueryBus.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Bus/RichEventBus.php` (interface)
 - Create: `packages/nexus-ddd-bus/src/Bus/SyncCommandBus.php`
 - Create: `packages/nexus-ddd-bus/src/Bus/SyncQueryBus.php`
 - Create: `packages/nexus-ddd-bus/src/Bus/SyncEventBus.php`
 - Tests
 
-**Locks per Q2 (Accepted marker) + drift-resolution (Rich* interfaces):**
-- `RichCommandBus extends CommandBus` adds `tryDispatch(Command): Either<Throwable, Accepted>`. The shipped `dispatchCommand(Command): void` continues to work.
-- `RichQueryBus extends QueryBus` adds `tryAsk(Query<TResult>): Either<Throwable, TResult>` (template parameter flows through).
-- `RichEventBus extends EventBus` adds `tryPublish(DomainEvent): Either<Throwable, Accepted>`.
-- The concrete `SyncCommandBus` implements `RichCommandBus` AND `EnvelopedCommandBus` (both — for compatibility with messaging's outbox-flush path).
+**Locks (H2 + H5 + H10):**
+- `SyncCommandBus implements CommandBus` (canonical messaging interface — has both `dispatchCommand` and `tryDispatch`) AND `EnvelopedCommandBus`. NO `RichCommandBus` extension interface.
+- Constructor (locked, 4 args): `(BusRegistry $registry, HandlerAttributeIndex $index, MiddlewarePipeline $pipeline, Profile $profile)`. All bus-internal collaborators (clock, logger, metrics, validator, decider, idempotency store, locator, outbox, backoff) flow through the pipeline closure passed in `MiddlewarePipeline::$core` at builder time.
+- `tryDispatch` propagates `BusInvariantException` (per H5) — does NOT lift to `Either::left`.
+- `RetryBudgetExhaustedException` IS caught and lifted to `Either::left` (it's a runtime-retryable failure, not a boot invariant).
 
-- [ ] **Step 1: TDD `RichCommandBus` interface**
+- [ ] **Step 1: TDD `SyncCommandBus`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Bus;
 
 use Fp\Functional\Either\Either;
-use Monadial\Nexus\Ddd\Bus\Marker\Accepted;
+use Monadial\Nexus\Ddd\Bus\Exception\BusInvariantException;
+use Monadial\Nexus\Ddd\Bus\Middleware\MiddlewarePipeline;
+use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
+use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Messaging\Bus\CommandBus;
+use Monadial\Nexus\Ddd\Messaging\Bus\EnvelopedCommandBus;
+use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Monadial\Nexus\Ddd\Messaging\Marker\Accepted;
 use Monadial\Nexus\Ddd\Messaging\Message\Command;
+use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
+use Override;
+use Psr\Clock\ClockInterface;
+use Throwable;
 
 /**
  * @psalm-api
  *
- * Per umbrella spec §8.6 + Q2 — adds tryDispatch() returning
- * Either<Throwable, Accepted>. Tracing rides on
- * MessageContext::current()->metadata->id, NOT on the Accepted marker.
+ * Synchronous command bus. Implements the canonical CommandBus interface
+ * directly (both dispatchCommand and tryDispatch — no Rich* extension
+ * needed since messaging upstream has tryDispatch on canonical).
  *
- * Drift note: this interface lives in nexus-ddd-bus until messaging
- * collapses it into the base CommandBus interface (post-merge follow-up #2).
+ * The pipeline is built once at boot (per handler) by BusBuilder and
+ * looked up via the index. Constructor takes 4 args — internal
+ * collaborators are baked into the cached pipeline.
  */
-interface RichCommandBus extends CommandBus
+final class SyncCommandBus implements CommandBus, EnvelopedCommandBus
 {
-    /**
-     * @return Either<\Throwable, Accepted>
-     */
-    public function tryDispatch(Command $command): Either;
-}
-```
+    public function __construct(
+        private readonly BusRegistry $registry,
+        private readonly HandlerAttributeIndex $index,
+        private readonly MiddlewarePipeline $pipeline,
+        private readonly Profile $profile,
+        private readonly ClockInterface $clock,
+    ) {}
 
-- [ ] **Step 2: TDD `SyncCommandBus`**
-
-The bus composes the canonical 11-stage pipeline. Constructor takes:
-- `Profile $profile`
-- `MessageContextStack $contextStack` (DI per "no singletons" rule)
-- `ClockInterface $clock`
-- `LoggerInterface $logger`
-- `MetricsCollector $metrics` (default `NoOpMetricsCollector`)
-- `Validator $validator` (optional via Option-style — apps without `#[Validate]` need not register)
-- `AuthorizationDecider $decider` (same)
-- `IdempotencyStore $idempotencyStore` (`InMemoryIdempotencyStore` for P0)
-- `IdempotencyKeyResolver $idempotencyKeyResolver`
-- `CommandHandlerLocator $locator` (from messaging)
-- `Outbox $outbox` (from messaging — for event drain)
-- `BackoffStrategy $backoff` (default `JitteredExponentialBackoff(50ms, 2s, 5)`)
-- `int $retryBudgetMs` (default 5000 sync; 60000 async)
-- `list<Middleware> $extraMiddlewares` — adopter-supplied additions
-
-The bus assembles the pipeline:
-
-```php
-public function dispatchCommand(Command $command): void
-{
-    $this->tryDispatch($command)->fold(
-        onLeft: fn(\Throwable $e) => throw $e,
-        onRight: static fn(Accepted $_): null => null,
-    );
-}
-
-public function tryDispatch(Command $command): Either
-{
-    try {
-        $envelope = new Envelope(
-            $command,
-            MessageMetadata::root($this->clock),  // root if no parent context; otherwise propagated
+    #[Override]
+    public function dispatchCommand(Command $command): void
+    {
+        $this->tryDispatch($command)->fold(
+            onLeft: static fn(Throwable $e) => throw $e,
+            onRight: static fn(Accepted $_): null => null,
         );
+    }
+
+    #[Override]
+    public function tryDispatch(Command $command): Either
+    {
+        $envelope = new Envelope($command, MessageMetadata::root($this->clock));
+
+        try {
+            $this->pipeline->dispatch($envelope);
+
+            return Either::right(new Accepted());
+        } catch (BusInvariantException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            return Either::left($e);
+        }
+    }
+
+    #[Override]
+    public function dispatchEnveloped(Envelope $envelope): void
+    {
         $this->pipeline->dispatch($envelope);
-        return Either::right(Accepted::instance());
-    } catch (\Throwable $e) {
-        return Either::left($e);
     }
 }
 ```
 
-The pipeline construction reads `#[Authorize(before: 'validation')]` per-handler at registration (cached) and reorders the validation/authorization middlewares for that handler. The simpler P0 model: ship one shared pipeline that always runs validation then authorization; defer per-handler reordering to a follow-up if it turns out adopters need it.
+- [ ] **Step 2: TDD `SyncQueryBus`** — analogous; implements canonical `QueryBus` (has both `dispatchQuery` and `tryAsk`) + `EnvelopedQueryBus`. No idempotency middleware (queries inherently idempotent). No event drain.
 
-Tests (smoke-level):
-- Register a fixture handler. Dispatch command. Assert handler was called.
-- Dispatch with a `Validator` that returns violations → `tryDispatch` returns `Either::left(ValidationFailedException)`.
-- Dispatch with an `AuthorizationDecider` that throws → `tryDispatch` returns `Either::left(AccessDeniedException)`.
-- Dispatch the same command twice (same `IdempotencyKey`) → second short-circuits.
-- Dispatch with `Profile::Actor` and a handler that throws `OptimisticLockException` → re-throws as `ActorWriterInvariantViolation`.
+- [ ] **Step 3: TDD `SyncEventBus`** — fan-out to N subscribers. For `Profile::Sync`, all subscribers run in-tx.
 
-- [ ] **Step 3: TDD `SyncQueryBus`** — analogous, but `dispatchQuery` returns `mixed` (the query result). No idempotency middleware (queries are inherently idempotent and the spec says idempotency is for commands). No event drain.
-
-- [ ] **Step 4: TDD `SyncEventBus`** — fan-out to N subscribers. For `Profile::Sync`, all subscribers run in-tx (per umbrella spec §11.0 — sync profile has no outbox). For other profiles, subscribers route via outbox + relay (not in P0).
-
-- [ ] **Step 5: Run tests + Psalm + PHPCS clean**
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Run tests + Psalm + PHPCS clean**
+- [ ] **Step 5: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): RichCommandBus/RichQueryBus/RichEventBus interfaces + SyncCommandBus + SyncQueryBus + SyncEventBus (assembles canonical 11-stage pipeline)"
+git commit -m "feat(ddd-bus): SyncCommandBus (implements canonical messaging\CommandBus + EnvelopedCommandBus directly — no Rich* extension since messaging upstream has tryDispatch) + SyncQueryBus + SyncEventBus; tryDispatch propagates BusInvariantException, lifts other Throwable to Either::left; constructor locked to 4 args"
 ```
 
 ---
 
-## Phase 14 — `IdempotencyKeyResolver` integration
+## Phase 14 — `RoutesShowCommand` service + `Cli\Command` interface
 
-**Note:** `IdempotencyKeyResolver` was created in Phase 10c (because `IdempotencyMiddleware` consumes it). Phase 14 is the integration phase: hook `IdempotencyKeyResolver` into the bus boot code, ensure resolution paths are tested, document the order (attribute → BusHeaders → messageId).
-
-**Files:**
-- Modify: `packages/nexus-ddd-bus/src/Bus/SyncCommandBus.php` (verify `IdempotencyKeyResolver` is wired)
-- Modify: `packages/nexus-ddd-bus/src/Idempotency/IdempotencyKeyResolver.php` (add explicit support for `MessageContext`-supplied header)
-- Tests: `packages/nexus-ddd-bus/tests/Unit/Idempotency/IdempotencyKeyResolverIntegrationTest.php`
-
-- [ ] **Step 1: Test the three resolution paths in integration**
-  - Command class with `#[IdempotencyKey(field: 'clientRequestId')]` + bus dispatches it twice with same `clientRequestId` → second short-circuits.
-  - Command class without attribute, but envelope has `BusHeadersStamp[nexus.idempotency-key]` → second dispatch with same header value short-circuits.
-  - Command class without attribute and no header → falls back to `messageId`. Two dispatches with different `messageId` both run.
-
-- [ ] **Step 2: Add HTTP-header documentation in the README** — adapter packages (`nexus-ddd-symfony`) populate `BusHeaders[nexus.idempotency-key]` from `X-Nexus-Idempotency-Key` HTTP header per umbrella spec §13.4.
-
-- [ ] **Step 3: Run tests + Psalm + PHPCS clean**
-- [ ] **Step 4: Commit**
-
-```bash
-git commit -m "feat(ddd-bus): IdempotencyKeyResolver integration — verify three-tier resolution (attribute → BusHeaders.nexus.idempotency-key → messageId fallback)"
-```
-
----
-
-## Phase 15 — `bin/ddd routes show` CLI command
+(Phase 14 of v1 — `IdempotencyKeyResolver` integration — was folded into Phase 10c per panel L3. This is the renumbered phase.)
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/bin/ddd` (executable shim)
+- Create: `packages/nexus-ddd-bus/src/Cli/Command.php` (interface)
 - Create: `packages/nexus-ddd-bus/src/Cli/RoutesShowCommand.php`
-- Tests: `packages/nexus-ddd-bus/tests/Unit/Cli/RoutesShowCommandTest.php`
+- Tests
 
-The command prints the registered routing table; with a class arg, shows how that class resolves through the composite strategy (per umbrella spec §27.1).
+**Lock M4:** the `bin/ddd` shell shim moves to `nexus-ddd-cli` (TBD) or `nexus-app` adapter packages. This package ships ONLY the service. No `bin/` directory. No symfony/console dep.
 
-The framework-agnostic CLI uses no symfony/console (per "no Symfony deps" lock). Plan: ship the simplest possible command runner — a script in `bin/ddd` that dispatches to a `Cli\Command` interface (one method, `run(array $args, OutputInterface): int`). For P0, only `routes show` exists.
+- [ ] **Step 1: TDD `Cli\Command` interface**
 
-- [ ] **Step 1: TDD `RoutesShowCommand`**
+```php
+namespace Monadial\Nexus\Ddd\Bus\Cli;
+
+/**
+ * @psalm-api
+ *
+ * Minimal command shape. Adapter packages (nexus-ddd-cli — TBD, or
+ * nexus-app) supply the shell shim that wires argv → Command::run.
+ */
+interface Command
+{
+    /** @param list<string> $args */
+    public function run(array $args): string;
+}
+```
+
+- [ ] **Step 2: TDD `RoutesShowCommand`**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Cli;
 
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
-use Monadial\Nexus\Ddd\Bus\Routing\Composite;
 use Monadial\Nexus\Ddd\Bus\Routing\RoutingStrategy;
+use Override;
 
-final class RoutesShowCommand
+/**
+ * @psalm-api
+ *
+ * Service shape for the routes-show CLI subcommand. The runner package
+ * (nexus-ddd-cli — TBD) supplies the argv parser and the shell shim;
+ * this package ships only the service.
+ */
+final class RoutesShowCommand implements Command
 {
     public function __construct(
         private readonly BusRegistry $registry,
         private readonly RoutingStrategy $strategy,
     ) {}
 
-    /**
-     * @param list<string> $args
-     */
+    #[Override]
     public function run(array $args): string
     {
         if ($args === []) {
             return $this->renderAll();
         }
-        $messageClass = $args[0];
-        return $this->renderOne($messageClass);
+
+        return $this->renderOne($args[0]);
     }
 
     private function renderAll(): string
     {
-        // Print: bus-name → impl-class
-        // Print: known-message-class → resolved-bus → resolved-by-strategy
-        return /* tabular output */;
+        $output = "Registered command buses:\n";
+
+        foreach ($this->registry->commandNames() as $name) {
+            $output .= sprintf("  %s\n", $name);
+        }
+
+        return $output;
     }
 
     private function renderOne(string $messageClass): string
     {
         $resolution = $this->strategy->resolve($messageClass)->get();
-        return sprintf('%s → bus `%s` (resolved by %s)', $messageClass, $resolution->busName, $resolution->resolvedBy);
+
+        return sprintf(
+            "%s → bus `%s` (resolved by %s)\n",
+            $messageClass,
+            $resolution->busName,
+            $resolution->displayName(),
+        );
     }
 }
 ```
-
-Tests cover both modes (no args, single-arg).
-
-- [ ] **Step 2: TDD `bin/ddd` shim** — minimal shell script that loads the autoloader and dispatches to `RoutesShowCommand` if `$argv[1] === 'routes'` and `$argv[2] === 'show'`. Future commands (other phases / packages) extend this.
 
 - [ ] **Step 3: Run tests + Psalm + PHPCS clean**
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): bin/ddd routes show CLI command (no symfony/console — minimal CLI shim)"
+git commit -m "feat(ddd-bus): Cli\\Command interface + RoutesShowCommand service (no shell shim — bin/ddd deferred to nexus-ddd-cli adapter package)"
 ```
 
 ---
 
-## Phase 16 — Smoke tests (full-pipeline end-to-end)
+## Phase 15 — Smoke tests (full-pipeline end-to-end)
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/PlaceOrder.php` (readonly command)
-- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/PlaceOrderHandler.php` (implements `CommandHandler`)
-- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/CancelOrder.php` (with `#[Authorize]`)
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/PlaceOrder.php`
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/PlaceOrderHandler.php`
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/CancelOrder.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/Fixtures/CancelOrderHandler.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/PlaceOrderEndToEndSmokeTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/ValidationFailureSmokeTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/AuthorizationDeniedSmokeTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/IdempotencyShortCircuitSmokeTest.php`
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/IdempotencyTwoPhaseInsideTxSmokeTest.php` (new — per B2)
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/OccRetryRetriesAndRecoversSmokeTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/OccRetryActorWrapsAsInvariantSmokeTest.php`
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/OccRetryBudgetExhaustedSmokeTest.php` (new — per H12)
 - Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/CausationDepthExceededSmokeTest.php`
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/IdempotencyHttpHeaderBridgeSmokeTest.php` (new — per L6)
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/CausationChainOnEmittedEventsSmokeTest.php` (new — per M7)
+- Create: `packages/nexus-ddd-bus/tests/Unit/Smoke/BusInvariantExceptionPropagatesThroughTryDispatchSmokeTest.php` (new — per H5)
+- Create: `packages/nexus-ddd-bus/tests/Unit/Performance/SmokeBenchmarkTest.php` (new — per L5)
 
-- [ ] **Step 1: TDD `PlaceOrderEndToEndSmokeTest`** — the happy-path smoke. Dispatch `PlaceOrder`, assert handler runs, assert metrics emitted, assert idempotency token committed, assert event drained.
+- [ ] **Step 1: TDD `PlaceOrderEndToEndSmokeTest`** — happy path. Dispatch → handler runs, metrics emitted, idempotency token committed (under non-Sync profile), event drained.
 
-- [ ] **Step 2: TDD `ValidationFailureSmokeTest`** — fixture validator returns Violations, assert `tryDispatch` returns `Either::left(ValidationFailedException)`.
+- [ ] **Step 2: TDD `ValidationFailureSmokeTest`** — Validator returns Violations → `tryDispatch` → `Either::left(ValidationFailedException)`.
 
-- [ ] **Step 3: TDD `AuthorizationDeniedSmokeTest`** — fixture decider throws `AccessDeniedException`, assert `tryDispatch` returns `Either::left`.
+- [ ] **Step 3: TDD `AuthorizationDeniedSmokeTest`** — decider throws → `tryDispatch` → `Either::left(AccessDeniedException)`.
 
-- [ ] **Step 4: TDD `IdempotencyShortCircuitSmokeTest`** — dispatch same command twice (same idempotency key), assert second is short-circuited.
+- [ ] **Step 4: TDD `IdempotencyShortCircuitSmokeTest`** — same idempotency key dispatched twice; second short-circuits.
 
-- [ ] **Step 5: TDD `OccRetryRetriesAndRecoversSmokeTest`** — handler throws `OptimisticLockException` once, succeeds on second attempt, assert two attempts.
+- [ ] **Step 5: TDD `IdempotencyTwoPhaseInsideTxSmokeTest` (new — per B2)** — verify ordering: handler success → IdempotencyCommit (`markCompleted`) → EventDrain (`flush`). The order matters: a handler that throws AFTER `markCompleted` but BEFORE `flush` should NOT have a committed reservation, because the TX rolls back. Test uses a fixture transactional outbox that rolls back on flush failure.
 
-- [ ] **Step 6: TDD `OccRetryActorWrapsAsInvariantSmokeTest`** — `Profile::Actor` + handler throws `OptimisticLockException`, assert `tryDispatch` returns `Either::left(ActorWriterInvariantViolation)`.
+- [ ] **Step 6: TDD `OccRetryRetriesAndRecoversSmokeTest`** — handler throws OCC once, succeeds on second attempt; assert two attempts.
 
-- [ ] **Step 7: TDD `CausationDepthExceededSmokeTest`** — synthesize an envelope with `BusHeaders[nexus.causation.depth] = 32`, dispatch, assert `CausationDepthExceededException`.
+- [ ] **Step 7: TDD `OccRetryActorWrapsAsInvariantSmokeTest`** — `Profile::Actor` + OCC → `Either::left(ActorWriterInvariantViolation)`.
 
-- [ ] **Step 8: Run all smoke tests; Psalm + PHPCS clean**
-- [ ] **Step 9: Commit**
+- [ ] **Step 8: TDD `OccRetryBudgetExhaustedSmokeTest` (new — per H12)** — repeated OCC throws past budget; assert metrics emitted (`ddd.command.retry_exhausted`), WARN log line emitted, `tryDispatch` → `Either::left(RetryBudgetExhaustedException)`.
+
+- [ ] **Step 9: TDD `CausationDepthExceededSmokeTest`** — synthetic envelope with `headers[nexus.causation.depth] = 32`; dispatch → `CausationDepthExceededException`.
+
+- [ ] **Step 10: TDD `IdempotencyHttpHeaderBridgeSmokeTest` (new — per L6)** — message has no `#[IdempotencyKey]` attribute; envelope metadata has `headers[nexus.idempotency-key]`; dispatch twice → second short-circuits.
+
+- [ ] **Step 11: TDD `CausationChainOnEmittedEventsSmokeTest` (new — per M7)** — dispatch a command that emits two events; verify each emitted event's metadata has `causationId = sourceCommand.messageId` and `headers[nexus.causation.depth] = sourceCommand.depth + 1`.
+
+- [ ] **Step 12: TDD `BusInvariantExceptionPropagatesThroughTryDispatchSmokeTest` (new — per H5)** — bus configured with `MissingValidatorException` thrown at boot; dispatch via `tryDispatch` propagates the exception (does NOT lift to `Either::left`).
+
+- [ ] **Step 13: TDD `SmokeBenchmarkTest` (new — per L5)** — 10000 dispatches of a no-op handler in <50ms wall-clock. The test guards against accidental O(n²) in pipeline composition or attribute reflection.
+
+- [ ] **Step 14: Run all smoke tests; Psalm + PHPCS clean**
+- [ ] **Step 15: Commit**
 
 ```bash
-git commit -m "test(ddd-bus): smoke tests covering full-pipeline (place-order happy path, validation failure, authorization denied, idempotency short-circuit, OCC retry recovers, OCC actor-mode wraps as invariant, causation-depth exceeded)"
+git commit -m "test(ddd-bus): smoke tests covering full-pipeline (place-order happy path, validation failure, authorization denied, idempotency two-phase inside TX, idempotency short-circuit, OCC retry recovers + budget exhausted + actor-mode invariant, causation depth + chain on emitted events, BusInvariantException propagates through tryDispatch, HTTP-header bridge for idempotency-key, smoke perf 10000<50ms)"
 ```
 
 ---
+## Phase 16 — Psalm rules in `nexus-psalm` (Phase 17 of v1; renumbered)
 
-## Phase 17 — Psalm rules in `nexus-psalm`
-
-**Files (in `nexus-psalm` package, NOT in `nexus-ddd-bus`):**
+**Files (in `nexus-psalm` package):**
 - Create: `packages/nexus-psalm/src/Hook/Bus/CommandHandlerReturnTypeRule.php`
 - Create: `packages/nexus-psalm/src/Hook/Bus/CommandReturnValueIgnoredRule.php`
 - Create: `packages/nexus-psalm/src/Hook/Bus/ValidatedCommandReadonlyRule.php`
@@ -2900,48 +3419,118 @@ git commit -m "test(ddd-bus): smoke tests covering full-pipeline (place-order ha
 - Create: `packages/nexus-psalm/src/Hook/Bus/AuthorizeBeforeValidationRule.php`
 - Create: `packages/nexus-psalm/src/Hook/Bus/UnguardedExternalSideEffectRule.php`
 - Create: `packages/nexus-psalm/src/Hook/Bus/MiddlewareOrderingRule.php`
-- Create matching `Issue/` classes for each
-- Create fixtures + tests for each rule (~7 rules × 3 files = ~21 new files)
-- Modify: `packages/nexus-psalm/src/Plugin.php` — register the new rules
+- Create matching `Issue/` classes
+- Create fixtures + tests for each
+- Modify: `packages/nexus-psalm/src/Plugin.php` — register the 7 new rules
 
-Each rule ships with TDD: write the fixture (a class that should fire the rule and a class that should not), assert via the Plugin test harness.
+**Per panel H11: each rule specifies hook + AST + Issue + fixture pair.**
 
-- [ ] **Step 1: TDD `CommandHandlerReturnTypeRule`** — every `CommandHandler::__invoke` and every method tagged `#[CommandHandler]` MUST declare `: void` return type. Fires `CommandHandlerNonVoidReturn` issue. Fixture: a handler declaring `: string` fires; a handler declaring `: void` doesn't.
+### Rule 1: `CommandHandlerReturnTypeRule`
 
-- [ ] **Step 2: TDD `CommandReturnValueIgnoredRule`** — `$bus->dispatchCommand($cmd)` returns void; assigning to a variable is dead code. Fires `CommandReturnValueAssigned` issue.
+- **Hook:** `Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface`
+- **AST node inspected:** `Stmt\ClassMethod` (handler methods declared in classes implementing `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` or attributed `#[Handler]`)
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\CommandHandlerNonVoidReturn`
+- **Emitted message:** `"Command handler %s::%s declared return type %s; commands are pure CQS — handlers MUST declare ': void'."`
+- **Fixture pair:**
+  - Triggering: `class BadHandler implements CommandHandler { public function __invoke(Cmd $c): string { return ''; } }`
+  - Clean: `class GoodHandler implements CommandHandler { public function __invoke(Cmd $c): void {} }`
 
-- [ ] **Step 3: TDD `ValidatedCommandReadonlyRule`** — commands tagged `#[Validate]` MUST be `readonly` classes. Fixture: a non-readonly command with `#[Validate]` fires.
+- [ ] **Step 1: TDD CommandHandlerReturnTypeRule**
 
-- [ ] **Step 4: TDD `IdempotencyKeyFieldExistsRule`** — `#[IdempotencyKey(field: 'clientRequestId')]` MUST name a property that exists on the command class AND returns `string`. Fixture: missing field fires; non-string field fires.
+### Rule 2: `CommandReturnValueIgnoredRule`
 
-- [ ] **Step 5: TDD `AuthorizeBeforeValidationRule`** — `#[Authorize(before: '…')]` MUST name a canonical pipeline stage (per `PipelineStage::names()`). Fixture: `before: 'validashion'` fires; `before: 'validation'` doesn't.
+- **Hook:** `Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface`
+- **AST node inspected:** `Expr\MethodCall` where the callee is `Monadial\Nexus\Ddd\Messaging\Bus\CommandBus::dispatchCommand`
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\CommandReturnValueAssigned`
+- **Emitted message:** `"$bus->dispatchCommand() returns void; assigning the return value to a variable is dead code."`
+- **Fixture pair:**
+  - Triggering: `$x = $bus->dispatchCommand($cmd);`
+  - Clean: `$bus->dispatchCommand($cmd);`
 
-- [ ] **Step 6: TDD `UnguardedExternalSideEffectRule`** — flags handlers calling external-side-effect APIs (configurable allow-list of "external" classes — `Mailer`, `HttpClient`, `PaymentGateway`, etc.) without an active `#[IdempotencyKey]` on the command. Per umbrella spec §22. The rule warns rather than errors. Fixture: a handler that calls `Mailer::send()` from a command with no `#[IdempotencyKey]` warns; same handler from a command with the attribute doesn't.
+- [ ] **Step 2: TDD CommandReturnValueIgnoredRule**
 
-- [ ] **Step 7: TDD `MiddlewareOrderingRule`** — flags adopter-registered middlewares whose `before:` / `after:` arguments don't name a canonical `PipelineStage`. Per umbrella spec §8.5.1.
+### Rule 3: `ValidatedCommandReadonlyRule`
+
+- **Hook:** `Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface`
+- **AST node inspected:** `Stmt\Class_` whose handler method has `#[Validate]` AND inspects the command-class parameter
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\ValidatedCommandNotReadonly`
+- **Emitted message:** `"Command class %s is referenced by a #[Validate] handler but is not readonly. Validated commands MUST be readonly."`
+- **Fixture pair:**
+  - Triggering: `class CmdNotReadonly { public string $x; }` referenced by a `#[Validate]` handler
+  - Clean: `readonly class CmdReadonly { public function __construct(public string $x) {} }`
+
+- [ ] **Step 3: TDD ValidatedCommandReadonlyRule**
+
+### Rule 4: `IdempotencyKeyFieldExistsRule`
+
+- **Hook:** `Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface`
+- **AST node inspected:** `Stmt\Class_` with `#[IdempotencyKey(field: '...')]` attribute
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\IdempotencyKeyFieldMissing`
+- **Emitted message:** `"#[IdempotencyKey(field: '%s')] on %s names a property that does not exist on the class (or whose type is not string)."`
+- **Fixture pair:**
+  - Triggering: `#[IdempotencyKey(field: 'missingField')] readonly class Cmd { public function __construct(public string $other) {} }`
+  - Clean: `#[IdempotencyKey(field: 'clientRequestId')] readonly class Cmd { public function __construct(public string $clientRequestId) {} }`
+
+- [ ] **Step 4: TDD IdempotencyKeyFieldExistsRule**
+
+### Rule 5: `AuthorizeBeforeValidationRule`
+
+- **Hook:** `Psalm\Plugin\EventHandler\AfterClassLikeAnalysisInterface`
+- **AST node inspected:** `Stmt\ClassMethod` with `#[Authorize(before: '...')]`
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\AuthorizeBeforeStageUnknown`
+- **Emitted message:** `"#[Authorize(before: '%s')] on %s::%s names a stage that is not in PipelineStage. Valid stages: [%s]."`
+- **Fixture pair:**
+  - Triggering: `#[Authorize(policy: 'order.cancel', before: 'validashion')] public function handle(...): void {}`
+  - Clean: `#[Authorize(policy: 'order.cancel', before: 'validation')] public function handle(...): void {}`
+
+- [ ] **Step 5: TDD AuthorizeBeforeValidationRule**
+
+### Rule 6: `UnguardedExternalSideEffectRule`
+
+- **Hook:** `Psalm\Plugin\EventHandler\AfterMethodCallAnalysisInterface`
+- **AST node inspected:** `Expr\MethodCall` whose callee class matches a configurable allow-list (e.g., `Mailer`, `HttpClient`, `PaymentGateway`) and whose enclosing method is a command handler
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\UnguardedExternalSideEffect`
+- **Emitted message (warning, not error):** `"Handler %s::%s calls external side-effect API %s::%s but the command class %s has no #[IdempotencyKey] attribute. Consider adding one to make redelivery safe."`
+- **Fixture pair:**
+  - Triggering: handler calls `Mailer::send()`, command has no `#[IdempotencyKey]`
+  - Clean: same handler, command has `#[IdempotencyKey(field: 'requestId')]`
+
+- [ ] **Step 6: TDD UnguardedExternalSideEffectRule**
+
+### Rule 7: `MiddlewareOrderingRule`
+
+- **Hook:** `Psalm\Plugin\EventHandler\AfterFunctionLikeAnalysisInterface` (or `AfterMethodCallAnalysisInterface` — depends on adopter API shape; pick at execution time)
+- **AST node inspected:** calls to a hypothetical `MiddlewarePipelineBuilder::add(stage: '...')` or similar; or simply scans `#[Authorize(before: '...')]` (overlaps with Rule 5 — keep distinct concerns)
+- **Issue class:** `Monadial\Nexus\Psalm\Issue\Bus\MiddlewareStageUnknown`
+- **Emitted message:** `"Stage name '%s' does not match any case of PipelineStage. Valid stages: [%s]."`
+- **Fixture pair:**
+  - Triggering: adopter middleware tagged with `before: 'validashion'`
+  - Clean: tagged with `before: 'validation'`
+
+- [ ] **Step 7: TDD MiddlewareOrderingRule**
 
 - [ ] **Step 8: Register all 7 rules in `Plugin.php`**
 
 - [ ] **Step 9: Run plugin testsuite; all rules pass**
-- [ ] **Step 10: Commit each rule as its own commit (per existing nexus-psalm convention — see Phase-5b in messaging plan)**
+
+- [ ] **Step 10: Commit each rule as its own commit (per messaging plugin convention)**
 
 ```bash
 git commit -m "feat(psalm): CommandHandlerReturnTypeRule (void return required for command handlers)"
-# … 6 more commits, one per rule
 ```
 
 ---
 
-## Phase 18 — Fitness tests
+## Phase 17 — Fitness tests (Phase 18 of v1; renumbered)
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/tests/Unit/Fitness/PackageDependencyFitnessTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Fitness/ForbiddenImportsFitnessTest.php`
 - Create: `packages/nexus-ddd-bus/tests/Unit/Fitness/AbstractClassReadonlyOrFinalFitnessTest.php`
 
-`PackageDependencyFitnessTest` walks `src/` and asserts no `use` statements outside the allowed set: `fp4php/functional`, `nexus-actors/ddd-core`, `nexus-actors/ddd-messaging`, `psr/log`, `psr/event-dispatcher`, `psr/clock`, `psr/container`, internal bus package. Specifically forbids: `nexus-actors/ddd-aggregate`, `nexus-persistence*`, `Symfony\*`, `Doctrine\*`, `Monolog\*`.
+`PackageDependencyFitnessTest` walks `src/`, asserts no `use` statements outside the allowed set: `fp4php/functional`, `nexus-actors/ddd-core`, `nexus-actors/ddd-messaging`, `psr/log`, `psr/event-dispatcher`, `psr/clock`, `psr/container`, internal bus package. Forbids `nexus-actors/ddd-aggregate`, `nexus-persistence*`, `Symfony\*`, `Doctrine\*`, `Monolog\*`.
 
-`ForbiddenImportsFitnessTest` mirrors the aggregate package's fitness test.
+`ForbiddenImportsFitnessTest` mirrors aggregate package's fitness test.
 
 `AbstractClassReadonlyOrFinalFitnessTest` verifies all classes in `src/` are either `abstract` or `final`.
 
@@ -2954,38 +3543,42 @@ git commit -m "test(ddd-bus): fitness functions (package deps, forbidden imports
 
 ---
 
-## Phase 19 — Documentation pass
+## Phase 18 — Documentation pass (Phase 19 of v1; renumbered)
 
 **Files:**
 - Create: `packages/nexus-ddd-bus/README.md`
-- Verify: every public `interface` and `class` has a `@psalm-api` docblock with a 2-paragraph description.
+- Verify: every public `interface` / `class` has a `@psalm-api` docblock with a 2-paragraph description.
 
 The README MUST:
-- Reference §25.6 known limitations (causation-chain integrity across writer-id changes; snapshot-vs-event-store transactional divergence — though those are aggregate-side, the bus README mentions the cross-package implication).
-- Reference §11.2 / Q8 — the `InProcessSameDbMiddleware` is best-effort runtime-fence; static analysis is the primary line.
-- Document the **sync-confirmation cookbook** (per umbrella spec §8.6.1): under `SyncCommandBus`, the controller can `dispatch(PlaceOrder)` then `queryBus->ask(GetOrderById($id))` and read the new state because the read goes through the same DB connection. Document this as the recommended pattern for sync-profile UX flows.
-- Document the **handler-may-read-MessageContext** rule (per umbrella spec §7.3): handlers are application services; they MAY read `MessageContextStack::current()` for diagnostics. Aggregates / VOs / specs / policies MAY NOT (the `DomainContextLeakRule` Psalm rule, deferred, enforces this at static analysis time).
+- Reference §25.6 known limitations (causation-chain integrity across writer-id changes; snapshot-vs-event-store transactional divergence — though those are aggregate-side, the bus README mentions cross-package implications).
+- Reference §11.2 — the `InProcessSameDbBootValidator` is boot-time; runtime introspection deferred to aggregate package.
+- Document the **sync-confirmation cookbook** (per umbrella spec §8.6.1).
+- Document the **handler-may-read-MessageContext** rule (per umbrella spec §7.3).
+- Document `BusInvariantException` propagation: adopters wrap composition-root code in `try/catch (BusBootException)` to handle boot-time misconfiguration; controllers see runtime exceptions via `Either::left` from `tryDispatch`.
+- Document the **Sensitive payload-redaction policy** (per panel M5): `#[Sensitive]` on properties; default-deny payload-at-DEBUG.
+- Document the **HTTP-header bridge for idempotency-key**: adapter packages (e.g., nexus-ddd-symfony) populate `MessageMetadata::$headers['nexus.idempotency-key']` from the `X-Nexus-Idempotency-Key` HTTP header.
 - Document the **out-of-scope deferrals** clearly:
   - `AsyncCommandBus`/`AsyncEventBus` → `nexus-ddd-async` (P3)
   - `ActorCommandBus` → `nexus-ddd-actor` (P4)
-  - `OutboxEventBus` (DB-backed outbox + relay) → `nexus-ddd-outbox` (P3) per §11
+  - `OutboxEventBus` → `nexus-ddd-outbox` (P3)
   - DB-backed `IdempotencyStore` impl → `nexus-ddd-bus-idempotency-doctrine`
   - Symfony bundle integration → `nexus-ddd-symfony` (P4)
-  - OpenTelemetry SDK adapter → `nexus-ddd-otel-adapter` (the bus ships only the no-op slot)
-  - SELECT FOR UPDATE SKIP LOCKED outbox locking discipline → `nexus-ddd-outbox` (per umbrella spec §11.4)
+  - OpenTelemetry SDK adapter → `nexus-ddd-otel-adapter`
+  - SELECT FOR UPDATE SKIP LOCKED outbox locking discipline → `nexus-ddd-outbox`
   - PM compensation / `CommandEmissionFailed` system event → `nexus-ddd-process-manager` (P2)
+  - `bin/ddd` shell shim → `nexus-ddd-cli` (TBD)
 
 - [ ] **Step 1: Write README**
 - [ ] **Step 2: Docblock sweep**
 - [ ] **Step 3: Commit**
 
 ```bash
-git commit -m "docs(ddd-bus): README + class docblock pass; sync-confirmation cookbook + handler-may-read-MessageContext + clear deferrals"
+git commit -m "docs(ddd-bus): README + class docblock pass; sync-confirmation cookbook + handler-may-read-MessageContext + Sensitive redaction + HTTP-header bridge + clear deferrals"
 ```
 
 ---
 
-## Phase 20 — Final CI sweep + PR
+## Phase 19 — Final CI sweep + PR (Phase 20 of v1; renumbered)
 
 - [ ] **Step 1: Full pipeline**
 
@@ -3001,7 +3594,15 @@ docker compose exec -T php vendor/bin/deptrac
 
 All clean.
 
-- [ ] **Step 2: Push branch + open PR**
+- [ ] **Step 2: Coverage gate (per panel L4)** — assert 90% method-coverage minimum per CLAUDE.md CI pipeline policy.
+
+```bash
+docker compose exec -T php vendor/bin/phpunit --testsuite=unit --coverage-text --coverage-filter=packages/nexus-ddd-bus/src
+```
+
+Confirm method-coverage threshold ≥ 90%.
+
+- [ ] **Step 3: Push branch + open PR**
 
 ```bash
 git push -u origin feat/nexus-ddd-bus
@@ -3010,30 +3611,31 @@ gh pr create --title "feat(ddd): add nexus-ddd-bus package" --body "$(cat <<'BOD
 
 Adds `nexus-ddd-bus` — the central dispatch fabric for the Nexus DDD framework. P0 scope:
 
-- `SyncCommandBus`, `SyncQueryBus`, `SyncEventBus` impls (per umbrella spec §8)
-- Canonical 11-stage middleware pipeline (causation → OTel-noop → logging-start → metrics-start → validation → authorization → idempotency → OCC retry → handler → event-drain → metrics-end → logging-end → span-close), per §8.5.1
-- `BusRegistry` + `CommandRouter` + composite routing (`ExplicitOnly` / `AttributeBased` / `NamespacePattern` / `Composite`), per §8.2
-- `Profile` enum (Sync / Async / Actor) + boot-time profile×routing validation, per §8.2.1
-- All 4 slot interfaces — `Validator`, `AuthorizationDecider`, `IdempotencyStore`, `MetricsCollector` — with default impls (`NoOpMetricsCollector`, `InMemoryIdempotencyStore`)
-- `IdempotencyReservation` value object + two-phase tryReserve / markCompleted / release contract (per §13)
-- 7 attributes — `Validate`, `Authorize`, `OnBus`, `IdempotencyKey`, `Idempotent`, `InProcess`, `CommandHandler`
-- 11 exception classes — `BusException` root + 10 concrete (10 in this PR; `ValidationFailedException` carries `Violations` per §8.5.1.1)
-- `Accepted` typed marker for `tryDispatch()` returns (per §8.6 / Q2)
-- Host-aware OCC retry middleware: under `Profile::Sync`, retries per `BackoffStrategy`; under `Profile::Actor`, wraps `OptimisticLockException` as `ActorWriterInvariantViolation` and lets supervision restart, per Q9
-- `CausationDepthExceededException` + depth-counter middleware (default cap 32) per §8.5.1
-- `BusHeaders` + `BusHeadersStamp` for header-style metadata (drift-resolution: shipped MessageMetadata has no headers map)
-- 7 new Psalm rules in nexus-psalm: `CommandHandlerReturnTypeRule`, `CommandReturnValueIgnoredRule`, `ValidatedCommandReadonlyRule`, `IdempotencyKeyFieldExistsRule`, `AuthorizeBeforeValidationRule`, `UnguardedExternalSideEffectRule`, `MiddlewareOrderingRule`
-- `bin/ddd routes show [<command-class>]` CLI command (per §27.1)
-- Smoke tests covering full pipeline + fitness tests + comprehensive docblocks
+- `SyncCommandBus`, `SyncQueryBus`, `SyncEventBus` impls (per umbrella spec §8) implementing the canonical messaging bus interfaces directly (both `dispatchCommand`/`tryDispatch`, etc. — no Rich* extension since messaging upstream provides both methods on the canonical interface).
+- Canonical 14-stage middleware pipeline (causation → OTel-noop → logging-start → metrics-start → validation → authorization → idempotency-reserve → OCC retry → handler → idempotency-commit → event-drain → metrics-end → logging-end → span-close), per §8.5.1. Idempotency split into Reserve (outer) + Commit (inner) so `markCompleted` runs INSIDE the handler TX.
+- `BusBuilder` + `BusRegistry` + `HandlerAttributeIndex` + `CommandRouter` + composite routing (`ExplicitOnly` / `AttributeBased` / `NamespacePattern` / `Composite`), per §8.2. Per-handler pipeline cache bakes the `#[Authorize(before: 'validation')]` flip at boot.
+- `Profile` enum (Sync / Async / Actor) + boot-time profile×routing validation, per §8.2.1.
+- All 4 slot interfaces — `Validator`, `AuthorizationDecider`, `IdempotencyStore`, `MetricsCollector` — with default impls.
+- `Principal` interface; `Option<Principal>` on validation/authorization contexts (no nullable principal).
+- `IdempotencyReservation` interface + each-store concrete reservation; `tryReserve / markCompleted / release` two-phase contract; `ttl(): Duration` for boot validation.
+- 8 attributes — `Validate`, `Authorize`, `OnBus`, `IdempotencyKey`, `Idempotent`, `InProcess`, `Handler` (renamed from `CommandHandler` to avoid collision with the messaging marker interface), `Sensitive` (payload redaction).
+- 14+ exception classes — `BusException` root + `BusBootException` / `BusRuntimeException` intermediates + `BusInvariantException` + `RetryableFailure` markers. `tryDispatch` propagates `BusInvariantException`; lifts other Throwable to `Either::left`.
+- Host-aware OCC retry middleware: under `Profile::Sync`, retries per `BackoffStrategy`; under `Profile::Actor`, wraps `OptimisticLockException` as `ActorWriterInvariantViolation`. Retry-budget exhaustion emits `ddd.command.retry_exhausted` metric + WARN log + `RetryBudgetExhaustedException`.
+- `CausationDepthExceededException` + depth-counter middleware (default cap 32) reading/writing via `MessageMetadata::$headers` (canonical `Headers` from messaging upstream).
+- Causation chain: emitted events stamp `causationId = sourceCommand.messageId` and depth+1.
+- 7 new Psalm rules in nexus-psalm, each with hook + AST node + Issue class + fixture pair.
+- `RoutesShowCommand` service + `Cli\Command` interface (no shell shim — deferred to `nexus-ddd-cli`).
+- Smoke tests covering full pipeline (incl. perf 10000<50ms) + fitness tests + comprehensive docblocks.
 
-Reuses already-shipped: `CommandBus` / `QueryBus` / `EventBus` / `EnvelopedCommandBus` / `EnvelopedQueryBus` / `EnvelopedEventBus` / `CommandHandler` / `QueryHandler` / `EventListener` / `MessageId` / `MessageMetadata` / `MessageContext` / `MessageContextStack` / `Outbox` / `MessageInbox` / `BackoffStrategy` impls / retry policies / `TerminalFailure` / `TransientFailure` / `Envelope` / `Stamp` from nexus-ddd-messaging. `OptimisticLockException` from nexus-ddd-core. `AggregateRepository` is consumed at runtime by handlers but NOT imported by this package.
+Reuses already-shipped from messaging upstream: `CommandBus` / `QueryBus` / `EventBus` (with `tryDispatch` / `tryAsk` / `tryPublish` on canonical) / `EnvelopedCommandBus` etc. / `Headers` value object on `MessageMetadata` / `Accepted` marker / `MessageInbox::markCompleted` (renamed from `markProcessed`) / `CommandHandler` marker interface / `MessageId` / `MessageMetadata` / `MessageContext` / `MessageContextStack` / `Outbox` / `BackoffStrategy` impls / retry policies / `TerminalFailure` / `TransientFailure` / `Envelope` (uses shipped `with(Stamp): self` and `get(class-string<Stamp>): Option<S>` API). `OptimisticLockException` from nexus-ddd-core. `AggregateRepository` consumed at runtime by handlers but NOT imported.
 
 ## Test plan
 
 - [x] make psalm — clean
-- [x] make test-unit — N tests pass
+- [x] make test-unit — N tests pass; method coverage ≥ 90%
 - [x] phpcs / php-cs-fixer — clean
 - [x] deptrac — no boundary violations
+- [x] Smoke perf — 10000 dispatches in <50ms
 - [ ] Mutation testing (deferred to follow-up PR)
 - [ ] Cross-package integration via nexus-ddd-async (follow-up package)
 
@@ -3046,16 +3648,20 @@ Spec reference: docs/superpowers/specs/2026-05-06-nexus-ddd-umbrella-design.md v
 - `AsyncCommandBus`/`AsyncEventBus` → `nexus-ddd-async` (P3)
 - `ActorCommandBus`/`ActorHost` → `nexus-ddd-actor` (P4)
 - `OutboxEventBus` + DB-backed outbox + relay → `nexus-ddd-outbox` (P3)
-- DB-backed `IdempotencyStore` impl → `nexus-ddd-bus-idempotency-doctrine`
+- DB-backed `IdempotencyStore` → `nexus-ddd-bus-idempotency-doctrine`
 - Symfony bundle integration → `nexus-ddd-symfony` (P4)
 - OpenTelemetry SDK adapter → `nexus-ddd-otel-adapter`
-- `OneAggregatePerCommandMiddleware` (lives in `nexus-ddd-aggregate` — contributed at runtime via DI tag)
+- `bin/ddd` shell shim → `nexus-ddd-cli` (TBD)
+- `OneAggregatePerCommandMiddleware` (lives in `nexus-ddd-aggregate` — contributed at runtime)
 
 ## Drift resolutions reconciled
 
-- v7 spec uses `MessageContext::headers()`; shipped `MessageMetadata` has no headers map. Bus introduces `BusHeaders` carried as `Stamp` on the Envelope. Post-merge follow-up #1 collapses into MessageMetadata.
-- v7 spec adds `tryDispatch()` to `CommandBus`; shipped interface has only `dispatchCommand(): void`. Bus introduces `RichCommandBus extends CommandBus`. Post-merge follow-up #2.
-- `InProcessSameDbMiddleware` is best-effort (registration-time fence; runtime introspection deferred per Q8 implementation note). Static analysis is the primary line.
+The parallel messaging-package upstream landed `Headers` on `MessageMetadata`, `Accepted` marker, `tryDispatch`/`tryAsk`/`tryPublish` on canonical bus interfaces, and `MessageInbox::markCompleted` rename. As a result, the bus package SHEDS several v1 workarounds that are no longer needed:
+
+- v1 `BusHeaders` + `BusHeadersStamp` → DROPPED. Bus consumes `Monadial\Nexus\Ddd\Messaging\Header\Headers` directly via `MessageMetadata::$headers`.
+- v1 `RichCommandBus` / `RichQueryBus` / `RichEventBus` extension interfaces → DROPPED. Bus impls implement canonical messaging interfaces directly.
+- v1 `Accepted` defined here → DROPPED. Re-exported from messaging.
+- v1 `InProcessSameDbMiddleware` runtime no-op → DROPPED. Replaced by `InProcessSameDbBootValidator` (boot-time only).
 BODY
 )"
 ```
@@ -3067,58 +3673,73 @@ BODY
 Before considering the plan complete, verify:
 
 - [ ] Every public class in the file structure has a Phase that produces it.
-- [ ] Every Phase has TDD ordering (test → fail → impl → pass → commit) with concrete code or detailed outline.
+- [ ] Every Phase has TDD ordering with concrete code or detailed outline.
 - [ ] Cross-references to v7 §8 / §11 / §13 / §19a / §22 / §27.1 are correct.
-- [ ] No type/method-name drift between phases (e.g., `tryDispatch` in Phase 13 matches `RichCommandBus::tryDispatch` in the docblock).
-- [ ] All 11 v7 fixes (Q1–Q11 + sub-items) have a corresponding phase or sub-step:
-  - Q1 (`IdempotencyKeyResolver` reads attribute → `BusHeaders[nexus.idempotency-key]` → `messageId`) → Phase 14
-  - Q2 (`tryDispatch` returns `Either<Throwable, Accepted>`; `Accepted` typed marker) → Phase 3 + Phase 13
-  - Q3 (two-phase IdempotencyStore: `tryReserve` returns `Option<IdempotencyReservation>`) → Phase 7
-  - Q4 (default Validate→Authorize; `#[Authorize(before:)]` flips; `MiddlewareOrderingRule` validates) → Phase 10b + Phase 17
-  - Q5 (Composite routing: explicit → attribute → namespace → default) → Phase 11
-  - Q6 (`Validator::validate()` returns `Violations`, never throws; middleware lifts) → Phase 4 + Phase 10b
-  - Q7 (`#[Authorize(policy:, subject:)]` — string property-name OR callable) → Phase 5 + Phase 8
-  - Q8 (`InProcessSameDbMiddleware` best-effort heuristic; runtime fence deferred) → Phase 10c + Phase 19 docs
-  - Q9 (host-aware OCC retry: Sync retries, Actor wraps as `ActorWriterInvariantViolation`) → Phase 10c
-  - Q10 (`OneAggregatePerCommandMiddleware` lives in aggregate, NOT here; bus ships only `Middleware` interface) → File Structure note + Phase 9
-  - Q11 sub-items mapped:
-    - degradeAsyncToSync → Phase 12
-    - marker-interface canonical → Phase 8 attributes + Phase 19 docs
-    - X-Nexus-Idempotency-Key HTTP header → Phase 14
-    - causation-depth limit → Phase 10a
-    - SELECT FOR UPDATE SKIP LOCKED → out of scope (deferred to outbox package)
-    - sync-route-aware retry budget (5s/60s) → Phase 10c
-    - InProcess+SharedInvocation boot error → Phase 12
-    - bin/ddd routes show → Phase 15
-    - sync-confirmation cookbook → Phase 19 docs
-    - handler-may-read-MessageContext → Phase 19 docs
-    - UnguardedExternalSideEffectRule → Phase 17
-- [ ] Out-of-scope items are clearly marked deferred:
-  - `AsyncCommandBus` / `AsyncEventBus` → `nexus-ddd-async` (P3)
-  - `ActorCommandBus` → `nexus-ddd-actor` (P4)
-  - `OutboxEventBus` (DB-backed outbox + relay) → `nexus-ddd-outbox` (P3)
-  - DB-backed `IdempotencyStore` → `nexus-ddd-bus-idempotency-doctrine`
-  - Symfony bundle → `nexus-ddd-symfony` (P4)
-  - OpenTelemetry SDK adapter → `nexus-ddd-otel-adapter` (bus ships only the no-op slot)
-- [ ] No `add()` method on the bus interface (commands/queries/events only — not aggregate persistence).
-- [ ] `#[CommandHandler]` attribute is created in this package (does not exist in messaging).
-- [ ] `MessageId` is reused from messaging (not redefined here).
-- [ ] `EnvelopedCommandBus` / `EnvelopedQueryBus` / `EnvelopedEventBus` are reused from messaging — `SyncCommandBus` etc. implement them.
-- [ ] Plan reconciles the spec/code drift on `MessageMetadata::headers()` (BusHeaders + BusHeadersStamp).
-- [ ] Plan reconciles the spec/code drift on `tryDispatch()` (RichCommandBus interface in this package).
-- [ ] Phase ordering follows dependency chain (no phase imports types defined later) — Phase 4's `ValidationContext` references `BusHeaders` which arrives in Phase 11 (mitigated: Phase 4 uses `array<string, scalar>`, Phase 11 includes a small migration commit).
-- [ ] Every phase ends with `phpunit --testsuite=unit` passing all current tests.
-- [ ] No GrumPHP overhead on `.md` plan files — the plan is markdown.
-- [ ] Phase 17 ships exactly 7 Psalm rules per the brief; deferred ones are documented.
-- [ ] Phase 18 ships 3 fitness tests, all enforce package boundaries.
-- [ ] Phase 19 README documents the 5 deferral categories.
-- [ ] Phase 20 PR title fits under 70 characters.
-- [ ] No singleton classes in the implementation. `Accepted::instance()` is a stateless cached marker (per CLAUDE.md "named constructors and factories are fine") — if Psalm flags it, fall back to `new Accepted()`.
-- [ ] The plan does NOT introduce `MultiAggregateTransactionException` enforcement (that's bus-middleware's job in `nexus-ddd-aggregate`'s `OneAggregatePerCommandMiddleware`, not this package's responsibility).
-- [ ] All template bounds reconciled: `Either<Throwable, Accepted>` on `tryDispatch`; `Either<Throwable, TResult>` on `tryAsk`.
-- [ ] No use of `?T` in framework signatures except documented exceptions (`Authorize::$subject`, `Authorize::$before`, `ValidationContext::$principal`, `AuthorizationContext::$principal` — all narrow exceptions to the no-`null` rule).
-- [ ] Pre-commit GrumPHP runs in Docker (covered by project's CLAUDE.md).
-- [ ] All `composer.json` constraints match the project's locked versions (PHP 8.5+, fp4php ^6, PHPUnit ^13).
+- [ ] No type/method-name drift between phases.
+
+**Panel findings applied (B1-3, H1-12, CV1-5, M1-8, L1-9):**
+
+- [ ] **B1** — Envelope API: middleware uses `metadata->headers->get(...)` and `withHeaders(...)` per shipped `with(Stamp)/get(class-string<Stamp>)` API; no `withStamp`/`stamp` references.
+- [ ] **B2** — `IdempotencyMiddleware` SPLIT into `IdempotencyReserveMiddleware` (Phase 10c step 2) + `IdempotencyCommitMiddleware` (Phase 10c step 5); `markCompleted` runs INSIDE handler TX.
+- [ ] **B3** — Exception classification: `RetryableFailure` and `TerminalFailure` marker interfaces; Reserve middleware classifies per type.
+- [ ] **H1** — `InProcessSameDbMiddleware` runtime no-op DELETED; replaced by `InProcessSameDbBootValidator` (Phase 12a step 2). The exception class still ships.
+- [ ] **H2** — `RichCommandBus`/`RichQueryBus`/`RichEventBus` extension interfaces DELETED. Bus impls implement canonical messaging interfaces directly with both methods.
+- [ ] **H3** — `BusHeaders` + `BusHeadersStamp` DELETED. Bus consumes `Monadial\Nexus\Ddd\Messaging\Header\Headers` from messaging upstream. `HeaderKeys` constants stay in `Monadial\Nexus\Ddd\Bus\Header\HeaderKeys` (Phase 10a step 1).
+- [ ] **H4** — Per-handler pipeline cache: `HandlerAttributeIndex` (Phase 12a step 1); `BusBuilder` (Phase 12a step 3) bakes `#[Authorize(before: 'validation')]` flip.
+- [ ] **H5** — `BusInvariantException` marker interface (Phase 2 step 3); 5 boot exceptions implement it; `tryDispatch` propagates them (Phase 13 step 1).
+- [ ] **H6** — `IdempotencyReserveMiddleware` profile-aware (Phase 10c step 2): self-disables under `Profile::Sync`.
+- [ ] **H7** — `EventDrainMiddleware` profile-aware (Phase 10c step 6); causation chain stamped on emitted events.
+- [ ] **H8** — `Composite::withStrategy(RoutingStrategy, ?class-string $before)` builder + `validate()` conflict detection (Phase 11 step 6).
+- [ ] **H9** — Templated `Middleware<TIn, TOut>` (Phase 9 step 2).
+- [ ] **H10** — `BusBuilder` promoted to Phase 12a; `BusRegistry` to Phase 12b; `SyncCommandBus` constructor locked to 4 args (`BusRegistry`, `HandlerAttributeIndex`, `MiddlewarePipeline`, `Profile` + clock for envelope creation).
+- [ ] **H11** — Each Psalm rule (Phase 16, 7 rules) ships hook + AST node + Issue class + fixture pair.
+- [ ] **H12** — OCC retry exhaustion observability + IdempotencyStore TTL contract (Phase 7 step 4 ships `ttl()`; Phase 10c step 3 ships metrics + WARN + `RetryBudgetExhaustedException`).
+- [ ] **CV1** — `Accepted::instance()` cached singleton DROPPED upstream (parallel agent); plan uses `new Accepted()`.
+- [ ] **CV2** — `Principal` interface + `Option<Principal>` on validation/authorization contexts; the 2 narrow exceptions (PHP attribute defaults `Authorize::$subject: ?string` and `Authorize::$before: ?string`) documented.
+- [ ] **CV3** — `#[\NoDiscard]` swept; visible in Violations, RoutingResolution, Composite, ExplicitOnly, NamespacePattern, ValidationContext, AuthorizationContext, IdempotencyReservation impl, etc.
+- [ ] **CV4** — `clone($this, [...])` (PHP 8.5 clone-with) used for VO mutators throughout.
+- [ ] **CV5** — Comments-write-less swept: no section dividers, no restating-the-code, no status-of-task in any code block.
+- [ ] **M1** — `IdempotencyReservation` is now an interface (Phase 7 step 2); `InMemoryReservation` concrete (Phase 7 step 3).
+- [ ] **M2** — `BusBootException` and `BusRuntimeException` intermediate abstract classes (Phase 2 step 4).
+- [ ] **M3** — `#[CommandHandler]` attribute renamed to `#[Handler]` (Phase 8 step 7).
+- [ ] **M4** — `bin/ddd` shell shim moved out (Phase 14 of v2 ships only `Cli\Command` + `RoutesShowCommand` service); deferred to `nexus-ddd-cli` (TBD).
+- [ ] **M5** — `#[Sensitive]` attribute (Phase 8 step 8) + `PayloadRedactor` (Phase 10a step 4) + `LoggingMiddleware` default-deny payload-at-DEBUG (Phase 10a step 5).
+- [ ] **M6** — `MetricOutcome` enum (Phase 6 step 1); used by all metric `count` calls.
+- [ ] **M7** — Causation chain through emitted events (Phase 10c step 6 + Phase 15 step 11 smoke test).
+- [ ] **M8** — `NEXUS_BUS_RETRY_BUDGET_MS_SYNC` env var support documented in Phase 10c step 3 + README ops section.
+- [ ] **L1** — `PipelineContext` uses `public private(set)` asymmetric visibility (Phase 9 step 4).
+- [ ] **L2** — `RoutingResolution::$resolvedBy: class-string<RoutingStrategy>` typed (Phase 11 step 2); `displayName(): string`.
+- [ ] **L3** — Phase 14 of v1 (IdempotencyKeyResolver integration) folded into Phase 10c (resolver + middleware + integration in one).
+- [ ] **L4** — Phase 19 step 2 enforces 90% method-coverage gate.
+- [ ] **L5** — `SmokeBenchmarkTest` ships in Phase 15 step 13 (10000 dispatches < 50ms).
+- [ ] **L6** — `IdempotencyHttpHeaderBridgeSmokeTest` in Phase 15 step 10.
+- [ ] **L7** — Sentinel string constants for `Authorize::$subject` documented as option; attribute keeps `?string` per attribute-default rule.
+- [ ] **L8** — Co-Authored-By reminder in Phase 0 conventions.
+- [ ] **L9** — Risk Register section after file structure.
+
+**Out-of-scope items clearly marked deferred:**
+- `AsyncCommandBus` / `AsyncEventBus` → `nexus-ddd-async` (P3)
+- `ActorCommandBus` → `nexus-ddd-actor` (P4)
+- `OutboxEventBus` (DB-backed outbox + relay) → `nexus-ddd-outbox` (P3)
+- DB-backed `IdempotencyStore` → `nexus-ddd-bus-idempotency-doctrine`
+- Symfony bundle → `nexus-ddd-symfony` (P4)
+- OpenTelemetry SDK adapter → `nexus-ddd-otel-adapter`
+- `bin/ddd` shell shim → `nexus-ddd-cli` (TBD)
+
+Other invariants:
+- [ ] No `add()` method on the bus interface.
+- [ ] `#[Handler]` attribute is created in this package (renamed from CommandHandler).
+- [ ] `MessageId` / `MessageMetadata` / `Headers` / `Accepted` reused from messaging.
+- [ ] `EnvelopedCommandBus` / `EnvelopedQueryBus` / `EnvelopedEventBus` reused from messaging.
+- [ ] No singleton classes in implementation. `Accepted` constructed via `new Accepted()`.
+- [ ] Phase 16 ships exactly 7 Psalm rules.
+- [ ] Phase 17 ships 3 fitness tests.
+- [ ] Phase 18 README documents deferral categories.
+- [ ] Phase 19 PR title fits under 70 characters.
+- [ ] No `MultiAggregateTransactionException` enforcement (lives in aggregate package).
+- [ ] All template bounds reconciled.
+- [ ] No `?T` in framework signatures except the documented exceptions (`Authorize::$subject`, `Authorize::$before`, `AccessDeniedException::for(?Principal)`).
+- [ ] Pre-commit GrumPHP runs in Docker.
 
 ---
 
@@ -3126,23 +3747,23 @@ Before considering the plan complete, verify:
 
 After this plan is reviewed:
 
-**1. Subagent-Driven (recommended)** — fresh subagent per phase; two-stage review per phase (spec compliance, then code quality). Best for keeping context clean across the 20 phases.
+**1. Subagent-Driven (recommended)**
 
 ```
 /superpowers:subagent-driven-development docs/superpowers/plans/2026-05-09-nexus-ddd-bus-plan.md
 ```
 
-**2. Inline execution** — execute phases in this session via `superpowers:executing-plans`.
+**2. Inline execution**
 
 ```
 /superpowers:executing-plans docs/superpowers/plans/2026-05-09-nexus-ddd-bus-plan.md
 ```
 
 The plan has been validated against:
-- The aggregate plan's structure (Phase 0 → Phase 20 mirrors aggregate's 0 → 16 with 4 extra phases for the broader bus surface).
-- The umbrella spec v7 (latest revision in commit `37f6832f`).
-- The shipped code in `packages/nexus-ddd-messaging/src/` (verified at planning time — `MessageMetadata` has no `headers()`, `CommandBus` has only `dispatchCommand(): void`).
-- The shipped Psalm plugin structure in `packages/nexus-psalm/src/Hook/{Aggregate,Messaging}/` — new bus rules live in a parallel `Bus/` subdirectory.
-- The shipped deptrac layer structure — new `DddBus` layer is added; allowed deps: `DddCore`, `DddMessaging`.
+- The aggregate plan's structure (`docs/superpowers/plans/2026-05-08-nexus-ddd-aggregate-plan.md`).
+- The umbrella spec v7.
+- The shipped messaging-package code (post-parallel-agent: `Headers` on `MessageMetadata`, `Accepted` marker, `tryDispatch` on `CommandBus`, `MessageInbox::markCompleted`).
+- The shipped Psalm plugin structure.
+- The shipped deptrac layer structure.
 
-For follow-up packages (`nexus-ddd-async`, `nexus-ddd-actor`, `nexus-ddd-outbox`, `nexus-ddd-bus-idempotency-doctrine`), refer to the umbrella spec v7 §11 + §12 + §16 + §26 + this plan's "Out of scope" list.
+For follow-up packages, refer to the umbrella spec v7 §11 + §12 + §16 + §26 + this plan's "Out of scope" list.
