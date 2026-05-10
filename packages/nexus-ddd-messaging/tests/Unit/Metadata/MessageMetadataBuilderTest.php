@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Ddd\Messaging\Tests\Unit\Metadata;
 use DateTimeImmutable;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
+use Monadial\Nexus\Ddd\Messaging\Header\Headers;
 use Monadial\Nexus\Ddd\Messaging\Identity\NodeId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -81,15 +82,48 @@ final class MessageMetadataBuilderTest extends TestCase
         self::assertSame(42, $updated->schemaVersion);
     }
 
+    #[Test]
+    public function rootMetadataDefaultsHeadersToEmpty(): void
+    {
+        self::assertSame([], $this->base->headers->values);
+    }
+
+    #[Test]
+    public function withHeadersReturnsNewInstance(): void
+    {
+        $headers = Headers::of(['nexus.idempotency-key' => 'k1']);
+
+        $updated = $this->base->withHeaders($headers);
+
+        self::assertNotSame($this->base, $updated);
+        self::assertSame([], $this->base->headers->values);
+        self::assertSame('k1', $updated->headers->get('nexus.idempotency-key')->get());
+        self::assertSame($this->base->id, $updated->id);
+    }
+
+    #[Test]
+    public function withHeadersRoundTripsViaCloneWith(): void
+    {
+        $headers = Headers::of(['nexus.principal-id' => 'u-1', 'nexus.retry.budget_remaining_ms' => 1000]);
+
+        $updated = $this->base->withHeaders($headers);
+
+        self::assertSame('u-1', $updated->headers->get('nexus.principal-id')->get());
+        self::assertSame(1000, $updated->headers->get('nexus.retry.budget_remaining_ms')->get());
+        self::assertSame($this->base->occurredAt, $updated->occurredAt);
+        self::assertSame($this->base->schemaVersion, $updated->schemaVersion);
+    }
+
     protected function setUp(): void
     {
         $now = new DateTimeImmutable('2026-05-07T10:00:00+00:00');
         $clock = new class ($now) implements ClockInterface {
             public function __construct(private DateTimeImmutable $now) {}
 
-            public function now(): DateTimeImmutable {
-return $this->now;
- }
+            public function now(): DateTimeImmutable
+            {
+                return $this->now;
+            }
         };
 
         $this->base = MessageMetadata::root($clock);

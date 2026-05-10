@@ -9,6 +9,7 @@ use Fp\Functional\Option\Option;
 use Monadial\Duration\FiniteDuration;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClock;
 use Monadial\Nexus\Ddd\Messaging\Clock\VectorClockOrdering;
+use Monadial\Nexus\Ddd\Messaging\Header\Headers;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use NoDiscard;
 use Psr\Clock\ClockInterface;
@@ -57,6 +58,7 @@ final readonly class MessageMetadata
         public Option $traceState,
         public Option $expiresAt,
         public Option $vectorClock,
+        public Headers $headers = new Headers([]),
     ) {}
 
     /**
@@ -115,6 +117,16 @@ final readonly class MessageMetadata
     public function withSchemaVersion(int $schemaVersion): self
     {
         return clone($this, ['schemaVersion' => $schemaVersion]);
+    }
+
+    /**
+     * Replace the cross-cutting header bag outright. Use `Headers::merge`
+     * upstream if appending to the existing bag is the goal.
+     */
+    #[NoDiscard('withHeaders() returns a new instance — the original is unchanged')]
+    public function withHeaders(Headers $headers): self
+    {
+        return clone($this, ['headers' => $headers]);
     }
 
     /**
