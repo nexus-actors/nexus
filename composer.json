@@ -11,6 +11,7 @@
         "doctrine/orm": "^3.0",
         "fp4php/functional": "^6.0",
         "monadial/php-duration": "^1.0",
+        "nette/php-generator": "^4.1",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",

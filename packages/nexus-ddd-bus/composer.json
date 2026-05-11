@@ -6,6 +6,7 @@
     "require": {
         "php": ">=8.5",
         "fp4php/functional": "^6.0",
+        "nette/php-generator": "^4.1",
         "nexus-actors/ddd-core": "dev-main",
         "nexus-actors/ddd-messaging": "dev-main",
         "psr/clock": "^1.0",
