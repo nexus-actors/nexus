@@ -41,6 +41,7 @@ This revision consumes the parallel `nexus-ddd-messaging` upstream work that lan
 - H11 — Each Psalm rule ships with hook-interface + AST node + Issue class + fixture pair (full shape per messaging plugin reference).
 - H12 — `OccRetryMiddleware` on retry-budget exhaustion: `MetricsCollector::count('ddd.command.retry_exhausted', ...)` + PSR-3 WARN BEFORE re-throw. `IdempotencyStore::ttl(): Duration` interface contract; bus boot validates TTL ≥ max retry budget.
 - H13 — `BusBuilder::withMiddleware(Middleware $m, ?PipelineStage $before = null)` for adopter / package middleware extension. Custom middleware inserts immediately before the named canonical stage; `before === null` appends after the last canonical stage. Multiple registrations targeting the same insertion point preserve registration order. `BusBuildResult::$customMiddlewares` carries the accumulated registrations so downstream pipeline assembly (Phase 13's bus constructors) can splice them into the canonical 14-stage list. Surfaced during Phase 9 design review — `PipelineStage` is intentionally a locked enum (PHP enums can't be extended from outside), so adopters need a declarative way to contribute custom middleware. `nexus-ddd-aggregate`'s `OneAggregatePerCommandMiddleware` is the canonical consumer.
+- H14 — `BusBuilder::dumpCompiledTo()` / `loadCompiledFrom()` + `CompiledBusBootSnapshot` / `CompiledHandlerEntry` value objects + `RoutesCompileCommand` (`ddd:routes:compile`) Symfony Console command. **Adopter directive surfaced post-Phase-16.** Reflection runs once at deploy time; runtime boot reads an opcache-friendly PHP file. The compile path is opt-in — adopters that don't compile keep using `build()` at boot (with full reflection cost). The snapshot is `return new CompiledBusBootSnapshot(...)`; opcache parses + caches the AST once, subsequent loads are near-zero-cost. Custom middleware splices (H13) are NOT serialized — they are still wired at runtime via `withMiddleware()` before `loadCompiledFrom()`.
 
 **CLAUDE.md compliance (CV1–CV5):**
 - CV1 — `Accepted::instance()` cached singleton DROPPED upstream; this package uses `new Accepted()` directly.
@@ -131,8 +132,10 @@ packages/nexus-ddd-bus/
 │   │   └── SpanCloseMiddleware.php                    # stage 14
 │   ├── Routing/
 │   │   ├── BusRegistry.php                            # name → bus impl
-│   │   ├── BusBuilder.php                             # builder; reflection cache; profile×strategy boot validation; withMiddleware(...) splice registrations
+│   │   ├── BusBuilder.php                             # builder; reflection cache; profile×strategy boot validation; withMiddleware(...) splice registrations; dumpCompiledTo/loadCompiledFrom (H14)
 │   │   ├── BusBuildResult.php                         # immutable carrier: HandlerAttributeIndex + handlerMap + customMiddlewares
+│   │   ├── CompiledBusBootSnapshot.php                # opcache-friendly snapshot value object (H14)
+│   │   ├── CompiledHandlerEntry.php                   # serializable equivalent of ResolvedAttributesEntry (H14)
 │   │   ├── CustomMiddlewareRegistration.php           # splice record (Middleware + optional ?PipelineStage $before)
 │   │   ├── HandlerAttributeIndex.php                  # cached handler-class → ResolvedPipeline
 │   │   ├── ResolvedAttributesEntry.php                # per-handler resolved attribute set + flip flags
@@ -199,7 +202,8 @@ packages/nexus-ddd-bus/
 │   │   ├── ActorWriterInvariantViolation.php          # extends BusRuntimeException; implements TerminalFailure
 │   │   └── RetryBudgetExhaustedException.php          # extends BusRuntimeException; implements RetryableFailure (caller may retry at higher level)
 │   ├── Cli/
-│   │   └── RoutesShowCommand.php                      # extends Symfony\Component\Console\Command\Command (#[AsCommand(name: 'ddd:routes:show')])
+│   │   ├── RoutesShowCommand.php                      # extends Symfony\Component\Console\Command\Command (#[AsCommand(name: 'ddd:routes:show')])
+│   │   └── RoutesCompileCommand.php                   # extends Symfony Command; runs reflection + writes snapshot (H14)
 │   └── Internal/
 │       └── Pipeline/
 │           └── PipelineContext.php                    # final class — short-lived per-dispatch scratchpad
@@ -3762,6 +3766,7 @@ Before considering the plan complete, verify:
 - [ ] **H11** — Each Psalm rule (Phase 16, 7 rules) ships hook + AST node + Issue class + fixture pair.
 - [ ] **H12** — OCC retry exhaustion observability + IdempotencyStore TTL contract (Phase 7 step 4 ships `ttl()`; Phase 10c step 3 ships metrics + WARN + `RetryBudgetExhaustedException`).
 - [ ] **H13** — `BusBuilder::withMiddleware(Middleware, ?PipelineStage $before)` adopter extension (Phase 12a step 3); `CustomMiddlewareRegistration` + `BusBuildResult::$customMiddlewares` carry registrations to Phase 13's pipeline assembler.
+- [ ] **H14** — `BusBuilder::dumpCompiledTo()` / `loadCompiledFrom()` + `RoutesCompileCommand`; reflection runs once at deploy time, runtime loads opcache-friendly PHP.
 - [ ] **CV1** — `Accepted::instance()` cached singleton DROPPED upstream (parallel agent); plan uses `new Accepted()`.
 - [ ] **CV2** — `Principal` interface + `Option<Principal>` on validation/authorization contexts; the 2 narrow exceptions (PHP attribute defaults `Authorize::$subject: ?string` and `Authorize::$before: ?string`) documented.
 - [ ] **CV3** — `#[\NoDiscard]` swept; visible in Violations, RoutingResolution, Composite, ExplicitOnly, NamespacePattern, ValidationContext, AuthorizationContext, IdempotencyReservation impl, etc.
