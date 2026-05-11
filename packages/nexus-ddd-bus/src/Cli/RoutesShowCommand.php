@@ -28,10 +28,8 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'ddd:routes:show', description: 'Show the configured bus routes')]
 final class RoutesShowCommand extends Command
 {
-    public function __construct(
-        private readonly BusRegistry $registry,
-        private readonly RoutingStrategy $strategy,
-    ) {
+    public function __construct(private readonly BusRegistry $registry, private readonly RoutingStrategy $strategy)
+    {
         parent::__construct();
     }
 
