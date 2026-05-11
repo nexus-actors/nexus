@@ -53,7 +53,7 @@ This revision consumes the parallel `nexus-ddd-messaging` upstream work that lan
 - M1 — `IdempotencyReservation` becomes interface (`handlerClass(): string`, `idempotencyKey(): string`); each store ships its own concrete (`InMemoryReservation`).
 - M2 — `BusBootException` and `BusRuntimeException` intermediate abstract classes for adopter `try/catch` ergonomics.
 - M3 — `#[CommandHandler]` attribute renamed to `#[Handler]` (avoids collision with the `Monadial\Nexus\Ddd\Messaging\Handler\CommandHandler` marker interface).
-- M4 — `bin/ddd` shell shim DEFERRED to `nexus-ddd-cli` (TBD); this package ships only the `Cli\Command` interface + `RoutesShowCommand` service.
+- M4 — **REVISED post-Phase-14 per user directive** — bus package consumes `symfony/console` directly. `RoutesShowCommand` extends `Symfony\Component\Console\Command\Command` and carries `#[AsCommand(name: 'ddd:routes:show', ...)]`. The custom `Cli\Command` interface from the original M4 is DROPPED. The `bin/ddd` shell shim itself still ships in the adapter package (`nexus-ddd-cli` TBD or app-level wiring) since each adopter integrates Symfony Console differently (own Application, own DI), but the canonical Command class lives here so adopters import + register without ceremony.
 - M5 — `#[Sensitive]` attribute + `LoggingMiddleware` redaction; default-deny payload-at-DEBUG.
 - M6 — `MetricOutcome` enum; all metric `count` calls use it.
 - M7 — Causation chain through emitted events (`EventDrainMiddleware` stamps emitted-event metadata with parent `causationId` and depth+1).
@@ -199,8 +199,7 @@ packages/nexus-ddd-bus/
 │   │   ├── ActorWriterInvariantViolation.php          # extends BusRuntimeException; implements TerminalFailure
 │   │   └── RetryBudgetExhaustedException.php          # extends BusRuntimeException; implements RetryableFailure (caller may retry at higher level)
 │   ├── Cli/
-│   │   ├── Command.php                                # interface (run(array $args): string)
-│   │   └── RoutesShowCommand.php                      # service; not a shell shim
+│   │   └── RoutesShowCommand.php                      # extends Symfony\Component\Console\Command\Command (#[AsCommand(name: 'ddd:routes:show')])
 │   └── Internal/
 │       └── Pipeline/
 │           └── PipelineContext.php                    # final class — short-lived per-dispatch scratchpad
@@ -3339,31 +3338,12 @@ git commit -m "feat(ddd-bus): SyncCommandBus (implements canonical messaging\Com
 (Phase 14 of v1 — `IdempotencyKeyResolver` integration — was folded into Phase 10c per panel L3. This is the renumbered phase.)
 
 **Files:**
-- Create: `packages/nexus-ddd-bus/src/Cli/Command.php` (interface)
-- Create: `packages/nexus-ddd-bus/src/Cli/RoutesShowCommand.php`
-- Tests
+- Create: `packages/nexus-ddd-bus/src/Cli/RoutesShowCommand.php` (extends `Symfony\Component\Console\Command\Command`)
+- Tests using `Symfony\Component\Console\Tester\CommandTester`
 
-**Lock M4:** the `bin/ddd` shell shim moves to `nexus-ddd-cli` (TBD) or `nexus-app` adapter packages. This package ships ONLY the service. No `bin/` directory. No symfony/console dep.
+**Lock M4 (REVISED post-Phase-14 per user directive):** the bus package consumes `symfony/console` directly. `RoutesShowCommand` extends Symfony's `Command` and carries `#[AsCommand(name: 'ddd:routes:show', ...)]`. The original "custom `Cli\Command` interface, no symfony/console dep" decision is reversed — adopters get a Symfony-Console-native command they can register against any `Application` instance.
 
-- [ ] **Step 1: TDD `Cli\Command` interface**
-
-```php
-namespace Monadial\Nexus\Ddd\Bus\Cli;
-
-/**
- * @psalm-api
- *
- * Minimal command shape. Adapter packages (nexus-ddd-cli — TBD, or
- * nexus-app) supply the shell shim that wires argv → Command::run.
- */
-interface Command
-{
-    /** @param list<string> $args */
-    public function run(array $args): string;
-}
-```
-
-- [ ] **Step 2: TDD `RoutesShowCommand`**
+- [ ] **Step 1: TDD `RoutesShowCommand` extending Symfony Console**
 
 ```php
 namespace Monadial\Nexus\Ddd\Bus\Cli;
@@ -3371,61 +3351,72 @@ namespace Monadial\Nexus\Ddd\Bus\Cli;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
 use Monadial\Nexus\Ddd\Bus\Routing\RoutingStrategy;
 use Override;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
-/**
- * @psalm-api
- *
- * Service shape for the routes-show CLI subcommand. The runner package
- * (nexus-ddd-cli — TBD) supplies the argv parser and the shell shim;
- * this package ships only the service.
- */
-final class RoutesShowCommand implements Command
+#[AsCommand(name: 'ddd:routes:show', description: 'Show the configured bus routes')]
+final class RoutesShowCommand extends Command
 {
     public function __construct(
         private readonly BusRegistry $registry,
         private readonly RoutingStrategy $strategy,
-    ) {}
+    ) {
+        parent::__construct();
+    }
 
     #[Override]
-    public function run(array $args): string
+    protected function configure(): void
     {
-        if ($args === []) {
-            return $this->renderAll();
-        }
-
-        return $this->renderOne($args[0]);
-    }
-
-    private function renderAll(): string
-    {
-        $output = "Registered command buses:\n";
-
-        foreach ($this->registry->commandNames() as $name) {
-            $output .= sprintf("  %s\n", $name);
-        }
-
-        return $output;
-    }
-
-    private function renderOne(string $messageClass): string
-    {
-        $resolution = $this->strategy->resolve($messageClass)->get();
-
-        return sprintf(
-            "%s → bus `%s` (resolved by %s)\n",
-            $messageClass,
-            $resolution->busName,
-            $resolution->displayName(),
+        $this->addArgument(
+            'message-class',
+            InputArgument::OPTIONAL,
+            'Fully-qualified message class name to resolve. Omit to list all registered command buses.',
         );
     }
+
+    #[Override]
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        $rawArgument = $input->getArgument('message-class');
+
+        if ($rawArgument === null) {
+            $this->renderAll($output);
+
+            return self::SUCCESS;
+        }
+
+        /** @var class-string $messageClass */
+        $messageClass = $rawArgument;
+        $this->renderOne($output, $messageClass);
+
+        return self::SUCCESS;
+    }
+
+    private function renderAll(OutputInterface $output): void { /* ... */ }
+
+    /** @param class-string $messageClass */
+    private function renderOne(OutputInterface $output, string $messageClass): void { /* ... */ }
 }
+```
+
+- [ ] **Step 2: TDD with `CommandTester`**
+
+```php
+use Symfony\Component\Console\Tester\CommandTester;
+
+$tester = new CommandTester(new RoutesShowCommand($registry, $strategy));
+$tester->execute(['message-class' => 'App\\PlaceOrder']);
+self::assertStringContainsString('bus `orders`', $tester->getDisplay());
 ```
 
 - [ ] **Step 3: Run tests + Psalm + PHPCS clean**
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): Cli\\Command interface + RoutesShowCommand service (no shell shim — bin/ddd deferred to nexus-ddd-cli adapter package)"
+git commit -m "feat(ddd-bus): RoutesShowCommand extends Symfony Console Command (#[AsCommand(name: 'ddd:routes:show')]) — per user directive, custom Cli\\Command interface dropped, symfony/console added to require"
 ```
 
 ---
@@ -3700,7 +3691,7 @@ Adds `nexus-ddd-bus` — the central dispatch fabric for the Nexus DDD framework
 - `CausationDepthExceededException` + depth-counter middleware (default cap 32) reading/writing via `MessageMetadata::$headers` (canonical `Headers` from messaging upstream).
 - Causation chain: emitted events stamp `causationId = sourceCommand.messageId` and depth+1.
 - 7 new Psalm rules in nexus-psalm, each with hook + AST node + Issue class + fixture pair.
-- `RoutesShowCommand` service + `Cli\Command` interface (no shell shim — deferred to `nexus-ddd-cli`).
+- `RoutesShowCommand` Symfony Console command (extends `Symfony\Component\Console\Command\Command`; `#[AsCommand(name: 'ddd:routes:show')]`). Custom `Cli\Command` interface dropped per user directive; `symfony/console` added to require.
 - Smoke tests covering full pipeline (incl. perf 10000<50ms) + fitness tests + comprehensive docblocks.
 
 Reuses already-shipped from messaging upstream: `CommandBus` / `QueryBus` / `EventBus` (with `tryDispatch` / `tryAsk` / `tryPublish` on canonical) / `EnvelopedCommandBus` etc. / `Headers` value object on `MessageMetadata` / `Accepted` marker / `MessageInbox::markCompleted` (renamed from `markProcessed`) / `CommandHandler` marker interface / `MessageId` / `MessageMetadata` / `MessageContext` / `MessageContextStack` / `Outbox` / `BackoffStrategy` impls / retry policies / `TerminalFailure` / `TransientFailure` / `Envelope` (uses shipped `with(Stamp): self` and `get(class-string<Stamp>): Option<S>` API). `OptimisticLockException` from nexus-ddd-core. `AggregateRepository` consumed at runtime by handlers but NOT imported.

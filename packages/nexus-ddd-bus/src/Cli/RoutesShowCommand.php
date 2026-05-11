@@ -7,53 +7,82 @@ namespace Monadial\Nexus\Ddd\Bus\Cli;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
 use Monadial\Nexus\Ddd\Bus\Routing\RoutingStrategy;
 use Override;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * @psalm-api
  *
- * Service shape for the routes-show CLI subcommand. The runner package
- * (nexus-ddd-cli — TBD) supplies the argv parser and the shell shim;
- * this package ships only the service.
+ * Symfony console command that prints the configured bus routes. Adopters
+ * register an instance with their application's Symfony Console
+ * Application (or the nexus-ddd-cli adapter package, when it lands).
+ *
+ * Two modes:
+ *   - `ddd:routes:show`                  — list every registered command bus name.
+ *   - `ddd:routes:show App\PlaceOrder`   — resolve the named message class to its
+ *                                          bus + show which routing strategy resolved it.
  */
-final class RoutesShowCommand implements Command
+#[AsCommand(name: 'ddd:routes:show', description: 'Show the configured bus routes')]
+final class RoutesShowCommand extends Command
 {
-    public function __construct(private readonly BusRegistry $registry, private readonly RoutingStrategy $strategy) {}
+    public function __construct(
+        private readonly BusRegistry $registry,
+        private readonly RoutingStrategy $strategy,
+    ) {
+        parent::__construct();
+    }
 
-    /** @param list<string> $args */
     #[Override]
-    public function run(array $args): string
+    protected function configure(): void
     {
-        if ($args === []) {
-            return $this->renderAll();
+        $this->addArgument(
+            'message-class',
+            InputArgument::OPTIONAL,
+            'Fully-qualified message class name to resolve. Omit to list all registered command buses.',
+        );
+    }
+
+    #[Override]
+    protected function execute(InputInterface $input, OutputInterface $output): int
+    {
+        /** @var string|null $rawArgument */
+        $rawArgument = $input->getArgument('message-class');
+
+        if ($rawArgument === null) {
+            $this->renderAll($output);
+
+            return self::SUCCESS;
         }
 
         /** @var class-string $messageClass */
-        $messageClass = $args[0];
+        $messageClass = $rawArgument;
+        $this->renderOne($output, $messageClass);
 
-        return $this->renderOne($messageClass);
+        return self::SUCCESS;
     }
 
-    private function renderAll(): string
+    private function renderAll(OutputInterface $output): void
     {
-        $output = "Registered command buses:\n";
+        $output->writeln('Registered command buses:');
 
         foreach ($this->registry->commandNames() as $name) {
-            $output .= sprintf("  %s\n", $name);
+            $output->writeln(sprintf('  %s', $name));
         }
-
-        return $output;
     }
 
     /** @param class-string $messageClass */
-    private function renderOne(string $messageClass): string
+    private function renderOne(OutputInterface $output, string $messageClass): void
     {
         $resolution = $this->strategy->resolve($messageClass)->getUnsafe();
 
-        return sprintf(
-            "%s → bus `%s` (resolved by %s)\n",
+        $output->writeln(sprintf(
+            '%s → bus `%s` (resolved by %s)',
             $messageClass,
             $resolution->busName,
             $resolution->displayName(),
-        );
+        ));
     }
 }

@@ -17,6 +17,8 @@ use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Console\Command\Command as SymfonyCommand;
+use Symfony\Component\Console\Tester\CommandTester;
 
 #[CoversClass(RoutesShowCommand::class)]
 final class RoutesShowCommandTest extends TestCase
@@ -31,36 +33,54 @@ final class RoutesShowCommandTest extends TestCase
             [],
         );
         $strategy = new ExplicitOnly();
-        $command = new RoutesShowCommand($registry, $strategy);
+        $tester = new CommandTester(new RoutesShowCommand($registry, $strategy));
 
-        $output = $command->run([]);
+        $exitCode = $tester->execute([]);
+        $output = $tester->getDisplay();
 
+        self::assertSame(SymfonyCommand::SUCCESS, $exitCode);
         self::assertStringContainsString('Registered command buses:', $output);
         self::assertStringContainsString('orders', $output);
         self::assertStringContainsString('payments', $output);
     }
 
     #[Test]
-    public function nonEmptyArgsRendersTheResolvedRoute(): void
+    public function namedClassRendersTheResolvedRoute(): void
     {
         $registry = new BusRegistry(Profile::Sync, ['orders' => new FakeCommandBus()], [], []);
         $strategy = new Composite([
-            new ExplicitOnly()->explicit('App\\PlaceOrder', 'orders'),
+            (new ExplicitOnly())->explicit('App\\PlaceOrder', 'orders'),
         ], 'orders');
-        $command = new RoutesShowCommand($registry, $strategy);
+        $tester = new CommandTester(new RoutesShowCommand($registry, $strategy));
 
-        $output = $command->run(['App\\PlaceOrder']);
+        $exitCode = $tester->execute(['message-class' => 'App\\PlaceOrder']);
+        $output = $tester->getDisplay();
 
+        self::assertSame(SymfonyCommand::SUCCESS, $exitCode);
         self::assertStringContainsString('App\\PlaceOrder', $output);
         self::assertStringContainsString('bus `orders`', $output);
         self::assertStringContainsString('ExplicitOnly', $output);
+    }
+
+    #[Test]
+    public function carriesSymfonyAsCommandName(): void
+    {
+        $command = new RoutesShowCommand(
+            new BusRegistry(Profile::Sync, [], [], []),
+            new ExplicitOnly(),
+        );
+
+        self::assertSame('ddd:routes:show', $command->getName());
     }
 }
 
 final class FakeCommandBus implements CommandBus
 {
     #[Override]
-    public function dispatchCommand(Command $command): void {}
+    public function dispatchCommand(Command $command): void
+    {
+        // intentional no-op — fixture used only for routing-resolution tests.
+    }
 
     #[Override]
     public function tryDispatch(Command $command): Either
