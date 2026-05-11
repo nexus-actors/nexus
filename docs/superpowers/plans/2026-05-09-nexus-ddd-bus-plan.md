@@ -40,6 +40,7 @@ This revision consumes the parallel `nexus-ddd-messaging` upstream work that lan
 - H10 — `BusBuilder` promoted to Phase 12a; `BusRegistry` to Phase 12b. `SyncCommandBus` constructor locked to 4 args: `(BusRegistry, HandlerAttributeIndex, MiddlewarePipeline, Profile)`.
 - H11 — Each Psalm rule ships with hook-interface + AST node + Issue class + fixture pair (full shape per messaging plugin reference).
 - H12 — `OccRetryMiddleware` on retry-budget exhaustion: `MetricsCollector::count('ddd.command.retry_exhausted', ...)` + PSR-3 WARN BEFORE re-throw. `IdempotencyStore::ttl(): Duration` interface contract; bus boot validates TTL ≥ max retry budget.
+- H13 — `BusBuilder::withMiddleware(Middleware $m, ?PipelineStage $before = null)` for adopter / package middleware extension. Custom middleware inserts immediately before the named canonical stage; `before === null` appends after the last canonical stage. Multiple registrations targeting the same insertion point preserve registration order. `BusBuildResult::$customMiddlewares` carries the accumulated registrations so downstream pipeline assembly (Phase 13's bus constructors) can splice them into the canonical 14-stage list. Surfaced during Phase 9 design review — `PipelineStage` is intentionally a locked enum (PHP enums can't be extended from outside), so adopters need a declarative way to contribute custom middleware. `nexus-ddd-aggregate`'s `OneAggregatePerCommandMiddleware` is the canonical consumer.
 
 **CLAUDE.md compliance (CV1–CV5):**
 - CV1 — `Accepted::instance()` cached singleton DROPPED upstream; this package uses `new Accepted()` directly.
@@ -130,8 +131,11 @@ packages/nexus-ddd-bus/
 │   │   └── SpanCloseMiddleware.php                    # stage 14
 │   ├── Routing/
 │   │   ├── BusRegistry.php                            # name → bus impl
-│   │   ├── BusBuilder.php                             # builder; reflection cache; profile×strategy boot validation
+│   │   ├── BusBuilder.php                             # builder; reflection cache; profile×strategy boot validation; withMiddleware(...) splice registrations
+│   │   ├── BusBuildResult.php                         # immutable carrier: HandlerAttributeIndex + handlerMap + customMiddlewares
+│   │   ├── CustomMiddlewareRegistration.php           # splice record (Middleware + optional ?PipelineStage $before)
 │   │   ├── HandlerAttributeIndex.php                  # cached handler-class → ResolvedPipeline
+│   │   ├── ResolvedAttributesEntry.php                # per-handler resolved attribute set + flip flags
 │   │   ├── InProcessSameDbBootValidator.php           # boot-time #[InProcess] conn-binding check
 │   │   ├── CommandRouter.php                          # composes RoutingStrategy impls
 │   │   ├── RoutingStrategy.php                        # interface
@@ -2695,10 +2699,11 @@ git commit -m "feat(ddd-bus): RoutingStrategy interface + 4 impls (ExplicitOnly,
 - Create: `packages/nexus-ddd-bus/src/Routing/InProcessSameDbBootValidator.php`
 - Tests
 
-**Locks (H4 + H10 + H1):**
+**Locks (H4 + H10 + H1 + H13):**
 - `BusBuilder` is the boot orchestrator. Reflects all registered handler classes; builds a `HandlerAttributeIndex` (cache: `class-string<handler> → ResolvedAttributesEntry`); assembles the per-handler `MiddlewarePipeline` with the `#[Authorize(before: 'validation')]` flip baked in.
 - `HandlerAttributeIndex::lookup(class-string<message>): Option<ResolvedAttributesEntry>` — middlewares consume this at runtime instead of doing reflection on every dispatch.
 - `InProcessSameDbBootValidator` (replaces v1's `InProcessSameDbMiddleware` no-op) — boot-time only; checks that every `#[InProcess]`-attributed handler's bound connection matches its source aggregate's bound connection. Throws `InProcessConnectionMismatchException` if mismatch.
+- `BusBuilder::withMiddleware(Middleware $m, ?PipelineStage $before = null): self` — declarative adopter / package middleware extension. Accumulates `CustomMiddlewareRegistration` records that `BusBuildResult` carries to the downstream pipeline assembler (Phase 13). `before === null` → append after `SpanClose` (last canonical stage). `before === PipelineStage::X` → insert immediately before the canonical `X` middleware. Multiple registrations targeting the same `$before` preserve registration order.
 
 - [ ] **Step 1: TDD `HandlerAttributeIndex`**
 
@@ -2871,7 +2876,10 @@ use Monadial\Nexus\Ddd\Bus\Attribute\Idempotent;
 use Monadial\Nexus\Ddd\Bus\Attribute\Validate;
 use Monadial\Nexus\Ddd\Bus\Exception\MissingAuthorizationDeciderException;
 use Monadial\Nexus\Ddd\Bus\Exception\MissingValidatorException;
+use Monadial\Nexus\Ddd\Bus\Middleware\Middleware;
+use Monadial\Nexus\Ddd\Bus\Middleware\PipelineStage;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use NoDiscard;
 use ReflectionClass;
 use ReflectionMethod;
 
@@ -2885,7 +2893,7 @@ use ReflectionMethod;
  *
  * The builder is final + non-readonly because it accumulates registrations
  * during construction. After build(), it produces an immutable BusRegistry
- * + HandlerAttributeIndex.
+ * + HandlerAttributeIndex + custom-middleware splice list.
  */
 final class BusBuilder
 {
@@ -2894,6 +2902,9 @@ final class BusBuilder
 
     /** @var array<string, string> connection bindings */
     private array $bindings = [];
+
+    /** @var list<CustomMiddlewareRegistration> accumulated adopter / package middleware */
+    private array $customMiddlewares = [];
 
     /**
      * @param class-string $messageClass
@@ -2910,6 +2921,33 @@ final class BusBuilder
     public function bindConnection(string $boundClass, string $connectionName): self
     {
         $this->bindings[$boundClass] = $connectionName;
+
+        return $this;
+    }
+
+    /**
+     * Register a custom Middleware impl into the canonical pipeline.
+     *
+     * Adopters and downstream packages (e.g. `nexus-ddd-aggregate`'s
+     * `OneAggregatePerCommandMiddleware`) ship their own Middleware impl and
+     * use this method to splice it at the correct position. The canonical
+     * PipelineStage enum stays locked; custom middleware references stages
+     * by name to declare their insertion point.
+     *
+     * Semantics:
+     *   `$before === null`            → append after the last canonical stage (after SpanClose).
+     *   `$before === PipelineStage::X` → insert immediately before the canonical X middleware.
+     *   Multiple registrations sharing the same `$before` preserve registration order
+     *   (first-registered runs first).
+     *
+     * The actual splice happens inside the downstream pipeline assembler (Phase 13's
+     * Sync*Bus constructors). BusBuilder only accumulates the registration records;
+     * `BusBuildResult::$customMiddlewares` exposes them in registration order.
+     */
+    #[NoDiscard('withMiddleware returns the builder — chain or assign')]
+    public function withMiddleware(Middleware $middleware, ?PipelineStage $before = null): self
+    {
+        $this->customMiddlewares[] = new CustomMiddlewareRegistration($middleware, $before);
 
         return $this;
     }
@@ -2944,6 +2982,7 @@ final class BusBuilder
         return new BusBuildResult(
             new HandlerAttributeIndex($entries),
             $this->handlers,
+            $this->customMiddlewares,
         );
     }
 
@@ -2996,10 +3035,39 @@ namespace Monadial\Nexus\Ddd\Bus\Routing;
  */
 final readonly class BusBuildResult
 {
-    /** @param array<class-string, class-string> $handlerMap */
+    /**
+     * @param array<class-string, class-string> $handlerMap
+     * @param list<CustomMiddlewareRegistration> $customMiddlewares
+     */
     public function __construct(
         public HandlerAttributeIndex $index,
         public array $handlerMap,
+        public array $customMiddlewares,
+    ) {}
+}
+```
+
+```php
+namespace Monadial\Nexus\Ddd\Bus\Routing;
+
+use Monadial\Nexus\Ddd\Bus\Middleware\Middleware;
+use Monadial\Nexus\Ddd\Bus\Middleware\PipelineStage;
+
+/**
+ * @psalm-api
+ * @psalm-immutable
+ *
+ * Splice record for a single adopter / package-supplied Middleware.
+ *
+ * Carried in `BusBuildResult::$customMiddlewares` in registration order.
+ * Phase 13's Sync*Bus constructors walk the list and splice each entry
+ * into the canonical 14-stage list at the position named by `$before`.
+ */
+final readonly class CustomMiddlewareRegistration
+{
+    public function __construct(
+        public Middleware $middleware,
+        public ?PipelineStage $before,
     ) {}
 }
 ```
@@ -3011,12 +3079,19 @@ final readonly class BusBuildResult
   - Register `#[InProcess]` handler with mismatched conn binding → `InProcessConnectionMismatchException`.
   - Register handlers that two routing strategies resolve differently → `DuplicateRoutingException`.
   - Register handler with `#[Authorize(before: 'validation')]` → entry's `authorizeBeforeValidate` is true.
+  - **`withMiddleware` registration (H13):**
+    - Register a single custom middleware with no `before:` → `BusBuildResult::$customMiddlewares` has one entry with `before === null`.
+    - Register with `before: PipelineStage::Validation` → entry's `before` is that case.
+    - Register two custom middlewares targeting the same `$before` → the result list preserves registration order.
+    - Register one custom middleware with `before: PipelineStage::Handler` and one with `before: null` → both entries present, in registration order.
+    - `withMiddleware` is chainable: `$builder->withMiddleware($a)->withMiddleware($b)->build(...)` works.
+    - `#[NoDiscard]` is enforced on the method (verify via reflection or rely on Psalm).
 
 - [ ] **Step 5: Run tests + Psalm + PHPCS clean**
 - [ ] **Step 6: Commit**
 
 ```bash
-git commit -m "feat(ddd-bus): BusBuilder boot orchestrator + HandlerAttributeIndex (cached reflection) + InProcessSameDbBootValidator (replaces v1 runtime no-op middleware) + per-handler authorize-before-validate flip baked into cached pipeline"
+git commit -m "feat(ddd-bus): BusBuilder boot orchestrator + HandlerAttributeIndex (cached reflection) + InProcessSameDbBootValidator (replaces v1 runtime no-op middleware) + per-handler authorize-before-validate flip baked into cached pipeline + withMiddleware(...) adopter / package extension hook"
 ```
 
 ---
@@ -3164,11 +3239,12 @@ git commit -m "feat(ddd-bus): BusRegistry (immutable; Profile × bus-impl valida
 - Create: `packages/nexus-ddd-bus/src/Bus/SyncEventBus.php`
 - Tests
 
-**Locks (H2 + H5 + H10):**
+**Locks (H2 + H5 + H10 + H13):**
 - `SyncCommandBus implements CommandBus` (canonical messaging interface — has both `dispatchCommand` and `tryDispatch`) AND `EnvelopedCommandBus`. NO `RichCommandBus` extension interface.
 - Constructor (locked, 4 args): `(BusRegistry $registry, HandlerAttributeIndex $index, MiddlewarePipeline $pipeline, Profile $profile)`. All bus-internal collaborators (clock, logger, metrics, validator, decider, idempotency store, locator, outbox, backoff) flow through the pipeline closure passed in `MiddlewarePipeline::$core` at builder time.
 - `tryDispatch` propagates `BusInvariantException` (per H5) — does NOT lift to `Either::left`.
 - `RetryBudgetExhaustedException` IS caught and lifted to `Either::left` (it's a runtime-retryable failure, not a boot invariant).
+- **Pipeline assembly (per H13):** the `MiddlewarePipeline` passed in to the constructor is pre-assembled by the composition root. The assembler builds the canonical 14-stage list (one instance per `PipelineStage` case, constructed from the registered slots), then walks `BusBuildResult::$customMiddlewares` (returned by `BusBuilder::build()`) and splices each `CustomMiddlewareRegistration` at the position named by its `$before` field. Custom registrations with `$before === null` append after `PipelineStage::SpanClose`. Multiple registrations sharing the same `$before` are inserted in registration order. Phase 13's tests cover a canonical-only pipeline + a canonical-with-custom-splice pipeline using a `RecordingMiddleware` fixture to verify execution order.
 
 - [ ] **Step 1: TDD `SyncCommandBus`**
 
@@ -3694,6 +3770,7 @@ Before considering the plan complete, verify:
 - [ ] **H10** — `BusBuilder` promoted to Phase 12a; `BusRegistry` to Phase 12b; `SyncCommandBus` constructor locked to 4 args (`BusRegistry`, `HandlerAttributeIndex`, `MiddlewarePipeline`, `Profile` + clock for envelope creation).
 - [ ] **H11** — Each Psalm rule (Phase 16, 7 rules) ships hook + AST node + Issue class + fixture pair.
 - [ ] **H12** — OCC retry exhaustion observability + IdempotencyStore TTL contract (Phase 7 step 4 ships `ttl()`; Phase 10c step 3 ships metrics + WARN + `RetryBudgetExhaustedException`).
+- [ ] **H13** — `BusBuilder::withMiddleware(Middleware, ?PipelineStage $before)` adopter extension (Phase 12a step 3); `CustomMiddlewareRegistration` + `BusBuildResult::$customMiddlewares` carry registrations to Phase 13's pipeline assembler.
 - [ ] **CV1** — `Accepted::instance()` cached singleton DROPPED upstream (parallel agent); plan uses `new Accepted()`.
 - [ ] **CV2** — `Principal` interface + `Option<Principal>` on validation/authorization contexts; the 2 narrow exceptions (PHP attribute defaults `Authorize::$subject: ?string` and `Authorize::$before: ?string`) documented.
 - [ ] **CV3** — `#[\NoDiscard]` swept; visible in Violations, RoutingResolution, Composite, ExplicitOnly, NamespacePattern, ValidationContext, AuthorizationContext, IdempotencyReservation impl, etc.
