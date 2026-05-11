@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
+use Override;
 
 /**
  * @psalm-api
@@ -17,7 +18,7 @@ use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
  * @template TIn of object
  * @template TOut
  */
-final class MiddlewarePipeline
+final class MiddlewarePipeline implements EnvelopePipeline
 {
     /**
      * @param list<Middleware<TIn, TOut>> $middlewares  Outermost first; innermost last.
@@ -32,7 +33,12 @@ final class MiddlewarePipeline
      * @psalm-suppress InvalidArgument
      *   Closure parameter `$env` erases the `TIn` template; the list type
      *   of `$this->middlewares` guarantees the runtime narrowing.
+     * @psalm-suppress MoreSpecificImplementedParamType
+     *   `EnvelopePipeline::dispatch` takes `Envelope<object>`; this impl
+     *   narrows to `Envelope<TIn>` per its templated `TIn`. The narrower
+     *   parameter is sound because callers carry the same template.
      */
+    #[Override]
     public function dispatch(Envelope $envelope): mixed
     {
         $next = $this->core;

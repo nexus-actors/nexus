@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Bus\Tests\Unit\Smoke;
 
-use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Duration\FiniteDuration;
 use Monadial\Duration\TimeUnit\TimeUnit;
@@ -15,22 +14,10 @@ use Monadial\Nexus\Ddd\Bus\Bus\SyncCommandBus;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKeyResolver;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyStore;
 use Monadial\Nexus\Ddd\Bus\Logging\PayloadRedactor;
-use Monadial\Nexus\Ddd\Bus\Middleware\AuthorizationMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\CausationPropagationMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\EventDrainMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\HandlerInvocationMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\IdempotencyCommitMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\IdempotencyReserveMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\LoggingEndMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\LoggingStartMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\MetricsEndMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\MetricsStartMiddleware;
+use Monadial\Nexus\Ddd\Bus\Middleware\CanonicalPipelineAssembler;
+use Monadial\Nexus\Ddd\Bus\Middleware\EnvelopePipeline;
 use Monadial\Nexus\Ddd\Bus\Middleware\Middleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\MiddlewarePipeline;
-use Monadial\Nexus\Ddd\Bus\Middleware\OccRetryMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\OpenTelemetrySpanMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\SpanCloseMiddleware;
-use Monadial\Nexus\Ddd\Bus\Middleware\ValidationMiddleware;
+use Monadial\Nexus\Ddd\Bus\Middleware\PipelineStage;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\BusBuilder;
 use Monadial\Nexus\Ddd\Bus\Routing\BusBuildResult;
@@ -57,16 +44,15 @@ use Psr\Clock\ClockInterface;
 use Throwable;
 
 /**
- * Test-only assembler that wires the full canonical 14-stage pipeline plus
- * a `SyncCommandBus`. Smoke tests override the slots they care about and
- * call `build()` to get a configured bus. The harness keeps the slot
- * defaults aligned with the production wiring (`Profile::Sync`,
- * zero-delay backoff, in-memory recording fixtures).
+ * Test-only adapter around `CanonicalPipelineAssembler` that wires the
+ * full canonical 14-stage pipeline plus a `SyncCommandBus`. Smoke tests
+ * override the slots they care about and call `build()` to get a
+ * configured bus. The harness keeps the slot defaults aligned with the
+ * production wiring (`Profile::Sync`, zero-delay backoff, in-memory
+ * recording fixtures).
  *
- * The pipeline ordering mirrors `PipelineStage`:
- *   Causation → OtelSpan → LoggingStart → MetricsStart → Validation →
- *   Authorization → IdempotencyReserve → OccRetry → Handler →
- *   IdempotencyCommit → EventDrain → MetricsEnd → LoggingEnd → SpanClose.
+ * The assembler bakes the canonical order (`PipelineStage`) and applies
+ * the `#[Authorize(before: 'validation')]` flip per handler at boot.
  *
  * @psalm-api
  */
@@ -137,6 +123,10 @@ final class PipelineHarness
 
     public function build(): SyncCommandBus
     {
+        foreach ($this->extraMiddlewares as $extra) {
+            (void) $this->builder->withMiddleware($extra, PipelineStage::Causation);
+        }
+
         $result = $this->builder->build(
             $this->profile,
             hasValidator: $this->hasValidator,
@@ -155,57 +145,30 @@ final class PipelineHarness
         );
     }
 
-    /**
-     * @return MiddlewarePipeline<Command, mixed>
-     */
-    private function pipeline(BusBuildResult $result): MiddlewarePipeline
+    private function pipeline(BusBuildResult $result): EnvelopePipeline
     {
-        $contextStack = MessageContextStack::default();
+        $assembler = new CanonicalPipelineAssembler(
+            $this->profile,
+            $this->validator,
+            $this->decider,
+            new SubjectResolver(),
+            $this->principalProvider,
+            MessageContextStack::default(),
+            $this->idempotencyStore,
+            new IdempotencyKeyResolver(),
+            $this->metrics,
+            $this->logger,
+            new PayloadRedactor(),
+            $this->clock,
+            $this->backoff,
+            $this->sleep,
+            $this->outbox,
+            $this->locator,
+            $this->causationDepthCap,
+            $this->retryBudgetMs,
+        );
 
-        $canonical = [
-            new CausationPropagationMiddleware($this->causationDepthCap),
-            new OpenTelemetrySpanMiddleware(),
-            new LoggingStartMiddleware($this->logger, new PayloadRedactor()),
-            new MetricsStartMiddleware($this->metrics),
-            new ValidationMiddleware($this->validator, $result->index),
-            new AuthorizationMiddleware(
-                $this->decider,
-                new SubjectResolver(),
-                $result->index,
-                $contextStack,
-                $this->principalProvider,
-            ),
-            new IdempotencyReserveMiddleware(
-                $this->idempotencyStore,
-                new IdempotencyKeyResolver(),
-                $result->index,
-                $this->profile,
-                $this->metrics,
-                $this->logger,
-            ),
-            new OccRetryMiddleware(
-                $this->profile,
-                $this->backoff,
-                $this->clock,
-                $this->logger,
-                $this->metrics,
-                $this->retryBudgetMs,
-                $this->sleep,
-            ),
-            new HandlerInvocationMiddleware($this->locator),
-            new IdempotencyCommitMiddleware($this->idempotencyStore, $this->profile),
-            new EventDrainMiddleware($this->outbox),
-            new MetricsEndMiddleware($this->metrics),
-            new LoggingEndMiddleware($this->logger),
-            new SpanCloseMiddleware(),
-        ];
-
-        $stack = [...$this->extraMiddlewares, ...$canonical];
-
-        /** @var Closure(Envelope<Command>): mixed $core */
-        $core = static fn(Envelope $e): mixed => null;
-
-        return new MiddlewarePipeline($stack, $core);
+        return $assembler->assembleEnvelopePipeline($result, static fn(Envelope $_e): mixed => null);
     }
 }
 

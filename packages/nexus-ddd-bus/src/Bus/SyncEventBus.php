@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Ddd\Bus\Bus;
 
 use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Bus\Exception\BusInvariantException;
-use Monadial\Nexus\Ddd\Bus\Middleware\MiddlewarePipeline;
+use Monadial\Nexus\Ddd\Bus\Middleware\EnvelopePipeline;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
 use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
@@ -42,7 +42,7 @@ final class SyncEventBus implements EventBus, EnvelopedEventBus
     public function __construct(
         private readonly BusRegistry $registry,
         private readonly HandlerAttributeIndex $index,
-        private readonly MiddlewarePipeline $pipeline,
+        private readonly EnvelopePipeline $pipeline,
         private readonly Profile $profile,
         private readonly ClockInterface $clock,
     ) {}
@@ -53,6 +53,11 @@ final class SyncEventBus implements EventBus, EnvelopedEventBus
         $this->tryPublish($event)->getOrCall(static fn(Throwable $e) => throw $e);
     }
 
+    /**
+     * @psalm-suppress InvalidArgument
+     *   `EnvelopePipeline::dispatch` takes `Envelope<object>`; the local
+     *   `Envelope<DomainEvent>` is a narrower subtype and accepted at runtime.
+     */
     #[Override]
     public function tryPublish(DomainEvent $event): Either
     {
@@ -73,6 +78,7 @@ final class SyncEventBus implements EventBus, EnvelopedEventBus
         }
     }
 
+    /** @psalm-suppress InvalidArgument */
     #[Override]
     public function publishEnveloped(Envelope $envelope): void
     {

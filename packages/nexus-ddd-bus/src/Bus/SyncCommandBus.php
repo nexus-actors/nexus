@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Ddd\Bus\Bus;
 
 use Fp\Functional\Either\Either;
 use Monadial\Nexus\Ddd\Bus\Exception\BusInvariantException;
-use Monadial\Nexus\Ddd\Bus\Middleware\MiddlewarePipeline;
+use Monadial\Nexus\Ddd\Bus\Middleware\EnvelopePipeline;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
 use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
@@ -49,7 +49,7 @@ final class SyncCommandBus implements CommandBus, EnvelopedCommandBus
     public function __construct(
         private readonly BusRegistry $registry,
         private readonly HandlerAttributeIndex $index,
-        private readonly MiddlewarePipeline $pipeline,
+        private readonly EnvelopePipeline $pipeline,
         private readonly Profile $profile,
         private readonly ClockInterface $clock,
     ) {}
@@ -60,6 +60,11 @@ final class SyncCommandBus implements CommandBus, EnvelopedCommandBus
         $this->tryDispatch($command)->getOrCall(static fn(Throwable $e) => throw $e);
     }
 
+    /**
+     * @psalm-suppress InvalidArgument
+     *   `EnvelopePipeline::dispatch` takes `Envelope<object>`; the local
+     *   `Envelope<Command>` is a narrower subtype and accepted at runtime.
+     */
     #[Override]
     public function tryDispatch(Command $command): Either
     {
@@ -80,6 +85,7 @@ final class SyncCommandBus implements CommandBus, EnvelopedCommandBus
         }
     }
 
+    /** @psalm-suppress InvalidArgument */
     #[Override]
     public function dispatchEnveloped(Envelope $envelope): void
     {
