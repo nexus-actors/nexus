@@ -15,9 +15,13 @@ use Override;
  * @psalm-api
  *
  * Inner half of the two-phase idempotency split. Runs INSIDE the handler
- * TX, AFTER `HandlerInvocation`, BEFORE `EventDrain` flush. `markCompleted`
- * lands or rolls back atomically with the handler's writes (per umbrella
- * spec §13.1).
+ * TX, AFTER `HandlerInvocation`, BEFORE `EventDrain` flush. Per umbrella
+ * spec §13.1 + panel B2: `markCompleted` runs BEFORE `$next` so the dedup
+ * row is durable before `EventDrain` flushes the outbox — otherwise an
+ * async relay polling between flush and mark could double-deliver. By the
+ * time this middleware is entered, the upstream `Handler` middleware has
+ * already invoked the handler successfully, so committing now reflects
+ * the handler's success.
  *
  * Self-disables under `Profile::Sync` (mirrors `IdempotencyReserveMiddleware`
  * H6) — the Reserve middleware doesn't reserve under Sync, so there's no
@@ -35,10 +39,8 @@ final class IdempotencyCommitMiddleware implements Middleware
     #[Override]
     public function process(Envelope $envelope, Closure $next): mixed
     {
-        $result = $next($envelope);
-
         if ($this->profile === Profile::Sync) {
-            return $result;
+            return $next($envelope);
         }
 
         $stamp = $envelope->get(ReservationStamp::class);
@@ -47,6 +49,6 @@ final class IdempotencyCommitMiddleware implements Middleware
             $this->store->markCompleted($stamp->getUnsafe()->reservation);
         }
 
-        return $result;
+        return $next($envelope);
     }
 }

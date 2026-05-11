@@ -61,7 +61,7 @@ final class IdempotencyCommitMiddlewareTest extends TestCase
     }
 
     #[Test]
-    public function asyncProfileWithStampCommitsAfterNext(): void
+    public function asyncProfileWithStampCommitsBeforeNext(): void
     {
         $store = new RecordingIdempotencyStore();
         $middleware = new IdempotencyCommitMiddleware($store, Profile::Async);
@@ -79,7 +79,7 @@ final class IdempotencyCommitMiddlewareTest extends TestCase
     }
 
     #[Test]
-    public function markCompletedRunsAfterHandlerReturns(): void
+    public function markCompletedRunsBeforeHandlerReturns(): void
     {
         $store = new RecordingIdempotencyStore();
         $middleware = new IdempotencyCommitMiddleware($store, Profile::Async);
@@ -89,37 +89,37 @@ final class IdempotencyCommitMiddlewareTest extends TestCase
 
         $middleware->process(
             $envelope,
-            Closure::fromCallable(static function (Envelope $e) use (&$events): string {
-                $events[] = 'handler-ran';
+            Closure::fromCallable(static function (Envelope $e) use (&$events, $store): string {
+                $events[] = $store->markCompletedCalls !== []
+                    ? 'mark-already-ran'
+                    : 'mark-not-yet';
 
                 return 'next';
             }),
         );
 
-        $events[] = 'after-process';
-
-        self::assertSame(['handler-ran', 'after-process'], $events);
+        self::assertSame(['mark-already-ran'], $events);
         self::assertCount(1, $store->markCompletedCalls);
     }
 
     #[Test]
-    public function handlerExceptionPropagatesAndCommitIsNotCalled(): void
+    public function downstreamExceptionPropagatesAndCommitIsAlreadyRecorded(): void
     {
         $store = new RecordingIdempotencyStore();
         $middleware = new IdempotencyCommitMiddleware($store, Profile::Async);
         $reservation = new InMemoryReservation(stdClass::class, new IdempotencyKey('k'), 'composite::k');
         $envelope = $this->envelope()->with(new ReservationStamp($reservation));
-        $failure = new RuntimeException('handler-failed');
+        $failure = new RuntimeException('flush-failed');
 
         try {
             $middleware->process(
                 $envelope,
                 Closure::fromCallable(static fn(Envelope $e) => throw $failure),
             );
-            self::fail('expected handler exception to propagate');
+            self::fail('expected downstream exception to propagate');
         } catch (Throwable $caught) {
             self::assertSame($failure, $caught);
-            self::assertSame([], $store->markCompletedCalls);
+            self::assertCount(1, $store->markCompletedCalls);
         }
     }
 
