@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Bus\Middleware;
 
 use Closure;
-use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Bus\Attribute\Authorize;
 use Monadial\Nexus\Ddd\Bus\Authorization\AuthorizationContext;
 use Monadial\Nexus\Ddd\Bus\Authorization\AuthorizationDecider;
+use Monadial\Nexus\Ddd\Bus\Authorization\PrincipalProvider;
 use Monadial\Nexus\Ddd\Bus\Authorization\SubjectResolver;
 use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
@@ -29,6 +29,11 @@ use Override;
  * receive. `AuthorizationDecider::decide` is total — denial is a
  * thrown `AccessDeniedException`.
  *
+ * The runtime principal is sourced via `PrincipalProvider::current()`
+ * (panel Security F2). Adopters bind the slot to their auth system
+ * (Symfony Security, JWT, etc.); the default `NoPrincipalProvider`
+ * yields `Option::none()` for anonymous flows.
+ *
  * @template TIn of object
  * @template TOut
  * @implements Middleware<TIn, TOut>
@@ -40,6 +45,7 @@ final class AuthorizationMiddleware implements Middleware
         private readonly SubjectResolver $subjectResolver,
         private readonly HandlerAttributeIndex $index,
         private readonly MessageContextStack $contextStack,
+        private readonly PrincipalProvider $principalProvider,
     ) {}
 
     #[Override]
@@ -73,7 +79,7 @@ final class AuthorizationMiddleware implements Middleware
         $this->decider->decide(
             $attribute->policy,
             $subject,
-            new AuthorizationContext(Option::none(), $envelope->metadata->headers, $envelope),
+            new AuthorizationContext($this->principalProvider->current(), $envelope->metadata->headers, $envelope),
         );
 
         return $next($envelope);

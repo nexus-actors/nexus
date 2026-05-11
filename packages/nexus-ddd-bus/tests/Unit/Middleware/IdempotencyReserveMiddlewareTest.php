@@ -13,12 +13,15 @@ use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKey;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKeyResolver;
 use Monadial\Nexus\Ddd\Bus\Idempotency\InMemoryIdempotencyStore;
 use Monadial\Nexus\Ddd\Bus\Idempotency\ReservationStamp;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
 use Monadial\Nexus\Ddd\Bus\Middleware\IdempotencyReserveMiddleware;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Bus\Routing\ResolvedAttributesEntry;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\AlwaysNoneStore;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingIdempotencyStore;
+use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingLogger;
+use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingMetricsCollector;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 use Monadial\Nexus\Ddd\Messaging\Header\Headers;
@@ -27,6 +30,7 @@ use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\LogLevel;
 use RuntimeException;
 use stdClass;
 use Throwable;
@@ -43,6 +47,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([]),
             Profile::Sync,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $envelope = $this->envelope();
         $nextCalled = false;
@@ -71,6 +77,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $envelope = $this->envelope();
 
@@ -93,6 +101,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $envelope = $this->envelope();
 
@@ -118,11 +128,15 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
     {
         $store = new AlwaysNoneStore();
         $entry = $this->entry();
+        $metrics = new RecordingMetricsCollector();
+        $logger = new RecordingLogger();
         $middleware = new IdempotencyReserveMiddleware(
             $store,
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            $metrics,
+            $logger,
         );
         $nextCalled = false;
 
@@ -137,6 +151,52 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
 
         self::assertNull($result);
         self::assertFalse($nextCalled);
+        self::assertNotSame([], $metrics->records, 'short-circuit must emit a metric per panel Ops F1');
+        self::assertNotSame([], $logger->records, 'short-circuit must emit an INFO log per panel Ops F1');
+    }
+
+    #[Test]
+    public function shortCircuitEmitsCanonicalMetricAndLog(): void
+    {
+        $store = new AlwaysNoneStore();
+        $entry = $this->entry();
+        $metrics = new RecordingMetricsCollector();
+        $logger = new RecordingLogger();
+        $middleware = new IdempotencyReserveMiddleware(
+            $store,
+            new IdempotencyKeyResolver(),
+            new HandlerAttributeIndex([stdClass::class => $entry]),
+            Profile::Async,
+            $metrics,
+            $logger,
+        );
+        $envelope = $this->envelope();
+
+        $middleware->process(
+            $envelope,
+            Closure::fromCallable(static fn(Envelope $e): null => null),
+        );
+
+        self::assertCount(1, $metrics->records);
+        self::assertSame('count', $metrics->records[0]['kind']);
+        self::assertSame('ddd.command.count', $metrics->records[0]['name']);
+        self::assertSame(1, $metrics->records[0]['value']);
+        self::assertSame(
+            ['outcome' => MetricOutcome::IdempotentShortCircuit->value, 'type' => stdClass::class],
+            $metrics->records[0]['tags'],
+        );
+
+        self::assertCount(1, $logger->records);
+        self::assertSame(LogLevel::INFO, $logger->records[0]['level']);
+        self::assertSame('ddd.command.idempotent_short_circuit', $logger->records[0]['message']);
+        self::assertSame(
+            [
+                'handler_class' => 'App\\Handler\\TestHandler',
+                'message_id' => $envelope->metadata->id->value(),
+                'message_type' => stdClass::class,
+            ],
+            $logger->records[0]['context'],
+        );
     }
 
     #[Test]
@@ -149,6 +209,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $failure = new IdempotencyReserveTestRetryableFailure('boom');
 
@@ -175,6 +237,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $failure = new IdempotencyReserveTestTerminalFailure('terminal');
 
@@ -201,6 +265,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $failure = new RuntimeException('infra');
 
@@ -227,6 +293,8 @@ final class IdempotencyReserveMiddlewareTest extends TestCase
             new IdempotencyKeyResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             Profile::Async,
+            new RecordingMetricsCollector(),
+            new RecordingLogger(),
         );
         $captured = null;
 

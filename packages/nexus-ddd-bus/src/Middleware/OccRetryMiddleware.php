@@ -11,6 +11,7 @@ use Monadial\Nexus\Ddd\Bus\Exception\ActorWriterInvariantViolation;
 use Monadial\Nexus\Ddd\Bus\Exception\RetryBudgetExhaustedException;
 use Monadial\Nexus\Ddd\Bus\Metrics\MetricsCollector;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
+use Monadial\Nexus\Ddd\Bus\Sleep\SleepStrategy;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Retry\BackoffStrategy;
@@ -18,8 +19,6 @@ use Override;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
-
-use function usleep;
 
 /**
  * @psalm-api
@@ -50,6 +49,7 @@ final class OccRetryMiddleware implements Middleware
         private readonly LoggerInterface $logger,
         private readonly MetricsCollector $metrics,
         private readonly int $defaultBudgetMs,
+        private readonly SleepStrategy $sleep,
     ) {}
 
     #[Override]
@@ -92,7 +92,7 @@ final class OccRetryMiddleware implements Middleware
                 }
 
                 $this->backoff->delayFor($attempt, $e)
-                    ->tap(static fn(FiniteDuration $delay) => usleep($delay->toMicros()));
+                    ->tap(fn(FiniteDuration $delay) => $this->sleep->sleep($delay));
             }
         }
     }

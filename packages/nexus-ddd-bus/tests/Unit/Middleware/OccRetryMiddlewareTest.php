@@ -16,6 +16,7 @@ use Monadial\Nexus\Ddd\Bus\Middleware\OccRetryMiddleware;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingLogger;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingMetricsCollector;
+use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingSleepStrategy;
 use Monadial\Nexus\Ddd\Core\Exception\OptimisticLockException;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Header\Headers;
@@ -42,6 +43,7 @@ final class OccRetryMiddlewareTest extends TestCase
         $clock = new OccRetryManualClock();
         $metrics = new RecordingMetricsCollector();
         $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
         $middleware = new OccRetryMiddleware(
             Profile::Sync,
             new NoRetry(),
@@ -49,6 +51,7 @@ final class OccRetryMiddlewareTest extends TestCase
             $logger,
             $metrics,
             defaultBudgetMs: 1_000,
+            sleep: $sleep,
         );
         $nextCalls = 0;
 
@@ -65,6 +68,7 @@ final class OccRetryMiddlewareTest extends TestCase
         self::assertSame(1, $nextCalls);
         self::assertSame([], $metrics->records);
         self::assertSame([], $logger->records);
+        self::assertSame([], $sleep->calls);
     }
 
     #[Test]
@@ -73,6 +77,7 @@ final class OccRetryMiddlewareTest extends TestCase
         $clock = new OccRetryManualClock();
         $metrics = new RecordingMetricsCollector();
         $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
         $middleware = new OccRetryMiddleware(
             Profile::Sync,
             new OccRetryNoSleepBackoff(),
@@ -80,6 +85,7 @@ final class OccRetryMiddlewareTest extends TestCase
             $logger,
             $metrics,
             defaultBudgetMs: 1_000,
+            sleep: $sleep,
         );
         $attempt = 0;
         $envelope = $this->envelope();
@@ -101,6 +107,8 @@ final class OccRetryMiddlewareTest extends TestCase
         self::assertSame(2, $attempt);
         self::assertSame([], $metrics->records);
         self::assertSame([], $logger->records);
+        self::assertCount(1, $sleep->calls, 'one sleep between attempt 1 and attempt 2');
+        self::assertSame(0, $sleep->calls[0]->toMicros(), 'OccRetryNoSleepBackoff yields a zero-microsecond delay');
     }
 
     #[Test]
@@ -109,6 +117,7 @@ final class OccRetryMiddlewareTest extends TestCase
         $clock = new OccRetryManualClock();
         $metrics = new RecordingMetricsCollector();
         $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
         $middleware = new OccRetryMiddleware(
             Profile::Sync,
             new OccRetryNoSleepBackoff(),
@@ -116,6 +125,7 @@ final class OccRetryMiddlewareTest extends TestCase
             $logger,
             $metrics,
             defaultBudgetMs: 50,
+            sleep: $sleep,
         );
         $cause = new OptimisticLockException(stdClass::class, 'order-1', 1, 2);
         // Advance clock past budget on every read so the first catch trips exhaustion.
@@ -147,6 +157,7 @@ final class OccRetryMiddlewareTest extends TestCase
         self::assertArrayHasKey('attempts', $context);
         self::assertArrayHasKey('cause', $context);
         self::assertArrayHasKey('messageId', $context);
+        self::assertSame([], $sleep->calls, 'budget exhausted before backoff sleep is reached');
     }
 
     #[Test]
@@ -155,6 +166,7 @@ final class OccRetryMiddlewareTest extends TestCase
         $clock = new OccRetryManualClock();
         $metrics = new RecordingMetricsCollector();
         $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
         $middleware = new OccRetryMiddleware(
             Profile::Sync,
             new OccRetryNoSleepBackoff(),
@@ -162,6 +174,7 @@ final class OccRetryMiddlewareTest extends TestCase
             $logger,
             $metrics,
             defaultBudgetMs: 1_000,
+            sleep: $sleep,
         );
         $failure = new RuntimeException('boom');
         $attempt = 0;
@@ -183,6 +196,7 @@ final class OccRetryMiddlewareTest extends TestCase
         self::assertSame(1, $attempt);
         self::assertSame([], $metrics->records);
         self::assertSame([], $logger->records);
+        self::assertSame([], $sleep->calls);
     }
 
     #[Test]
@@ -191,6 +205,7 @@ final class OccRetryMiddlewareTest extends TestCase
         $clock = new OccRetryManualClock();
         $metrics = new RecordingMetricsCollector();
         $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
         $middleware = new OccRetryMiddleware(
             Profile::Actor,
             new NoRetry(),
@@ -198,6 +213,7 @@ final class OccRetryMiddlewareTest extends TestCase
             $logger,
             $metrics,
             defaultBudgetMs: 1_000,
+            sleep: $sleep,
         );
         $cause = new OptimisticLockException(stdClass::class, 'order-1', 1, 2);
         $attempt = 0;
@@ -217,6 +233,44 @@ final class OccRetryMiddlewareTest extends TestCase
         }
 
         self::assertSame(1, $attempt, 'Actor profile must not retry');
+        self::assertSame([], $sleep->calls, 'actor profile never sleeps — it terminally wraps the OCC');
+    }
+
+    #[Test]
+    public function retryLoopDelegatesBackoffToSleepStrategy(): void
+    {
+        $clock = new OccRetryManualClock();
+        $metrics = new RecordingMetricsCollector();
+        $logger = new RecordingLogger();
+        $sleep = new RecordingSleepStrategy();
+        $middleware = new OccRetryMiddleware(
+            Profile::Sync,
+            new OccRetryFixedDelayBackoff(),
+            $clock,
+            $logger,
+            $metrics,
+            defaultBudgetMs: 10_000,
+            sleep: $sleep,
+        );
+        $attempt = 0;
+
+        $middleware->process(
+            $this->envelope(),
+            Closure::fromCallable(static function (Envelope $e) use (&$attempt): string {
+                $attempt++;
+
+                if ($attempt < 3) {
+                    throw new OptimisticLockException(stdClass::class, 'order-1', 1, 2);
+                }
+
+                return 'ok';
+            }),
+        );
+
+        self::assertSame(3, $attempt);
+        self::assertCount(2, $sleep->calls);
+        self::assertSame(7_500, $sleep->calls[0]->toMicros());
+        self::assertSame(7_500, $sleep->calls[1]->toMicros());
     }
 
     /** @return Envelope<stdClass> */
@@ -276,5 +330,15 @@ final readonly class OccRetryNoSleepBackoff implements BackoffStrategy
     public function delayFor(int $attempt, Throwable $cause): Option
     {
         return Option::some(FiniteDuration::fromTimeUnit(0, TimeUnit::Microseconds()));
+    }
+}
+
+final readonly class OccRetryFixedDelayBackoff implements BackoffStrategy
+{
+    /** @return Option<FiniteDuration> */
+    #[Override]
+    public function delayFor(int $attempt, Throwable $cause): Option
+    {
+        return Option::some(FiniteDuration::fromTimeUnit(7_500, TimeUnit::Microseconds()));
     }
 }

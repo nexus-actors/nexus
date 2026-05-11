@@ -8,12 +8,16 @@ use Closure;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKeyResolver;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyStore;
 use Monadial\Nexus\Ddd\Bus\Idempotency\ReservationStamp;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricsCollector;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\HandlerAttributeIndex;
 use Monadial\Nexus\Ddd\Bus\Routing\ResolvedAttributesEntry;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Exception\TerminalFailure;
 use Override;
+use Psr\Log\LoggerInterface;
+use Psr\Log\LogLevel;
 use Throwable;
 
 /**
@@ -36,7 +40,10 @@ use Throwable;
  * Short-circuit branch: when `tryReserve` returns `Option::none()` the
  * message has already been handled — `process()` returns `null` (the `mixed`
  * declared return type permits null; this is the dispatcher's no-op signal,
- * not a "null value" leaking through Option's contract).
+ * not a "null value" leaking through Option's contract). Before returning
+ * null the middleware emits a `MetricOutcome::IdempotentShortCircuit`
+ * counter and an INFO log so callers can distinguish freshly-handled from
+ * already-handled dispatches (panel Ops F1).
  *
  * @template TIn of object
  * @template TOut
@@ -49,6 +56,8 @@ final class IdempotencyReserveMiddleware implements Middleware
         private readonly IdempotencyKeyResolver $resolver,
         private readonly HandlerAttributeIndex $index,
         private readonly Profile $profile,
+        private readonly MetricsCollector $metrics,
+        private readonly LoggerInterface $logger,
     ) {}
 
     #[Override]
@@ -72,6 +81,16 @@ final class IdempotencyReserveMiddleware implements Middleware
         $reservation = $this->store->tryReserve($handlerClass, $key);
 
         if ($reservation->isNone()) {
+            $this->metrics->count('ddd.command.count', 1, [
+                'outcome' => MetricOutcome::IdempotentShortCircuit->value,
+                'type' => $envelope->message::class,
+            ]);
+            $this->logger->log(LogLevel::INFO, 'ddd.command.idempotent_short_circuit', [
+                'handler_class' => $handlerClass,
+                'message_id' => $envelope->metadata->id->value(),
+                'message_type' => $envelope->message::class,
+            ]);
+
             return null;
         }
 

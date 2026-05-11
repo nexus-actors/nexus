@@ -8,6 +8,8 @@ use Closure;
 use Fp\Functional\Option\Option;
 use Monadial\Duration\FiniteDuration;
 use Monadial\Duration\TimeUnit\TimeUnit;
+use Monadial\Nexus\Ddd\Bus\Authorization\NoPrincipalProvider;
+use Monadial\Nexus\Ddd\Bus\Authorization\PrincipalProvider;
 use Monadial\Nexus\Ddd\Bus\Authorization\SubjectResolver;
 use Monadial\Nexus\Ddd\Bus\Bus\SyncCommandBus;
 use Monadial\Nexus\Ddd\Bus\Idempotency\IdempotencyKeyResolver;
@@ -34,6 +36,8 @@ use Monadial\Nexus\Ddd\Bus\Routing\BusBuilder;
 use Monadial\Nexus\Ddd\Bus\Routing\BusBuildResult;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
 use Monadial\Nexus\Ddd\Bus\Routing\Composite;
+use Monadial\Nexus\Ddd\Bus\Sleep\BlockingSleepStrategy;
+use Monadial\Nexus\Ddd\Bus\Sleep\SleepStrategy;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\FixedClock;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\MapCommandHandlerLocator;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingAuthorizationDecider;
@@ -90,6 +94,10 @@ final class PipelineHarness
 
     public BackoffStrategy $backoff;
 
+    public SleepStrategy $sleep;
+
+    public PrincipalProvider $principalProvider;
+
     public int $retryBudgetMs = 5_000;
 
     public int $causationDepthCap = 32;
@@ -113,6 +121,8 @@ final class PipelineHarness
         $this->builder = new BusBuilder();
         $this->clock = new FixedClock();
         $this->backoff = new SmokeZeroDelayBackoff();
+        $this->sleep = new BlockingSleepStrategy();
+        $this->principalProvider = new NoPrincipalProvider();
     }
 
     /**
@@ -158,12 +168,20 @@ final class PipelineHarness
             new LoggingStartMiddleware($this->logger, new PayloadRedactor()),
             new MetricsStartMiddleware($this->metrics),
             new ValidationMiddleware($this->validator, $result->index),
-            new AuthorizationMiddleware($this->decider, new SubjectResolver(), $result->index, $contextStack),
+            new AuthorizationMiddleware(
+                $this->decider,
+                new SubjectResolver(),
+                $result->index,
+                $contextStack,
+                $this->principalProvider,
+            ),
             new IdempotencyReserveMiddleware(
                 $this->idempotencyStore,
                 new IdempotencyKeyResolver(),
                 $result->index,
                 $this->profile,
+                $this->metrics,
+                $this->logger,
             ),
             new OccRetryMiddleware(
                 $this->profile,
@@ -172,6 +190,7 @@ final class PipelineHarness
                 $this->logger,
                 $this->metrics,
                 $this->retryBudgetMs,
+                $this->sleep,
             ),
             new HandlerInvocationMiddleware($this->locator),
             new IdempotencyCommitMiddleware($this->idempotencyStore, $this->profile),

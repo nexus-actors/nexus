@@ -9,6 +9,9 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Bus\Attribute\Authorize;
+use Monadial\Nexus\Ddd\Bus\Authorization\NoPrincipalProvider;
+use Monadial\Nexus\Ddd\Bus\Authorization\Principal;
+use Monadial\Nexus\Ddd\Bus\Authorization\PrincipalProvider;
 use Monadial\Nexus\Ddd\Bus\Authorization\SubjectResolver;
 use Monadial\Nexus\Ddd\Bus\Exception\AccessDeniedException;
 use Monadial\Nexus\Ddd\Bus\Middleware\AuthorizationMiddleware;
@@ -19,6 +22,7 @@ use Monadial\Nexus\Ddd\Messaging\Context\MessageContextStack;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
 use Monadial\Nexus\Ddd\Messaging\Identity\MessageId;
 use Monadial\Nexus\Ddd\Messaging\Metadata\MessageMetadata;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -36,6 +40,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             new SubjectResolver(),
             new HandlerAttributeIndex([]),
             MessageContextStack::default(),
+            new NoPrincipalProvider(),
         );
         $envelope = $this->envelope(new stdClass());
         $nextCalled = false;
@@ -64,6 +69,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             new SubjectResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             MessageContextStack::default(),
+            new NoPrincipalProvider(),
         );
         $envelope = $this->envelope(new stdClass());
 
@@ -86,6 +92,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             new SubjectResolver(),
             new HandlerAttributeIndex([AuthorizationMiddlewareTestCommand::class => $entry]),
             MessageContextStack::default(),
+            new NoPrincipalProvider(),
         );
         $envelope = $this->envelope($message);
 
@@ -110,6 +117,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             new SubjectResolver(),
             new HandlerAttributeIndex([stdClass::class => $entry]),
             MessageContextStack::default(),
+            new NoPrincipalProvider(),
         );
 
         $middleware->process(
@@ -134,6 +142,7 @@ final class AuthorizationMiddlewareTest extends TestCase
             new SubjectResolver(),
             new HandlerAttributeIndex([AuthorizationMiddlewareTestCommand::class => $entry]),
             MessageContextStack::default(),
+            new NoPrincipalProvider(),
         );
         $nextCalled = false;
 
@@ -151,6 +160,52 @@ final class AuthorizationMiddlewareTest extends TestCase
             self::assertSame($denied, $e);
             self::assertFalse($nextCalled);
         }
+    }
+
+    #[Test]
+    public function authorizationContextCarriesPrincipalFromProvider(): void
+    {
+        $decider = RecordingAuthorizationDecider::allowing();
+        $principal = new AuthorizationMiddlewareTestPrincipal('alice');
+        $entry = $this->entry([Authorize::class => new Authorize(policy: 'admin.access')]);
+        $middleware = new AuthorizationMiddleware(
+            $decider,
+            new SubjectResolver(),
+            new HandlerAttributeIndex([stdClass::class => $entry]),
+            MessageContextStack::default(),
+            new FixedPrincipalProvider($principal),
+        );
+
+        $middleware->process(
+            $this->envelope(new stdClass()),
+            Closure::fromCallable(static fn(Envelope $e): string => 'next'),
+        );
+
+        self::assertCount(1, $decider->calls);
+        self::assertTrue($decider->calls[0]['context']->principal->isSome());
+        self::assertSame($principal, $decider->calls[0]['context']->principal->getUnsafe());
+    }
+
+    #[Test]
+    public function authorizationContextCarriesNoneWhenProviderReturnsNone(): void
+    {
+        $decider = RecordingAuthorizationDecider::allowing();
+        $entry = $this->entry([Authorize::class => new Authorize(policy: 'admin.access')]);
+        $middleware = new AuthorizationMiddleware(
+            $decider,
+            new SubjectResolver(),
+            new HandlerAttributeIndex([stdClass::class => $entry]),
+            MessageContextStack::default(),
+            new NoPrincipalProvider(),
+        );
+
+        $middleware->process(
+            $this->envelope(new stdClass()),
+            Closure::fromCallable(static fn(Envelope $e): string => 'next'),
+        );
+
+        self::assertCount(1, $decider->calls);
+        self::assertTrue($decider->calls[0]['context']->principal->isNone());
     }
 
     /**
@@ -198,4 +253,27 @@ final class AuthorizationMiddlewareTest extends TestCase
 final readonly class AuthorizationMiddlewareTestCommand
 {
     public function __construct(public string $orderId) {}
+}
+
+final readonly class AuthorizationMiddlewareTestPrincipal implements Principal
+{
+    public function __construct(private string $id) {}
+
+    #[Override]
+    public function id(): string
+    {
+        return $this->id;
+    }
+}
+
+final readonly class FixedPrincipalProvider implements PrincipalProvider
+{
+    public function __construct(private Principal $principal) {}
+
+    /** @return Option<Principal> */
+    #[Override]
+    public function current(): Option
+    {
+        return Option::some($this->principal);
+    }
 }
