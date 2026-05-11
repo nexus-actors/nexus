@@ -60,4 +60,37 @@ final class ResolvedAttributesEntryTest extends TestCase
 
         self::assertTrue($entry->attribute(Authorize::class)->isNone());
     }
+
+    #[Test]
+    public function handlerClassAccessorReturnsClassString(): void
+    {
+        $entry = new ResolvedAttributesEntry(
+            handlerClass: 'App\\Handler\\PlaceOrderHandler',
+            attributes: [],
+            authorizeBeforeValidate: false,
+            idempotencyOptedOut: false,
+        );
+
+        self::assertSame('App\\Handler\\PlaceOrderHandler', $entry->handlerClass());
+    }
+
+    #[Test]
+    public function isIdempotencyOptedOutReflectsConstructorFlag(): void
+    {
+        $optedIn = new ResolvedAttributesEntry(
+            handlerClass: 'H',
+            attributes: [],
+            authorizeBeforeValidate: false,
+            idempotencyOptedOut: false,
+        );
+        $optedOut = new ResolvedAttributesEntry(
+            handlerClass: 'H',
+            attributes: [],
+            authorizeBeforeValidate: false,
+            idempotencyOptedOut: true,
+        );
+
+        self::assertFalse($optedIn->isIdempotencyOptedOut());
+        self::assertTrue($optedOut->isIdempotencyOptedOut());
+    }
 }

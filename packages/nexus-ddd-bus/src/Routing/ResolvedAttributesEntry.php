@@ -53,4 +53,15 @@ final readonly class ResolvedAttributesEntry
     {
         return Option::fromNullable($this->attributes[$attributeClass] ?? null);
     }
+
+    /** @return class-string */
+    public function handlerClass(): string
+    {
+        return $this->handlerClass;
+    }
+
+    public function isIdempotencyOptedOut(): bool
+    {
+        return $this->idempotencyOptedOut;
+    }
 }
