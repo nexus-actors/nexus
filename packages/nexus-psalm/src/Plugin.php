@@ -9,6 +9,12 @@ use Monadial\Nexus\Psalm\Hook\Aggregate\AggregateRepositoryReadOnlyBulkRule;
 use Monadial\Nexus\Psalm\Hook\Aggregate\FactoryAssignsOnlyIdRule;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
+use Monadial\Nexus\Psalm\Hook\Bus\AuthorizeBeforeValidationRule;
+use Monadial\Nexus\Psalm\Hook\Bus\CommandHandlerReturnTypeRule;
+use Monadial\Nexus\Psalm\Hook\Bus\CommandReturnValueIgnoredRule;
+use Monadial\Nexus\Psalm\Hook\Bus\IdempotencyKeyFieldExistsRule;
+use Monadial\Nexus\Psalm\Hook\Bus\UnguardedExternalSideEffectRule;
+use Monadial\Nexus\Psalm\Hook\Bus\ValidatedCommandReadonlyRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\Messaging\CommandHandlerSignatureRule;
 use Monadial\Nexus\Psalm\Hook\Messaging\EventListenerSignatureRule;
@@ -50,6 +56,12 @@ final class Plugin implements PluginEntryPointInterface
             FactoryAssignsOnlyIdRule::class,
             AggregateEmitsOnlyEventsRule::class,
             AggregateRepositoryReadOnlyBulkRule::class,
+            CommandHandlerReturnTypeRule::class,
+            CommandReturnValueIgnoredRule::class,
+            ValidatedCommandReadonlyRule::class,
+            IdempotencyKeyFieldExistsRule::class,
+            AuthorizeBeforeValidationRule::class,
+            UnguardedExternalSideEffectRule::class,
         ];
 
         foreach ($hooks as $hook) {
