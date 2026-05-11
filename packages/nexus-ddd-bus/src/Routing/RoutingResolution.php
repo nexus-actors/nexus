@@ -18,7 +18,7 @@ use function explode;
 final readonly class RoutingResolution
 {
     /** @param class-string<RoutingStrategy> $resolvedBy */
-    public function __construct(public string $busName, public string $resolvedBy,) {}
+    public function __construct(public string $busName, public string $resolvedBy) {}
 
     public function displayName(): string
     {

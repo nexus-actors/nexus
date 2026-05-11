@@ -30,7 +30,7 @@ use function sprintf;
 final readonly class Composite implements RoutingStrategy
 {
     /** @param list<RoutingStrategy> $strategies */
-    public function __construct(private array $strategies, private string $defaultBusName,) {}
+    public function __construct(private array $strategies, private string $defaultBusName) {}
 
     #[Override]
     public function resolve(string $messageClass): Option

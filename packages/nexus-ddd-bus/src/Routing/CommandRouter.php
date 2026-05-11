@@ -19,7 +19,7 @@ use Monadial\Nexus\Ddd\Messaging\Bus\CommandBus;
  */
 final class CommandRouter
 {
-    public function __construct(private readonly BusRegistry $registry, private readonly RoutingStrategy $strategy,) {}
+    public function __construct(private readonly BusRegistry $registry, private readonly RoutingStrategy $strategy) {}
 
     /** @param class-string $messageClass */
     public function routeFor(string $messageClass): CommandBus
