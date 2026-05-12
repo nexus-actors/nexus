@@ -12,6 +12,7 @@ use Monadial\Nexus\Ddd\Bus\Exception\AccessDeniedException;
 use Monadial\Nexus\Ddd\Bus\Exception\RetryBudgetExhaustedException;
 use Monadial\Nexus\Ddd\Bus\Exception\ValidationFailedException;
 use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricsTimingStamp;
 use Monadial\Nexus\Ddd\Bus\Middleware\MetricsEndMiddleware;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingMetricsCollector;
 use Monadial\Nexus\Ddd\Bus\Validation\Violations;
@@ -26,6 +27,8 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use stdClass;
 use Throwable;
+
+use function microtime;
 
 #[CoversClass(MetricsEndMiddleware::class)]
 final class MetricsEndMiddlewareTest extends TestCase
@@ -152,6 +155,78 @@ final class MetricsEndMiddlewareTest extends TestCase
         }
 
         self::assertSame([], $metrics->records);
+    }
+
+    #[Test]
+    public function emitsDurationHistogramOnSuccessWhenStampPresent(): void
+    {
+        $metrics = new RecordingMetricsCollector();
+        $middleware = new MetricsEndMiddleware($metrics);
+        $envelope = $this->envelope()->with(new MetricsTimingStamp(microtime(true) - 0.05));
+
+        $middleware->process(
+            $envelope,
+            Closure::fromCallable(static fn(Envelope $e): string => 'next'),
+        );
+
+        $histogramRecords = [];
+
+        foreach ($metrics->records as $record) {
+            if ($record['kind'] === 'histogram') {
+                $histogramRecords[] = $record;
+            }
+        }
+
+        self::assertCount(1, $histogramRecords);
+        self::assertSame('ddd.command.duration_ms', $histogramRecords[0]['name']);
+        self::assertSame(['type' => stdClass::class], $histogramRecords[0]['tags']);
+        self::assertGreaterThan(0.0, $histogramRecords[0]['value']);
+    }
+
+    #[Test]
+    public function emitsDurationHistogramOnTerminalFailureWhenStampPresent(): void
+    {
+        $metrics = new RecordingMetricsCollector();
+        $middleware = new MetricsEndMiddleware($metrics);
+        $envelope = $this->envelope()->with(new MetricsTimingStamp(microtime(true) - 0.05));
+        $failure = ValidationFailedException::with(Violations::empty());
+
+        try {
+            $middleware->process(
+                $envelope,
+                Closure::fromCallable(static fn(Envelope $e) => throw $failure),
+            );
+            self::fail('expected rethrow');
+        } catch (Throwable $caught) {
+            self::assertSame($failure, $caught);
+        }
+
+        $histogramRecords = [];
+
+        foreach ($metrics->records as $record) {
+            if ($record['kind'] === 'histogram') {
+                $histogramRecords[] = $record;
+            }
+        }
+
+        self::assertCount(1, $histogramRecords);
+        self::assertSame('ddd.command.duration_ms', $histogramRecords[0]['name']);
+    }
+
+    #[Test]
+    public function omitsDurationHistogramWhenStampAbsent(): void
+    {
+        $metrics = new RecordingMetricsCollector();
+        $middleware = new MetricsEndMiddleware($metrics);
+
+        $middleware->process(
+            $this->envelope(),
+            Closure::fromCallable(static fn(Envelope $e): string => 'next'),
+        );
+
+        foreach ($metrics->records as $record) {
+            self::assertNotSame('histogram', $record['kind']);
+        }
     }
 
     /** @return Envelope<stdClass> */

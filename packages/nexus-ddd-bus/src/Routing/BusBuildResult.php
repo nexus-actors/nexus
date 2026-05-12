@@ -25,5 +25,7 @@ final readonly class BusBuildResult
         public HandlerAttributeIndex $index,
         public array $handlerMap,
         public array $customMiddlewares,
+        public int $causationDepthCap = 32,
+        public int $retryBudgetMs = 5_000,
     ) {}
 }

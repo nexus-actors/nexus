@@ -18,7 +18,7 @@ final readonly class CompiledBusBootSnapshot
 {
     /**
      * @param array<class-string, class-string> $handlerMap
-     * @param array<class-string, CompiledHandlerEntry> $entries
+     * @param array<class-string, ResolvedAttributesEntry> $entries
      */
-    public function __construct(public array $handlerMap, public array $entries) {}
+    public function __construct(public string $sourceHash, public array $handlerMap, public array $entries) {}
 }

@@ -73,8 +73,6 @@ final class CanonicalPipelineAssembler
         private readonly SleepStrategy $sleep,
         private readonly Outbox $outbox,
         private readonly CommandHandlerLocator $handlerLocator,
-        private readonly int $causationDepthCap = 32,
-        private readonly int $retryBudgetMs = 5_000,
         private readonly bool $logPayloadAtDebug = false,
     ) {}
 
@@ -94,7 +92,12 @@ final class CanonicalPipelineAssembler
 
         foreach ($result->handlerMap as $messageClass => $_handlerClass) {
             $entry = $result->index->lookup($messageClass)->getUnsafe();
-            $stages = $this->canonicalStagesForHandler($result->index, $entry->authorizeBeforeValidate);
+            $stages = $this->canonicalStagesForHandler(
+                $result->index,
+                $entry->authorizeBeforeValidate,
+                $result->causationDepthCap,
+                $result->retryBudgetMs,
+            );
             $spliced = $this->spliceCustomMiddleware($stages, $result->customMiddlewares);
             $pipelines[$messageClass] = new MiddlewarePipeline($spliced, $core);
         }
@@ -113,7 +116,12 @@ final class CanonicalPipelineAssembler
     {
         $perHandler = $this->assemble($result, $core);
         $fallback = new MiddlewarePipeline(
-            $this->canonicalStagesForHandler($result->index, false),
+            $this->canonicalStagesForHandler(
+                $result->index,
+                false,
+                $result->causationDepthCap,
+                $result->retryBudgetMs,
+            ),
             $core,
         );
 
@@ -123,9 +131,13 @@ final class CanonicalPipelineAssembler
     /**
      * @return list<Middleware>  outermost-first
      */
-    private function canonicalStagesForHandler(HandlerAttributeIndex $index, bool $authorizeBeforeValidate): array
-    {
-        $causation = new CausationPropagationMiddleware($this->causationDepthCap);
+    private function canonicalStagesForHandler(
+        HandlerAttributeIndex $index,
+        bool $authorizeBeforeValidate,
+        int $causationDepthCap,
+        int $retryBudgetMs,
+    ): array {
+        $causation = new CausationPropagationMiddleware($causationDepthCap);
         $otel = new OpenTelemetrySpanMiddleware();
         $logStart = new LoggingStartMiddleware($this->logger, $this->redactor, $this->logPayloadAtDebug);
         $metricsStart = new MetricsStartMiddleware($this->metrics);
@@ -151,7 +163,7 @@ final class CanonicalPipelineAssembler
             $this->clock,
             $this->logger,
             $this->metrics,
-            $this->retryBudgetMs,
+            $retryBudgetMs,
             $this->sleep,
         );
         $handler = new HandlerInvocationMiddleware($this->handlerLocator);

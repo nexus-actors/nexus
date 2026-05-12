@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Fp\Functional\Option\Option;
 use Monadial\Nexus\Ddd\Bus\Metrics\MetricOutcome;
+use Monadial\Nexus\Ddd\Bus\Metrics\MetricsTimingStamp;
 use Monadial\Nexus\Ddd\Bus\Middleware\MetricsStartMiddleware;
 use Monadial\Nexus\Ddd\Bus\Tests\Support\RecordingMetricsCollector;
 use Monadial\Nexus\Ddd\Messaging\Envelope\Envelope;
@@ -59,7 +60,28 @@ final class MetricsStartMiddlewareTest extends TestCase
         $result = new MetricsStartMiddleware($metrics)->process($envelope, Closure::fromCallable($next));
 
         self::assertSame('next-result', $result);
-        self::assertSame($envelope, $captured);
+        self::assertInstanceOf(Envelope::class, $captured);
+        self::assertSame($envelope->message, $captured->message);
+    }
+
+    #[Test]
+    public function stampsEnvelopeWithMetricsTimingStamp(): void
+    {
+        $metrics = new RecordingMetricsCollector();
+        $envelope = $this->envelope();
+        $captured = null;
+
+        $next = static function (Envelope $env) use (&$captured): string {
+            $captured = $env;
+
+            return 'next';
+        };
+
+        new MetricsStartMiddleware($metrics)->process($envelope, Closure::fromCallable($next));
+
+        self::assertInstanceOf(Envelope::class, $captured);
+        $stamp = $captured->get(MetricsTimingStamp::class)->getUnsafe();
+        self::assertGreaterThan(0.0, $stamp->startMicros);
     }
 
     #[Test]

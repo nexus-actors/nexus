@@ -127,6 +127,10 @@ final class PipelineHarness
             (void) $this->builder->withMiddleware($extra, PipelineStage::Causation);
         }
 
+        (void) $this->builder
+            ->withCausationDepthCap($this->causationDepthCap)
+            ->withRetryBudgetMs($this->retryBudgetMs);
+
         $result = $this->builder->build(
             $this->profile,
             hasValidator: $this->hasValidator,
@@ -164,8 +168,6 @@ final class PipelineHarness
             $this->sleep,
             $this->outbox,
             $this->locator,
-            $this->causationDepthCap,
-            $this->retryBudgetMs,
         );
 
         return $assembler->assembleEnvelopePipeline($result, static fn(Envelope $_e): mixed => null);

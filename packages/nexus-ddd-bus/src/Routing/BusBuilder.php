@@ -12,20 +12,11 @@ use Monadial\Nexus\Ddd\Bus\Exception\MissingValidatorException;
 use Monadial\Nexus\Ddd\Bus\Middleware\Middleware;
 use Monadial\Nexus\Ddd\Bus\Middleware\PipelineStage;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
-use Nette\PhpGenerator\Dumper;
-use Nette\PhpGenerator\Literal;
 use NoDiscard;
 use ReflectionClass;
 use RuntimeException;
 
 use function array_keys;
-use function dirname;
-use function file_put_contents;
-use function is_file;
-use function ksort;
-use function rename;
-use function sprintf;
-use function tempnam;
 
 /**
  * @psalm-api
@@ -53,6 +44,10 @@ final class BusBuilder
 
     /** @var list<CustomMiddlewareRegistration> */
     private array $customMiddlewares = [];
+
+    private int $causationDepthCap = 32;
+
+    private int $retryBudgetMs = 5_000;
 
     /**
      * @param class-string $messageClass
@@ -99,6 +94,32 @@ final class BusBuilder
     }
 
     /**
+     * Override the default 32-frame causation depth cap. Adopters with
+     * deeper saga chains can raise this; tightening it (e.g. to 8) is also
+     * a valid hardening choice. Defaults to 32.
+     */
+    #[NoDiscard('withCausationDepthCap returns the builder — chain or assign')]
+    public function withCausationDepthCap(int $cap): self
+    {
+        $this->causationDepthCap = $cap;
+
+        return $this;
+    }
+
+    /**
+     * Override the default 5000ms OCC retry budget. The budget is the
+     * total wall-clock time `OccRetryMiddleware` may consume across all
+     * retry attempts before declaring the operation exhausted.
+     */
+    #[NoDiscard('withRetryBudgetMs returns the builder — chain or assign')]
+    public function withRetryBudgetMs(int $budgetMs): self
+    {
+        $this->retryBudgetMs = $budgetMs;
+
+        return $this;
+    }
+
+    /**
      * @throws MissingValidatorException when a handler is `#[Validate]`-annotated and no validator is registered
      * @throws MissingAuthorizationDeciderException when a handler is `#[Authorize]`-annotated and no decider is registered
      * @throws \Monadial\Nexus\Ddd\Bus\Exception\InProcessConnectionMismatchException when an `#[InProcess]` handler binds to a different connection than its source aggregate
@@ -131,6 +152,8 @@ final class BusBuilder
             new HandlerAttributeIndex($entries),
             $this->handlers,
             $this->customMiddlewares,
+            $this->causationDepthCap,
+            $this->retryBudgetMs,
         );
     }
 
@@ -157,21 +180,7 @@ final class BusBuilder
         Composite $routing,
     ): void {
         $result = $this->build($profile, $hasValidator, $hasDecider, $routing);
-        $code = $this->renderSnapshot($result);
-
-        $tmp = tempnam(dirname($path), 'ddd-routes-compile-');
-
-        if ($tmp === false) {
-            throw new RuntimeException(sprintf('Could not create temp file in directory of %s', $path));
-        }
-
-        if (file_put_contents($tmp, $code) === false) {
-            throw new RuntimeException(sprintf('Could not write snapshot to temp file %s', $tmp));
-        }
-
-        if (!rename($tmp, $path)) {
-            throw new RuntimeException(sprintf('Could not rename %s to %s', $tmp, $path));
-        }
+        new CompiledBusBootWriter()->writeTo($path, $result);
     }
 
     /**
@@ -186,31 +195,11 @@ final class BusBuilder
      */
     public function loadCompiledFrom(string $path): BusBuildResult
     {
-        if (!is_file($path)) {
-            throw new RuntimeException(sprintf('Compiled snapshot not found at %s', $path));
-        }
-
-        /** @var mixed $snapshot */
-        $snapshot = require $path;
-
-        if (!$snapshot instanceof CompiledBusBootSnapshot) {
-            throw new RuntimeException(sprintf(
-                'Compiled snapshot file %s did not return a CompiledBusBootSnapshot instance',
-                $path,
-            ));
-        }
-
-        /** @var array<class-string, ResolvedAttributesEntry> $entries */
-        $entries = [];
-
-        foreach ($snapshot->entries as $messageClass => $entry) {
-            $entries[$messageClass] = $entry->toResolvedAttributesEntry();
-        }
-
-        return new BusBuildResult(
-            new HandlerAttributeIndex($entries),
-            $snapshot->handlerMap,
+        return new CompiledBusBootReader()->readFrom(
+            $path,
             $this->customMiddlewares,
+            $this->causationDepthCap,
+            $this->retryBudgetMs,
         );
     }
 
@@ -248,80 +237,4 @@ final class BusBuilder
         return new ResolvedAttributesEntry($handlerClass, $attributes, $authorizeBeforeValidate, $idempotencyOptedOut);
     }
 
-    /**
-     * Emit the snapshot as opcache-friendly PHP. Top-level shape:
-     *
-     *     <?php
-     *     declare(strict_types=1);
-     *     return new \Monadial\Nexus\Ddd\Bus\Routing\CompiledBusBootSnapshot(
-     *         handlerMap: [...],
-     *         entries: [...],
-     *     );
-     *
-     * Uses `Nette\PhpGenerator\Dumper` for scalar/array dumping; attribute
-     * instances and `CompiledHandlerEntry` are emitted via `Dumper::format()`
-     * with a `new \FQN(...?:)` template (the `...?:` placeholder expands an
-     * associative array as named arguments) and wrapped in `Literal` when
-     * placed inside an outer array so `Dumper` inlines them verbatim instead
-     * of falling back to `__set_state`-style object dumping.
-     */
-    private function renderSnapshot(BusBuildResult $result): string
-    {
-        $dumper = new Dumper();
-        $dumper->indentation = '    ';
-
-        $handlerMap = $result->handlerMap;
-        ksort($handlerMap);
-
-        $entries = [];
-
-        foreach ($result->index->all() as $messageClass => $entry) {
-            $entries[$messageClass] = new Literal($this->renderCompiledHandlerEntry($entry, $dumper));
-        }
-
-        ksort($entries);
-
-        return sprintf(
-            "<?php\n\ndeclare(strict_types=1);\n\n// Generated by ddd:routes:compile — do not edit by hand.\n// To refresh: bin/console ddd:routes:compile <output-path>.\n\nreturn new \\%s(\n    handlerMap: %s,\n    entries: %s,\n);\n",
-            CompiledBusBootSnapshot::class,
-            $dumper->dump($handlerMap),
-            $dumper->dump($entries),
-        );
-    }
-
-    private function renderCompiledHandlerEntry(ResolvedAttributesEntry $entry, Dumper $dumper): string
-    {
-        $attributes = [];
-
-        foreach ($entry->attributes as $attrClass => $instance) {
-            $attributes[$attrClass] = new Literal($this->renderAttributeInstance($instance, $dumper));
-        }
-
-        ksort($attributes);
-
-        return $dumper->format(
-            'new \\' . CompiledHandlerEntry::class . '(...?:)',
-            [
-                'attributes' => $attributes,
-                'authorizeBeforeValidate' => $entry->authorizeBeforeValidate,
-                'handlerClass' => $entry->handlerClass,
-                'idempotencyOptedOut' => $entry->idempotencyOptedOut,
-            ],
-        );
-    }
-
-    private function renderAttributeInstance(object $instance, Dumper $dumper): string
-    {
-        $reflection = new ReflectionClass($instance);
-        $class = $reflection->getName();
-        /** @var array<string, mixed> $args */
-        $args = [];
-
-        foreach ($reflection->getProperties() as $property) {
-            /** @psalm-suppress MixedAssignment — attribute properties are typed by the attribute class itself */
-            $args[$property->getName()] = $property->getValue($instance);
-        }
-
-        return $dumper->format('new \\' . $class . '(...?:)', $args);
-    }
 }

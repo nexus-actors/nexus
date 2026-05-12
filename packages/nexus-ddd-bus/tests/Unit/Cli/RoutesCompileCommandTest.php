@@ -17,8 +17,14 @@ use Symfony\Component\Console\Command\Command as SymfonyCommand;
 use Symfony\Component\Console\Exception\RuntimeException as SymfonyRuntimeException;
 use Symfony\Component\Console\Tester\CommandTester;
 
+use function chmod;
 use function file_put_contents;
+use function function_exists;
+use function is_dir;
 use function is_file;
+use function mkdir;
+use function posix_geteuid;
+use function rmdir;
 use function sys_get_temp_dir;
 use function tempnam;
 use function unlink;
@@ -130,6 +136,45 @@ final class RoutesCompileCommandTest extends TestCase
 
         self::assertSame(SymfonyCommand::FAILURE, $exit);
         self::assertStringContainsString('Parent directory', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function readOnlyParentDirectoryFails(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped(
+                'chmod-based writability is bypassed for the root user; run this case under a non-root UID.',
+            );
+        }
+
+        $readOnlyDir = sys_get_temp_dir() . '/ddd-routes-readonly-' . __FUNCTION__;
+
+        if (is_dir($readOnlyDir)) {
+            chmod($readOnlyDir, 0o755);
+            rmdir($readOnlyDir);
+        }
+
+        mkdir($readOnlyDir, 0o755);
+        chmod($readOnlyDir, 0o555);
+
+        try {
+            $command = new RoutesCompileCommand(
+                new BusBuilder(),
+                new Composite([], 'misc'),
+                Profile::Sync,
+                hasValidator: false,
+                hasDecider: false,
+            );
+            $tester = new CommandTester($command);
+
+            $exit = $tester->execute(['output' => $readOnlyDir . '/snapshot.php']);
+
+            self::assertSame(SymfonyCommand::FAILURE, $exit);
+            self::assertStringContainsString('not writable', $tester->getDisplay());
+        } finally {
+            chmod($readOnlyDir, 0o755);
+            rmdir($readOnlyDir);
+        }
     }
 
     #[Test]

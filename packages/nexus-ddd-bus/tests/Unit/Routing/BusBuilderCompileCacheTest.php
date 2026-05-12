@@ -53,6 +53,7 @@ final class BusBuilderCompileCacheTest extends TestCase
         $snapshot = require $this->snapshotPath;
         self::assertInstanceOf(CompiledBusBootSnapshot::class, $snapshot);
         self::assertSame([CompileCacheMessage::class => CompileCacheHandler::class], $snapshot->handlerMap);
+        self::assertNotSame('', $snapshot->sourceHash);
     }
 
     #[Test]

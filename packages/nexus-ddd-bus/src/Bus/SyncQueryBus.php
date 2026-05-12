@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Bus\Bus;
 
 use Fp\Functional\Either\Either;
-use Monadial\Nexus\Ddd\Bus\Exception\BusInvariantException;
 use Monadial\Nexus\Ddd\Bus\Middleware\EnvelopePipeline;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
@@ -64,17 +63,8 @@ final class SyncQueryBus implements QueryBus, EnvelopedQueryBus
     {
         $envelope = new Envelope($query, MessageMetadata::root($this->clock));
 
-        try {
-            /** @psalm-suppress InvalidReturnStatement, MixedArgument */
-            return Either::right($this->pipeline->dispatch($envelope));
-        } catch (Throwable $e) {
-            if ($e instanceof BusInvariantException) {
-                throw $e;
-            }
-
-            /** @psalm-suppress InvalidReturnStatement */
-            return Either::left($e);
-        }
+        /** @psalm-suppress MixedReturnTypeCoercion */
+        return BusInvariantBoundary::tryRun(fn(): mixed => $this->pipeline->dispatch($envelope));
     }
 
     /** @psalm-suppress InvalidArgument */

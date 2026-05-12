@@ -19,6 +19,7 @@ use function count;
 use function dirname;
 use function is_dir;
 use function is_file;
+use function is_writable;
 use function sprintf;
 
 /**
@@ -71,6 +72,12 @@ final class RoutesCompileCommand extends Command
 
         if (!is_dir($parent)) {
             $output->writeln(sprintf('<error>Parent directory %s does not exist.</error>', $parent));
+
+            return self::FAILURE;
+        }
+
+        if (!is_writable($parent)) {
+            $output->writeln(sprintf('<error>Parent directory %s is not writable.</error>', $parent));
 
             return self::FAILURE;
         }

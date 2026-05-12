@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Ddd\Bus\Bus;
 
 use Fp\Functional\Either\Either;
-use Monadial\Nexus\Ddd\Bus\Exception\BusInvariantException;
 use Monadial\Nexus\Ddd\Bus\Middleware\EnvelopePipeline;
 use Monadial\Nexus\Ddd\Bus\Profile\Profile;
 use Monadial\Nexus\Ddd\Bus\Routing\BusRegistry;
@@ -70,19 +69,11 @@ final class SyncCommandBus implements CommandBus, EnvelopedCommandBus
     {
         $envelope = new Envelope($command, MessageMetadata::root($this->clock));
 
-        try {
+        return BusInvariantBoundary::tryRun(function () use ($envelope): Accepted {
             $this->pipeline->dispatch($envelope);
 
-            /** @psalm-suppress InvalidReturnStatement */
-            return Either::right(new Accepted());
-        } catch (Throwable $e) {
-            if ($e instanceof BusInvariantException) {
-                throw $e;
-            }
-
-            /** @psalm-suppress InvalidReturnStatement */
-            return Either::left($e);
-        }
+            return new Accepted();
+        });
     }
 
     /** @psalm-suppress InvalidArgument */

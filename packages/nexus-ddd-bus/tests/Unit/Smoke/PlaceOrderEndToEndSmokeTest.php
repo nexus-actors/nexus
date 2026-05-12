@@ -13,6 +13,10 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function array_filter;
+use function array_map;
+use function array_values;
+
 /**
  * Full-pipeline smoke: dispatching a `PlaceOrder` command runs every
  * canonical middleware (start/end metrics + logs, validation/auth pass-through,
@@ -42,7 +46,10 @@ final class PlaceOrderEndToEndSmokeTest extends TestCase
 
         $outcomes = array_map(
             static fn(array $r): string => (string) $r['tags']['outcome'],
-            $harness->metrics->records,
+            array_values(array_filter(
+                $harness->metrics->records,
+                static fn(array $r): bool => $r['kind'] === 'count' && isset($r['tags']['outcome']),
+            )),
         );
         self::assertContains(MetricOutcome::Started->value, $outcomes);
         self::assertContains(MetricOutcome::Succeeded->value, $outcomes);
