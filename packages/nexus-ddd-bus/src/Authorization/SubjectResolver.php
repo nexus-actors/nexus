@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Ddd\Bus\Authorization;
 
-use Closure;
 use LogicException;
 use Monadial\Nexus\Ddd\Messaging\Context\MessageContext;
+use ReflectionMethod;
 use ReflectionObject;
 
-use function is_callable;
+use function class_exists;
+use function explode;
+use function method_exists;
 use function sprintf;
 use function str_contains;
 
@@ -26,16 +28,28 @@ final class SubjectResolver
     public function resolve(object $message, string $subjectSpec, MessageContext $ctx): mixed
     {
         if (str_contains($subjectSpec, '::')) {
-            if (!is_callable($subjectSpec)) {
+            [$class, $method] = explode('::', $subjectSpec, 2);
+
+            if (!class_exists($class) || !method_exists($class, $method)) {
                 throw new LogicException(sprintf(
-                    'Subject spec `%s` looks like a `Class::method` callable but is not callable. The method must exist and be public+static.',
+                    'Subject spec `%s` looks like a `Class::method` callable but the class or method does not exist.',
                     $subjectSpec,
                 ));
             }
 
-            $callable = Closure::fromCallable($subjectSpec);
+            $reflection = new ReflectionMethod($class, $method);
 
-            return $callable($message, $ctx);
+            if (!$reflection->isPublic() || !$reflection->isStatic()) {
+                throw new LogicException(sprintf(
+                    'Subject spec `%s` must reference a public static method.',
+                    $subjectSpec,
+                ));
+            }
+
+            /** @var mixed $value */
+            $value = $reflection->invoke(null, $message, $ctx);
+
+            return $value;
         }
 
         $reflection = new ReflectionObject($message);

@@ -137,9 +137,8 @@ final class BusBuilder
     /**
      * Run reflection (same path as `build()`) and write the result to
      * disk as opcache-friendly PHP. Adopters run this at deploy time
-     * (typically via `bin/console ddd:routes:compile <path>`) so the
-     * production boot path can `loadCompiledFrom()` without paying the
-     * reflection cost.
+     * (see `Cli/RoutesCompileCommand`) so the production boot path can
+     * `loadCompiledFrom()` without paying the reflection cost.
      *
      * The output is written atomically: a tmp file in the destination
      * directory + `rename()`.

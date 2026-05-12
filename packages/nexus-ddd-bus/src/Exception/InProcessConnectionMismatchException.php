@@ -9,18 +9,18 @@ use function sprintf;
 /**
  * @psalm-api
  *
- * Thrown when two aggregates touched in the same transaction resolve to
+ * Thrown when two bound classes touched in the same transaction resolve to
  * different DBAL/Doctrine connection names — the in-process same-DB
- * invariant requires all aggregates in a unit-of-work to share one
+ * invariant requires all bound classes in a unit-of-work to share one
  * connection.
  */
 final class InProcessConnectionMismatchException extends BusRuntimeException
 {
-    public static function for(string $aggregateClass, string $expectedConnection, string $actualConnection): self
+    public static function for(string $boundClass, string $expectedConnection, string $actualConnection): self
     {
         return new self(sprintf(
-            'Aggregate `%s` resolved to connection `%s`, expected `%s`.',
-            $aggregateClass,
+            'Bound class `%s` resolved to connection `%s`, expected `%s`.',
+            $boundClass,
             $actualConnection,
             $expectedConnection,
         ));

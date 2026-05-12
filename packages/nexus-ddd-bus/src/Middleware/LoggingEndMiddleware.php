@@ -10,6 +10,9 @@ use Override;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function strlen;
+use function substr;
+
 /**
  * @psalm-api
  *
@@ -18,12 +21,17 @@ use Throwable;
  * (`ddd.command.failed`) carrying the same envelope identifiers as the
  * start log so log scraping can correlate the dispatch lifecycle.
  *
+ * The exception message is truncated at 1024 bytes to prevent unbounded
+ * user-data from polluting logs (panel Security F5).
+ *
  * @template TIn of object
  * @template TOut
  * @implements Middleware<TIn, TOut>
  */
 final class LoggingEndMiddleware implements Middleware
 {
+    public const int EXCEPTION_MESSAGE_MAX_LENGTH = 1024;
+
     public function __construct(private readonly LoggerInterface $logger) {}
 
     #[Override]
@@ -34,7 +42,7 @@ final class LoggingEndMiddleware implements Middleware
         } catch (Throwable $e) {
             $this->logger->warning('ddd.command.failed', [
                 'exception_class' => $e::class,
-                'exception_message' => $e->getMessage(),
+                'exception_message' => self::truncate($e->getMessage()),
                 'messageId' => $envelope->metadata->id->value(),
                 'messageType' => $envelope->message::class,
             ]);
@@ -48,5 +56,14 @@ final class LoggingEndMiddleware implements Middleware
         ]);
 
         return $result;
+    }
+
+    private static function truncate(string $message): string
+    {
+        if (strlen($message) <= self::EXCEPTION_MESSAGE_MAX_LENGTH) {
+            return $message;
+        }
+
+        return substr($message, 0, self::EXCEPTION_MESSAGE_MAX_LENGTH) . '...';
     }
 }

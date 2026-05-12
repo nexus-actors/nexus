@@ -38,7 +38,7 @@ final class AccessDeniedExceptionTest extends TestCase
     }
 
     #[Test]
-    public function forWithPrincipalAppendsPrincipalId(): void
+    public function forWithPrincipalDoesNotLeakIdInMessage(): void
     {
         $principal = new class implements Principal {
             #[Override]
@@ -50,6 +50,32 @@ final class AccessDeniedExceptionTest extends TestCase
 
         $ex = AccessDeniedException::for('order.place', 'order-42', $principal);
 
-        self::assertStringContainsString('principal=user-7', $ex->getMessage());
+        self::assertStringNotContainsString('user-7', $ex->getMessage());
+        self::assertStringNotContainsString('principal=', $ex->getMessage());
+    }
+
+    #[Test]
+    public function principalAccessorReturnsSomeWhenSupplied(): void
+    {
+        $principal = new class implements Principal {
+            #[Override]
+            public function id(): string
+            {
+                return 'user-7';
+            }
+        };
+
+        $ex = AccessDeniedException::for('order.place', 'order-42', $principal);
+
+        self::assertTrue($ex->principal()->isSome());
+        self::assertSame($principal, $ex->principal()->getUnsafe());
+    }
+
+    #[Test]
+    public function principalAccessorReturnsNoneWhenAbsent(): void
+    {
+        $ex = AccessDeniedException::for('order.place', 'order-42');
+
+        self::assertTrue($ex->principal()->isNone());
     }
 }

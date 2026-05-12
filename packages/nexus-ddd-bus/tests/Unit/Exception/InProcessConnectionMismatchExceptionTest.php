@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 final class InProcessConnectionMismatchExceptionTest extends TestCase
 {
     #[Test]
-    public function forBuildsExceptionWithAggregateAndConnections(): void
+    public function forBuildsExceptionWithBoundClassAndConnections(): void
     {
         $ex = InProcessConnectionMismatchException::for('App\\Order\\Order', 'orders_write', 'shipments_write');
 
@@ -22,5 +22,6 @@ final class InProcessConnectionMismatchExceptionTest extends TestCase
         self::assertStringContainsString('App\\Order\\Order', $ex->getMessage());
         self::assertStringContainsString('orders_write', $ex->getMessage());
         self::assertStringContainsString('shipments_write', $ex->getMessage());
+        self::assertStringContainsString('Bound class', $ex->getMessage());
     }
 }

@@ -22,6 +22,10 @@ use RuntimeException;
 use stdClass;
 use Throwable;
 
+use function str_repeat;
+use function strlen;
+use function substr;
+
 #[CoversClass(LoggingEndMiddleware::class)]
 final class LoggingEndMiddlewareTest extends TestCase
 {
@@ -72,6 +76,53 @@ final class LoggingEndMiddlewareTest extends TestCase
         self::assertSame('boom', $context['exception_message']);
         self::assertSame($envelope->metadata->id->value(), $context['messageId']);
         self::assertSame(stdClass::class, $context['messageType']);
+    }
+
+    #[Test]
+    public function exceptionMessageLongerThanCapIsTruncatedWithEllipsis(): void
+    {
+        $logger = new RecordingLogger();
+        $middleware = new LoggingEndMiddleware($logger);
+        $oversized = str_repeat('a', LoggingEndMiddleware::EXCEPTION_MESSAGE_MAX_LENGTH + 100);
+
+        try {
+            $middleware->process(
+                $this->envelope(),
+                Closure::fromCallable(static fn(Envelope $e) => throw new RuntimeException($oversized)),
+            );
+            self::fail('expected rethrow');
+        } catch (Throwable) {
+            // expected
+        }
+
+        $logged = $logger->records[0]['context']['exception_message'];
+        self::assertIsString($logged);
+        self::assertSame(LoggingEndMiddleware::EXCEPTION_MESSAGE_MAX_LENGTH + 3, strlen($logged));
+        self::assertSame(
+            str_repeat('a', LoggingEndMiddleware::EXCEPTION_MESSAGE_MAX_LENGTH),
+            substr($logged, 0, LoggingEndMiddleware::EXCEPTION_MESSAGE_MAX_LENGTH),
+        );
+        self::assertSame('...', substr($logged, -3));
+    }
+
+    #[Test]
+    public function exceptionMessageAtCapIsNotTruncated(): void
+    {
+        $logger = new RecordingLogger();
+        $middleware = new LoggingEndMiddleware($logger);
+        $atCap = str_repeat('b', LoggingEndMiddleware::EXCEPTION_MESSAGE_MAX_LENGTH);
+
+        try {
+            $middleware->process(
+                $this->envelope(),
+                Closure::fromCallable(static fn(Envelope $e) => throw new RuntimeException($atCap)),
+            );
+            self::fail('expected rethrow');
+        } catch (Throwable) {
+            // expected
+        }
+
+        self::assertSame($atCap, $logger->records[0]['context']['exception_message']);
     }
 
     #[Test]

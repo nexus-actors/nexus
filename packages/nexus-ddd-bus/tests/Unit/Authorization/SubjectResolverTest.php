@@ -58,16 +58,50 @@ final class SubjectResolverTest extends TestCase
     }
 
     #[Test]
-    public function callableFormThrowsLogicExceptionWhenSpecIsNotCallable(): void
+    public function callableFormThrowsLogicExceptionWhenClassMissing(): void
     {
         $resolver = new SubjectResolver();
         $message = new SubjectResolverFixtureMessage('user-1');
         $ctx = $this->messageContext();
 
         $this->expectException(LogicException::class);
-        $this->expectExceptionMessage('looks like a `Class::method` callable but is not callable');
+        $this->expectExceptionMessage('class or method does not exist');
 
         $resolver->resolve($message, 'NoSuchClass::nope', $ctx);
+    }
+
+    #[Test]
+    public function callableFormThrowsLogicExceptionWhenMethodIsNotStatic(): void
+    {
+        $resolver = new SubjectResolver();
+        $message = new SubjectResolverFixtureMessage('user-1');
+        $ctx = $this->messageContext();
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('must reference a public static method');
+
+        $resolver->resolve(
+            $message,
+            SubjectResolverFixtureMessage::class . '::instanceMethod',
+            $ctx,
+        );
+    }
+
+    #[Test]
+    public function callableFormThrowsLogicExceptionWhenMethodIsPrivate(): void
+    {
+        $resolver = new SubjectResolver();
+        $message = new SubjectResolverFixtureMessage('user-1');
+        $ctx = $this->messageContext();
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('must reference a public static method');
+
+        $resolver->resolve(
+            $message,
+            SubjectResolverFixtureMessage::class . '::privateStatic',
+            $ctx,
+        );
     }
 
     private function messageContext(): MessageContext
@@ -100,5 +134,17 @@ final readonly class SubjectResolverFixtureMessage
         assert($message instanceof self);
 
         return $message->userId;
+    }
+
+    /** @psalm-suppress PossiblyUnusedMethod — fixture surfaces a non-static method for SubjectResolver tightening test. */
+    public function instanceMethod(object $message, MessageContext $ctx): string
+    {
+        return $this->userId;
+    }
+
+    /** @psalm-suppress UnusedMethod — fixture surfaces a private static method for SubjectResolver tightening test. */
+    private static function privateStatic(object $message, MessageContext $ctx): string
+    {
+        return 'never';
     }
 }

@@ -9,11 +9,15 @@ use Attribute;
 /**
  * @psalm-api
  *
- * #[Authorize(policy: 'order.cancel', subject: 'orderId')]
- *   String form: subject names a property on the command class.
- *
  * #[Authorize(policy: 'order.cancel', subject: 'App\\Subjects\\OrderSubject::resolve')]
- *   Callable form: 'Class::method' (public static); receives ($message, MessageContext): mixed.
+ *   Canonical (callable) form: `Class::method` (public static); receives
+ *   ($message, MessageContext) and returns the subject. Keeps the bus
+ *   ignorant of message-internal field naming.
+ *
+ * #[Authorize(policy: 'order.cancel', subject: 'orderId')]
+ *   Shortcut form: names a property on the message class. Convenient for
+ *   simple cases but couples the bus configuration to property names —
+ *   prefer the callable form whenever the subject derivation is non-trivial.
  *
  * The `before:` field flips pipeline ordering — set to 'validation' to
  * run Authorize before Validate. Validated by MiddlewareOrderingRule.

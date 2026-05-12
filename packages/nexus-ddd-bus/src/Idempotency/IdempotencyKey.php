@@ -6,6 +6,9 @@ namespace Monadial\Nexus\Ddd\Bus\Idempotency;
 
 use InvalidArgumentException;
 
+use function sprintf;
+use function strlen;
+
 /**
  * @psalm-api
  * @psalm-immutable
@@ -18,10 +21,20 @@ use InvalidArgumentException;
  */
 final readonly class IdempotencyKey
 {
+    public const int MAX_LENGTH = 256;
+
     public function __construct(public string $value)
     {
         if ($value === '') {
             throw new InvalidArgumentException('IdempotencyKey value cannot be empty.');
+        }
+
+        if (strlen($value) > self::MAX_LENGTH) {
+            throw new InvalidArgumentException(sprintf(
+                'IdempotencyKey value length %d exceeds maximum %d bytes.',
+                strlen($value),
+                self::MAX_LENGTH,
+            ));
         }
     }
 
