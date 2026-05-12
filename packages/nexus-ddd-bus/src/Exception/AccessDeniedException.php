@@ -41,11 +41,7 @@ final class AccessDeniedException extends DomainException implements TerminalFai
             ? (string) $subject
             : get_debug_type($subject);
 
-        $exception = new self(sprintf(
-            'Access denied: principal cannot perform `%s` on `%s`.',
-            $policy,
-            $subjectStr,
-        ));
+        $exception = new self(sprintf('Access denied: principal cannot perform `%s` on `%s`.', $policy, $subjectStr));
         $exception->principal = Option::fromNullable($principal);
 
         return $exception;

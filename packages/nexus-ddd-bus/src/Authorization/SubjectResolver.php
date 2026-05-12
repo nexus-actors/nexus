@@ -28,7 +28,9 @@ final class SubjectResolver
     public function resolve(object $message, string $subjectSpec, MessageContext $ctx): mixed
     {
         if (str_contains($subjectSpec, '::')) {
-            [$class, $method] = explode('::', $subjectSpec, 2);
+            /** @var array{0: string, 1: string} $parts */
+            $parts = explode('::', $subjectSpec, 2);
+            [$class, $method] = $parts;
 
             if (!class_exists($class) || !method_exists($class, $method)) {
                 throw new LogicException(sprintf(

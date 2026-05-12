@@ -80,11 +80,7 @@ final class SubjectResolverTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('must reference a public static method');
 
-        $resolver->resolve(
-            $message,
-            SubjectResolverFixtureMessage::class . '::instanceMethod',
-            $ctx,
-        );
+        $resolver->resolve($message, SubjectResolverFixtureMessage::class . '::instanceMethod', $ctx);
     }
 
     #[Test]
@@ -97,11 +93,7 @@ final class SubjectResolverTest extends TestCase
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('must reference a public static method');
 
-        $resolver->resolve(
-            $message,
-            SubjectResolverFixtureMessage::class . '::privateStatic',
-            $ctx,
-        );
+        $resolver->resolve($message, SubjectResolverFixtureMessage::class . '::privateStatic', $ctx);
     }
 
     private function messageContext(): MessageContext
@@ -129,17 +121,17 @@ final readonly class SubjectResolverFixtureMessage
 {
     public function __construct(public string $userId) {}
 
+    /** @psalm-suppress PossiblyUnusedMethod — fixture surfaces a non-static method for SubjectResolver tightening test. */
+    public function instanceMethod(object $message, MessageContext $ctx): string
+    {
+        return $this->userId;
+    }
+
     public static function pickUserId(object $message, MessageContext $ctx): string
     {
         assert($message instanceof self);
 
         return $message->userId;
-    }
-
-    /** @psalm-suppress PossiblyUnusedMethod — fixture surfaces a non-static method for SubjectResolver tightening test. */
-    public function instanceMethod(object $message, MessageContext $ctx): string
-    {
-        return $this->userId;
     }
 
     /** @psalm-suppress UnusedMethod — fixture surfaces a private static method for SubjectResolver tightening test. */
