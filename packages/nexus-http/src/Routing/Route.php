@@ -40,10 +40,16 @@ final readonly class Route
 
     public function withPrefixedPath(string $prefix): self
     {
-        $combined = rtrim($prefix, '/') . '/' . ltrim($this->path, '/');
-        $combined = $combined === ''
-            ? '/'
-            : $combined;
+        $left = rtrim($prefix, '/');
+        $right = ltrim($this->path, '/');
+
+        if ($right === '') {
+            $combined = $left === ''
+                ? '/'
+                : $left;
+        } else {
+            $combined = $left . '/' . $right;
+        }
 
         return new self($this->method, $combined, $this->handler, $this->middleware, $this->name);
     }
