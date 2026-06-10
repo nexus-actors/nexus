@@ -77,6 +77,11 @@ deptrac:
         - type: directory
           value: packages/nexus-persistence-doctrine/src/.*
 
+    - name: Http
+      collectors:
+        - type: directory
+          value: packages/nexus-http/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -122,3 +127,7 @@ deptrac:
       - PersistenceDbal
       - Core
       - Serialization
+    Http:
+      - Core
+      - Runtime
+      - WorkerPool
