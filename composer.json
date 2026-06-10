@@ -9,7 +9,7 @@
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.0",
-        "nikic/fast-route": "^2.0@beta",
+        "nikic/fast-route": "^1.3",
         "nyholm/psr7": "^1.8",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
