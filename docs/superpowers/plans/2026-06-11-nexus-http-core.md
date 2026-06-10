@@ -1838,7 +1838,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Actor;
 
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 
 /**
@@ -1869,7 +1869,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Dsl;
 
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistry;
