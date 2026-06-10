@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `packages/nexus-http` — a PSR-15-compliant HTTP framework with actor injection, three lifecycle modes (pool-singleton, worker-local, per-request), sync + Future-returning handlers, fluent + attribute-discovered routing, compile-time pipeline, and two-file route caching.
+**Goal:** Build `packages/nexus-http` — a PSR-15-compliant HTTP framework with actor injection, three lifecycle modes (pool-singleton, worker-local, per-request), sync + Future-returning handlers, fluent + attribute-discovered routing, compile-time pipeline, and PSR-16 route caching.
 
-**Architecture:** Compile-time pipeline. `HttpApp` collects fluent declarations into immutable structures; `compile()` walks reflection once to build closure-based handlers; the hot path runs no reflection. PSR-15 on the wire. FastRoute under the routing. `nyholm/psr7` for messages. Three lifecycle modes resolved at compile via `ResolvedActorTable`. Per-request actors lazy-spawned through `PerRequestActorScope` and `PoisonPill`-disposed in `finally`.
+**Architecture:** Compile-time pipeline. `HttpApp` collects fluent declarations into immutable structures; `compile()` walks reflection once to build closure-based handlers AND compiles the full middleware stack into a single `RequestHandlerInterface` (`$compiledHandler`); the hot path runs no reflection and no per-request stack assembly. PSR-15 on the wire. FastRoute under the routing. `nyholm/psr7` for messages. PSR-16 (`Psr\SimpleCache\CacheInterface`) for route metadata caching — backend-agnostic (APCu, Redis, file system, …). Three lifecycle modes resolved at compile via `ResolvedActorTable`. Per-request actors lazy-spawned through `PerRequestActorScope` and `PoisonPill`-disposed in `finally`.
 
-**Tech Stack:** PHP 8.5+, `nyholm/psr7` ^1.8, `nikic/fast-route` ^2.0, `nexus-actors/core` (existing), `nexus-actors/runtime` (existing — with a small extension), PSR-7/11/14/15/17. Tests in PHPUnit 13 via Docker (`make test-unit`). Lint via `make psalm phpcs cs`.
+**Tech Stack:** PHP 8.5+, `nyholm/psr7` ^1.8, `nikic/fast-route` ^2.0, `psr/simple-cache` ^3.0, `nexus-actors/core` (existing), `nexus-actors/runtime` (existing — with a small extension), PSR-7/11/14/15/16/17. Tests in PHPUnit 13 via Docker (`make test-unit`). Lint via `make psalm phpcs cs`.
 
 **Spec:** `docs/superpowers/specs/2026-06-10-nexus-http-core-design.md` (commit `27c7a928`).
 
@@ -1787,16 +1787,15 @@ Dispatcher wraps FastRoute and returns a typed DispatchResult.
 
 ## Phase 5: Actor modes + registry
 
-**Outcome:** `ActorMode` enum, mutable `ActorRegistry` collecting boot-time declarations, fluent `ActorRegistration` for chained `->poolSingleton()/->workerLocal()/->withSupervision(...)` calls. Validation rules deferred until phase 6 when `ResolvedActorTable` exists.
+**Outcome:** `ActorMode` enum and runtime types (`ActorRegistry`, `ActorRegistrationEntry`) in `Actor\`. The fluent setter `ActorRegistration` lives in the `Dsl\` namespace alongside the rest of the DSL surface. Validation rules deferred until phase 6 when `ResolvedActorTable` exists.
 
 **Files:**
 - Create: `packages/nexus-http/src/Actor/ActorMode.php`
-- Create: `packages/nexus-http/src/Actor/ActorRegistration.php`
+- Create: `packages/nexus-http/src/Dsl/ActorRegistration.php`
 - Create: `packages/nexus-http/src/Actor/ActorRegistry.php`
 - Create: `packages/nexus-http/src/Actor/ActorRegistrationEntry.php`
 - Create: `packages/nexus-http/src/Exception/DuplicateActorNameException.php`
 - Create: `packages/nexus-http/tests/Unit/Actor/ActorRegistryTest.php`
-- Create: `packages/nexus-http/tests/Unit/Actor/ActorRegistrationTest.php`
 
 - [ ] **Step 1:** Implement `ActorMode` enum
 
@@ -1859,19 +1858,21 @@ final readonly class ActorRegistrationEntry
 }
 ```
 
-- [ ] **Step 3:** Implement `ActorRegistration` (the fluent setter)
+- [ ] **Step 3:** Implement `Dsl\ActorRegistration` (the fluent setter)
 
-Create `packages/nexus-http/src/Actor/ActorRegistration.php`:
+Create `packages/nexus-http/src/Dsl/ActorRegistration.php`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Http\Actor;
+namespace Monadial\Nexus\Http\Dsl;
 
 use Monadial\Nexus\Core\Mailbox\MailboxConfig;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Http\Actor\ActorMode;
+use Monadial\Nexus\Http\Actor\ActorRegistry;
 
 /**
  * @psalm-api
@@ -1947,6 +1948,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Actor;
 
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Exception\DuplicateActorNameException;
 
 /**
@@ -2098,13 +2100,16 @@ Expected: clean.
 
 ```bash
 git add packages/nexus-http/src/Actor/ \
+        packages/nexus-http/src/Dsl/ActorRegistration.php \
         packages/nexus-http/src/Exception/DuplicateActorNameException.php \
         packages/nexus-http/tests/Unit/Actor/ActorRegistryTest.php
-git -c commit.gpgsign=false commit -m "feat(http): add ActorMode enum, ActorRegistry, ActorRegistration
+git -c commit.gpgsign=false commit -m "feat(http): add ActorMode enum, ActorRegistry, Dsl\\ActorRegistration
 
 Boot-time actor registration with fluent mode/supervision/mailbox setters.
 Three lifecycle modes (PoolSingleton, WorkerLocal, PerRequest). Registry
-freezes to a list of ActorRegistrationEntry for the compiler."
+freezes to a list of ActorRegistrationEntry for the compiler. The fluent
+ActorRegistration setter lives in the Dsl\\ namespace alongside the rest
+of the user-facing DSL surface."
 ```
 
 ---
@@ -2599,12 +2604,15 @@ Scope is lazy + idempotent dispose. Naming: {name}-{requestId}."
 
 ---
 
-## Phase 7: Handler resolution — #[FromActor], HandlerResolver, ResolvedHandler
+## Phase 7: Handler resolution — #[FromActor], #[FromService], HandlerResolver, ResolvedHandler
 
-**Outcome:** `#[FromActor]` attribute defined. `HandlerResolver` walks reflection ONCE per handler class/closure at compile time and emits a `ResolvedHandler` — a closure that takes `(ServerRequestInterface, PerRequestActorScope, array $pathParams)` and returns `ResponseInterface` or `Future`. All validation rules from the spec are enforced here.
+**Outcome:** `#[FromActor]` and `#[FromService]` attributes defined. `HandlerResolver` walks reflection ONCE per handler class/closure at compile time and emits a `ResolvedHandler` — a closure that takes `(ServerRequestInterface, PerRequestActorScope, array $pathParams)` and returns `ResponseInterface` or `Future`. All validation rules from the spec are enforced here.
+
+`#[FromService]` lets handlers and middleware inject any PSR-11 container service alongside actor injection. Explicit `#[FromService('service.id')]` for string-id binding; bare `#[FromService]` for type-based binding (uses the parameter's type-hint as the container key). Works on constructor params and method/invoke params.
 
 **Files:**
 - Create: `packages/nexus-http/src/Handler/Attribute/FromActor.php`
+- Create: `packages/nexus-http/src/Handler/Attribute/FromService.php`
 - Create: `packages/nexus-http/src/Handler/ResolvedHandler.php`
 - Create: `packages/nexus-http/src/Handler/HandlerMetadata.php`
 - Create: `packages/nexus-http/src/Handler/HandlerResolver.php`
@@ -2637,6 +2645,35 @@ use Attribute;
 final readonly class FromActor
 {
     public function __construct(public string $name) {}
+}
+```
+
+Also create `packages/nexus-http/src/Handler/Attribute/FromService.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Http\Handler\Attribute;
+
+use Attribute;
+
+/**
+ * @psalm-api
+ *
+ * Inject a service from the PSR-11 container.
+ *
+ *   #[FromService('logger.audit')] LoggerInterface $log    // resolve by container id
+ *   #[FromService] MyService $service                       // resolve by type
+ *
+ * Works on constructor params and on handler/middleware invocation method
+ * params. Requires a ContainerInterface to be supplied to HttpApp::create().
+ */
+#[Attribute(Attribute::TARGET_PARAMETER)]
+final readonly class FromService
+{
+    public function __construct(public ?string $id = null) {}
 }
 ```
 
@@ -2689,6 +2726,7 @@ final readonly class ParamMetadata
     public const string KIND_SERVER_REQUEST  = 'server_request';
     public const string KIND_PATH_PARAM      = 'path_param';
     public const string KIND_FROM_ACTOR      = 'from_actor';
+    public const string KIND_FROM_SERVICE    = 'from_service';
     public const string KIND_CONTAINER       = 'container';
     public const string KIND_REQUEST_SCOPE   = 'request_scope';
 
@@ -2697,6 +2735,7 @@ final readonly class ParamMetadata
         public ?string $type,
         public string $kind,
         public ?string $actorName = null,
+        public ?string $serviceId = null,
     ) {}
 }
 ```
@@ -2754,6 +2793,7 @@ use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\Exception\PerRequestActorInConstructorException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
+use Monadial\Nexus\Http\Handler\Attribute\FromService;
 use Monadial\Nexus\Runtime\Async\Future;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -2862,8 +2902,10 @@ final class HandlerResolver
         $args = [];
         foreach ($ctorParams as $p) {
             $args[] = match ($p->kind) {
-                ParamMetadata::KIND_FROM_ACTOR => $this->actors->resolve($p->actorName ?? ''),
-                ParamMetadata::KIND_CONTAINER  => $this->container?->get($p->type ?? '')
+                ParamMetadata::KIND_FROM_ACTOR   => $this->actors->resolve($p->actorName ?? ''),
+                ParamMetadata::KIND_FROM_SERVICE => $this->container?->get($p->serviceId ?? $p->type ?? '')
+                    ?? throw new \LogicException("Cannot resolve {$class}::{$p->name} via #[FromService] without a container"),
+                ParamMetadata::KIND_CONTAINER    => $this->container?->get($p->type ?? '')
                     ?? throw new \LogicException("Cannot resolve {$class}::{$p->name} without a container"),
                 default => throw new \LogicException("Unsupported constructor param kind: {$p->kind}"),
             };
@@ -2893,6 +2935,13 @@ final class HandlerResolver
                     throw new PerRequestActorInConstructorException($owner, $name, $actorName);
                 }
                 $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_ACTOR, $actorName);
+                continue;
+            }
+
+            $fromService = $p->getAttributes(FromService::class);
+            if ($fromService !== []) {
+                $serviceId = $fromService[0]->newInstance()->id;
+                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_SERVICE, serviceId: $serviceId);
                 continue;
             }
 
@@ -2946,6 +2995,8 @@ final class HandlerResolver
                 ParamMetadata::KIND_FROM_ACTOR     => $this->actors->isPerRequest($p->actorName ?? '')
                     ? $scope->spawn($p->actorName ?? '')
                     : $this->actors->resolve($p->actorName ?? ''),
+                ParamMetadata::KIND_FROM_SERVICE   => $this->container?->get($p->serviceId ?? $p->type ?? '')
+                    ?? throw new \LogicException("Cannot resolve param \${$p->name} via #[FromService] without a container"),
                 ParamMetadata::KIND_CONTAINER => $this->container?->get($p->type ?? '')
                     ?? throw new \LogicException("Cannot resolve param \${$p->name} without a container"),
             };
@@ -4056,33 +4107,42 @@ walks the mapper registry."
 
 ---
 
-## Phase 10: HttpApp glue — fluent DSL + compile
+## Phase 10: HttpApp glue — Dsl/HttpApp + App/CompiledHttpApp
 
-**Outcome:** `HttpApp` ties together: actor registry, route collection, middleware stack, exception mapper, `compile()` builds the resolved table + handlers + dispatcher and returns `self` ready to `handle()` requests. Implements `RequestHandlerInterface`. Includes the route group + route builder fluent surface.
+**Outcome:** Clean two-class design.
+- `Monadial\Nexus\Http\Dsl\HttpApp` is the fluent builder. It holds mutable boot-time state (registries, route collections, middleware lists). It does NOT implement `RequestHandlerInterface`. Its terminal operation, `compile()`, returns a fresh `CompiledHttpApp`.
+- `Monadial\Nexus\Http\App\CompiledHttpApp` is the immutable runtime artifact. It implements `RequestHandlerInterface`. Server adapters consume `CompiledHttpApp`. It owns the fully compiled middleware chain (assembled once at compile time, NEVER reassembled per request).
+
+The `Dsl\` namespace holds every fluent-DSL class (`HttpApp`, `RouteBuilder`, `RouteGroup`, `ActorRegistration`). Runtime/data classes stay in their topical namespaces (`Routing\`, `Actor\`, `Handler\`, …).
 
 **Files:**
-- Create: `packages/nexus-http/src/App/HttpApp.php`
-- Create: `packages/nexus-http/src/Routing/RouteBuilder.php`
-- Create: `packages/nexus-http/src/Routing/RouteGroup.php`
-- Create: `packages/nexus-http/tests/Unit/App/HttpAppTest.php`
+- Create: `packages/nexus-http/src/Dsl/HttpApp.php`
+- Create: `packages/nexus-http/src/Dsl/RouteBuilder.php`
+- Create: `packages/nexus-http/src/Dsl/RouteGroup.php`
+- Create: `packages/nexus-http/src/App/CompiledHttpApp.php`
+- Create: `packages/nexus-http/tests/Unit/Dsl/HttpAppTest.php`
 
-- [ ] **Step 1:** Implement `RouteBuilder`
+Note: `ActorRegistration` is also in `Dsl\` per the Phase 5 plan update — already accounted for there.
 
-Create `packages/nexus-http/src/Routing/RouteBuilder.php`:
+- [ ] **Step 1:** Implement `Dsl\RouteBuilder`
+
+Create `packages/nexus-http/src/Dsl/RouteBuilder.php`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Http\Routing;
+namespace Monadial\Nexus\Http\Dsl;
 
 use Closure;
+use Monadial\Nexus\Http\Routing\Route;
 
 /**
  * @psalm-api
  *
- * Fluent setter for one route. Mutating until the parent freezes the collection.
+ * Fluent setter for one route. Mutating until HttpApp::compile() freezes
+ * it into a Route value object.
  */
 final class RouteBuilder
 {
@@ -4116,18 +4176,19 @@ final class RouteBuilder
 }
 ```
 
-- [ ] **Step 2:** Implement `RouteGroup`
+- [ ] **Step 2:** Implement `Dsl\RouteGroup`
 
-Create `packages/nexus-http/src/Routing/RouteGroup.php`:
+Create `packages/nexus-http/src/Dsl/RouteGroup.php`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Http\Routing;
+namespace Monadial\Nexus\Http\Dsl;
 
 use Closure;
+use Monadial\Nexus\Http\Routing\Route;
 
 /**
  * @psalm-api
@@ -4207,25 +4268,26 @@ final class RouteGroup
 }
 ```
 
-- [ ] **Step 3:** Implement `HttpApp`
+- [ ] **Step 3:** Implement `Dsl\HttpApp`
 
-Create `packages/nexus-http/src/App/HttpApp.php`:
+Create `packages/nexus-http/src/Dsl/HttpApp.php`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Http\App;
+namespace Monadial\Nexus\Http\Dsl;
 
 use Closure;
 use LogicException;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Http\Actor\ActorMode;
-use Monadial\Nexus\Http\Actor\ActorRegistration;
 use Monadial\Nexus\Http\Actor\ActorRegistry;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
+use Monadial\Nexus\Http\App\CompiledHttpApp;
+use Monadial\Nexus\Http\App\ErrorMode;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
@@ -4234,27 +4296,27 @@ use Monadial\Nexus\Http\Middleware\MiddlewareInvoker;
 use Monadial\Nexus\Http\Middleware\MiddlewarePipeline;
 use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
-use Monadial\Nexus\Http\Routing\RouteBuilder;
 use Monadial\Nexus\Http\Routing\RouteCollection;
-use Monadial\Nexus\Http\Routing\RouteGroup;
 use Monadial\Nexus\WorkerPool\WorkerNode;
-use Override;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
-use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * @psalm-api
  *
- * Top-level fluent DSL. Build at boot, call compile() once, then handle()
- * requests. Implements PSR-15 RequestHandlerInterface — server adapters call
- * handle() per request.
+ * Fluent DSL for building an HTTP app. Mutable during construction.
+ * Terminal operation `compile()` returns an immutable {@see CompiledHttpApp}
+ * — server adapters consume that, not the DSL.
+ *
+ * HttpApp itself does NOT implement RequestHandlerInterface. The DSL builds,
+ * the CompiledHttpApp serves.
  */
-final class HttpApp implements RequestHandlerInterface
+final class HttpApp
 {
     private readonly ActorRegistry $registry;
     private readonly RouteCollection $routes;
@@ -4272,11 +4334,6 @@ final class HttpApp implements RequestHandlerInterface
     private ErrorMode $errorMode = ErrorMode::Production;
     private bool $useDefaultExceptionHandler = true;
     private ?WorkerNode $workerNode = null;
-    private bool $compiled = false;
-
-    // Compiled state (built by compile())
-    private ?RouterMiddleware $router = null;
-    private ?MiddlewarePipeline $pipeline = null;
 
     private function __construct(
         private readonly ActorSystem $system,
@@ -4366,7 +4423,7 @@ final class HttpApp implements RequestHandlerInterface
 
     // ─── Errors ────────────────────────────────────────────────────
 
-    /** @param Closure(\Throwable, ServerRequestInterface): ResponseInterface $mapper */
+    /** @param Closure(Throwable, ServerRequestInterface): ResponseInterface $mapper */
     public function onException(string $exceptionClass, Closure $mapper): self
     {
         $this->userExceptionRegistrations[] = static fn(ExceptionMapperRegistry $r) => $r->register($exceptionClass, $mapper);
@@ -4397,14 +4454,15 @@ final class HttpApp implements RequestHandlerInterface
         return false;
     }
 
-    // ─── Compile + serve ───────────────────────────────────────────
+    // ─── Compile ───────────────────────────────────────────────────
 
-    public function compile(): self
+    /**
+     * Freeze the DSL state into an immutable, ready-to-serve CompiledHttpApp.
+     * Calling compile() multiple times yields independent CompiledHttpApp
+     * instances reflecting the DSL state at each call.
+     */
+    public function compile(): CompiledHttpApp
     {
-        if ($this->compiled) {
-            return $this;
-        }
-
         // 1. Promote pending route builders BEFORE the dispatcher is built.
         foreach ($this->pendingBuilders as $builder) {
             $this->routes->add($builder->build());
@@ -4427,51 +4485,41 @@ final class HttpApp implements RequestHandlerInterface
             $routeMwsByKey[$key] = $route->middleware;
         }
 
-        // 4. Mappers — defaults first so user overrides (which run next) win.
+        // 4. Mappers — defaults first so user overrides win.
+        $mappers = clone $this->mappers;
         if ($this->useDefaultExceptionHandler) {
-            DefaultMappers::registerInto($this->mappers, $this->errorMode);
+            DefaultMappers::registerInto($mappers, $this->errorMode);
         }
         foreach ($this->userExceptionRegistrations as $apply) {
-            $apply($this->mappers);
+            $apply($mappers);
         }
 
-        // 5. Build pipeline + router.
-        $this->pipeline = new MiddlewarePipeline($this->container);
-        $this->router = new RouterMiddleware(
+        // 5. Build dispatcher + RouterMiddleware.
+        $pipeline = new MiddlewarePipeline($this->container);
+        $router = new RouterMiddleware(
             Dispatcher::build($routes),
             $handlersByKey,
             $routeMwsByKey,
-            $this->pipeline,
+            $pipeline,
             $this->system,
             $table,
             $this->events,
         );
 
-        $this->compiled = true;
-        return $this;
-    }
-
-    #[Override]
-    public function handle(ServerRequestInterface $request): ResponseInterface
-    {
-        if (!$this->compiled) {
-            $this->compile();
-        }
-        assert($this->router !== null);
-
-        $resolvedStack = [];
+        // 6. Compile the full middleware stack into ONE RequestHandlerInterface.
+        $stack = [];
         if ($this->useDefaultExceptionHandler) {
-            $resolvedStack[] = new ExceptionHandlerMiddleware($this->mappers, $this->logger);
+            $stack[] = new ExceptionHandlerMiddleware($mappers, $this->logger);
         }
         foreach ($this->globalMiddleware as $mw) {
-            $resolvedStack[] = $mw instanceof MiddlewareInterface ? $mw : $this->resolveMiddleware($mw);
+            $stack[] = $mw instanceof MiddlewareInterface ? $mw : $this->resolveMiddleware($mw);
         }
-        $resolvedStack[] = $this->router;
+        $stack[] = $router;
 
         $tail = static fn(ServerRequestInterface $r): ResponseInterface =>
             throw new LogicException('RouterMiddleware did not produce a response');
 
-        return (new MiddlewareInvoker($resolvedStack, $tail))->handle($request);
+        return new CompiledHttpApp(new MiddlewareInvoker($stack, $tail), $this->events);
     }
 
     private function registerRoute(string $method, string $path, string|Closure $handler): RouteBuilder
@@ -4493,32 +4541,90 @@ final class HttpApp implements RequestHandlerInterface
 }
 ```
 
-- [ ] **Step 4:** Write integration-style HttpApp tests
+- [ ] **Step 4:** Implement `App\CompiledHttpApp`
 
-Create `packages/nexus-http/tests/Unit/App/HttpAppTest.php`:
+Create `packages/nexus-http/src/App/CompiledHttpApp.php`:
 
 ```php
 <?php
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Http\Tests\Unit\App;
+namespace Monadial\Nexus\Http\App;
+
+use Override;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
+
+/**
+ * @psalm-api
+ *
+ * Immutable, ready-to-serve HTTP app. Produced by {@see HttpApp::compile()}.
+ * Implements PSR-15 RequestHandlerInterface — server adapters consume this.
+ *
+ * The internal handler chain (exception mw → globals → router) is compiled
+ * once during construction; handle() invokes it directly with no per-request
+ * stack assembly.
+ *
+ * The PSR-14 event hookup for RequestStarted / RequestCompleted is added in
+ * Phase 13 (this class keeps the events reference but doesn't dispatch yet
+ * at this phase).
+ */
+final readonly class CompiledHttpApp implements RequestHandlerInterface
+{
+    public function __construct(
+        private RequestHandlerInterface $compiledHandler,
+        private ?EventDispatcherInterface $events,
+    ) {}
+
+    #[Override]
+    public function handle(ServerRequestInterface $request): ResponseInterface
+    {
+        return $this->compiledHandler->handle($request);
+    }
+}
+```
+
+- [ ] **Step 5:** Write integration-style HttpApp tests
+
+Create `packages/nexus-http/tests/Unit/Dsl/HttpAppTest.php`:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Http\Tests\Unit\Dsl;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\App\CompiledHttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
+use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Response\Response;
-use Monadial\Nexus\Http\Routing\RouteGroup;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 
 #[CoversClass(HttpApp::class)]
+#[CoversClass(CompiledHttpApp::class)]
 final class HttpAppTest extends TestCase
 {
+    #[Test]
+    public function compile_returns_compiled_http_app(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+
+        $compiled = $app->compile();
+
+        self::assertInstanceOf(CompiledHttpApp::class, $compiled);
+    }
+
     #[Test]
     public function get_route_with_closure_handler_dispatches(): void
     {
@@ -4566,28 +4672,30 @@ final class HttpAppTest extends TestCase
 }
 ```
 
-(Discard the first test's malformed snippet — the working pattern is the second declaration in that test which uses `$app->compile()->handle(...)` directly.)
+- [ ] **Step 6:** Run
 
-- [ ] **Step 5:** Run
-
-Run: `docker compose exec php vendor/bin/phpunit packages/nexus-http/tests/Unit/App/HttpAppTest.php`
+Run: `docker compose exec php vendor/bin/phpunit packages/nexus-http/tests/Unit/Dsl/HttpAppTest.php`
 Expected: PASS.
 
-- [ ] **Step 6:** Lint + commit
+- [ ] **Step 7:** Lint + commit
 
 Run: `make psalm && make phpcs`
 
 ```bash
-git add packages/nexus-http/src/App/HttpApp.php \
-        packages/nexus-http/src/Routing/RouteBuilder.php \
-        packages/nexus-http/src/Routing/RouteGroup.php \
-        packages/nexus-http/tests/Unit/App/HttpAppTest.php
-git -c commit.gpgsign=false commit -m "feat(http): add HttpApp fluent DSL + RouteBuilder + RouteGroup
+git add packages/nexus-http/src/Dsl/ \
+        packages/nexus-http/src/App/CompiledHttpApp.php \
+        packages/nexus-http/tests/Unit/Dsl/
+git -c commit.gpgsign=false commit -m "feat(http): add Dsl\HttpApp + App\CompiledHttpApp
 
-HttpApp ties the actor registry, route collection, mapper registry,
-and middleware list together. compile() builds the dispatcher and
-resolved handlers once; handle() runs the PSR-15 stack per request.
-RouteGroup composes prefix + middleware over nested registrations."
+Clean two-class design: Dsl\HttpApp is the mutable fluent builder
+(actors, routes, middleware, error mappers). Its compile() returns
+an immutable App\CompiledHttpApp that implements
+RequestHandlerInterface. Server adapters consume the compiled app.
+
+The middleware stack is fully assembled inside compile() into a
+single RequestHandlerInterface — no per-request reassembly. DSL
+classes (HttpApp, RouteBuilder, RouteGroup, ActorRegistration)
+live under Monadial\Nexus\Http\Dsl\."
 ```
 
 ---
@@ -4820,49 +4928,39 @@ then ReflectionClass for the attribute(s)."
 
 ---
 
-## Phase 12: Route caching — metadata + FastRoute
+## Phase 12: Route caching — PSR-16 cache adapter
 
-**Outcome:** `$app->withRouteCache(string $path)` enables two cache files: `routes.php` (our metadata, `var_export`) and `routes.fast.php` (FastRoute's cached dispatcher). Cache write happens during `compile()` on miss. `$app->clearRouteCache()` deletes both.
+**Outcome:** `$app->withRouteCache(CacheInterface $cache, string $key = 'nexus.http.routes')` enables PSR-16 (SimpleCache) cache-backed route metadata caching. On compile: try the cache key; if hit, hydrate routes from the cached payload; if miss, persist the freshly-built routes. Closure routes are skipped from caching and re-added from the in-memory collection on boot. FastRoute's regex tree is rebuilt from the cached routes on each boot (sub-millisecond for typical route counts).
+
+Why PSR-16: lets the user plug in any cache backend (APCu, Redis, Memcached, file system) via existing PSR-16 adapters (`symfony/cache`, `cache/cache`, etc.) — no framework-specific file format, no proprietary serialization.
 
 **Files:**
-- Create: `packages/nexus-http/src/Cache/RouteCacheWriter.php`
-- Create: `packages/nexus-http/src/Cache/RouteCacheReader.php`
-- Modify: `packages/nexus-http/src/App/HttpApp.php`
-- Modify: `packages/nexus-http/src/Routing/Dispatcher.php` (support cached dispatcher)
-- Create: `packages/nexus-http/tests/Unit/Cache/RouteCacheRoundtripTest.php`
+- Modify: `packages/nexus-http/composer.json` — add `psr/simple-cache: ^3.0`
+- Modify: `composer.json` (root) — add `psr/simple-cache: ^3.0`
+- Create: `packages/nexus-http/src/Cache/RouteCachePersister.php`
+- Modify: `packages/nexus-http/src/App/HttpApp.php` — `withRouteCache(CacheInterface, ?string)`
+- Create: `packages/nexus-http/tests/Unit/Cache/RouteCachePersisterTest.php`
 
-- [ ] **Step 1:** Adjust `Dispatcher` to optionally use FastRoute's `cachedDispatcher`
+Note: `Dispatcher::buildCached` is NOT added (FastRoute file caching is replaced by PSR-16 metadata caching). The base `Dispatcher::build` is used unconditionally.
 
-Edit `packages/nexus-http/src/Routing/Dispatcher.php`. Add a new static factory:
+- [ ] **Step 1:** Add `psr/simple-cache` to package + root composer.json
 
-```php
-    use function FastRoute\cachedDispatcher;
-
-    /**
-     * Build a Dispatcher backed by FastRoute's cached dispatcher.
-     *
-     * @param list<Route> $routes
-     */
-    public static function buildCached(array $routes, string $cacheFile, bool $cacheDisabled = false): self
-    {
-        $byId = [];
-        $dispatcher = cachedDispatcher(static function (\FastRoute\RouteCollector $r) use ($routes, &$byId): void {
-            foreach ($routes as $id => $route) {
-                $byId[$id] = $route;
-                $r->addRoute($route->method, $route->path, $id);
-            }
-        }, [
-            'cacheFile'     => $cacheFile,
-            'cacheDisabled' => $cacheDisabled,
-        ]);
-
-        return new self($dispatcher, $byId);
-    }
+Edit `packages/nexus-http/composer.json` — add to `require` (alphabetical):
+```json
+"psr/simple-cache": "^3.0",
 ```
 
-- [ ] **Step 2:** Implement `RouteCacheWriter`
+Edit root `composer.json` — add to `require` (alphabetical):
+```json
+"psr/simple-cache": "^3.0",
+```
 
-Create `packages/nexus-http/src/Cache/RouteCacheWriter.php`:
+Run: `make install` to install the new dep.
+Expected: composer install succeeds.
+
+- [ ] **Step 2:** Implement `RouteCachePersister`
+
+Create `packages/nexus-http/src/Cache/RouteCachePersister.php`:
 
 ```php
 <?php
@@ -4871,26 +4969,61 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Cache;
 
+use Closure;
 use Monadial\Nexus\Http\Routing\Route;
+use Psr\SimpleCache\CacheInterface;
 
 /**
  * @psalm-api
  *
- * Serializes route metadata to a var_export()-friendly PHP file. Only
- * supports string-handler routes (closures are skipped at the metadata
- * layer — they're recompiled at boot).
+ * PSR-16-backed persistence of route metadata. Closure handlers are skipped
+ * from the cache (they can't be serialized) — callers re-add them from the
+ * in-memory collection after a hit.
+ *
+ * Cache payload shape: list of [method, path, handler, middleware[], name]
+ * arrays. var_export-safe so any PSR-16 backend can serialize it.
  */
-final class RouteCacheWriter
+final class RouteCachePersister
 {
-    /** @param list<Route> $routes */
-    public function write(string $path, array $routes): void
+    public function __construct(
+        private readonly CacheInterface $cache,
+        private readonly string $key,
+    ) {}
+
+    /**
+     * Returns the cached routes, or null on miss.
+     *
+     * @return list<Route>|null
+     */
+    public function load(): ?array
     {
-        $serialized = [];
+        /** @var list<array{0: string, 1: string, 2: string, 3: list<string>, 4: ?string}>|null $payload */
+        $payload = $this->cache->get($this->key);
+        if ($payload === null) {
+            return null;
+        }
+
+        $routes = [];
+        foreach ($payload as $row) {
+            $routes[] = new Route($row[0], $row[1], $row[2], $row[3], $row[4]);
+        }
+
+        return $routes;
+    }
+
+    /**
+     * Persist the string-handler subset of the given routes.
+     *
+     * @param list<Route> $routes
+     */
+    public function save(array $routes): void
+    {
+        $payload = [];
         foreach ($routes as $route) {
             if (!is_string($route->handler)) {
                 continue;
             }
-            $serialized[] = [
+            $payload[] = [
                 $route->method,
                 $route->path,
                 $route->handler,
@@ -4899,119 +5032,83 @@ final class RouteCacheWriter
             ];
         }
 
-        $contents = "<?php return [\n    'routes' => " . var_export($serialized, true) . ",\n];\n";
-        $dir = dirname($path);
-        if (!is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
-        file_put_contents($path, $contents);
+        $this->cache->set($this->key, $payload);
+    }
+
+    public function clear(): void
+    {
+        $this->cache->delete($this->key);
     }
 }
 ```
 
-- [ ] **Step 3:** Implement `RouteCacheReader`
+- [ ] **Step 3:** Wire `withRouteCache` into `HttpApp`
 
-Create `packages/nexus-http/src/Cache/RouteCacheReader.php`:
+Edit `packages/nexus-http/src/App/HttpApp.php`. Add the import at the top alongside others:
 
 ```php
-<?php
-
-declare(strict_types=1);
-
-namespace Monadial\Nexus\Http\Cache;
-
-use Monadial\Nexus\Http\Routing\Route;
-
-/**
- * @psalm-api
- *
- * Reads the metadata cache file. Returns null if cache miss.
- */
-final class RouteCacheReader
-{
-    /** @return list<Route>|null */
-    public function read(string $path): ?array
-    {
-        if (!is_file($path)) {
-            return null;
-        }
-
-        /** @var array{routes: list<array{0: string, 1: string, 2: string, 3: list<string>, 4: ?string}>} $data */
-        $data = require $path;
-
-        $routes = [];
-        foreach ($data['routes'] as $row) {
-            $routes[] = new Route($row[0], $row[1], $row[2], $row[3], $row[4]);
-        }
-
-        return $routes;
-    }
-}
+use Monadial\Nexus\Http\Cache\RouteCachePersister;
+use Psr\SimpleCache\CacheInterface;
 ```
 
-- [ ] **Step 4:** Wire caching into `HttpApp`
-
-Edit `packages/nexus-http/src/App/HttpApp.php`. Add fields:
+Add the fields (alongside other private fields):
 
 ```php
-    private ?string $routeCacheDir = null;
+    private ?CacheInterface $routeCache = null;
+    private string $routeCacheKey = 'nexus.http.routes';
 ```
 
-Add method:
+Replace any prior file-based `withRouteCache` / `clearRouteCache` with these methods:
 
 ```php
-    public function withRouteCache(string $directory): self
+    public function withRouteCache(CacheInterface $cache, ?string $key = null): self
     {
-        $this->routeCacheDir = $directory;
+        $this->routeCache = $cache;
+        if ($key !== null) {
+            $this->routeCacheKey = $key;
+        }
         return $this;
     }
 
     public function clearRouteCache(): void
     {
-        if ($this->routeCacheDir === null) {
-            return;
-        }
-        foreach (['routes.php', 'routes.fast.php'] as $f) {
-            $path = $this->routeCacheDir . '/' . $f;
-            if (is_file($path)) {
-                unlink($path);
-            }
+        if ($this->routeCache !== null) {
+            (new RouteCachePersister($this->routeCache, $this->routeCacheKey))->clear();
         }
     }
 ```
 
-Update `compile()` — after `$discoveryDirs` walk and pending-builder commit:
+In `compile()`, after the pending-builder commit and discovery walk (still BEFORE the actor table resolution), add the cache hit-or-fill block:
 
 ```php
-        // Route cache
         $routeList = $this->routes->all();
-        if ($this->routeCacheDir !== null) {
-            $metaPath = $this->routeCacheDir . '/routes.php';
-            $fastPath = $this->routeCacheDir . '/routes.fast.php';
-            $reader = new \Monadial\Nexus\Http\Cache\RouteCacheReader();
 
-            $cached = $reader->read($metaPath);
+        if ($this->routeCache !== null) {
+            $persister = new RouteCachePersister($this->routeCache, $this->routeCacheKey);
+            $cached = $persister->load();
             if ($cached !== null) {
-                // Replace routes with cached set — but preserve any closure routes
-                // (skipped from cache; re-add from current collection).
-                $current = $routeList;
-                $closureRoutes = array_values(array_filter($current, static fn(\Monadial\Nexus\Http\Routing\Route $r) => !is_string($r->handler)));
+                // Re-add closure-handler routes from the live collection
+                // (they're skipped from cache).
+                $closureRoutes = [];
+                foreach ($routeList as $route) {
+                    if (!is_string($route->handler)) {
+                        $closureRoutes[] = $route;
+                    }
+                }
                 $routeList = [...$cached, ...$closureRoutes];
             } else {
-                (new \Monadial\Nexus\Http\Cache\RouteCacheWriter())->write($metaPath, $routeList);
+                $persister->save($routeList);
             }
-
-            $dispatcher = \Monadial\Nexus\Http\Routing\Dispatcher::buildCached($routeList, $fastPath);
-        } else {
-            $dispatcher = \Monadial\Nexus\Http\Routing\Dispatcher::build($routeList);
         }
 ```
 
-And use `$dispatcher` (the local) where the old code used `Dispatcher::build($routes)`.
+And use `$routeList` (the local) for the rest of the compile flow — dispatcher and handler resolution iterate `$routeList` instead of `$this->routes->all()`.
 
-- [ ] **Step 5:** Test round-trip
+- [ ] **Step 4:** Write tests using `symfony/cache` ArrayAdapter
 
-Create `packages/nexus-http/tests/Unit/Cache/RouteCacheRoundtripTest.php`:
+`symfony/cache` is already in root `require-dev`. We use its `Psr16Adapter` wrapping an `ArrayAdapter` (in-memory) for tests.
+
+Create `packages/nexus-http/tests/Unit/Cache/RouteCachePersisterTest.php`:
 
 ```php
 <?php
@@ -5020,60 +5117,63 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Tests\Unit\Cache;
 
-use Monadial\Nexus\Http\Cache\RouteCacheReader;
-use Monadial\Nexus\Http\Cache\RouteCacheWriter;
+use Monadial\Nexus\Http\Cache\RouteCachePersister;
 use Monadial\Nexus\Http\Routing\Route;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
+use Symfony\Component\Cache\Psr16Cache;
 
-#[CoversClass(RouteCacheWriter::class)]
-#[CoversClass(RouteCacheReader::class)]
-final class RouteCacheRoundtripTest extends TestCase
+#[CoversClass(RouteCachePersister::class)]
+final class RouteCachePersisterTest extends TestCase
 {
-    private string $path;
-
-    protected function setUp(): void
+    private function newCache(): \Psr\SimpleCache\CacheInterface
     {
-        $this->path = sys_get_temp_dir() . '/nexus-http-cache-' . uniqid() . '/routes.php';
-    }
-
-    protected function tearDown(): void
-    {
-        if (is_file($this->path)) {
-            unlink($this->path);
-        }
-        @rmdir(dirname($this->path));
+        return new Psr16Cache(new ArrayAdapter());
     }
 
     #[Test]
-    public function writes_and_reads_routes_preserving_fields(): void
+    public function load_returns_null_on_cold_cache(): void
     {
+        $persister = new RouteCachePersister($this->newCache(), 'routes');
+
+        self::assertNull($persister->load());
+    }
+
+    #[Test]
+    public function save_then_load_round_trips_fields(): void
+    {
+        $cache = $this->newCache();
+        $persister = new RouteCachePersister($cache, 'routes');
         $routes = [
             new Route('GET', '/a/{id}', 'App\\A', ['M1'], 'a.show'),
             new Route('POST', '/b', 'App\\B', [], null),
         ];
 
-        (new RouteCacheWriter())->write($this->path, $routes);
-        $loaded = (new RouteCacheReader())->read($this->path);
+        $persister->save($routes);
+        $loaded = $persister->load();
 
         self::assertNotNull($loaded);
         self::assertCount(2, $loaded);
         self::assertSame('/a/{id}', $loaded[0]->path);
         self::assertSame('a.show', $loaded[0]->name);
         self::assertSame(['M1'], $loaded[0]->middleware);
+        self::assertSame('App\\B', $loaded[1]->handler);
     }
 
     #[Test]
-    public function skips_closure_handlers(): void
+    public function save_skips_closure_handlers(): void
     {
+        $cache = $this->newCache();
+        $persister = new RouteCachePersister($cache, 'routes');
         $routes = [
             new Route('GET', '/closure', static fn() => null, [], null),
             new Route('GET', '/string', 'App\\X', [], null),
         ];
 
-        (new RouteCacheWriter())->write($this->path, $routes);
-        $loaded = (new RouteCacheReader())->read($this->path);
+        $persister->save($routes);
+        $loaded = $persister->load();
 
         self::assertNotNull($loaded);
         self::assertCount(1, $loaded);
@@ -5081,32 +5181,41 @@ final class RouteCacheRoundtripTest extends TestCase
     }
 
     #[Test]
-    public function read_returns_null_on_missing_file(): void
+    public function clear_evicts_the_cached_routes(): void
     {
-        self::assertNull((new RouteCacheReader())->read('/does/not/exist.php'));
+        $cache = $this->newCache();
+        $persister = new RouteCachePersister($cache, 'routes');
+        $persister->save([new Route('GET', '/a', 'App\\A', [], null)]);
+
+        $persister->clear();
+
+        self::assertNull($persister->load());
     }
 }
 ```
 
-- [ ] **Step 6:** Run tests + lint
+- [ ] **Step 5:** Run tests + lint
 
 Run: `docker compose exec php vendor/bin/phpunit packages/nexus-http/tests/Unit/Cache/`
 Then: `make psalm && make phpcs`
 Expected: clean.
 
-- [ ] **Step 7:** Commit
+- [ ] **Step 6:** Commit
 
 ```bash
-git add packages/nexus-http/src/Cache/ \
+git add packages/nexus-http/composer.json \
+        composer.json \
+        composer.lock \
+        packages/nexus-http/src/Cache/ \
         packages/nexus-http/src/App/HttpApp.php \
-        packages/nexus-http/src/Routing/Dispatcher.php \
         packages/nexus-http/tests/Unit/Cache/
-git -c commit.gpgsign=false commit -m "feat(http): add route caching — metadata + FastRoute dispatcher
+git -c commit.gpgsign=false commit -m "feat(http): add PSR-16 route cache adapter
 
-withRouteCache(dir) enables two cache files: routes.php (var_export
-metadata) and routes.fast.php (FastRoute's cachedDispatcher). Closure
-routes are skipped from the metadata cache and re-added from the
-collection on boot. clearRouteCache() deletes both files."
+withRouteCache(CacheInterface, ?key) replaces the file-path based
+caching. RouteCachePersister wraps a PSR-16 store; closure handlers
+are skipped from the payload and re-added from the in-memory
+collection on boot. clearRouteCache() evicts the cached key. Backends
+(APCu, Redis, file system, …) plug in via existing PSR-16 adapters."
 ```
 
 ---
@@ -5118,7 +5227,7 @@ collection on boot. clearRouteCache() deletes both files."
 **Files:**
 - Create: `packages/nexus-http/src/Event/RequestStarted.php`
 - Create: `packages/nexus-http/src/Event/RequestCompleted.php`
-- Modify: `packages/nexus-http/src/App/HttpApp.php` (wrap handle() with events)
+- Modify: `packages/nexus-http/src/App/CompiledHttpApp.php` (wrap handle() with events)
 - Create: `packages/nexus-http/tests/Unit/Event/EventDispatchTest.php`
 
 - [ ] **Step 1:** Implement event classes
@@ -5167,43 +5276,32 @@ final readonly class RequestCompleted
 }
 ```
 
-- [ ] **Step 2:** Wrap `HttpApp::handle()`
+- [ ] **Step 2:** Wrap `CompiledHttpApp::handle()` with event emission
 
-Edit `packages/nexus-http/src/App/HttpApp.php`. Update `handle()`:
+Edit `packages/nexus-http/src/App/CompiledHttpApp.php` to emit `RequestStarted`/`RequestCompleted` around the compiled chain. The middleware stack itself is already assembled — events are a thin outer wrapper around its invocation.
 
 ```php
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        if (!$this->compiled) {
-            $this->compile();
+        if ($this->events === null) {
+            return $this->compiledHandler->handle($request);
         }
-        assert($this->router !== null);
 
         $start = hrtime(true);
-        $this->events?->dispatch(new \Monadial\Nexus\Http\Event\RequestStarted($request, $start));
+        $this->events->dispatch(new \Monadial\Nexus\Http\Event\RequestStarted($request, $start));
 
-        $resolvedStack = [];
-        if ($this->useDefaultExceptionHandler) {
-            $resolvedStack[] = new ExceptionHandlerMiddleware($this->mappers, $this->logger);
-        }
-        foreach ($this->globalMiddleware as $mw) {
-            $resolvedStack[] = $mw instanceof MiddlewareInterface ? $mw : $this->resolveMiddleware($mw);
-        }
-        $resolvedStack[] = $this->router;
+        $response = $this->compiledHandler->handle($request);
 
-        $tail = static fn(ServerRequestInterface $r): ResponseInterface =>
-            throw new \LogicException('RouterMiddleware did not produce a response');
-
-        $response = (new MiddlewareInvoker($resolvedStack, $tail))->handle($request);
-
-        $this->events?->dispatch(
+        $this->events->dispatch(
             new \Monadial\Nexus\Http\Event\RequestCompleted($request, $response, hrtime(true) - $start),
         );
 
         return $response;
     }
 ```
+
+The explicit null-check at the top is the cheapest possible fast path when no `EventDispatcher` is wired — one identity check, then straight through to the compiled handler.
 
 - [ ] **Step 3:** Write tests
 
@@ -5218,7 +5316,7 @@ namespace Monadial\Nexus\Http\Tests\Unit\Event;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Event\RequestCompleted;
 use Monadial\Nexus\Http\Event\RequestStarted;
 use Monadial\Nexus\Http\Event\RouteMatched;
@@ -5274,13 +5372,15 @@ Then: `make psalm && make phpcs`
 
 ```bash
 git add packages/nexus-http/src/Event/ \
-        packages/nexus-http/src/App/HttpApp.php \
+        packages/nexus-http/src/App/CompiledHttpApp.php \
         packages/nexus-http/tests/Unit/Event/
-git -c commit.gpgsign=false commit -m "feat(http): emit PSR-14 events around the pipeline
+git -c commit.gpgsign=false commit -m "feat(http): emit PSR-14 events around the compiled pipeline
 
-RequestStarted at handle() entry, RouteMatched after dispatch (from
-RouterMiddleware), RequestCompleted at handle() exit with nano-precision
-duration. Dispatcher is optional — null check skips emission."
+CompiledHttpApp wraps event emission around the compiled handler call:
+RequestStarted at entry, RouteMatched after dispatch (from
+RouterMiddleware), RequestCompleted at exit with nano-precision
+duration. Dispatcher is optional — null check skips emission entirely
+and goes straight through to the compiled handler."
 ```
 
 ---
@@ -5452,7 +5552,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
@@ -5542,7 +5642,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\Http;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureResult;
@@ -5596,7 +5696,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\Http;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\StreamingResponse;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Nyholm\Psr7\ServerRequest;
@@ -5641,7 +5741,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\Http;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Exception\HttpException;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Nyholm\Psr7\ServerRequest;
@@ -5728,7 +5828,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Performance\Http;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Nyholm\Psr7\ServerRequest;
@@ -5820,7 +5920,7 @@ composer require nexus-actors/http
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\HttpApp;
+use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
