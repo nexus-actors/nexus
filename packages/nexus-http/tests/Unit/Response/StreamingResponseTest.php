@@ -57,4 +57,55 @@ final class StreamingResponseTest extends TestCase
             (string) $response->getBody(),
         );
     }
+
+    #[Test]
+    public function sse_includes_id_and_retry_when_present(): void
+    {
+        $response = StreamingResponse::sse([
+            ['id' => '42', 'event' => 'ping', 'data' => 'hello', 'retry' => 3000],
+            ['data' => 'plain'],
+        ]);
+
+        self::assertSame('text/event-stream', $response->getHeaderLine('Content-Type'));
+        self::assertSame(
+            "id: 42\nevent: ping\nretry: 3000\ndata: hello\n\ndata: plain\n\n",
+            (string) $response->getBody(),
+        );
+    }
+
+    #[Test]
+    public function from_generator_propagates_custom_status_and_headers(): void
+    {
+        $gen = (static function () {
+            yield 'x';
+        })();
+
+        $response = StreamingResponse::fromGenerator($gen, 202, ['Content-Type' => 'text/plain']);
+
+        self::assertSame(202, $response->getStatusCode());
+        self::assertSame('text/plain', $response->getHeaderLine('Content-Type'));
+        self::assertSame('x', (string) $response->getBody());
+    }
+
+    #[Test]
+    public function file_sets_content_length_and_optional_content_type(): void
+    {
+        $path = sys_get_temp_dir() . '/nexus-http-streaming-' . uniqid() . '.txt';
+        file_put_contents($path, 'hello world');
+
+        try {
+            $response = StreamingResponse::file($path, 'text/plain');
+
+            self::assertSame(200, $response->getStatusCode());
+            self::assertSame('text/plain', $response->getHeaderLine('Content-Type'));
+            self::assertSame('11', $response->getHeaderLine('Content-Length'));
+            self::assertSame('hello world', (string) $response->getBody());
+
+            $responseWithoutType = StreamingResponse::file($path);
+            self::assertSame('', $responseWithoutType->getHeaderLine('Content-Type'));
+            self::assertSame('11', $responseWithoutType->getHeaderLine('Content-Length'));
+        } finally {
+            @unlink($path);
+        }
+    }
 }
