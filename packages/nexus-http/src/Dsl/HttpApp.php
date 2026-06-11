@@ -13,6 +13,7 @@ use Monadial\Nexus\Http\Actor\ActorRegistry;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\App\ErrorMode;
+use Monadial\Nexus\Http\Discovery\RouteDiscoverer;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
@@ -51,6 +52,9 @@ final class HttpApp
 
     /** @var list<RouteBuilder> */
     private array $pendingBuilders = [];
+
+    /** @var list<string> */
+    private array $discoveryDirs = [];
 
     /** @var list<string|MiddlewareInterface> */
     private array $globalMiddleware = [];
@@ -100,7 +104,16 @@ final class HttpApp
      */
     public function compile(): CompiledHttpApp
     {
-        // 1. Promote pending route builders BEFORE the dispatcher is built.
+        // 1. Discovered routes — append before pending builders so they share the same collection.
+        $discoverer = new RouteDiscoverer();
+
+        foreach ($this->discoveryDirs as $dir) {
+            foreach ($discoverer->discover($dir) as $route) {
+                $this->routes->add($route);
+            }
+        }
+
+        // 2. Promote pending route builders BEFORE the dispatcher is built.
         foreach ($this->pendingBuilders as $builder) {
             $this->routes->add($builder->build());
         }
@@ -174,6 +187,13 @@ final class HttpApp
     public function delete(string $path, string|Closure $handler): RouteBuilder
     {
         return $this->registerRoute('DELETE', $path, $handler);
+    }
+
+    public function discover(string $directory): self
+    {
+        $this->discoveryDirs[] = $directory;
+
+        return $this;
     }
 
     public function errorMode(ErrorMode $mode): self
