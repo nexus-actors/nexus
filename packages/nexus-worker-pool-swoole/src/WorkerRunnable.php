@@ -49,7 +49,8 @@ final class WorkerRunnable extends Runnable
         private readonly string $serializedLoggerFactory,
     ) {}
 
-    public function run(): void
+    /** @param array<int, mixed> $args */
+    public function run(array $args): void
     {
         $workerId = $this->workerIdCounter->add(1) - 1;
 
