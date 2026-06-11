@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleRequestTranslator;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleResponseWriter;
+use Monadial\Nexus\Http\Server\Swoole\Signal\ShutdownSignalHandler;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
@@ -124,7 +125,7 @@ final class SwooleWorkerHttpServer
         });
 
         if ($config->installSignalHandlers) {
-            // TODO: signal handler installed in Phase 6 (ShutdownSignalHandler::install)
+            ShutdownSignalHandler::install($server, $config->logger);
         }
 
         $server->start();
