@@ -763,3 +763,17 @@ None blocking. The following are clarifications expected during implementation, 
 - Exact `Future` API surface in `nexus-core` to confirm `askFuture` exists by name (may need a rename if the core uses a different name); spec assumes `askFuture` and `await`.
 - Final shape of `RouteBuilder` and `RouteGroup` (covered conceptually; field details emerge in code).
 - File-system layout convention for `discover()` (recommend default of "any class with `#[Route]` in the configured directory tree").
+
+## 19. API clarifications (post-spec, during implementation)
+
+The following clarifications were recorded during the Phase 0–17 implementation. They are corrections to the spec's earlier wording, not redesigns.
+
+- **`ActorRef::ask` returns `Future<R>` directly.** The synchronous form is `->ask(...)->await()`. The spec's earlier handler examples used `askFuture` as a hypothetical separate method; in practice `ask` *is* what would have been `askFuture`. All DSL examples should be read as `->ask($msg, $timeout)->await()` for the sync path and `->ask($msg, $timeout)` to keep the `Future` open for composition.
+- **Namespace is `Monadial\Nexus\Http\`** to match the rest of the monorepo.
+- **`Dsl\` sub-namespace.** The fluent DSL classes (`HttpApp`, `RouteBuilder`, `RouteGroup`, `ActorRegistration`) live under `Monadial\Nexus\Http\Dsl\`. Runtime and data classes stay in their topical namespaces (`App\`, `Actor\`, `Handler\`, `Routing\`, `Middleware\`, `Response\`, `Cache\`, `Event\`, `Server\`, `Exception\`).
+- **`HttpApp::compile()` returns `CompiledHttpApp`**, not `self`. `HttpApp` is the mutable builder; `CompiledHttpApp` is the immutable `final readonly` runtime that implements `RequestHandlerInterface`. Server adapters consume `CompiledHttpApp`.
+- **Compiled middleware stack.** The full PSR-15 chain is assembled once inside `compile()` into a single `RequestHandlerInterface` via `MiddlewareInvoker`. `handle()` runs the compiled chain directly — no per-request reassembly.
+- **PSR-16 route caching.** `RouteCachePersister` wraps a `Psr\SimpleCache\CacheInterface`. Closure-handler routes are skipped from cache and re-added from the in-memory collection on boot.
+- **`#[FromService]` attribute.** Handlers and middleware can inject any PSR-11 container service via `#[FromService('service.id')]` (by id) or `#[FromService] MyService $svc` (by parameter type).
+- **`nikic/fast-route` ^1.3**, not the spec's ^2.0. Only `2.0.0-beta1` exists; v1.3 is stable, widely deployed, and matches our dispatcher code.
+- **`Future` API extensions added in `nexus-runtime`:** `Future::all(array): Future<FutureResult>`, `Future::resolved(object): Future`, `Future::failed(FutureException): Future` were added to enable fan-out composition. `recover`, `race`, `withTimeout` remain deferred.
