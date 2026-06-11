@@ -73,7 +73,9 @@ final class RouteDiscoverer
             $namespace = $m[1];
         }
 
-        if (preg_match('/(?:^|\s)(?:final\s+|abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)/m', $contents, $m) === 1) {
+        $classRegex = '/(?:^|\s)(?:(?:final|abstract|readonly)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)/m';
+
+        if (preg_match($classRegex, $contents, $m) === 1) {
             $class = $m[1];
         }
 
