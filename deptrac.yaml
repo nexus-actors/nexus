@@ -87,6 +87,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http-server-swoole/src/.*
 
+    - name: HttpServerSwooleThreads
+      collectors:
+        - type: directory
+          value: packages/nexus-http-server-swoole-threads/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -141,3 +146,10 @@ deptrac:
       - Runtime
       - Http
       - RuntimeSwoole
+    HttpServerSwooleThreads:
+      - Core
+      - Runtime
+      - Http
+      - HttpServerSwoole
+      - WorkerPool
+      - WorkerPoolSwoole
