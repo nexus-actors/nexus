@@ -46,6 +46,9 @@ test-persistence: ## Persistence unit + integration tests
 test-http: ## HTTP integration tests
 	$(DC) vendor/bin/phpunit --testsuite=integration-http
 
+test-http-swoole: ## HTTP Swoole integration tests
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-http-swoole
+
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
 

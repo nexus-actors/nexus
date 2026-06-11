@@ -31,6 +31,9 @@
         <testsuite name="integration-swoole">
             <directory>tests/Integration/Swoole</directory>
         </testsuite>
+        <testsuite name="integration-http-swoole">
+            <directory>tests/Integration/HttpSwoole</directory>
+        </testsuite>
         <testsuite name="integration-step">
             <directory>tests/Integration/Step</directory>
         </testsuite>
