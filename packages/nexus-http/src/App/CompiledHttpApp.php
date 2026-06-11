@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\App;
 
+use Monadial\Nexus\Http\Event\RequestCompleted;
+use Monadial\Nexus\Http\Event\RequestStarted;
 use Override;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -20,9 +22,9 @@ use Psr\Http\Server\RequestHandlerInterface;
  * once during construction; handle() invokes it directly with no per-request
  * stack assembly.
  *
- * The PSR-14 event hookup for RequestStarted / RequestCompleted is added in
- * Phase 13 (this class keeps the events reference but doesn't dispatch yet
- * at this phase).
+ * PSR-14 events RequestStarted and RequestCompleted are emitted around the
+ * compiled handler when an EventDispatcher is wired. The null-check fast
+ * path makes the cost when no dispatcher is supplied a single identity check.
  */
 final readonly class CompiledHttpApp implements RequestHandlerInterface
 {
@@ -34,6 +36,19 @@ final readonly class CompiledHttpApp implements RequestHandlerInterface
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface
     {
-        return $this->compiledHandler->handle($request);
+        if ($this->events === null) {
+            return $this->compiledHandler->handle($request);
+        }
+
+        $start = hrtime(true);
+        $this->events->dispatch(new RequestStarted($request, $start));
+
+        $response = $this->compiledHandler->handle($request);
+
+        $this->events->dispatch(
+            new RequestCompleted($request, $response, hrtime(true) - $start),
+        );
+
+        return $response;
     }
 }
