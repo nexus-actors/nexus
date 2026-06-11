@@ -11,8 +11,13 @@ use Monadial\Nexus\Http\Server\Swoole\App\SwooleCompiledHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleRequestTranslator;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleResponseWriter;
 use Monadial\Nexus\Http\Server\Swoole\Signal\ShutdownSignalHandler;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ChannelActorNameResolver;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ChannelActorRegistry;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\ConnectionTable;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\LocalWebSocketContext;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionClosed;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionOpened;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelMessageReceived;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketHandler;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketRoute;
@@ -43,6 +48,9 @@ final class SwooleWorkerHttpServer
 {
     /** @var array<int, CompiledHttpApp|SwooleCompiledHttpApp> */
     private static array $appsByServerId = [];
+
+    /** @var array<int, ChannelActorRegistry> */
+    private static array $channelsByServerId = [];
 
     /** @var array<int, ConnectionTable> */
     private static array $connectionsByServerId = [];
@@ -81,6 +89,7 @@ final class SwooleWorkerHttpServer
                 self::$appsByServerId[$serverId]         = $app;
                 self::$systemsByServerId[$serverId]      = $system;
                 self::$connectionsByServerId[$serverId]  = new ConnectionTable();
+                self::$channelsByServerId[$serverId]     = new ChannelActorRegistry($system);
             } catch (Throwable $e) {
                 $config->logger->error('HTTP factory failed during WorkerStart', [
                     'exception' => $e,
@@ -167,8 +176,23 @@ final class SwooleWorkerHttpServer
                     $handler = $factory($ctx);
                     $table->attachHandler($fd, $handler, $ctx);
                 } else {
-                    // Channel mode handled in Phase 10/11
-                    $config->logger->warning('Channel-mode WebSocket route not wired yet');
+                    $props    = $route->props;
+                    $registry = self::$channelsByServerId[$serverId] ?? null;
+
+                    if ($props === null || $registry === null) {
+                        $s->disconnect($fd, 1011, 'Server error');
+
+                        return;
+                    }
+
+                    $keyFrom = $route->keyFrom ?? '';
+                    $key     = $match['params'][$keyFrom] ?? '';
+
+                    $actorName = ChannelActorNameResolver::resolve($key);
+                    $actor     = $registry->resolveOrSpawn($actorName, $props);
+
+                    $actor->tell(new ChannelConnectionOpened($fd, $ctx, $psr7));
+                    $table->attachChannel($fd, $actor, $actorName, $ctx);
                 }
             } catch (Throwable $e) {
                 $config->logger->error('WebSocket Open failed', ['exception' => $e]);
@@ -191,11 +215,15 @@ final class SwooleWorkerHttpServer
                     return;
                 }
 
+                $kind = (int) $frame->opcode === 2
+                    ? WebSocketFrame::KIND_BINARY
+                    : WebSocketFrame::KIND_TEXT;
+                $wsFrame = new WebSocketFrame($kind, (string) $frame->data);
+
                 if ($entry['handler'] !== null) {
-                    $kind = (int) $frame->opcode === 2
-                        ? WebSocketFrame::KIND_BINARY
-                        : WebSocketFrame::KIND_TEXT;
-                    $entry['handler']->onMessage(new WebSocketFrame($kind, (string) $frame->data));
+                    $entry['handler']->onMessage($wsFrame);
+                } elseif ($entry['channelActor'] !== null) {
+                    $entry['channelActor']->tell(new ChannelMessageReceived((int) $frame->fd, $wsFrame));
                 }
             } catch (Throwable $e) {
                 $config->logger->error('WebSocket Message failed', ['exception' => $e]);
@@ -213,8 +241,12 @@ final class SwooleWorkerHttpServer
 
                 $entry = $table->get($fd);
 
-                if ($entry !== null && $entry['handler'] !== null) {
-                    $entry['handler']->onClose(1000);
+                if ($entry !== null) {
+                    if ($entry['handler'] !== null) {
+                        $entry['handler']->onClose(1000);
+                    } elseif ($entry['channelActor'] !== null) {
+                        $entry['channelActor']->tell(new ChannelConnectionClosed($fd, 1000));
+                    }
                 }
 
                 $table->remove($fd);
@@ -240,6 +272,7 @@ final class SwooleWorkerHttpServer
 
             unset(
                 self::$appsByServerId[$serverId],
+                self::$channelsByServerId[$serverId],
                 self::$connectionsByServerId[$serverId],
                 self::$systemsByServerId[$serverId],
             );
