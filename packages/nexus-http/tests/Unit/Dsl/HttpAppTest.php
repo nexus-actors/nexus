@@ -6,6 +6,8 @@ namespace Monadial\Nexus\Http\Tests\Unit\Dsl;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\Dsl\HttpApp;
@@ -14,11 +16,15 @@ use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 use Monadial\Nexus\Http\Response\Response;
 use Nyholm\Psr7\ServerRequest;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface;
+use RuntimeException;
 use Symfony\Component\Cache\Adapter\ArrayAdapter;
 use Symfony\Component\Cache\Psr16Cache;
 
@@ -119,6 +125,53 @@ final class HttpAppTest extends TestCase
         // Cache must be empty: a failed compile must not have written.
         self::assertNull($cache->get('nexus.http.routes'));
     }
+
+    #[Test]
+    public function group_middleware_runs_on_grouped_route(): void
+    {
+        _GroupSpyMiddleware::$hits = [];
+
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->group('/api', static function (RouteGroup $g): void {
+            $g->middleware(_GroupSpyMiddleware::class);
+            $g->get('/ping', static fn(): ResponseInterface => Response::ok());
+        });
+
+        $response = $app->compile()->handle(new ServerRequest('GET', '/api/ping'));
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(['/api/ping'], _GroupSpyMiddleware::$hits);
+    }
+
+    #[Test]
+    public function on_exception_user_mapper_wins_over_default_throwable_fallback(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->onException(
+            RuntimeException::class,
+            static fn(): ResponseInterface => Response::badRequest(),
+        );
+        $app->get('/boom', static function (): ResponseInterface {
+            throw new RuntimeException('boom');
+        });
+
+        $response = $app->compile()->handle(new ServerRequest('GET', '/boom'));
+
+        self::assertSame(400, $response->getStatusCode());
+    }
+
+    #[Test]
+    public function requires_pool_singleton_is_true_when_a_pool_singleton_actor_is_registered(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+        $app->actor('store', $props)->poolSingleton();
+
+        self::assertTrue($app->requiresPoolSingleton());
+    }
 }
 
 final class _HandlerWithUnknownActor
@@ -128,5 +181,19 @@ final class _HandlerWithUnknownActor
     public function __invoke(ServerRequestInterface $r): ResponseInterface
     {
         return Response::ok();
+    }
+}
+
+final class _GroupSpyMiddleware implements MiddlewareInterface
+{
+    /** @var list<string> */
+    public static array $hits = [];
+
+    #[Override]
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
+        self::$hits[] = $request->getUri()->getPath();
+
+        return $handler->handle($request);
     }
 }
