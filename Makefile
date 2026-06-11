@@ -43,6 +43,9 @@ test-cluster: ## Cluster integration tests
 test-persistence: ## Persistence unit + integration tests
 	$(DC) vendor/bin/phpunit --testsuite=unit-persistence,unit-persistence-dbal,unit-persistence-doctrine,integration-persistence
 
+test-http: ## HTTP integration tests
+	$(DC) vendor/bin/phpunit --testsuite=integration-http
+
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
 
@@ -67,4 +70,4 @@ profile-hotpath: ## Profile hotpath breakdown with SPX (then run make spx-ui)
 spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?SPX_KEY=nexus&SPX_UI_URI=/)
 	docker compose exec php-swoole php -S 0.0.0.0:8889 docker/spx-ui.php
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence test-http psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui

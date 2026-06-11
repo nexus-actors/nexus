@@ -33,6 +33,9 @@
         <testsuite name="integration-step">
             <directory>tests/Integration/Step</directory>
         </testsuite>
+        <testsuite name="integration-http">
+            <directory>tests/Integration/Http</directory>
+        </testsuite>
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
