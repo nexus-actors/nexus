@@ -13,6 +13,7 @@ use Monadial\Nexus\Http\Actor\ActorRegistry;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\App\ErrorMode;
+use Monadial\Nexus\Http\Cache\RouteCachePersister;
 use Monadial\Nexus\Http\Discovery\RouteDiscoverer;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
@@ -30,6 +31,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 use Throwable;
 
 /**
@@ -66,6 +68,10 @@ final class HttpApp
 
     private bool $useDefaultExceptionHandler = true;
 
+    private ?CacheInterface $routeCache = null;
+
+    private string $routeCacheKey = 'nexus.http.routes';
+
     private ?WorkerNode $workerNode = null;
 
     private function __construct(
@@ -97,6 +103,13 @@ final class HttpApp
 
     // ─── Compile ───────────────────────────────────────────────────
 
+    public function clearRouteCache(): void
+    {
+        if ($this->routeCache !== null) {
+            (new RouteCachePersister($this->routeCache, $this->routeCacheKey))->clear();
+        }
+    }
+
     /**
      * Freeze the DSL state into an immutable, ready-to-serve CompiledHttpApp.
      * Calling compile() multiple times yields independent CompiledHttpApp
@@ -120,17 +133,39 @@ final class HttpApp
 
         $this->pendingBuilders = [];
 
-        // 2. Resolve actor table.
+        // 2a. Route cache hit-or-fill — closure routes are skipped from the
+        // cached payload and re-added from the live collection on hit.
+        $routeList = $this->routes->all();
+
+        if ($this->routeCache !== null) {
+            $persister = new RouteCachePersister($this->routeCache, $this->routeCacheKey);
+            $cached = $persister->load();
+
+            if ($cached !== null) {
+                $closureRoutes = [];
+
+                foreach ($routeList as $route) {
+                    if (!is_string($route->handler)) {
+                        $closureRoutes[] = $route;
+                    }
+                }
+
+                $routeList = [...$cached, ...$closureRoutes];
+            } else {
+                $persister->save($routeList);
+            }
+        }
+
+        // 2b. Resolve actor table.
         $entries = $this->registry->freeze();
         $table = ResolvedActorTable::build($entries, $this->system, $this->workerNode);
 
         // 3. Resolve handlers per route.
         $resolver = new HandlerResolver($table, $this->container);
-        $routes = $this->routes->all();
         $handlersByKey = [];
         $routeMwsByKey = [];
 
-        foreach ($routes as $route) {
+        foreach ($routeList as $route) {
             $key = $route->method . ':' . $route->path;
             /** @psalm-suppress ArgumentTypeCoercion */
             $handlersByKey[$key] = $resolver->resolve($route->handler);
@@ -151,7 +186,7 @@ final class HttpApp
         // 5. Build dispatcher + RouterMiddleware.
         $pipeline = new MiddlewarePipeline($this->container);
         $router = new RouterMiddleware(
-            Dispatcher::build($routes),
+            Dispatcher::build($routeList),
             $handlersByKey,
             $routeMwsByKey,
             $pipeline,
@@ -275,6 +310,17 @@ final class HttpApp
         }
 
         return false;
+    }
+
+    public function withRouteCache(CacheInterface $cache, ?string $key = null): self
+    {
+        $this->routeCache = $cache;
+
+        if ($key !== null) {
+            $this->routeCacheKey = $key;
+        }
+
+        return $this;
     }
 
     public function withWorkerNode(WorkerNode $node): self
