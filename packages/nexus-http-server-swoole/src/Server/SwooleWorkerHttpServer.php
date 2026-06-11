@@ -7,33 +7,45 @@ namespace Monadial\Nexus\Http\Server\Swoole\Server;
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
+use Monadial\Nexus\Http\Server\Swoole\App\SwooleCompiledHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleRequestTranslator;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleResponseWriter;
 use Monadial\Nexus\Http\Server\Swoole\Signal\ShutdownSignalHandler;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ConnectionTable;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\LocalWebSocketContext;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketFrame;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketHandler;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketRoute;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
-use Swoole\Http\Server;
+use Swoole\WebSocket\Frame as SwooleFrame;
+use Swoole\WebSocket\Server;
 use Throwable;
 
 use function array_key_first;
+use function is_array;
+use function is_string;
 use function microtime;
 use function spl_object_id;
 
 /**
  * @psalm-api
  *
- * Worker-mode HTTP runner. Boots ext-swoole's master + N worker processes.
- * Each worker runs the factory to build a per-worker CompiledHttpApp at
- * WorkerStart, then serves Request events.
+ * Worker-mode HTTP + WebSocket runner. Boots ext-swoole's master + N worker
+ * processes. Each worker runs the factory at WorkerStart to build a per-worker
+ * CompiledHttpApp (or SwooleCompiledHttpApp for WebSocket support).
  *
- * Pool-singleton actors are NOT available in worker mode (no shared ring
- * across processes). Use thread mode for pool-singletons.
+ * Channel-actor WebSocket routes spawn the channel actor as WorkerLocal —
+ * no cross-worker sharing. See spec for thread-mode alternative.
  */
 final class SwooleWorkerHttpServer
 {
-    /** @var array<int, CompiledHttpApp> */
+    /** @var array<int, CompiledHttpApp|SwooleCompiledHttpApp> */
     private static array $appsByServerId = [];
+
+    /** @var array<int, ConnectionTable> */
+    private static array $connectionsByServerId = [];
 
     /** @var array<int, array{count:int, since:float}> */
     private static array $failureCounters = [];
@@ -41,7 +53,7 @@ final class SwooleWorkerHttpServer
     /** @var array<int, ActorSystem> */
     private static array $systemsByServerId = [];
 
-    /** @param Closure(ActorSystem): CompiledHttpApp $factory */
+    /** @param Closure(ActorSystem): (CompiledHttpApp|SwooleCompiledHttpApp) $factory */
     public static function run(SwooleWorkerConfig $config, Closure $factory): void
     {
         $server = new Server($config->host, $config->port);
@@ -65,9 +77,10 @@ final class SwooleWorkerHttpServer
                 $system = ActorSystem::create("http-worker-{$workerId}", new SwooleRuntime());
                 $app    = $factory($system);
 
-                $serverId                            = spl_object_id($s);
-                self::$appsByServerId[$serverId]     = $app;
-                self::$systemsByServerId[$serverId]  = $system;
+                $serverId                                = spl_object_id($s);
+                self::$appsByServerId[$serverId]         = $app;
+                self::$systemsByServerId[$serverId]      = $system;
+                self::$connectionsByServerId[$serverId]  = new ConnectionTable();
             } catch (Throwable $e) {
                 $config->logger->error('HTTP factory failed during WorkerStart', [
                     'exception' => $e,
@@ -79,19 +92,16 @@ final class SwooleWorkerHttpServer
 
         $server->on('Request', static function (Request $req, Response $res) use ($config): void {
             try {
-                // The Request event has no direct Server reference; in single-server
-                // worker mode the app table has one entry per worker process. Pick the
-                // first registered app.
-                $firstKey = array_key_first(self::$appsByServerId);
+                $serverId = self::resolveServerId();
+                $app      = self::$appsByServerId[$serverId] ?? null;
 
-                if ($firstKey === null) {
+                if ($app === null) {
                     $res->status(503);
                     $res->end('Service not ready');
 
                     return;
                 }
 
-                $app  = self::$appsByServerId[$firstKey];
                 $psr7 = SwooleRequestTranslator::toPsr7($req);
                 SwooleResponseWriter::write($app->handle($psr7), $res);
             } catch (Throwable $e) {
@@ -103,6 +113,113 @@ final class SwooleWorkerHttpServer
 
                 $res->status(500);
                 $res->end('Internal Server Error');
+            }
+        });
+
+        $server->on('Open', static function (Server $s, Request $req) use ($config): void {
+            $fd = (int) $req->fd;
+
+            try {
+                $serverId = spl_object_id($s);
+                $app      = self::$appsByServerId[$serverId] ?? null;
+
+                if (!$app instanceof SwooleCompiledHttpApp) {
+                    return;
+                }
+
+                /** @var mixed $serverEnv */
+                $serverEnv = $req->server;
+                $path      = '/';
+
+                if (is_array($serverEnv) && isset($serverEnv['request_uri']) && is_string($serverEnv['request_uri'])) {
+                    $path = $serverEnv['request_uri'];
+                }
+
+                $match = $app->webSocketRouter()->match($path);
+
+                if ($match === null) {
+                    $s->disconnect($fd, 1000, 'No WebSocket route');
+
+                    return;
+                }
+
+                $route = $match['route'];
+                $psr7  = SwooleRequestTranslator::toPsr7($req);
+                $ctx   = new LocalWebSocketContext($s, $fd, $psr7);
+                $table = self::$connectionsByServerId[$serverId] ?? null;
+
+                if ($table === null) {
+                    $s->disconnect($fd, 1011, 'Server error');
+
+                    return;
+                }
+
+                if ($route->mode === WebSocketRoute::MODE_HANDLER) {
+                    $factory = $route->factory;
+
+                    if ($factory === null) {
+                        $s->disconnect($fd, 1011, 'Server error');
+
+                        return;
+                    }
+
+                    /** @var WebSocketHandler $handler */
+                    $handler = $factory($ctx);
+                    $table->attachHandler($fd, $handler, $ctx);
+                } else {
+                    // Channel mode handled in Phase 10/11
+                    $config->logger->warning('Channel-mode WebSocket route not wired yet');
+                }
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Open failed', ['exception' => $e]);
+                $s->disconnect($fd, 1011, 'Server error');
+            }
+        });
+
+        $server->on('Message', static function (Server $s, SwooleFrame $frame) use ($config): void {
+            try {
+                $serverId = spl_object_id($s);
+                $table    = self::$connectionsByServerId[$serverId] ?? null;
+
+                if ($table === null) {
+                    return;
+                }
+
+                $entry = $table->get((int) $frame->fd);
+
+                if ($entry === null) {
+                    return;
+                }
+
+                if ($entry['handler'] !== null) {
+                    $kind = (int) $frame->opcode === 2
+                        ? WebSocketFrame::KIND_BINARY
+                        : WebSocketFrame::KIND_TEXT;
+                    $entry['handler']->onMessage(new WebSocketFrame($kind, (string) $frame->data));
+                }
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Message failed', ['exception' => $e]);
+            }
+        });
+
+        $server->on('Close', static function (Server $s, int $fd) use ($config): void {
+            try {
+                $serverId = spl_object_id($s);
+                $table    = self::$connectionsByServerId[$serverId] ?? null;
+
+                if ($table === null) {
+                    return;
+                }
+
+                $entry = $table->get($fd);
+
+                if ($entry !== null && $entry['handler'] !== null) {
+                    $entry['handler']->onClose(1000);
+                }
+
+                $table->remove($fd);
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Close failed', ['exception' => $e]);
             }
         });
 
@@ -121,7 +238,11 @@ final class SwooleWorkerHttpServer
                 }
             }
 
-            unset(self::$appsByServerId[$serverId], self::$systemsByServerId[$serverId]);
+            unset(
+                self::$appsByServerId[$serverId],
+                self::$connectionsByServerId[$serverId],
+                self::$systemsByServerId[$serverId],
+            );
         });
 
         if ($config->installSignalHandlers) {
@@ -129,6 +250,17 @@ final class SwooleWorkerHttpServer
         }
 
         $server->start();
+    }
+
+    /**
+     * Best-effort: pick the first registered server id (single-server is typical).
+     * Multi-server-per-process is unsupported.
+     */
+    private static function resolveServerId(): int
+    {
+        $first = array_key_first(self::$appsByServerId);
+
+        return $first ?? 0;
     }
 
     private static function recordFailureAndMaybeShutdown(Server $server, SwooleWorkerConfig $config): void
