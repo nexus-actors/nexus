@@ -74,6 +74,8 @@ final class HttpApp
 
     private ?WorkerNode $workerNode = null;
 
+    private bool $compiled = false;
+
     private function __construct(
         private readonly ActorSystem $system,
         private readonly ?ContainerInterface $container,
@@ -117,31 +119,39 @@ final class HttpApp
      */
     public function compile(): CompiledHttpApp
     {
-        // 1. Discovered routes — append before pending builders so they share the same collection.
-        $discoverer = new RouteDiscoverer();
+        // 1. First-time-only side effects: attribute discovery + pending-builder
+        // promotion contribute to $this->routes exactly once per HttpApp instance.
+        // Subsequent compile() calls reuse the snapshotted route collection so
+        // repeated compiles do not duplicate routes.
+        if (!$this->compiled) {
+            $discoverer = new RouteDiscoverer();
 
-        foreach ($this->discoveryDirs as $dir) {
-            foreach ($discoverer->discover($dir) as $route) {
-                $this->routes->add($route);
+            foreach ($this->discoveryDirs as $dir) {
+                foreach ($discoverer->discover($dir) as $route) {
+                    $this->routes->add($route);
+                }
             }
+
+            foreach ($this->pendingBuilders as $builder) {
+                $this->routes->add($builder->build());
+            }
+
+            $this->pendingBuilders = [];
+            $this->compiled = true;
         }
 
-        // 2. Promote pending route builders BEFORE the dispatcher is built.
-        foreach ($this->pendingBuilders as $builder) {
-            $this->routes->add($builder->build());
-        }
-
-        $this->pendingBuilders = [];
-
-        // 2a. Route cache hit-or-fill — closure routes are skipped from the
+        // 2. Route cache hit-or-fill — closure routes are skipped from the
         // cached payload and re-added from the live collection on hit.
         $routeList = $this->routes->all();
+        $persister = null;
+        $cacheHit = false;
 
         if ($this->routeCache !== null) {
             $persister = new RouteCachePersister($this->routeCache, $this->routeCacheKey);
             $cached = $persister->load();
 
             if ($cached !== null) {
+                $cacheHit = true;
                 $closureRoutes = [];
 
                 foreach ($routeList as $route) {
@@ -151,8 +161,6 @@ final class HttpApp
                 }
 
                 $routeList = [...$cached, ...$closureRoutes];
-            } else {
-                $persister->save($routeList);
             }
         }
 
@@ -160,7 +168,8 @@ final class HttpApp
         $entries = $this->registry->freeze();
         $table = ResolvedActorTable::build($entries, $this->system, $this->workerNode);
 
-        // 3. Resolve handlers per route.
+        // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
+        // we must NOT have written to the route cache yet — see step 3a.
         $resolver = new HandlerResolver($table, $this->container);
         $handlersByKey = [];
         $routeMwsByKey = [];
@@ -170,6 +179,13 @@ final class HttpApp
             /** @psalm-suppress ArgumentTypeCoercion */
             $handlersByKey[$key] = $resolver->resolve($route->handler);
             $routeMwsByKey[$key] = $route->middleware;
+        }
+
+        // 3a. Persist route cache only AFTER handler resolution succeeds, so a
+        // failed compile (e.g. unknown actor reference) never leaves stale routes
+        // in the cache.
+        if ($persister !== null && !$cacheHit) {
+            $persister->save($routeList);
         }
 
         // 4. Mappers — defaults first so user overrides win.
