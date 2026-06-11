@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Http\Actor;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Message\PoisonPill;
+use Monadial\Nexus\Http\Exception\PerRequestScopeDisposedException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 
 /**
@@ -57,7 +58,7 @@ final class PerRequestActorScope
     public function spawn(string $name): ActorRef
     {
         if ($this->disposed) {
-            throw new UnknownActorException("Scope disposed; cannot spawn '{$name}'");
+            throw new PerRequestScopeDisposedException($name);
         }
 
         if (isset($this->spawned[$name])) {

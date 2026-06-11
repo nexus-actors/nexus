@@ -57,6 +57,39 @@ final class ResolvedActorTableTest extends TestCase
         self::assertSame('/user/store', (string) $ref->path());
     }
 
+    #[Test]
+    public function has_any_is_true_for_resolved_and_per_request_entries(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $entries = [
+            new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::WorkerLocal, null, null),
+            new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
+        ];
+
+        $table = ResolvedActorTable::build($entries, $system, workerNode: null);
+
+        self::assertTrue($table->hasAny('store'));
+        self::assertTrue($table->hasAny('saga'));
+        self::assertFalse($table->hasAny('nope'));
+    }
+
+    #[Test]
+    public function per_request_entries_returns_only_per_request_entries(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $entries = [
+            new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::WorkerLocal, null, null),
+            new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
+        ];
+
+        $table = ResolvedActorTable::build($entries, $system, workerNode: null);
+
+        $perRequest = $table->perRequestEntries();
+        self::assertCount(1, $perRequest);
+        self::assertArrayHasKey('saga', $perRequest);
+        self::assertSame(ActorMode::PerRequest, $perRequest['saga']->mode);
+    }
+
     /** @return Props<object> */
     private function noopProps(): Props
     {

@@ -11,6 +11,7 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistrationEntry;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
+use Monadial\Nexus\Http\Exception\PerRequestScopeDisposedException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -32,7 +33,7 @@ final class PerRequestActorScopeTest extends TestCase
     }
 
     #[Test]
-    public function spawn_after_dispose_throws(): void
+    public function spawn_after_dispose_throws_scope_disposed(): void
     {
         $system = ActorSystem::create('test', new TestRuntime());
         $entry = new ActorRegistrationEntry('saga', $this->noopProps(), ActorMode::PerRequest, null, null);
@@ -40,7 +41,7 @@ final class PerRequestActorScopeTest extends TestCase
 
         $scope->dispose();
 
-        $this->expectException(UnknownActorException::class);
+        $this->expectException(PerRequestScopeDisposedException::class);
         $scope->spawn('saga');
     }
 
