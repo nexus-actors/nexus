@@ -1,0 +1,32 @@
+{
+    "name": "nexus-actors/http-server-swoole",
+    "description": "Nexus HTTP server — Swoole worker-mode adapter with WebSocket support.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": "*",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
+        "nikic/fast-route": "^1.3",
+        "nyholm/psr7": "^1.8",
+        "psr/http-message": "^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\Tests\\": "tests/"
+        }
+    }
+}

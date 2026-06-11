@@ -23,6 +23,7 @@
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-worker-pool-swoole/tests/Unit</directory>
+            <directory>packages/nexus-http-server-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -77,6 +78,7 @@
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
             <directory>packages/nexus-http/src</directory>
+            <directory>packages/nexus-http-server-swoole/src</directory>
             <directory>packages/nexus-core/tests/Support</directory>
         </include>
     </source>
