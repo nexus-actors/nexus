@@ -6,9 +6,8 @@ namespace Monadial\Nexus\Http\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\Exception\PoolSingletonRequiresWorkerNodeException;
+use Monadial\Nexus\Http\Exception\PoolSingletonRequiresSpawnerException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
-use Monadial\Nexus\WorkerPool\WorkerNode;
 
 /**
  * @psalm-api
@@ -28,26 +27,26 @@ final readonly class ResolvedActorTable
     /**
      * @param list<ActorRegistrationEntry> $entries
      */
-    public static function build(array $entries, ActorSystem $system, ?WorkerNode $workerNode): self
+    public static function build(array $entries, ActorSystem $system, ?PoolSingletonSpawner $spawner): self
     {
         $resolved = [];
         $perRequest = [];
-        $poolSingletonsMissingWorkerNode = [];
+        $poolSingletonsMissingSpawner = [];
 
         foreach ($entries as $entry) {
             if ($entry->mode === ActorMode::PerRequest) {
                 $perRequest[$entry->name] = $entry;
             } elseif ($entry->mode === ActorMode::WorkerLocal) {
                 $resolved[$entry->name] = $system->spawn($entry->props, $entry->name);
-            } elseif ($workerNode === null) {
-                $poolSingletonsMissingWorkerNode[] = $entry->name;
+            } elseif ($spawner === null) {
+                $poolSingletonsMissingSpawner[] = $entry->name;
             } else {
-                $resolved[$entry->name] = $workerNode->spawn($entry->props, $entry->name);
+                $resolved[$entry->name] = $spawner->spawn($entry->props, $entry->name);
             }
         }
 
-        if ($poolSingletonsMissingWorkerNode !== []) {
-            throw new PoolSingletonRequiresWorkerNodeException($poolSingletonsMissingWorkerNode);
+        if ($poolSingletonsMissingSpawner !== []) {
+            throw new PoolSingletonRequiresSpawnerException($poolSingletonsMissingSpawner);
         }
 
         return new self($resolved, $perRequest);

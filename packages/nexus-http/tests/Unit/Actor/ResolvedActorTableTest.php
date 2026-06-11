@@ -11,7 +11,7 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistrationEntry;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
-use Monadial\Nexus\Http\Exception\PoolSingletonRequiresWorkerNodeException;
+use Monadial\Nexus\Http\Exception\PoolSingletonRequiresSpawnerException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -26,7 +26,7 @@ final class ResolvedActorTableTest extends TestCase
         $system = ActorSystem::create('test', new TestRuntime());
         $entry = new ActorRegistrationEntry('saga', $this->noopProps(), ActorMode::PerRequest, null, null);
 
-        $table = ResolvedActorTable::build([$entry], $system, workerNode: null);
+        $table = ResolvedActorTable::build([$entry], $system, spawner: null);
 
         self::assertTrue($table->isPerRequest('saga'));
         $this->expectException(UnknownActorException::class);
@@ -34,14 +34,14 @@ final class ResolvedActorTableTest extends TestCase
     }
 
     #[Test]
-    public function pool_singleton_without_worker_node_throws(): void
+    public function pool_singleton_without_spawner_throws(): void
     {
         $system = ActorSystem::create('test', new TestRuntime());
         $entry = new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::PoolSingleton, null, null);
 
-        $this->expectException(PoolSingletonRequiresWorkerNodeException::class);
+        $this->expectException(PoolSingletonRequiresSpawnerException::class);
         $this->expectExceptionMessageMatches('/store/');
-        ResolvedActorTable::build([$entry], $system, workerNode: null);
+        ResolvedActorTable::build([$entry], $system, spawner: null);
     }
 
     #[Test]
@@ -50,7 +50,7 @@ final class ResolvedActorTableTest extends TestCase
         $system = ActorSystem::create('test', new TestRuntime());
         $entry = new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::WorkerLocal, null, null);
 
-        $table = ResolvedActorTable::build([$entry], $system, workerNode: null);
+        $table = ResolvedActorTable::build([$entry], $system, spawner: null);
 
         $ref = $table->resolve('store');
         self::assertTrue($ref->isAlive());
@@ -66,7 +66,7 @@ final class ResolvedActorTableTest extends TestCase
             new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
         ];
 
-        $table = ResolvedActorTable::build($entries, $system, workerNode: null);
+        $table = ResolvedActorTable::build($entries, $system, spawner: null);
 
         self::assertTrue($table->hasAny('store'));
         self::assertTrue($table->hasAny('saga'));
@@ -82,7 +82,7 @@ final class ResolvedActorTableTest extends TestCase
             new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
         ];
 
-        $table = ResolvedActorTable::build($entries, $system, workerNode: null);
+        $table = ResolvedActorTable::build($entries, $system, spawner: null);
 
         $perRequest = $table->perRequestEntries();
         self::assertCount(1, $perRequest);

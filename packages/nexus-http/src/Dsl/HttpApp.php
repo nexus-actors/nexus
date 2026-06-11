@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistry;
+use Monadial\Nexus\Http\Actor\PoolSingletonSpawner;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\App\ErrorMode;
@@ -25,7 +26,6 @@ use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
 use Monadial\Nexus\Http\Routing\RouteCollection;
-use Monadial\Nexus\WorkerPool\WorkerNode;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -73,7 +73,7 @@ final class HttpApp
 
     private string $routeCacheKey = 'nexus.http.routes';
 
-    private ?WorkerNode $workerNode = null;
+    private ?PoolSingletonSpawner $poolSingletonSpawner = null;
 
     private bool $compiled = false;
 
@@ -167,7 +167,7 @@ final class HttpApp
 
         // 2b. Resolve actor table.
         $entries = $this->registry->freeze();
-        $table = ResolvedActorTable::build($entries, $this->system, $this->workerNode);
+        $table = ResolvedActorTable::build($entries, $this->system, $this->poolSingletonSpawner);
 
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.
@@ -336,6 +336,13 @@ final class HttpApp
         return false;
     }
 
+    public function withPoolSingletonSpawner(PoolSingletonSpawner $spawner): self
+    {
+        $this->poolSingletonSpawner = $spawner;
+
+        return $this;
+    }
+
     public function withRouteCache(CacheInterface $cache, ?string $key = null): self
     {
         $this->routeCache = $cache;
@@ -343,13 +350,6 @@ final class HttpApp
         if ($key !== null) {
             $this->routeCacheKey = $key;
         }
-
-        return $this;
-    }
-
-    public function withWorkerNode(WorkerNode $node): self
-    {
-        $this->workerNode = $node;
 
         return $this;
     }
