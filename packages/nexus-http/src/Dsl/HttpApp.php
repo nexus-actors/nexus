@@ -21,6 +21,7 @@ use Monadial\Nexus\Http\Handler\HandlerResolver;
 use Monadial\Nexus\Http\Middleware\ExceptionHandlerMiddleware;
 use Monadial\Nexus\Http\Middleware\MiddlewareInvoker;
 use Monadial\Nexus\Http\Middleware\MiddlewarePipeline;
+use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
 use Monadial\Nexus\Http\Routing\RouteCollection;
@@ -171,6 +172,7 @@ final class HttpApp
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.
         $resolver = new HandlerResolver($table, $this->container);
+        $middlewareResolver = new MiddlewareResolver($this->container);
         $handlersByKey = [];
         $routeMwsByKey = [];
 
@@ -178,7 +180,13 @@ final class HttpApp
             $key = $route->method . ':' . $route->path;
             /** @psalm-suppress ArgumentTypeCoercion */
             $handlersByKey[$key] = $resolver->resolve($route->handler);
-            $routeMwsByKey[$key] = $route->middleware;
+            $routeMwsByKey[$key] = array_map(
+                /** @psalm-suppress ArgumentTypeCoercion */
+                static fn(string|MiddlewareInterface $mw): MiddlewareInterface => $mw instanceof MiddlewareInterface
+                    ? $mw
+                    : $middlewareResolver->resolve($mw),
+                $route->middleware,
+            );
         }
 
         // 3a. Persist route cache only AFTER handler resolution succeeds, so a
@@ -222,7 +230,7 @@ final class HttpApp
             /** @psalm-suppress ArgumentTypeCoercion */
             $stack[] = $mw instanceof MiddlewareInterface
                 ? $mw
-                : $this->resolveMiddleware($mw);
+                : $middlewareResolver->resolve($mw);
         }
 
         $stack[] = $router;
@@ -359,20 +367,5 @@ final class HttpApp
         $this->pendingBuilders[] = $builder;
 
         return $builder;
-    }
-
-    /** @param class-string $class */
-    private function resolveMiddleware(string $class): MiddlewareInterface
-    {
-        if ($this->container !== null && $this->container->has($class)) {
-            /** @var MiddlewareInterface */
-            return $this->container->get($class);
-        }
-
-        /**
-         * @var MiddlewareInterface
-         * @psalm-suppress MixedMethodCall
-         */
-        return new $class();
     }
 }

@@ -13,15 +13,24 @@ use Psr\Http\Server\MiddlewareInterface;
 /**
  * @psalm-api
  *
- * Resolves middleware class strings to MiddlewareInterface instances and
- * runs the PSR-15 chain.
+ * Runs a PSR-15 middleware chain. Accepts already-resolved
+ * {@see MiddlewareInterface} instances OR class strings, lazily resolving the
+ * latter via {@see MiddlewareResolver} and caching them across calls.
+ *
+ * Route-level middlewares are pre-resolved at compile time and arrive as
+ * instances; global middlewares may still arrive as class strings.
  */
 final class MiddlewarePipeline
 {
     /** @var array<class-string, MiddlewareInterface> */
     private array $instances = [];
 
-    public function __construct(private readonly ?ContainerInterface $container) {}
+    private readonly MiddlewareResolver $resolver;
+
+    public function __construct(?ContainerInterface $container)
+    {
+        $this->resolver = new MiddlewareResolver($container);
+    }
 
     /**
      * @param list<string|MiddlewareInterface> $middlewares
@@ -35,27 +44,20 @@ final class MiddlewarePipeline
             /** @psalm-suppress ArgumentTypeCoercion */
             $resolved[] = $mw instanceof MiddlewareInterface
                 ? $mw
-                : $this->resolve($mw);
+                : $this->resolveCached($mw);
         }
 
         return (new MiddlewareInvoker($resolved, $tail))->handle($request);
     }
 
     /** @param class-string $class */
-    private function resolve(string $class): MiddlewareInterface
+    private function resolveCached(string $class): MiddlewareInterface
     {
         if (isset($this->instances[$class])) {
             return $this->instances[$class];
         }
 
-        /**
-         * @var MiddlewareInterface $instance
-         * @psalm-suppress MixedMethodCall
-         */
-        $instance = $this->container !== null && $this->container->has($class)
-            ? $this->container->get($class)
-            : new $class();
-
+        $instance = $this->resolver->resolve($class);
         $this->instances[$class] = $instance;
 
         return $instance;

@@ -34,7 +34,7 @@ final class RouterMiddleware implements MiddlewareInterface
 {
     /**
      * @param array<string, ResolvedHandler> $handlersByRouteKey key = "METHOD:path"
-     * @param array<string, list<string>> $routeMiddlewaresByKey
+     * @param array<string, list<MiddlewareInterface>> $routeMiddlewaresByKey
      */
     public function __construct(
         private readonly Dispatcher $dispatcher,
@@ -73,11 +73,11 @@ final class RouterMiddleware implements MiddlewareInterface
             $request = $request->withAttribute($name, $value);
         }
 
-        $requestId = $request->getHeaderLine('X-Request-Id');
-
-        if ($requestId === '') {
-            $requestId = (string) new Ulid();
-        }
+        $externalRequestId = $request->getHeaderLine('X-Request-Id');
+        $internalId = (string) new Ulid();
+        $requestId = $externalRequestId === ''
+            ? $internalId
+            : "{$externalRequestId}-{$internalId}";
 
         $scope = new PerRequestActorScope($this->system, $this->actors->perRequestEntries(), $requestId);
         $request = $request->withAttribute(PerRequestActorScope::class, $scope);

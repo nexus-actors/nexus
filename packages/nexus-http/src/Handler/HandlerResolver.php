@@ -149,6 +149,20 @@ final class HandlerResolver
             }
 
             if ($inConstructor) {
+                if ($type === null) {
+                    throw new LogicException(
+                        "Cannot resolve {$owner}::__construct(\${$name}) "
+                        . '— no type hint and no #[FromActor]/#[FromService] attribute',
+                    );
+                }
+
+                if ($this->container === null || !$this->container->has($type)) {
+                    throw new LogicException(
+                        "Cannot resolve {$owner}::__construct(\${$name}: {$type}) — no #[FromService] attribute "
+                        . "and no PSR-11 container binding for '{$type}'",
+                    );
+                }
+
                 $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_CONTAINER);
 
                 continue;
