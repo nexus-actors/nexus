@@ -26,6 +26,7 @@ use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
 use Monadial\Nexus\Http\Routing\RouteCollection;
+use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -74,6 +75,8 @@ final class HttpApp
     private string $routeCacheKey = 'nexus.http.routes';
 
     private ?PoolSingletonSpawner $poolSingletonSpawner = null;
+
+    private ?MessageSerializer $messageSerializer = null;
 
     private bool $compiled = false;
 
@@ -171,7 +174,7 @@ final class HttpApp
 
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.
-        $resolver = new HandlerResolver($table, $this->container);
+        $resolver = new HandlerResolver($table, $this->container, $this->messageSerializer);
         $middlewareResolver = new MiddlewareResolver($this->container);
         $handlersByKey = [];
         $routeMwsByKey = [];
@@ -334,6 +337,13 @@ final class HttpApp
         }
 
         return false;
+    }
+
+    public function withMessageSerializer(MessageSerializer $serializer): self
+    {
+        $this->messageSerializer = $serializer;
+
+        return $this;
     }
 
     public function withPoolSingletonSpawner(PoolSingletonSpawner $spawner): self

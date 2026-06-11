@@ -11,8 +11,11 @@ use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\Exception\PerRequestActorInConstructorException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
+use Monadial\Nexus\Http\Handler\Attribute\FromBody;
 use Monadial\Nexus\Http\Handler\Attribute\FromService;
 use Monadial\Nexus\Runtime\Async\Future;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Nyholm\Psr7\Response;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -21,7 +24,6 @@ use ReflectionClass;
 use ReflectionFunction;
 use ReflectionNamedType;
 use ReflectionParameter;
-use ReflectionType;
 
 /**
  * @psalm-api
@@ -34,6 +36,7 @@ final class HandlerResolver
     public function __construct(
         private readonly ResolvedActorTable $actors,
         private readonly ?ContainerInterface $container,
+        private readonly ?MessageSerializer $serializer = null,
     ) {}
 
     /**
@@ -79,6 +82,10 @@ final class HandlerResolver
                 ParamMetadata::KIND_REQUEST_SCOPE => $scope,
                 ParamMetadata::KIND_PATH_PARAM => $pathParams[$p->name] ?? '',
                 ParamMetadata::KIND_FROM_ACTOR => $this->resolveActorForCall($p, $scope),
+                ParamMetadata::KIND_FROM_BODY => $this->deserializeBody(
+                    $r,
+                    $p->type ?? throw new LogicException('FromBody param missing type'),
+                ),
                 ParamMetadata::KIND_FROM_SERVICE => $this->resolveService($p->serviceId ?? $p->type ?? '', $p->name),
                 ParamMetadata::KIND_CONTAINER => $this->resolveService($p->type ?? '', $p->name),
                 default => throw new LogicException("Unsupported param kind: {$p->kind}"),
@@ -86,6 +93,15 @@ final class HandlerResolver
         }
 
         return $args;
+    }
+
+    private function deserializeBody(ServerRequestInterface $r, string $type): object
+    {
+        if ($this->serializer === null) {
+            throw new LogicException('No MessageSerializer wired — cannot resolve #[FromBody]');
+        }
+
+        return $this->serializer->deserialize((string) $r->getBody(), $type);
     }
 
     /**
@@ -117,6 +133,27 @@ final class HandlerResolver
                 }
 
                 $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_ACTOR, $actorName);
+
+                continue;
+            }
+
+            $fromBody = $p->getAttributes(FromBody::class);
+
+            if ($fromBody !== []) {
+                if ($type === null) {
+                    throw new LogicException(
+                        "Cannot resolve {$owner} param \${$name} via #[FromBody] — no class type hint",
+                    );
+                }
+
+                if ($this->serializer === null) {
+                    throw new LogicException(
+                        "{$owner} param \${$name} uses #[FromBody] but no MessageSerializer is wired. "
+                        . 'Call HttpApp::withMessageSerializer(...) at boot.',
+                    );
+                }
+
+                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_BODY);
 
                 continue;
             }
@@ -225,6 +262,36 @@ final class HandlerResolver
         return false;
     }
 
+    /**
+     * Post-process a handler return value: unwrap Future, pass ResponseInterface
+     * through, otherwise serialize the typed object into a JSON response.
+     */
+    private function postProcess(mixed $result): ResponseInterface
+    {
+        if ($result instanceof Future) {
+            /** @psalm-suppress MixedAssignment */
+            $result = $result->await();
+        }
+
+        if ($result instanceof ResponseInterface) {
+            return $result;
+        }
+
+        if (is_object($result)) {
+            if ($this->serializer === null) {
+                throw new LogicException('Handler returned a typed object but no MessageSerializer is wired');
+            }
+
+            return new Response(
+                200,
+                ['Content-Type' => 'application/json'],
+                $this->serializer->serialize($result),
+            );
+        }
+
+        throw new LogicException('Handler must return ResponseInterface, Future, or a typed object');
+    }
+
     private function resolveActorForCall(ParamMetadata $p, PerRequestActorScope $scope): object
     {
         $actorName = $p->actorName ?? '';
@@ -249,7 +316,6 @@ final class HandlerResolver
 
         $methodRef = $reflection->getMethod($method);
         $invokeParams = $this->describeParams($methodRef->getParameters(), inConstructor: false, owner: $class);
-        $returnIsFuture = $this->returnsFuture($methodRef->getReturnType());
         $needsScope = $this->paramsNeedScope($invokeParams);
 
         $instance = $this->instantiate($class, $ctorParams);
@@ -257,48 +323,49 @@ final class HandlerResolver
         $invoke =
             /**
              * @param array<string, string> $pathParams
-             * @return Future<object>|ResponseInterface
              */
             function (
                 ServerRequestInterface $r,
                 PerRequestActorScope $scope,
                 array $pathParams,
-            ) use ($instance, $method, $invokeParams): mixed {
+            ) use ($instance, $method, $invokeParams): ResponseInterface {
                 $args = $this->buildArgs($invokeParams, $r, $scope, $pathParams);
 
-                /** @psalm-suppress MixedMethodCall, MixedReturnStatement */
-                return $instance->{$method}(...$args);
+                /** @psalm-suppress MixedMethodCall, MixedAssignment */
+                $result = $instance->{$method}(...$args);
+
+                return $this->postProcess($result);
             };
 
         /** @psalm-suppress MixedArgumentTypeCoercion */
-        return new ResolvedHandler($invoke, !$returnIsFuture, $needsScope);
+        return new ResolvedHandler($invoke, true, $needsScope);
     }
 
     private function resolveClosure(Closure $closure): ResolvedHandler
     {
         $reflection = new ReflectionFunction($closure);
         $invokeParams = $this->describeParams($reflection->getParameters(), inConstructor: false, owner: 'closure');
-        $returnIsFuture = $this->returnsFuture($reflection->getReturnType());
         $needsScope = $this->paramsNeedScope($invokeParams);
 
         $invoke =
             /**
              * @param array<string, string> $pathParams
-             * @return Future<object>|ResponseInterface
              */
             function (
                 ServerRequestInterface $r,
                 PerRequestActorScope $scope,
                 array $pathParams,
-            ) use ($closure, $invokeParams): mixed {
+            ) use ($closure, $invokeParams): ResponseInterface {
                 $args = $this->buildArgs($invokeParams, $r, $scope, $pathParams);
 
-                /** @psalm-suppress MixedReturnStatement */
-                return $closure(...$args);
+                /** @psalm-suppress MixedAssignment */
+                $result = $closure(...$args);
+
+                return $this->postProcess($result);
             };
 
         /** @psalm-suppress MixedArgumentTypeCoercion */
-        return new ResolvedHandler($invoke, !$returnIsFuture, $needsScope);
+        return new ResolvedHandler($invoke, true, $needsScope);
     }
 
     /**
@@ -339,14 +406,5 @@ final class HandlerResolver
         }
 
         return $this->container->get($id);
-    }
-
-    private function returnsFuture(?ReflectionType $type): bool
-    {
-        if (!$type instanceof ReflectionNamedType) {
-            return false;
-        }
-
-        return $type->getName() === Future::class;
     }
 }

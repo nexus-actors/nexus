@@ -130,3 +130,4 @@ deptrac:
     Http:
       - Core
       - Runtime
+      - Serialization
