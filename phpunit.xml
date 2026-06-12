@@ -65,6 +65,13 @@
         <testsuite name="performance">
             <directory>tests/Performance</directory>
         </testsuite>
+        <testsuite name="performance-http-swoole">
+            <directory>tests/Performance/HttpSwoole</directory>
+            <exclude>tests/Performance/HttpSwoole/Support</exclude>
+        </testsuite>
+        <testsuite name="performance-http-swoole-threads">
+            <directory>tests/Performance/HttpSwooleThreads</directory>
+        </testsuite>
         <testsuite name="psalm">
             <directory>packages/nexus-psalm/tests</directory>
         </testsuite>

@@ -52,6 +52,12 @@ test-http: ## HTTP integration tests
 test-http-swoole: ## HTTP Swoole integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-http-swoole
 
+perf-http-swoole: ## HTTP Swoole performance benchmarks (worker mode)
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole
+
+perf-http-swoole-threads: ## HTTP Swoole performance benchmarks (thread mode)
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole-threads
+
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
 

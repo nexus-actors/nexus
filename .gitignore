@@ -19,3 +19,6 @@ website/node_modules/
 website/.docusaurus/
 website/build/
 coverage-guard-test.php
+
+# Performance harness results
+tests/Performance/HttpSwoole/.results/
