@@ -19,6 +19,7 @@
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
             <directory>packages/nexus-http/tests/Unit</directory>
+            <directory>packages/nexus-http-ws/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>

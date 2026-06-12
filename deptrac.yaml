@@ -82,6 +82,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http/src/.*
 
+    - name: HttpWs
+      collectors:
+        - type: directory
+          value: packages/nexus-http-ws/src/.*
+
     - name: HttpServerSwoole
       collectors:
         - type: directory
@@ -141,16 +146,21 @@ deptrac:
       - Core
       - Runtime
       - Serialization
+    HttpWs:
+      - Core
+      - Http
     HttpServerSwoole:
       - Core
-      - Runtime
       - Http
+      - HttpWs
+      - Runtime
       - RuntimeSwoole
     HttpServerSwooleThreads:
       - Core
-      - Runtime
-      - RuntimeSwoole
       - Http
       - HttpServerSwoole
+      - HttpWs
+      - Runtime
+      - RuntimeSwoole
       - WorkerPool
       - WorkerPoolSwoole
