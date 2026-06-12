@@ -5,10 +5,25 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Server\Swoole\Threads\Server;
 
 use Closure;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
+use Monadial\Nexus\Http\Server\Swoole\App\SwooleCompiledHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleRequestTranslator;
 use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleResponseWriter;
+use Monadial\Nexus\Http\Server\Swoole\Threads\WebSocket\Message\WebSocketFramePush;
+use Monadial\Nexus\Http\Server\Swoole\Threads\WebSocket\ThreadAwareWebSocketContext;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ChannelActorNameResolver;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ChannelActorRegistry;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\ConnectionTable;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionClosed;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionOpened;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelMessageReceived;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketFrame;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketHandler;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketRoute;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
@@ -16,52 +31,102 @@ use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
-use Swoole\Http\Server;
 use Swoole\Thread;
 use Swoole\Thread\ArrayList;
 use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
+use Swoole\WebSocket\Frame as SwooleFrame;
+use Swoole\WebSocket\Server;
 use Throwable;
 
+use function is_array;
+use function is_string;
 use function spl_object_id;
+
+use const WEBSOCKET_OPCODE_BINARY;
+use const WEBSOCKET_OPCODE_PING;
 
 /**
  * @psalm-api
  *
- * Thread-mode HTTP runner using Swoole 6's native SWOOLE_THREAD server mode.
+ * Thread-mode HTTP + WebSocket runner using Swoole 6's native SWOOLE_THREAD
+ * server mode.
  *
- * Boots a single Swoole\Http\Server in the main thread; Swoole spawns N worker
- * threads that share the listening socket and dispatch incoming requests via
- * the kernel. Each worker thread runs the factory at WorkerStart to build a
- * per-thread ActorSystem + WorkerNode. WebSocket events are added in Phase 16.
+ * Boots a single Swoole\WebSocket\Server in the main thread; Swoole spawns N
+ * worker threads that share the listening socket and dispatch incoming
+ * requests via the kernel. Each worker thread runs the factory at WorkerStart
+ * to build a per-thread ActorSystem + WorkerNode and (when the factory
+ * returns a SwooleCompiledHttpApp) wires WebSocket events.
  *
  * Cross-thread pool-singleton actor support is wired automatically: a
  * Thread\Map directory and one Thread\Queue per worker are allocated in the
- * main thread via the Server's init_arguments hook (the documented Swoole 6
- * mechanism for sharing thread-safe resources), then retrieved from each
+ * main thread via the Server's init_arguments hook, then retrieved from each
  * worker thread via Swoole\Thread::getArguments(). The factory receives a
  * fully-wired WorkerNode whose hash ring routes spawn() calls across all
  * threads.
  *
+ * ## WebSocket model (v1)
+ *
+ * Channel actors in v1 are **thread-local**: each thread keeps its own
+ * ChannelActorRegistry, so a connection that lands on thread Y creates (or
+ * reuses) the channel actor on thread Y. Two connections to the same channel
+ * key that land on different threads will be served by two distinct actor
+ * instances. This trades the single-actor-per-channel guarantee for a clean
+ * serialization story (the `WebSocketContext` and Swoole `Request` carried in
+ * `ChannelConnectionOpened` cannot cross threads via Thread\Queue, which uses
+ * php_serialize internally).
+ *
+ * Cross-thread broadcast plumbing (`WebSocketFramePush` + per-thread router
+ * actors) IS wired up so that a thread can push to fds owned by another
+ * thread. Each thread spawns one well-known router actor at WorkerStart whose
+ * name is deterministically salted to land on that specific thread; other
+ * threads resolve a WorkerActorRef for each router via
+ * `WorkerNode::actorFor()` and can tell `WebSocketFramePush` messages
+ * directly. The router on the owning thread looks up the fd in its local
+ * ConnectionTable and pushes via the local Swoole server.
+ *
+ * In v1, application code is responsible for invoking the cross-thread push
+ * path explicitly (e.g. an application-level service that fans messages out
+ * across threads). The `ThreadAwareWebSocketContext` short-circuits to a
+ * direct local push when the calling thread owns the fd; it falls back to
+ * the registered router senders otherwise. The channel-actor message path
+ * stays thread-local until a future revision adds serialization-safe context
+ * transport.
+ *
  * The factory closure has signature:
- *   Closure(ActorSystem, WorkerNode): CompiledHttpApp
+ *   Closure(ActorSystem, WorkerNode): (CompiledHttpApp|SwooleCompiledHttpApp)
  *
  * Call this method from the main thread; it blocks until the server shuts
  * down (SIGTERM/SIGINT or explicit Server::shutdown()).
  */
 final class SwooleThreadHttpServer
 {
-    /** @var array<int, CompiledHttpApp> */
+    private const string ROUTER_NAME_PREFIX = 'ws-thread-router';
+    private const int ROUTER_NAME_MAX_SALT = 100_000;
+
+    /** @var array<int, CompiledHttpApp|SwooleCompiledHttpApp> */
     private static array $appsByServerId = [];
+
+    /** @var array<int, ChannelActorRegistry> */
+    private static array $channelsByServerId = [];
+
+    /** @var array<int, ConnectionTable> */
+    private static array $connectionsByServerId = [];
 
     /** @var array<int, ActorSystem> */
     private static array $systemsByServerId = [];
 
-    /** @param Closure(ActorSystem, WorkerNode): CompiledHttpApp $factory */
+    /** @var array<int, int> serverId -> owning thread id (workerId) */
+    private static array $threadIdByServerId = [];
+
+    /** @var array<int, array<int, callable(WebSocketFramePush): void>> serverId -> [threadId -> sender] */
+    private static array $routerSendersByServerId = [];
+
+    /** @param Closure(ActorSystem, WorkerNode): (CompiledHttpApp|SwooleCompiledHttpApp) $factory */
     public static function run(SwooleThreadConfig $config, Closure $factory): void
     {
         $threads = $config->threads;
-        $server = new Server($config->host, $config->port, SWOOLE_THREAD, SWOOLE_SOCK_TCP);
+        $server  = new Server($config->host, $config->port, SWOOLE_THREAD, SWOOLE_SOCK_TCP);
 
         $settings = [
             'max_request'    => $config->maxRequest,
@@ -109,21 +174,60 @@ final class SwooleThreadHttpServer
                     $queues[$i] = $q;
                 }
 
+                $ring   = new ConsistentHashRing($totalThreads);
                 $system = ActorSystem::create("http-thread-{$workerId}", new SwooleRuntime());
                 $node   = new WorkerNode(
                     $workerId,
                     $system,
                     new ThreadQueueTransport($queues, $workerId),
-                    new ConsistentHashRing($totalThreads),
+                    $ring,
                     new ThreadMapDirectory($directory),
                 );
                 $node->start();
 
-                $app = $factory($system, $node);
+                $app      = $factory($system, $node);
+                $serverId = spl_object_id($s);
 
-                $serverId                            = spl_object_id($s);
-                self::$appsByServerId[$serverId]     = $app;
-                self::$systemsByServerId[$serverId]  = $system;
+                $table           = new ConnectionTable();
+                $routerNames     = self::computeRouterNames($ring, $totalThreads);
+                $localRouterName = $routerNames[$workerId];
+
+                $node->spawn(
+                    self::routerProps($table, $s),
+                    $localRouterName,
+                );
+
+                $routerSenders = [];
+
+                foreach ($routerNames as $threadId => $name) {
+                    if ($threadId === $workerId) {
+                        // Same-thread short-circuit: dispatch in-process (also
+                        // unused by ThreadAwareWebSocketContext, which has its
+                        // own same-thread fast path; included for symmetry).
+                        $routerSenders[$threadId] = static function (WebSocketFramePush $msg) use ($s, $table): void {
+                            self::dispatchFramePushLocally($s, $table, $msg);
+                        };
+
+                        continue;
+                    }
+
+                    $remoteRef = $node->actorFor('/user/' . $name);
+
+                    if ($remoteRef === null) {
+                        continue;
+                    }
+
+                    $routerSenders[$threadId] = static function (WebSocketFramePush $msg) use ($remoteRef): void {
+                        $remoteRef->tell($msg);
+                    };
+                }
+
+                self::$appsByServerId[$serverId]          = $app;
+                self::$channelsByServerId[$serverId]      = new ChannelActorRegistry($system);
+                self::$connectionsByServerId[$serverId]   = $table;
+                self::$routerSendersByServerId[$serverId] = $routerSenders;
+                self::$systemsByServerId[$serverId]       = $system;
+                self::$threadIdByServerId[$serverId]      = $workerId;
             } catch (Throwable $e) {
                 $config->logger->error('HTTP factory failed during WorkerStart', [
                     'exception' => $e,
@@ -158,6 +262,143 @@ final class SwooleThreadHttpServer
             }
         });
 
+        $server->on('Open', static function (Server $s, Request $req) use ($config): void {
+            $fd = (int) $req->fd;
+
+            try {
+                $serverId = spl_object_id($s);
+                $app      = self::$appsByServerId[$serverId] ?? null;
+
+                if (!$app instanceof SwooleCompiledHttpApp) {
+                    return;
+                }
+
+                /** @var mixed $serverEnv */
+                $serverEnv = $req->server;
+                $path      = '/';
+
+                if (is_array($serverEnv) && isset($serverEnv['request_uri']) && is_string($serverEnv['request_uri'])) {
+                    $path = $serverEnv['request_uri'];
+                }
+
+                $match = $app->webSocketRouter()->match($path);
+
+                if ($match === null) {
+                    $s->disconnect($fd, 1000, 'No WebSocket route');
+
+                    return;
+                }
+
+                $route    = $match['route'];
+                $psr7     = SwooleRequestTranslator::toPsr7($req);
+                $table    = self::$connectionsByServerId[$serverId] ?? null;
+                $threadId = self::$threadIdByServerId[$serverId] ?? null;
+                $senders  = self::$routerSendersByServerId[$serverId] ?? [];
+
+                if ($table === null || $threadId === null) {
+                    $s->disconnect($fd, 1011, 'Server error');
+
+                    return;
+                }
+
+                // The fd owner is the thread that accepted the upgrade — i.e.
+                // the thread currently running this Open event. The channel
+                // actor (v1: thread-local) runs on the same thread, so the
+                // context's same-thread fast path is hit on every push.
+                $ctx = new ThreadAwareWebSocketContext($s, $threadId, $threadId, $fd, $psr7, $senders);
+
+                if ($route->mode === WebSocketRoute::MODE_HANDLER) {
+                    $factory = $route->factory;
+
+                    if ($factory === null) {
+                        $s->disconnect($fd, 1011, 'Server error');
+
+                        return;
+                    }
+
+                    /** @var WebSocketHandler $handler */
+                    $handler = $factory($ctx);
+                    $table->attachHandler($fd, $handler, $ctx);
+                } else {
+                    $props    = $route->props;
+                    $registry = self::$channelsByServerId[$serverId] ?? null;
+
+                    if ($props === null || $registry === null) {
+                        $s->disconnect($fd, 1011, 'Server error');
+
+                        return;
+                    }
+
+                    $keyFrom = $route->keyFrom ?? '';
+                    $key     = $match['params'][$keyFrom] ?? '';
+
+                    $actorName = ChannelActorNameResolver::resolve($key);
+                    $actor     = $registry->resolveOrSpawn($actorName, $props);
+
+                    $actor->tell(new ChannelConnectionOpened($fd, $ctx, $psr7));
+                    $table->attachChannel($fd, $actor, $actorName, $ctx);
+                }
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Open failed', ['exception' => $e]);
+                $s->disconnect($fd, 1011, 'Server error');
+            }
+        });
+
+        $server->on('Message', static function (Server $s, SwooleFrame $frame) use ($config): void {
+            try {
+                $serverId = spl_object_id($s);
+                $table    = self::$connectionsByServerId[$serverId] ?? null;
+
+                if ($table === null) {
+                    return;
+                }
+
+                $entry = $table->get((int) $frame->fd);
+
+                if ($entry === null) {
+                    return;
+                }
+
+                $kind = (int) $frame->opcode === 2
+                    ? WebSocketFrame::KIND_BINARY
+                    : WebSocketFrame::KIND_TEXT;
+                $wsFrame = new WebSocketFrame($kind, (string) $frame->data);
+
+                if ($entry['handler'] !== null) {
+                    $entry['handler']->onMessage($wsFrame);
+                } elseif ($entry['channelActor'] !== null) {
+                    $entry['channelActor']->tell(new ChannelMessageReceived((int) $frame->fd, $wsFrame));
+                }
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Message failed', ['exception' => $e]);
+            }
+        });
+
+        $server->on('Close', static function (Server $s, int $fd) use ($config): void {
+            try {
+                $serverId = spl_object_id($s);
+                $table    = self::$connectionsByServerId[$serverId] ?? null;
+
+                if ($table === null) {
+                    return;
+                }
+
+                $entry = $table->get($fd);
+
+                if ($entry !== null) {
+                    if ($entry['handler'] !== null) {
+                        $entry['handler']->onClose(1000);
+                    } elseif ($entry['channelActor'] !== null) {
+                        $entry['channelActor']->tell(new ChannelConnectionClosed($fd, 1000));
+                    }
+                }
+
+                $table->remove($fd);
+            } catch (Throwable $e) {
+                $config->logger->error('WebSocket Close failed', ['exception' => $e]);
+            }
+        });
+
         $server->on('WorkerStop', static function (Server $s, int $workerId) use ($config): void {
             $serverId = spl_object_id($s);
             $system   = self::$systemsByServerId[$serverId] ?? null;
@@ -175,17 +416,98 @@ final class SwooleThreadHttpServer
 
             unset(
                 self::$appsByServerId[$serverId],
+                self::$channelsByServerId[$serverId],
+                self::$connectionsByServerId[$serverId],
+                self::$routerSendersByServerId[$serverId],
                 self::$systemsByServerId[$serverId],
+                self::$threadIdByServerId[$serverId],
             );
         });
-
-        // WebSocket events added in Phase 16 (cross-thread broadcast support).
 
         // Swoole's SWOOLE_THREAD mode wires SIGTERM/SIGINT to Server::shutdown
         // natively. The $config->installSignalHandlers flag is retained for
         // API parity with the worker-mode config; a no-op here is correct.
 
         $server->start();
+    }
+
+    /**
+     * Deterministically compute a router actor name for each thread such
+     * that the ring assigns the name to that specific thread.
+     *
+     * @return array<int, string> threadId -> actor name
+     */
+    public static function computeRouterNames(ConsistentHashRing $ring, int $totalThreads): array
+    {
+        $names = [];
+
+        for ($threadId = 0; $threadId < $totalThreads; $threadId++) {
+            for ($salt = 0; $salt < self::ROUTER_NAME_MAX_SALT; $salt++) {
+                $candidate = self::ROUTER_NAME_PREFIX . "-{$threadId}-s{$salt}";
+
+                if ($ring->getWorker($candidate) === $threadId) {
+                    $names[$threadId] = $candidate;
+
+                    break;
+                }
+            }
+
+            if (!isset($names[$threadId])) {
+                // Fallback to the prefix+thread name even if the ring would not
+                // map it to $threadId. With 150 virtual nodes per worker and
+                // any reasonable thread count, the search above succeeds in
+                // practice, so this branch is defensive only.
+                $names[$threadId] = self::ROUTER_NAME_PREFIX . "-{$threadId}";
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * @return Props<object>
+     */
+    private static function routerProps(ConnectionTable $table, Server $server): Props
+    {
+        /**
+         * @psalm-suppress InvalidArgument
+         *   Behavior::receive's @template U of object can't be inferred from
+         *   the broad `object` param type in diff-mode runs of Psalm. The
+         *   router only ever receives WebSocketFramePush; the instanceof
+         *   guard makes this safe at runtime.
+         */
+        $behavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use ($table, $server): Behavior {
+                if ($msg instanceof WebSocketFramePush) {
+                    self::dispatchFramePushLocally($server, $table, $msg);
+
+                    return Behavior::same();
+                }
+
+                return Behavior::unhandled();
+            },
+        );
+
+        /** @var Props<object> */
+        return Props::fromBehavior($behavior);
+    }
+
+    private static function dispatchFramePushLocally(
+        Server $server,
+        ConnectionTable $table,
+        WebSocketFramePush $msg,
+    ): void {
+        if (!$table->has($msg->fd)) {
+            // fd is not on this thread (or was closed mid-flight); silently drop.
+            return;
+        }
+
+        match ($msg->kind) {
+            WebSocketFramePush::KIND_BINARY => $server->push($msg->fd, $msg->payload, WEBSOCKET_OPCODE_BINARY),
+            WebSocketFramePush::KIND_PING   => $server->push($msg->fd, '', WEBSOCKET_OPCODE_PING),
+            WebSocketFramePush::KIND_CLOSE  => $server->disconnect($msg->fd, $msg->closeCode, $msg->closeReason),
+            default                         => $server->push($msg->fd, $msg->payload),
+        };
     }
 
     /**
