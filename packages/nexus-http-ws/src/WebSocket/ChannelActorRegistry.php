@@ -35,10 +35,6 @@ final class ChannelActorRegistry
 
     public function remove(string $name): void
     {
-        if (isset($this->refs[$name])) {
-            $ref = $this->refs[$name];
-            unset($this->refs[$name]);
-            $this->system->stop($ref);
-        }
+        unset($this->refs[$name]);
     }
 }
