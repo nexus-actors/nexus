@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Http\Server\Swoole\WebSocket;
 use FastRoute\Dispatcher;
 use FastRoute\RouteCollector;
 
+use function array_values;
 use function FastRoute\simpleDispatcher;
 
 /**
@@ -18,10 +19,7 @@ use function FastRoute\simpleDispatcher;
 final class WebSocketRouter
 {
     /** @param array<int, WebSocketRoute> $routes */
-    private function __construct(
-        private readonly Dispatcher $delegate,
-        private readonly array $routes,
-    ) {
+    private function __construct(private readonly Dispatcher $delegate, private readonly array $routes,) {
     }
 
     /** @param list<WebSocketRoute> $routes */
@@ -37,6 +35,12 @@ final class WebSocketRouter
 
         /** @var array<int, WebSocketRoute> $byId */
         return new self($dispatcher, $byId);
+    }
+
+    /** @return list<WebSocketRoute> */
+    public function routes(): array
+    {
+        return array_values($this->routes);
     }
 
     /** @return array{route: WebSocketRoute, params: array<string,string>}|null */

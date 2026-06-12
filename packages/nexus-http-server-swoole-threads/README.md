@@ -73,7 +73,7 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
 
 Handler mode works the same way as in worker mode — see the worker-mode package's README for the API.
 
-**v1 limitation — channel-actor cross-thread broadcast:** The cross-thread `WebSocketFramePush` plumbing + per-thread router actors are wired (see `ThreadAwareWebSocketContext` and `WebSocketFramePush`), but channel actors themselves stay thread-local in v1. The `ChannelConnectionOpened` envelope's `WebSocketContext` + Swoole `Request` are not serialization-safe across `Thread\Queue`, so a v2 design pass is needed to make a channel actor span threads. Handler-mode WebSocket works fully in thread mode.
+**v1: channel-actor routes are rejected.** Channel-actor mode (`webSocketChannel(...)`) is unsupported in thread mode and the server fails fast at `WorkerStart` rather than silently degrading to thread-local semantics. The `ChannelConnectionOpened` envelope's `WebSocketContext` + Swoole `Request` are not serialization-safe over `Thread\Queue` (php_serialize); a v2 design pass is needed before channel actors can span threads. Use handler mode for thread-mode WebSockets, or the `nexus-http-server-swoole` worker-mode package for channel actors. The cross-thread `WebSocketFramePush` plumbing + per-thread router actors are wired (see `ThreadAwareWebSocketContext`) for future use.
 
 ## Configuration
 
@@ -97,4 +97,4 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
 ## Status
 
 Thread-mode HTTP + handler-mode WebSocket: stable.
-Channel-actor cross-thread broadcast: v2 (handler mode is the recommended pattern in thread mode until then).
+Channel-actor routes: rejected at boot in v1 (cross-thread serialization gap). Handler mode is the recommended pattern in thread mode until v2 lands.

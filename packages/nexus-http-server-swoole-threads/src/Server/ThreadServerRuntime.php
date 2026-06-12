@@ -37,6 +37,9 @@ final class ThreadServerRuntime
     /** @var array<int, callable(WebSocketFramePush): void> */
     public array $routerSenders = [];
 
+    /** @var array{count: int, since: float} */
+    public array $failureBucket = ['count' => 0, 'since' => 0.0];
+
     public function reset(): void
     {
         $this->system        = null;

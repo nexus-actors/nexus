@@ -24,11 +24,13 @@ use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelMessageReceived;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketHandler;
 use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketRoute;
+use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketRouter;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
 use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
+use RuntimeException;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 use Swoole\Http\Server as HttpServer;
@@ -42,6 +44,7 @@ use Throwable;
 
 use function is_array;
 use function is_string;
+use function microtime;
 
 use const WEBSOCKET_OPCODE_BINARY;
 use const WEBSOCKET_OPCODE_PING;
@@ -178,7 +181,12 @@ final class SwooleThreadHttpServer
                     );
                     $node->start();
 
-                    $app             = $factory($system, $node);
+                    $app = $factory($system, $node);
+
+                    if ($enableWebSocket && $app instanceof SwooleCompiledHttpApp) {
+                        self::assertNoChannelRoutes($app->webSocketRouter());
+                    }
+
                     $runtime->system = $system;
                     $runtime->app    = $app;
 
@@ -228,6 +236,7 @@ final class SwooleThreadHttpServer
                         'exception' => $e,
                         'workerId'  => $workerId,
                     ]);
+                    self::recordFailureAndMaybeShutdown($s, $config, $runtime);
                 }
             },
         );
@@ -461,6 +470,30 @@ final class SwooleThreadHttpServer
     }
 
     /**
+     * Thread-mode v1 does not support channel-actor routes — the
+     * ChannelConnectionOpened envelope carries a Swoole Request + a
+     * WebSocketContext bound to a Swoole server handle, neither of which
+     * round-trip through Thread\Queue (php_serialize). Accepting such routes
+     * would silently serve them with thread-local semantics, which violates
+     * the user's pub/sub expectations under load distribution.
+     *
+     * Fail fast at boot so the misconfiguration surfaces in the worker-boot
+     * circuit breaker rather than at the first WebSocket upgrade.
+     */
+    public static function assertNoChannelRoutes(WebSocketRouter $router): void
+    {
+        foreach ($router->routes() as $route) {
+            if ($route->mode === WebSocketRoute::MODE_CHANNEL) {
+                throw new RuntimeException(
+                    "WebSocket channel-actor routes are not supported in thread mode "
+                    . "(route '{$route->path}'). Use handler-mode WebSocket here, "
+                    . 'or switch to nexus-http-server-swoole (worker mode) for channel actors.',
+                );
+            }
+        }
+    }
+
+    /**
      * @return Props<object>
      */
     private static function routerProps(ConnectionTable $table, WebSocketServer $server): Props
@@ -486,6 +519,28 @@ final class SwooleThreadHttpServer
 
         /** @var Props<object> */
         return Props::fromBehavior($behavior);
+    }
+
+    private static function recordFailureAndMaybeShutdown(
+        HttpServer|WebSocketServer $server,
+        SwooleThreadConfig $config,
+        ThreadServerRuntime $runtime,
+    ): void {
+        $now    = microtime(true);
+        $bucket = $runtime->failureBucket;
+
+        if ($bucket['since'] === 0.0 || $now - $bucket['since'] > 5.0) {
+            $bucket = ['count' => 1, 'since' => $now];
+        } else {
+            $bucket['count']++;
+        }
+
+        $runtime->failureBucket = $bucket;
+
+        if ($bucket['count'] >= 3) {
+            $config->logger->error('HTTP factory failed during thread boot 3 times in 5s — shutting down server.');
+            $server->shutdown();
+        }
     }
 
     private static function dispatchFramePushLocally(
