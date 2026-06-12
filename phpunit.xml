@@ -47,6 +47,9 @@
         <testsuite name="integration-workerPool">
             <directory>tests/Integration/WorkerPool</directory>
         </testsuite>
+        <testsuite name="integration-worker-pool-swoole">
+            <directory>tests/Integration/WorkerPoolSwoole</directory>
+        </testsuite>
         <testsuite name="unit-persistence">
             <directory>packages/nexus-persistence/tests/Unit</directory>
         </testsuite>

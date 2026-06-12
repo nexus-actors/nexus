@@ -147,13 +147,24 @@ final class WorkerPoolBootstrap
     private function runWithPool(Map $directory, array $queues, Atomic $workerIdCounter, string $handlerClass): void
     {
         /** @psalm-suppress UndefinedClass, MissingDependency, MixedAssignment */
-        $pool = new Pool(
-            WorkerRunnable::class,
-            $this->config->workerCount,
+        $pool = new Pool(WorkerRunnable::class, $this->config->workerCount);
+
+        // WorkerPoolConfig is NOT passed as an object — its scalar properties are
+        // passed instead and the config is rebuilt inside WorkerRunnable::run().
+        // This mirrors bin/worker.php and avoids the "incomplete object" warning
+        // that occurs when Swoole reconstructs args before the autoloader catches
+        // up in the worker thread.
+        //
+        // PHP arrays passed via Pool::withArguments() are converted to
+        // Swoole\Thread\ArrayList in the worker thread; WorkerRunnable converts
+        // back to a plain array<int, Queue> before constructing the transport.
+        /** @psalm-suppress MixedMethodCall, UndefinedClass */
+        $pool->withArguments(
             $directory,
             $queues,
             $workerIdCounter,
-            $this->config,
+            $this->config->workerCount,
+            $this->config->systemNamePrefix,
             $handlerClass,
             $this->serializedConfigure ?? '',
             $this->loggerClass ?? '',
