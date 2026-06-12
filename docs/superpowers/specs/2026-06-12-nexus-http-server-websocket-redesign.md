@@ -65,8 +65,12 @@ nexus-http-server-swoole          nexus-http-server-swoole-threads
 
 **`nexus-http-ws`**
 
-- `Application` — top-level builder. Full HTTP surface (delegates to internal `HttpApp`) plus WebSocket methods.
-- `CompiledApplication` — implements `Psr\Http\Server\RequestHandlerInterface`. Exposes `webSocketRouter()`, `dispatcher()`, `hasWebSocketRoutes()`.
+- `Application` — **interface** defining the HTTP surface (all `HttpApp` methods) plus `compile(): CompiledApplication`.
+- `HttpApplication` — concrete `Application` impl; HTTP-only. HAS-A nexus-http `HttpApp` internally and delegates everything. `compile()` returns `CompiledHttpApplication` (covariant).
+- `WsApplication` — concrete `Application` impl; **decorates** another `Application` and adds WebSocket methods. All HTTP methods delegate to the wrapped `$inner`. `compile()` returns `CompiledWsApplication` (covariant).
+- `CompiledApplication` — **interface** extending `Psr\Http\Server\RequestHandlerInterface` plus `hasWebSocketRoutes(): bool`.
+- `CompiledHttpApplication` — concrete `CompiledApplication`; HTTP-only. `hasWebSocketRoutes()` always returns `false`.
+- `CompiledWsApplication` — concrete `CompiledApplication`; HTTP + WS. Additionally exposes `webSocketRouter(): WebSocketRouter` and `dispatcher(): WebSocketDispatcher`.
 - `WebSocketHandler` — abstract base for per-connection POPO handlers.
 - `WebSocketChannelActor` — abstract base for per-key channel actors. Extends `StatefulActorHandler`. Provides typed `onOpened`/`onMessage`/`onClosed` and the `broadcast()` helper.
 - `WebSocketContext` — interface implemented by runners.
@@ -114,16 +118,15 @@ http-server-swoole-threads:
 
 ## Public API
 
-### `Application`
+### `Application` interface
 
 ```php
 namespace Monadial\Nexus\Http\Ws;
 
-final class Application
+interface Application
 {
-    public static function create(ActorSystem $system): self;
-
-    // HTTP surface — delegated to internal HttpApp, identical signatures:
+    // HTTP surface — every method nexus-http's HttpApp exposes today,
+    // identical signatures. Fluent setters return `self` (covariant per impl).
     public function get(string $path, string|Closure $handler): RouteBuilder;
     public function post(string $path, string|Closure $handler): RouteBuilder;
     public function put(string $path, string|Closure $handler): RouteBuilder;
@@ -142,7 +145,53 @@ final class Application
     public function withoutDefaultExceptionHandler(): self;
     public function clearRouteCache(): void;
 
-    // WebSocket surface:
+    public function compile(): CompiledApplication;
+}
+```
+
+### `HttpApplication` — concrete HTTP-only impl
+
+```php
+namespace Monadial\Nexus\Http\Ws;
+
+final class HttpApplication implements Application
+{
+    public static function create(ActorSystem $system): self;
+
+    // All Application methods implemented by delegation to an internal
+    // nexus-http HttpApp. The constructor is private; create() is the
+    // single entry point and constructs the internal HttpApp.
+
+    public function compile(): CompiledHttpApplication;  // covariant return
+}
+```
+
+### `WsApplication` — decorator over `Application`
+
+```php
+namespace Monadial\Nexus\Http\Ws;
+
+final class WsApplication implements Application
+{
+    /** Decorate any existing Application — usually an HttpApplication. */
+    public static function decorate(Application $inner): self;
+
+    /** Convenience shortcut equivalent to decorate(HttpApplication::create($system)). */
+    public static function create(ActorSystem $system): self;
+
+    // All Application methods delegated to $inner, returning $this so the
+    // fluent chain stays on the WsApplication type. Example:
+    //   public function get(string $path, string|Closure $handler): RouteBuilder
+    //   {
+    //       return $this->inner->get($path, $handler);
+    //   }
+    //   public function middleware(string|MiddlewareInterface $m): self
+    //   {
+    //       $this->inner->middleware($m);
+    //       return $this;
+    //   }
+
+    // WebSocket additions:
     /** @param class-string<WebSocketHandler> $handlerClass */
     public function ws(string $path, string $handlerClass): self;
 
@@ -152,11 +201,11 @@ final class Application
     /** @param Closure(Throwable, WebSocketContext): void $mapper */
     public function onWebSocketException(Closure $mapper): self;
 
-    public function compile(): CompiledApplication;
+    public function compile(): CompiledWsApplication;  // covariant return
 }
 ```
 
-`Application` HAS-A `HttpApp` internally. All HTTP methods delegate. The constructor is private; `create()` is the single entry point and constructs the internal `HttpApp`.
+**Why decorator, not subclass:** keeps `HttpApplication` and `WsApplication` as siblings under one interface, lets users pass any `Application` (including pre-configured / pre-decorated ones) into `WsApplication::decorate`, and avoids inheriting state that doesn't belong to the WebSocket layer.
 
 ### `WebSocketHandler`
 
@@ -240,7 +289,20 @@ The base maintains the attached-connection set internally; users never touch it.
 ```php
 namespace Monadial\Nexus\Http\Ws;
 
-final class CompiledApplication implements RequestHandlerInterface
+interface CompiledApplication extends RequestHandlerInterface
+{
+    public function hasWebSocketRoutes(): bool;
+}
+
+final class CompiledHttpApplication implements CompiledApplication
+{
+    public function __construct(CompiledHttpApp $http);
+
+    public function handle(ServerRequestInterface $request): ResponseInterface;
+    public function hasWebSocketRoutes(): bool;          // always false
+}
+
+final class CompiledWsApplication implements CompiledApplication
 {
     public function __construct(
         CompiledHttpApp $http,
@@ -248,16 +310,15 @@ final class CompiledApplication implements RequestHandlerInterface
         ContainerInterface $container,
     );
 
-    // PSR-15
     public function handle(ServerRequestInterface $request): ResponseInterface;
+    public function hasWebSocketRoutes(): bool;          // true iff any ws()/channel() registered
 
     public function webSocketRouter(): WebSocketRouter;
-    public function hasWebSocketRoutes(): bool;
     public function dispatcher(): WebSocketDispatcher;
 }
 ```
 
-Implements `Psr\Http\Server\RequestHandlerInterface` so runners pass HTTP traffic straight through. The dispatcher is the WS-side seam.
+The interface extends PSR-15 so runners pass HTTP traffic straight through with one `handle()` call regardless of which concrete is in hand. Runners inspect `hasWebSocketRoutes()` to decide whether to register Swoole's `Open`/`Message`/`Close` events; when `true`, the concrete is statically known to be `CompiledWsApplication` and runners may `assert` and use `webSocketRouter()` / `dispatcher()`.
 
 ### `WebSocketDispatcher`
 
@@ -323,7 +384,7 @@ final class SwooleThreadServer
 }
 ```
 
-Both static. Both block until the server shuts down. Both wire Swoole `Request/Open/Message/Close/WorkerStart/WorkerStop` events to `CompiledApplication::handle(...)` for HTTP and `CompiledApplication::dispatcher()->dispatch...` for WebSocket events.
+Both static. Both block until the server shuts down. Both wire Swoole `Request/WorkerStart/WorkerStop` events to `CompiledApplication::handle(...)` for HTTP. WebSocket event wiring is conditional: if `$app->hasWebSocketRoutes()` returns `true`, the runner asserts `$app instanceof CompiledWsApplication` and wires `Open/Message/Close` to `$app->dispatcher()->dispatch...`. Otherwise the WS events are never registered on the Swoole server.
 
 The threads runner additionally:
 
@@ -335,12 +396,11 @@ The threads runner additionally:
 
 ### Pure HTTP (no WebSockets)
 
-Users on the Swoole runners use `Application::create($system)` with only the HTTP methods. `hasWebSocketRoutes()` returns false on the compiled app, the runner skips registering Swoole `Open`/`Message`/`Close` event handlers entirely, and the per-request hot path goes straight through `CompiledApplication::handle(...)` (a PSR-15 delegate to the internal `CompiledHttpApp`). Zero WebSocket runtime cost.
+Users on the Swoole runners use `HttpApplication::create($system)` with only the HTTP methods. `compile()` returns a `CompiledHttpApplication` whose `hasWebSocketRoutes()` is `false`; the runner skips registering Swoole `Open`/`Message`/`Close` event handlers entirely, and the per-request hot path goes straight through `CompiledApplication::handle(...)` (a PSR-15 delegate to the internal `CompiledHttpApp`). Zero WebSocket runtime cost.
 
 ```php
-$app = Application::create($system);
+$app = HttpApplication::create($system);
 $app->get('/health', static fn() => Response::ok('ok'));
-$app->compile();
 
 SwooleWorkerServer::run($app->compile(), SwooleWorkerConfig::bind('0.0.0.0', 8080)->workers(4));
 ```
@@ -362,9 +422,11 @@ final class EchoHandler extends WebSocketHandler
     }
 }
 
-$app = Application::create($system);
+$app = WsApplication::create($system);                 // shortcut
+$app->get('/api/users', UsersController::class);       // HTTP delegated to inner HttpApplication
 $app->ws('/ws/echo', EchoHandler::class);
-$app->compile();
+
+SwooleWorkerServer::run($app->compile(), SwooleWorkerConfig::bind('0.0.0.0', 8080));
 ```
 
 ### Channel-mode actor with broadcast
@@ -403,9 +465,23 @@ final class ChatRoomActor extends WebSocketChannelActor
     }
 }
 
-$app = Application::create($system);
+$app = WsApplication::create($system);
 $app->channel('/ws/room/{roomId}', ChatRoomActor::class, key: 'roomId');
-$app->compile();
+
+SwooleWorkerServer::run($app->compile(), SwooleWorkerConfig::bind('0.0.0.0', 8080));
+```
+
+### Explicit decoration (pre-configured Application)
+
+```php
+$http = HttpApplication::create($system)
+    ->middleware(AuthMiddleware::class)
+    ->onException(DomainException::class, $domainExceptionMapper);
+
+$app = WsApplication::decorate($http);
+$app->ws('/ws/echo', EchoHandler::class);
+
+SwooleWorkerServer::run($app->compile(), $config);
 ```
 
 ### Thread mode (no channel routes)
@@ -450,7 +526,7 @@ If `$app` contains any `channel(...)` registration, `SwooleThreadServer::run()` 
 |---|---|---|
 | Handler class PSR-11 resolution throws on Open | Disconnect 1011, log via PSR-3 | Per-connection failure — not a boot failure. |
 | User code throws in `onOpen`/`onOpened` | Disconnect 1011, remove from table, log | Same as above. |
-| User code throws in `onMessage` | Log; connection stays alive. Override via `Application::onWebSocketException($mapper)` | One bad frame ≠ kill the socket. |
+| User code throws in `onMessage` | Log; connection stays alive. Override via `WsApplication::onWebSocketException($mapper)` | One bad frame ≠ kill the socket. |
 | User code throws in `onClose`/`onClosed` | Log only | Connection is already gone. |
 | Boot: channel route + thread runner | Throw `UnsupportedRouteException` before `$server->start()` | Crash-loud at config time. |
 | Runtime: WS frame on unknown fd | Silently drop | Race between Close and a queued Message. |
@@ -465,7 +541,8 @@ The Application-level WebSocket exception mapper is opt-in. Default behavior: lo
 
 Roughly 50–60 test methods across:
 
-- `ApplicationTest` — DSL registration, delegation to internal `HttpApp`, compile output, duplicate path rejection, channel `key:` validation.
+- `HttpApplicationTest` — HTTP-only DSL delegation to internal `HttpApp`, `compile()` returns `CompiledHttpApplication`, `hasWebSocketRoutes()` is `false`.
+- `WsApplicationTest` — `decorate()` and `create()` shortcut, HTTP method delegation to `$inner`, WS registration (`ws()`, `channel()`, `onWebSocketException()`), `compile()` returns `CompiledWsApplication`, duplicate path rejection, channel `key:` validation.
 - `WebSocketRouterTest` — match, no-match, path param extraction, `routes()` accessor, `assertNoChannelRoutes()`.
 - `WebSocketDispatcherTest` — dispatch open → handler resolved via container, dispatch open → channel actor spawned, message routing, close cleanup, unknown-fd drop, route-mode rejection. Uses `InMemoryWebSocketContext` + `InMemoryWebSocketRuntime` test doubles.
 - `WebSocketHandlerLifecycleTest` — `onOpen` precedes first `onMessage`, `onClose` fires once, instance unreferenced after close.
@@ -511,7 +588,7 @@ Sequence:
    - Rename `SwooleWorkerHttpServer` → `SwooleWorkerServer`. Inline closures shrink to dispatcher calls per Section 3.
    - `SwooleHttpServerAdapter`, `SwooleWorkerConfig`, `WorkerServerRuntime`, `Bridge/`, `Signal/` unchanged.
 5. Shrink `nexus-http-server-swoole-threads` similarly. Rename `SwooleThreadHttpServer` → `SwooleThreadServer`. `ThreadAwareWebSocketContext` → `ThreadAwareConnectionContext`. `WorkerNodePoolSingletonSpawner` and `WebSocketFramePush` unchanged.
-6. Update all integration tests (mass import + DSL rename: `SwooleHttpApp::wrap` → `Application::create`, `webSocket` → `ws`, `webSocketChannel` → `channel`).
+6. Update all integration tests (mass import + DSL rename: `SwooleHttpApp::wrap($http, $system)->...->compile()` → `WsApplication::decorate($http)->...->compile()` or `WsApplication::create($system)->...->compile()`, `webSocket` → `ws`, `webSocketChannel` → `channel`).
 7. Update both runner READMEs and create a `nexus-http-ws` README with the quickstart examples from this spec.
 8. Update `composer.json` graph and `deptrac.yaml` boundaries.
 
