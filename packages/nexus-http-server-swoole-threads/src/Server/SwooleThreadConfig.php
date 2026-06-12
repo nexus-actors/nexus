@@ -24,6 +24,7 @@ final readonly class SwooleThreadConfig
         public Duration $shutdownTimeout,
         public bool $installSignalHandlers,
         public LoggerInterface $logger,
+        public bool $enableWebSocket,
     ) {}
 
     public static function bind(string $host, int $port = 8080): self
@@ -36,6 +37,21 @@ final readonly class SwooleThreadConfig
             shutdownTimeout: Duration::seconds(10),
             installSignalHandlers: true,
             logger: new NullLogger(),
+            enableWebSocket: false,
+        );
+    }
+
+    public function enableWebSocket(bool $b = true): self
+    {
+        return new self(
+            $this->host,
+            $this->port,
+            $this->threads,
+            $this->maxRequest,
+            $this->shutdownTimeout,
+            $this->installSignalHandlers,
+            $this->logger,
+            $b,
         );
     }
 
@@ -49,6 +65,7 @@ final readonly class SwooleThreadConfig
             $this->shutdownTimeout,
             $b,
             $this->logger,
+            $this->enableWebSocket,
         );
     }
 
@@ -62,6 +79,7 @@ final readonly class SwooleThreadConfig
             $this->shutdownTimeout,
             $this->installSignalHandlers,
             $log,
+            $this->enableWebSocket,
         );
     }
 
@@ -75,6 +93,7 @@ final readonly class SwooleThreadConfig
             $this->shutdownTimeout,
             $this->installSignalHandlers,
             $this->logger,
+            $this->enableWebSocket,
         );
     }
 
@@ -88,6 +107,7 @@ final readonly class SwooleThreadConfig
             $d,
             $this->installSignalHandlers,
             $this->logger,
+            $this->enableWebSocket,
         );
     }
 
@@ -101,6 +121,7 @@ final readonly class SwooleThreadConfig
             $this->shutdownTimeout,
             $this->installSignalHandlers,
             $this->logger,
+            $this->enableWebSocket,
         );
     }
 }

@@ -76,7 +76,8 @@ $threads = (int) ($argv[3] ?? 2);
 SwooleThreadHttpServer::run(
     config: SwooleThreadConfig::bind($host, $port)
         ->threads($threads)
-        ->installSignalHandlers(true),
+        ->installSignalHandlers(true)
+        ->enableWebSocket(true),
     factory: static function (ActorSystem $system, WorkerNode $node): SwooleCompiledHttpApp {
         $http = HttpApp::create($system);
         $http->get('/ws-up', static fn(): ResponseInterface => Response::ok());

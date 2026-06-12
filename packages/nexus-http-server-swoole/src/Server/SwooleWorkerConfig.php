@@ -29,6 +29,7 @@ final readonly class SwooleWorkerConfig
         public bool $installSignalHandlers,
         public LoggerInterface $logger,
         public string $logFile,
+        public bool $enableWebSocket,
     ) {}
 
     public static function bind(string $host, int $port = 8080): self
@@ -45,6 +46,7 @@ final readonly class SwooleWorkerConfig
             installSignalHandlers: true,
             logger: new NullLogger(),
             logFile: '',
+            enableWebSocket: false,
         );
     }
 
@@ -62,6 +64,25 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
+        );
+    }
+
+    public function enableWebSocket(bool $b = true): self
+    {
+        return new self(
+            $this->host,
+            $this->port,
+            $this->workers,
+            $this->reactorThreads,
+            $this->maxRequest,
+            $this->maxConn,
+            $this->dispatchMode,
+            $this->shutdownTimeout,
+            $this->installSignalHandlers,
+            $this->logger,
+            $this->logFile,
+            $b,
         );
     }
 
@@ -79,6 +100,7 @@ final readonly class SwooleWorkerConfig
             $b,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -96,6 +118,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $path,
+            $this->enableWebSocket,
         );
     }
 
@@ -113,6 +136,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $log,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -130,6 +154,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -147,6 +172,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -164,6 +190,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -181,6 +208,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 
@@ -198,6 +226,7 @@ final readonly class SwooleWorkerConfig
             $this->installSignalHandlers,
             $this->logger,
             $this->logFile,
+            $this->enableWebSocket,
         );
     }
 }

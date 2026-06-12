@@ -33,7 +33,8 @@ final class WorkerModeWebSocketChannelTest extends TestCase
             SwooleWorkerHttpServer::run(
                 config: SwooleWorkerConfig::bind('127.0.0.1', $port)
                     ->workers(1)
-                    ->installSignalHandlers(false),
+                    ->installSignalHandlers(false)
+                    ->enableWebSocket(true),
                 factory: static function (ActorSystem $system): SwooleCompiledHttpApp {
                     $http = HttpApp::create($system);
 
