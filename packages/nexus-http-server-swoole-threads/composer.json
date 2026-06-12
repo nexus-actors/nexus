@@ -1,6 +1,6 @@
 {
     "name": "nexus-actors/http-server-swoole-threads",
-    "description": "Thread-mode HTTP server using nexus-worker-pool-swoole; adds PoolSingletonSpawner bridge.",
+    "description": "Thread-mode HTTP server built on Swoole 6 native SWOOLE_THREAD; cross-thread pool-singleton actors via WorkerNode.",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -8,6 +8,7 @@
         "ext-swoole": "*",
         "nexus-actors/http": "dev-main",
         "nexus-actors/http-server-swoole": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
         "nexus-actors/worker-pool": "dev-main",
         "nexus-actors/worker-pool-swoole": "dev-main"
     },

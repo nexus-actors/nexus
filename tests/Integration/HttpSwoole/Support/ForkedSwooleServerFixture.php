@@ -38,8 +38,9 @@ final class ForkedSwooleServerFixture
     public function __construct(private readonly string $host, private readonly int $port) {}
 
     /**
-     * @param Closure(): void $body Child process body — boots and runs the
-     *                              server, must call $server->start().
+     * @param Closure(Process=): void $body Child process body — boots and runs
+     *                                      the server, must call $server->start()
+     *                                      (or $worker->exec() to swap image).
      */
     public function start(Closure $body): void
     {
