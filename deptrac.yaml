@@ -149,6 +149,7 @@ deptrac:
     HttpWs:
       - Core
       - Http
+      - Serialization
     HttpServerSwoole:
       - Core
       - Http
