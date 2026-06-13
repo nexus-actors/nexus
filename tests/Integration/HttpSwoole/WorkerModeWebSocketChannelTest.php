@@ -5,17 +5,17 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\HttpSwoole;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\Dsl\HttpApp;
-use Monadial\Nexus\Http\Server\Swoole\App\SwooleCompiledHttpApp;
-use Monadial\Nexus\Http\Server\Swoole\App\SwooleHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerConfig;
-use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerHttpServer;
+use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerServer;
+use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Ws\WsApplication;
 use Monadial\Nexus\Tests\Integration\HttpSwoole\Support\ChannelChatBehavior;
 use Monadial\Nexus\Tests\Integration\HttpSwoole\Support\ForkedSwooleServerFixture;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine\Http\Client;
+use Swoole\WebSocket\Frame;
 
 use function Co\run;
 use function usleep;
@@ -30,19 +30,17 @@ final class WorkerModeWebSocketChannelTest extends TestCase
         $fixture = new ForkedSwooleServerFixture('127.0.0.1', $port);
 
         $fixture->start(static function () use ($port): void {
-            SwooleWorkerHttpServer::run(
+            SwooleWorkerServer::run(
                 config: SwooleWorkerConfig::bind('127.0.0.1', $port)
                     ->workers(1)
                     ->installSignalHandlers(false)
                     ->enableWebSocket(true),
-                factory: static function (ActorSystem $system): SwooleCompiledHttpApp {
-                    $http = HttpApp::create($system);
-
-                    return SwooleHttpApp::wrap($http, $system)
-                        ->webSocketChannel(
+                factory: static function (ActorSystem $system): CompiledApplication {
+                    return WsApplication::create($system)
+                        ->channel(
                             '/ws/channel/{channelId}',
-                            ChannelChatBehavior::props(),
-                            keyFrom: 'channelId',
+                            ChannelChatBehavior::class,
+                            key: 'channelId',
                         )
                         ->compile();
                 },
@@ -62,9 +60,9 @@ final class WorkerModeWebSocketChannelTest extends TestCase
 
                 $a->push('hello-from-a');
                 $frame = $b->recv(2.0);
-                $receivedByB = $frame === false || $frame === true
-                    ? null
-                    : $frame->data;
+                $receivedByB = $frame instanceof Frame
+                    ? $frame->data
+                    : null;
 
                 $a->close();
                 $b->close();

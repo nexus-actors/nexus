@@ -5,67 +5,40 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\HttpSwoole\Support;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
-use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionClosed;
-use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelConnectionOpened;
-use Monadial\Nexus\Http\Server\Swoole\WebSocket\Message\ChannelMessageReceived;
-use Monadial\Nexus\Http\Server\Swoole\WebSocket\WebSocketContext;
+use Monadial\Nexus\Http\Ws\WebSocket\WebSocketChannelActor;
+use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
+use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
+use Override;
 
 /**
  * @psalm-api
  *
- * Test-only chat channel behavior. Tracks open WebSocket connections in a
- * fd-keyed map; on incoming text frames, broadcasts to every other connection
- * (sender excluded). When the last connection closes, the actor stops.
+ * Test-only chat channel actor. On incoming text frames, broadcasts to every
+ * connection in the channel (sender included).
+ *
+ * @extends WebSocketChannelActor<null>
  */
-final class ChannelChatBehavior
+final class ChannelChatBehavior extends WebSocketChannelActor
 {
-    /**
-     * @return Props<object>
-     */
-    public static function props(): Props
+    #[Override]
+    public function initialState(): mixed
     {
-        /** @var Behavior<object> $behavior */
-        $behavior = Behavior::withState(
-            ['ctx' => []],
-            static function (ActorContext $ctx, object $msg, array $state): BehaviorWithState {
-                if ($msg instanceof ChannelConnectionOpened) {
-                    /** @var array<int, WebSocketContext> $newCtx */
-                    $newCtx           = $state['ctx'];
-                    $newCtx[$msg->fd] = $msg->ctx;
+        return null;
+    }
 
-                    return BehaviorWithState::next(['ctx' => $newCtx]);
-                }
+    /**
+     * @psalm-suppress MixedReturnTypeCoercion — BehaviorWithState::same() is generic over mixed; state type is null.
+     */
+    #[Override]
+    public function onMessage(
+        ActorContext $ctx,
+        WebSocketContext $conn,
+        WebSocketFrame $frame,
+        mixed $state,
+    ): BehaviorWithState {
+        $this->broadcast($frame->text);
 
-                if ($msg instanceof ChannelMessageReceived) {
-                    /** @var array<int, WebSocketContext> $contexts */
-                    $contexts = $state['ctx'];
-
-                    foreach ($contexts as $fd => $c) {
-                        if ($fd !== $msg->fd) {
-                            $c->send($msg->frame->text);
-                        }
-                    }
-
-                    return BehaviorWithState::same();
-                }
-
-                if ($msg instanceof ChannelConnectionClosed) {
-                    /** @var array<int, WebSocketContext> $newCtx */
-                    $newCtx = $state['ctx'];
-                    unset($newCtx[$msg->fd]);
-
-                    return $newCtx === []
-                        ? BehaviorWithState::stopped()
-                        : BehaviorWithState::next(['ctx' => $newCtx]);
-                }
-
-                return BehaviorWithState::same();
-            },
-        );
-
-        return Props::fromBehavior($behavior);
+        return BehaviorWithState::same();
     }
 }

@@ -72,7 +72,7 @@ final class WebSocketDispatcher
                 /** @psalm-suppress InvalidArgument, UnsafeInstantiation */
                 $ref = $this->registry->resolveOrSpawn(
                     $name,
-                    Props::fromFactory(static fn() => new $actorClass()),
+                    Props::fromStatefulFactory(static fn() => new $actorClass()),
                 );
                 $ref->tell(new ChannelConnectionOpened($ctx->id(), $ctx, $upgrade));
                 $this->table->attachChannel($ctx->id(), $ref, $name, $ctx);
