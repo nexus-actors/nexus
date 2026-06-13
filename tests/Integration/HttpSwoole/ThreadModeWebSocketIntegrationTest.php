@@ -18,16 +18,10 @@ use const PHP_BINARY;
 /**
  * @psalm-api
  *
- * Phase 17 — verifies the Phase 16 SwooleThreadHttpServer WebSocket wiring
- * end-to-end with a real round-trip in SWOOLE_THREAD mode.
- *
- * In v1 channel-mode actors are thread-local: their `ChannelConnectionOpened`
- * payload (WebSocketContext + Swoole Request) cannot serialize across
- * Thread\Queue, so cross-thread channel broadcast is documented as future
- * work. This test exercises the fully supported path: handler-mode echo
- * through a 2-thread server. It proves that the Open / Message / Close
- * pipeline (router actors, ConnectionTable, ThreadAwareWebSocketContext) is
- * correctly wired in SwooleThreadHttpServer.
+ * Verifies SwooleThreadServer WebSocket wiring end-to-end with a real
+ * round-trip in SWOOLE_THREAD mode. Channel-mode routes are rejected at
+ * boot (see ThreadModeChannelRejectionTest). This test exercises the fully
+ * supported path: handler-mode echo through a 2-thread server.
  */
 #[CoversNothing]
 final class ThreadModeWebSocketIntegrationTest extends TestCase

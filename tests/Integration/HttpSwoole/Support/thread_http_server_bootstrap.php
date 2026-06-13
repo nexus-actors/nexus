@@ -1,7 +1,7 @@
 <?php
 
 /**
- * Standalone child-process entry script for SwooleThreadHttpServer integration tests.
+ * Standalone child-process entry script for SwooleThreadServer HTTP integration tests.
  *
  * SWOOLE_THREAD mode re-runs the entry script in every worker thread, so the
  * child process cannot be a phpunit re-entry — it would re-execute phpunit's
@@ -19,11 +19,11 @@
 declare(strict_types=1);
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\CompiledHttpApp;
-use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadConfig;
-use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadHttpServer;
+use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadServer;
+use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Ws\HttpApplication;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Psr\Http\Message\ResponseInterface;
 
@@ -36,12 +36,12 @@ $port = (int) ($argv[2] ?? 0);
 /** @var int $threads */
 $threads = (int) ($argv[3] ?? 1);
 
-SwooleThreadHttpServer::run(
+SwooleThreadServer::run(
     config: SwooleThreadConfig::bind($host, $port)
         ->threads($threads)
         ->installSignalHandlers(true),
-    factory: static function (ActorSystem $system, WorkerNode $node): CompiledHttpApp {
-        $app = HttpApp::create($system);
+    factory: static function (ActorSystem $system, WorkerNode $node): CompiledApplication {
+        $app = HttpApplication::create($system);
         $app->get('/hello', static fn(): ResponseInterface => Response::ok());
 
         return $app->compile();
