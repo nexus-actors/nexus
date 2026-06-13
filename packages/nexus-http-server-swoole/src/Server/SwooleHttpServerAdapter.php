@@ -18,7 +18,7 @@ use Swoole\Http\Server;
  * @psalm-api
  *
  * Thin HttpServerAdapter that wires a Swoole\Http\Server to a PSR-15
- * RequestHandlerInterface. Use SwooleWorkerHttpServer::run() for the
+ * RequestHandlerInterface. Use SwooleWorkerServer::run() for the
  * production entry point; this class exists primarily for the
  * HttpServerAdapterContractTest from nexus-http.
  */
