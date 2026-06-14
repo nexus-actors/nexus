@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Logger\Processor;
 
+use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\Record;
 use Monadial\Nexus\Logger\RecordProcessor;
 use Override;
 
 use function array_slice;
+use function array_values;
 use function count;
 use function debug_backtrace;
+use function in_array;
 use function str_starts_with;
 
 use const DEBUG_BACKTRACE_IGNORE_ARGS;
@@ -44,9 +47,31 @@ final class CallerInfoProcessor implements RecordProcessor
         'Psr\\Log\\',
     ];
 
+    /**
+     * @param list<Level>|null $levels  null = run on every record.
+     *   Pass a list to only walk the backtrace for matching levels —
+     *   useful when you want call-site info on debug/error/critical
+     *   but want to skip the debug_backtrace() cost on high-volume
+     *   info-level messages.
+     */
+    public function __construct(private readonly ?array $levels = null) {}
+
+    /**
+     * Restrict the processor to the given levels. Equivalent to
+     * `new CallerInfoProcessor([Level::Debug, Level::Error])`.
+     */
+    public static function onlyFor(Level ...$levels): self
+    {
+        return new self(array_values($levels));
+    }
+
     #[Override]
     public function process(Record $record): Record
     {
+        if ($this->levels !== null && !in_array($record->level, $this->levels, true)) {
+            return $record;
+        }
+
         /**
          * debug_backtrace semantics:
          *   - frame[i].function = the function executing at frame i

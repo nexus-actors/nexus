@@ -67,7 +67,7 @@ SwooleThreadServer::run(
 
         $logger = NexusLogger::create($system, "thread-{$node->workerId()}")
             ->minLevel(Level::Debug)
-            ->processor(new CallerInfoProcessor())
+            ->processor(CallerInfoProcessor::onlyFor(Level::Debug, Level::Error, Level::Critical))
             ->handler(new ThreadQueueHandler($logQueue, new MonologFormatterAdapter($monoFormatter)))
             ->build();
 
