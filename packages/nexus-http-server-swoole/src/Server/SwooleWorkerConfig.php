@@ -13,7 +13,7 @@ use Psr\Log\NullLogger;
  *
  * Immutable configuration for SwooleWorkerServer::run().
  * Constructed via the static bind() entry; further tunables return
- * new instances.
+ * new instances via PHP 8.5 clone-with.
  */
 final readonly class SwooleWorkerConfig
 {
@@ -52,181 +52,51 @@ final readonly class SwooleWorkerConfig
 
     public function dispatchMode(int $mode): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $mode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['dispatchMode' => $mode]);
     }
 
     public function enableWebSocket(bool $b = true): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $b,
-        );
+        return clone($this, ['enableWebSocket' => $b]);
     }
 
     public function installSignalHandlers(bool $b): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $b,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['installSignalHandlers' => $b]);
     }
 
     public function logFile(string $path): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $path,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['logFile' => $path]);
     }
 
     public function logger(LoggerInterface $log): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $log,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['logger' => $log]);
     }
 
     public function maxConn(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $n,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['maxConn' => $n]);
     }
 
     public function maxRequest(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $n,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['maxRequest' => $n]);
     }
 
     public function reactorThreads(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $n,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['reactorThreads' => $n]);
     }
 
     public function shutdownTimeout(Duration $d): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->workers,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $d,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['shutdownTimeout' => $d]);
     }
 
     public function workers(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $n,
-            $this->reactorThreads,
-            $this->maxRequest,
-            $this->maxConn,
-            $this->dispatchMode,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->logFile,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['workers' => $n]);
     }
 }

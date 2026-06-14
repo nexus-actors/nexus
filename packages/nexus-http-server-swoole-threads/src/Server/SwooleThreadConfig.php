@@ -12,7 +12,8 @@ use Psr\Log\NullLogger;
  * @psalm-api
  *
  * Immutable configuration for SwooleThreadServer::run().
- * Constructed via the static bind() entry; further tunables return new instances.
+ * Constructed via the static bind() entry; further tunables return new
+ * instances via PHP 8.5 clone-with.
  */
 final readonly class SwooleThreadConfig
 {
@@ -43,85 +44,31 @@ final readonly class SwooleThreadConfig
 
     public function enableWebSocket(bool $b = true): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->threads,
-            $this->maxRequest,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $b,
-        );
+        return clone($this, ['enableWebSocket' => $b]);
     }
 
     public function installSignalHandlers(bool $b): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->threads,
-            $this->maxRequest,
-            $this->shutdownTimeout,
-            $b,
-            $this->logger,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['installSignalHandlers' => $b]);
     }
 
     public function logger(LoggerInterface $log): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->threads,
-            $this->maxRequest,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $log,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['logger' => $log]);
     }
 
     public function maxRequest(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->threads,
-            $n,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['maxRequest' => $n]);
     }
 
     public function shutdownTimeout(Duration $d): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $this->threads,
-            $this->maxRequest,
-            $d,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['shutdownTimeout' => $d]);
     }
 
     public function threads(int $n): self
     {
-        return new self(
-            $this->host,
-            $this->port,
-            $n,
-            $this->maxRequest,
-            $this->shutdownTimeout,
-            $this->installSignalHandlers,
-            $this->logger,
-            $this->enableWebSocket,
-        );
+        return clone($this, ['threads' => $n]);
     }
 }
