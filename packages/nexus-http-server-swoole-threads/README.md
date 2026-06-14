@@ -1,8 +1,8 @@
 # nexus-http-server-swoole-threads
 
-Swoole thread-mode HTTP/WebSocket server. Uses Swoole 6's native `SWOOLE_THREAD` server mode — one shared `Swoole\Http\Server` (or `WebSocket\Server`) in the main thread, N internal worker threads with shared memory. Each thread gets its own `ActorSystem` + `WorkerNode`, enabling true `PoolSingleton` actor routing across all HTTP-serving threads.
+Thread-mode (Swoole 6 SWOOLE_THREAD) HTTP+WebSocket runner. Same DSL as the worker package — see [nexus-http-ws](../nexus-http-ws). Uses Swoole's native thread mode for shared-memory pool-singleton actors.
 
-> See `docs/superpowers/specs/2026-06-11-nexus-http-server-swoole-design.md` for the design.
+Requires Swoole ≥ 6.0 with `--enable-swoole-thread` (ZTS PHP 8.5+).
 
 ## Install
 
@@ -10,70 +10,40 @@ Swoole thread-mode HTTP/WebSocket server. Uses Swoole 6's native `SWOOLE_THREAD`
 composer require nexus-actors/http-server-swoole-threads
 ```
 
-Requires Swoole ≥ 6.0 with `--enable-swoole-thread` (ZTS PHP).
-
 ## HTTP quickstart
 
 ```php
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\CompiledHttpApp;
-use Monadial\Nexus\Http\Dsl\HttpApp;
-use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadConfig;
-use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadHttpServer;
+use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadServer;
+use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Ws\WsApplication;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 
-SwooleThreadHttpServer::run(
+SwooleThreadServer::run(
     SwooleThreadConfig::bind('0.0.0.0', 8080)->threads(8),
-    static function (ActorSystem $system, WorkerNode $node): CompiledHttpApp {
-        $http = HttpApp::create($system);
-        $http->get('/hello', static fn() => Response::ok());
-        return $http->compile();
+    static function (ActorSystem $system, WorkerNode $node): CompiledApplication {
+        $app = WsApplication::create($system);
+        $app->get('/api/users', UsersController::class);
+        return $app->compile();
     },
 );
 ```
-
-The factory closure receives a `WorkerNode` — the per-thread coordinator that routes pool-singleton actors via the consistent hash ring. Use it (see below) or ignore it for stateless apps.
 
 ## Pool-singleton actors
 
-Across the N HTTP-serving threads, you can declare an actor as `PoolSingleton` and the framework places it on whichever thread the hash ring assigns. All other threads' handlers reach it through a `WorkerActorRef` over `ThreadQueueTransport`.
+Across N HTTP-serving threads, declare an actor as `PoolSingleton` and the framework places it on whichever thread the hash ring assigns. All other threads' handlers reach it through a `WorkerActorRef`.
 
 ```php
-use Monadial\Nexus\Http\Actor\ActorMode;
-use Monadial\Nexus\Http\Handler\Attribute\FromActor;
-use Monadial\Nexus\Http\Server\Swoole\App\SwooleHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Threads\Actor\WorkerNodePoolSingletonSpawner;
 
-SwooleThreadHttpServer::run(
-    SwooleThreadConfig::bind('0.0.0.0', 8080)->threads(8),
-    static function (ActorSystem $system, WorkerNode $node): CompiledHttpApp {
-        $http = HttpApp::create($system);
-        $http->withPoolSingletonSpawner(new WorkerNodePoolSingletonSpawner($node));
-        $http->actor('store', $storeProps)->poolSingleton();
-        $http->get(
-            '/store/{id}',
-            static fn(ServerRequestInterface $r, #[FromActor('store')] ActorRef $store) =>
-                JsonResponse::ok($store->ask(new GetItem($r->getAttribute('id')))->await()),
-        );
-        return SwooleHttpApp::wrap($http, $system)->compile();
-    },
-);
+$app->withPoolSingletonSpawner(new WorkerNodePoolSingletonSpawner($node));
+$app->actor('store', $storeProps)->poolSingleton();
 ```
 
-## WebSocket (opt-in)
+## WebSocket — handler mode only in v1
 
-Disabled by default. Call `enableWebSocket(true)`.
-
-```php
-SwooleThreadConfig::bind('0.0.0.0', 8080)
-    ->threads(8)
-    ->enableWebSocket(true);
-```
-
-Handler mode works the same way as in worker mode — see the worker-mode package's README for the API.
-
-**v1: channel-actor routes are rejected.** Channel-actor mode (`webSocketChannel(...)`) is unsupported in thread mode and the server fails fast at `WorkerStart` rather than silently degrading to thread-local semantics. The `ChannelConnectionOpened` envelope's `WebSocketContext` + Swoole `Request` are not serialization-safe over `Thread\Queue` (php_serialize); a v2 design pass is needed before channel actors can span threads. Use handler mode for thread-mode WebSockets, or the `nexus-http-server-swoole` worker-mode package for channel actors. The cross-thread `WebSocketFramePush` plumbing + per-thread router actors are wired (see `ThreadAwareWebSocketContext`) for future use.
+Enable via `->enableWebSocket(true)` on the config. **Channel-mode routes (`channel(...)`) are rejected at boot**: the channel-actor message payload is not serialization-safe across `Thread\Queue`, so accepting them under thread-distributed load would violate the per-channel-key actor guarantee. Use handler-mode WebSocket here, or switch to `nexus-actors/http-server-swoole` (worker mode) for channel actors.
 
 ## Configuration
 
@@ -83,18 +53,9 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
     ->maxRequest(10_000)
     ->shutdownTimeout(Duration::seconds(10))
     ->enableWebSocket(true)
-    ->installSignalHandlers(true)
     ->logger($psrLogger);
 ```
 
-## Architecture
-
-- Swoole's `SWOOLE_THREAD` server mode: one `Server` in main thread, N internal threads.
-- Per-thread state: `ActorSystem`, `WorkerNode`, optional `ConnectionTable` + per-thread router actor (when WebSocket is enabled).
-- Cross-thread sharing: `Thread\Map` (directory) + `Thread\Queue` array (transport) allocated in `init_arguments` callback, retrieved per worker via `Thread::getArguments()`.
-- The `WorkerNodePoolSingletonSpawner` adapter bridges nexus-http's `PoolSingletonSpawner` interface to `WorkerNode::spawn`.
-
 ## Status
 
-Thread-mode HTTP + handler-mode WebSocket: stable.
-Channel-actor routes: rejected at boot in v1 (cross-thread serialization gap). Handler mode is the recommended pattern in thread mode until v2 lands.
+Thread-mode HTTP + handler-mode WebSocket — stable. Channel-mode WebSocket — rejected at boot in v1 (see above).
