@@ -87,6 +87,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http-ws/src/.*
 
+    - name: Logger
+      collectors:
+        - type: directory
+          value: packages/nexus-logger/src/.*
+
     - name: HttpServerSwoole
       collectors:
         - type: directory
@@ -150,6 +155,8 @@ deptrac:
       - Core
       - Http
       - Serialization
+    Logger:
+      - Core
     HttpServerSwoole:
       - Core
       - Http
