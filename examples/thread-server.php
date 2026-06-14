@@ -125,7 +125,7 @@ $bootstrapLogger = new class implements LoggerInterface {
 
 SwooleThreadServer::run(
     SwooleThreadConfig::bind('0.0.0.0', 8080)
-        ->threads(2)
+        ->threads(8)
         ->enableWebSocket(true)
         ->shutdownTimeout(Duration::seconds(5))
         ->logger($bootstrapLogger),

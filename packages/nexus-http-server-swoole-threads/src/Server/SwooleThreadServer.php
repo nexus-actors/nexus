@@ -54,7 +54,7 @@ final class SwooleThreadServer
              *
              * @psalm-suppress InvalidArgument
              */
-            'init_arguments' => static function () use ($threads): array {
+            'init_arguments' => static function () use ($threads, $config): array {
                 $directory = new Map();
                 $queues = new ArrayList();
 
@@ -62,7 +62,7 @@ final class SwooleThreadServer
                     $queues[] = new Queue();
                 }
 
-                return [$directory, $queues, $threads];
+                return [$directory, $queues, $threads, $config->logQueue];
             },
         ]);
 

@@ -34,6 +34,7 @@ final class JsonFormatter implements Formatter
         $payload = [
             'channel' => $record->channel,
             'context' => $record->context,
+            'extra' => $record->extra,
             'level' => $record->level->toPsr3(),
             'message' => $record->message,
             'timestamp' => sprintf('%s.%03dZ', $iso, $millis),

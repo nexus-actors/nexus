@@ -36,11 +36,12 @@ final class LineFormatter implements Formatter
         $iso = (new DateTimeImmutable('@' . (int) $record->timestamp))->format('Y-m-d\\TH:i:s');
         $timestamp = sprintf('%s.%03dZ', $iso, $millis);
         $level = strtoupper($record->level->toPsr3());
-        $context = $record->context === []
+        $merged = $record->context + $record->extra;
+        $tail = $merged === []
             ? ''
-            : ' ' . self::encode($record->context);
+            : ' ' . self::encode($merged);
 
-        return "[{$timestamp}] {$record->channel}.{$level}: {$record->message}{$context}";
+        return "[{$timestamp}] {$record->channel}.{$level}: {$record->message}{$tail}";
     }
 
     /** @param array<string, mixed> $context */

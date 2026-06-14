@@ -24,7 +24,7 @@ final class JsonFormatterTest extends TestCase
         /** @var array<string, mixed> $decoded */
         $decoded = json_decode($line, true, flags: JSON_THROW_ON_ERROR);
 
-        self::assertSame(['channel', 'context', 'level', 'message', 'timestamp'], array_keys($decoded));
+        self::assertSame(['channel', 'context', 'extra', 'level', 'message', 'timestamp'], array_keys($decoded));
         self::assertSame('app', $decoded['channel']);
         self::assertSame(['userId' => 7], $decoded['context']);
         self::assertSame('error', $decoded['level']);

@@ -42,10 +42,7 @@ final class Logger extends AbstractLogger
         $mdc = Mdc::getAll();
 
         /** @var array<string, mixed> $context */
-        $merged = $mdc === []
-            ? $context
-            : ($context === [] ? $mdc : $context + $mdc);
-        $record = Record::create($resolved, $message, $merged, $this->channel);
+        $record = Record::create($resolved, $message, $context, $this->channel, $mdc);
         $this->sink->tell($record);
     }
 

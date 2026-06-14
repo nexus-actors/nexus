@@ -27,7 +27,7 @@ use RuntimeException;
 final class LoggerTest extends TestCase
 {
     #[Test]
-    public function mdc_values_are_merged_into_record_context(): void
+    public function mdc_values_land_in_extra_not_context(): void
     {
         $runtime = new StepRuntime();
         $system = ActorSystem::create('logger-test', $runtime);
@@ -39,14 +39,12 @@ final class LoggerTest extends TestCase
         $logger->info('user logged in', ['userId' => 7]);
         $runtime->drain();
 
-        self::assertSame(
-            ['userId' => 7, 'host' => 'thread-0', 'pid' => 1234],
-            $capturing->records[0]->context,
-        );
+        self::assertSame(['userId' => 7], $capturing->records[0]->context);
+        self::assertSame(['host' => 'thread-0', 'pid' => 1234], $capturing->records[0]->extra);
     }
 
     #[Test]
-    public function explicit_context_keys_win_over_mdc(): void
+    public function context_arg_and_mdc_extra_are_independent(): void
     {
         $runtime = new StepRuntime();
         $system = ActorSystem::create('logger-test', $runtime);
@@ -58,6 +56,7 @@ final class LoggerTest extends TestCase
         $runtime->drain();
 
         self::assertSame('fromArg', $capturing->records[0]->context['userId']);
+        self::assertSame('fromMdc', $capturing->records[0]->extra['userId']);
     }
 
     #[Test]

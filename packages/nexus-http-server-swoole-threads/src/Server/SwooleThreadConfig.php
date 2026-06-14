@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Http\Server\Swoole\Threads\Server;
 use Monadial\Nexus\Runtime\Duration;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Swoole\Thread\Queue;
 
 /**
  * @psalm-api
@@ -26,6 +27,7 @@ final readonly class SwooleThreadConfig
         public bool $installSignalHandlers,
         public LoggerInterface $logger,
         public bool $enableWebSocket,
+        public ?Queue $logQueue = null,
     ) {}
 
     public static function bind(string $host, int $port = 8080): self
@@ -39,7 +41,19 @@ final readonly class SwooleThreadConfig
             installSignalHandlers: true,
             logger: new NullLogger(),
             enableWebSocket: false,
+            logQueue: null,
         );
+    }
+
+    /**
+     * Pass a pre-allocated Swoole\Thread\Queue to be shared across all
+     * worker threads. Threads access it via Swoole\Thread::getArguments()[3].
+     * Pair with ThreadQueueHandler + a dedicated writer thread for
+     * lock-free file logging at high throughput.
+     */
+    public function withLogQueue(Queue $queue): self
+    {
+        return clone($this, ['logQueue' => $queue]);
     }
 
     public function enableWebSocket(bool $b = true): self
