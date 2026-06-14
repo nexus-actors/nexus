@@ -403,3 +403,154 @@ tagging without spawning a second LogActor:
 $httpLogger = $logger->withChannel('http');
 $dbLogger = $logger->withChannel('db')->withMinLevel(Level::Warning);
 ```
+
+## Full Production Example
+
+Eight Swoole worker threads, one shared `Swoole\Thread\Queue`, one
+dedicated writer thread, MDC populated at boot and per-request,
+level-gated `CallerInfoProcessor`, native `LineFormatter`. Matches the
+configuration measured in [Performance](#performance) above.
+
+```php
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Http\Server\Swoole\Threads\Server\{SwooleThreadConfig, SwooleThreadServer};
+use Monadial\Nexus\Http\Ws\{CompiledApplication, WsApplication};
+use Monadial\Nexus\Logger\Formatter\LineFormatter;
+use Monadial\Nexus\Logger\{Level, Mdc, NexusLogger};
+use Monadial\Nexus\Logger\Processor\CallerInfoProcessor;
+use Monadial\Nexus\Logger\Swoole\ThreadQueueHandler;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\WorkerPool\WorkerNode;
+use Swoole\Thread;
+use Swoole\Thread\{Atomic, Queue};
+
+$logQueue = new Queue();
+$shutdown = new Atomic(0);
+
+$writer = new Thread(
+    __DIR__ . '/logger-writer.php',
+    $logQueue,
+    '/var/log/app.log',
+    $shutdown,
+);
+
+SwooleThreadServer::run(
+    SwooleThreadConfig::bind('0.0.0.0', 8080)
+        ->threads(8)
+        ->withLogQueue($logQueue)
+        ->shutdownTimeout(Duration::seconds(5)),
+    static function (ActorSystem $system, WorkerNode $node) use ($logQueue): CompiledApplication {
+        // Static MDC: written once per thread, attached to every record.
+        Mdc::putStatic('host', gethostname() ?: 'unknown');
+        Mdc::putStatic('threadId', $node->workerId());
+        Mdc::putStatic('service', 'orders-api');
+
+        $logger = NexusLogger::create($system, "thread-{$node->workerId()}")
+            ->minLevel(Level::Info)
+            ->processor(CallerInfoProcessor::onlyFor(Level::Error, Level::Critical))
+            ->handler(new ThreadQueueHandler($logQueue, new LineFormatter()))
+            ->build();
+
+        return WsApplication::create($system)
+            ->withLogger($logger)
+            ->get('/orders/{id}', static function ($req) use ($logger) {
+                // Coroutine-local MDC: scoped to this request.
+                Mdc::put('requestId', bin2hex(random_bytes(4)));
+                Mdc::put('route', 'GET /orders/{id}');
+                $logger->info('fetching order {id}', ['id' => $req->getAttribute('id')]);
+
+                return JsonResponse::ok(['id' => $req->getAttribute('id')]);
+            })
+            ->compile();
+    },
+);
+
+$shutdown->set(1);
+$writer->join();
+```
+
+The writer-thread script (`logger-writer.php`) and the actual annotated
+8-thread server live at `examples/logger-writer.php` and
+`examples/thread-server-q.php` in the repository.
+
+## Cookbook
+
+### Multi-handler routing by level
+
+Errors go to a file, everything goes to stdout:
+
+```php
+$logger = NexusLogger::create($system, 'app')
+    ->handler(new ConsoleHandler(STDOUT, new LineFormatter()))
+    ->handler(
+        (new FileHandler('/var/log/errors.log', new JsonFormatter()))
+            ->withMinLevel(Level::Error),
+    )
+    ->build();
+```
+
+### Per-subsystem channels sharing one sink
+
+```php
+$root = NexusLogger::create($system, 'app')
+    ->handler(new ConsoleHandler(STDOUT, new LineFormatter()))
+    ->build();
+
+$httpLog = $root->withChannel('http');
+$dbLog = $root->withChannel('db')->withMinLevel(Level::Warning);
+$workerLog = $root->withChannel('worker');
+```
+
+All three share the same `LogActor` (one ordered queue, one set of
+handlers) but produce records tagged with different channels.
+
+### Monolog handler for an external sink
+
+Reuse the Sentry / Loggly / Bugsnag / GELF handler you already have:
+
+```php
+use Monadial\Nexus\Logger\Monolog\MonologHandlerAdapter;
+use Monolog\Handler\StreamHandler;
+use Monolog\Processor\HostnameProcessor;
+use Monolog\Processor\ProcessIdProcessor;
+
+$sentryHandler = (new MyMonologSentryHandler(...))->setLevel(Logger::ERROR);
+
+$logger = NexusLogger::create($system, 'app')
+    ->handler(new ConsoleHandler(STDOUT, new LineFormatter()))
+    ->handler(new MonologHandlerAdapter(
+        $sentryHandler,
+        [new HostnameProcessor(), new ProcessIdProcessor()],
+    ))
+    ->build();
+```
+
+The second `MonologHandlerAdapter` argument is a list of Monolog
+processors that run on the converted `LogRecord` before the wrapped
+handler — needed because we bypass Monolog's own `Logger` class.
+
+### Templated console output
+
+Mix nexus runtime metadata with Monolog's `%token%` formatter:
+
+```php
+use Monadial\Nexus\Logger\Monolog\MonologFormatterAdapter;
+use Monolog\Formatter\LineFormatter as MonologLineFormatter;
+
+$template = "[%datetime%] thread-%extra.threadId%@%extra.host% "
+    . "%channel%.%level_name% %extra.class%::%extra.function%:%extra.line% "
+    . "— %message% %context%\n";
+
+$logger = NexusLogger::create($system, 'app')
+    ->processor(CallerInfoProcessor::onlyFor(Level::Debug, Level::Error))
+    ->handler(new ConsoleHandler(
+        STDOUT,
+        new MonologFormatterAdapter(new MonologLineFormatter($template, 'Y-m-d H:i:s.v', true, true)),
+    ))
+    ->build();
+```
+
+Renders like:
+```
+[2026-06-14 14:21:05.206] thread-3@my-host app.INFO Acme\Orders\Handler::__invoke:42 — greeting tomas {"requestId":"abc"}
+```
