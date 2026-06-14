@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Performance\HttpSwoole;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\Dsl\HttpApp;
-use Monadial\Nexus\Http\Server\Swoole\App\SwooleHttpApp;
 use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerConfig;
-use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerHttpServer;
+use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerServer;
+use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Ws\WsApplication;
 use Monadial\Nexus\Tests\Integration\HttpSwoole\Support\ChannelChatBehavior;
 use Monadial\Nexus\Tests\Integration\HttpSwoole\Support\ForkedSwooleServerFixture;
 use Monadial\Nexus\Tests\Performance\HttpSwoole\Support\LatencyRecorder;
@@ -41,19 +41,17 @@ final class WorkerWebSocketBroadcastTest extends TestCase
         $fixture = new ForkedSwooleServerFixture('127.0.0.1', $port);
 
         $fixture->start(static function () use ($port): void {
-            SwooleWorkerHttpServer::run(
+            SwooleWorkerServer::run(
                 SwooleWorkerConfig::bind('127.0.0.1', $port)
                     ->workers(1)
                     ->enableWebSocket(true)
                     ->installSignalHandlers(false),
-                static function (ActorSystem $system) {
-                    $http = HttpApp::create($system);
-
-                    return SwooleHttpApp::wrap($http, $system)
-                        ->webSocketChannel(
-                            path: '/ws/channel/{channelId}',
-                            props: ChannelChatBehavior::props(),
-                            keyFrom: 'channelId',
+                static function (ActorSystem $system): CompiledApplication {
+                    return WsApplication::create($system)
+                        ->channel(
+                            '/ws/channel/{channelId}',
+                            ChannelChatBehavior::class,
+                            key: 'channelId',
                         )
                         ->compile();
                 },

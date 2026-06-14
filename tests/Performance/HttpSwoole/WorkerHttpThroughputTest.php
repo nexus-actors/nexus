@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Performance\HttpSwoole;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\App\CompiledHttpApp;
-use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerConfig;
-use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerHttpServer;
+use Monadial\Nexus\Http\Server\Swoole\Server\SwooleWorkerServer;
+use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Ws\HttpApplication;
 use Monadial\Nexus\Tests\Integration\HttpSwoole\Support\ForkedSwooleServerFixture;
 use Monadial\Nexus\Tests\Performance\HttpSwoole\Support\FreePort;
 use Monadial\Nexus\Tests\Performance\HttpSwoole\Support\LatencyRecorder;
@@ -36,12 +36,12 @@ final class WorkerHttpThroughputTest extends TestCase
         $fixture = new ForkedSwooleServerFixture('127.0.0.1', $port);
 
         $fixture->start(static function () use ($port): void {
-            SwooleWorkerHttpServer::run(
+            SwooleWorkerServer::run(
                 config: SwooleWorkerConfig::bind('127.0.0.1', $port)
                     ->workers(1)
                     ->installSignalHandlers(false),
-                factory: static function (ActorSystem $system): CompiledHttpApp {
-                    $app = HttpApp::create($system);
+                factory: static function (ActorSystem $system): CompiledApplication {
+                    $app = HttpApplication::create($system);
                     $app->get('/ping', static fn(): ResponseInterface => Response::ok());
 
                     return $app->compile();

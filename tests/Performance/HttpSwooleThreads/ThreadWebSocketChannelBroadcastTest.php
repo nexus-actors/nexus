@@ -21,7 +21,7 @@ use function Co\run;
  * Phase 16 v1 limitation: channel-actor broadcast across threads is not yet
  * supported (the ChannelConnectionOpened payload is not serialization-safe
  * over Thread\Queue). This test instead measures handler-mode echo round-trip
- * latency on a 2-thread SwooleThreadHttpServer — proves the message loop +
+ * latency on a 2-thread SwooleThreadServer — proves the message loop +
  * cross-process bridge work end-to-end under thread mode and gives us a
  * latency baseline to track.
  *
