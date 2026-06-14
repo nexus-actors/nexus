@@ -11,7 +11,7 @@ use Psr\Log\NullLogger;
 /**
  * @psalm-api
  *
- * Immutable configuration for SwooleThreadHttpServer::run().
+ * Immutable configuration for SwooleThreadServer::run().
  * Constructed via the static bind() entry; further tunables return new instances.
  */
 final readonly class SwooleThreadConfig

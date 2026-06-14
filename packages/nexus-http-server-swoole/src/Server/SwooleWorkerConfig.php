@@ -11,7 +11,7 @@ use Psr\Log\NullLogger;
 /**
  * @psalm-api
  *
- * Immutable configuration for SwooleWorkerHttpServer::run().
+ * Immutable configuration for SwooleWorkerServer::run().
  * Constructed via the static bind() entry; further tunables return
  * new instances.
  */
