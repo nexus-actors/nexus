@@ -4,24 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Server\Swoole\Server;
 
-use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\Http\Server\Swoole\Bridge\ServerRuntime;
 
 /**
  * @internal Per-worker-process runtime state for SwooleWorkerServer.
  */
-final class WorkerServerRuntime
+final class WorkerServerRuntime extends ServerRuntime
 {
-    public ?ActorSystem $system = null;
-
-    public ?CompiledApplication $app = null;
-
-    /** @var array{count: int, since: float} */
-    public array $failureBucket = ['count' => 0, 'since' => 0.0];
-
-    public function reset(): void
-    {
-        $this->system = null;
-        $this->app = null;
-    }
 }

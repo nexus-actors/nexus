@@ -6,29 +6,23 @@ namespace Monadial\Nexus\Http\Server\Swoole\Threads\Server;
 
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleRequestTranslator;
-use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleResponseWriter;
+use Monadial\Nexus\Http\Server\Swoole\Bridge\SwooleServerEventBinder;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\CompiledWsApplication;
-use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
+use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
 use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
-use Nyholm\Psr7\ServerRequest;
-use Swoole\Http\Request;
-use Swoole\Http\Response;
+use Psr\Http\Message\ServerRequestInterface;
 use Swoole\Http\Server as HttpServer;
 use Swoole\Thread;
 use Swoole\Thread\ArrayList;
 use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
-use Swoole\WebSocket\Frame as SwooleFrame;
 use Swoole\WebSocket\Server as WebSocketServer;
 use Throwable;
-
-use function microtime;
 
 /**
  * @psalm-api
@@ -120,137 +114,37 @@ final class SwooleThreadServer
                         'exception' => $e,
                         'workerId' => $workerId,
                     ]);
-                    self::recordFailureAndMaybeShutdown($s, $config, $runtime);
+                    SwooleServerEventBinder::recordFailureAndMaybeShutdown(
+                        $s,
+                        $runtime,
+                        $config->logger,
+                        'HTTP factory failed during thread boot 3 times in 5s — shutting down server.',
+                    );
                 }
             },
         );
 
-        $server->on('Request', static function (Request $req, Response $res) use ($config, $runtime): void {
-            try {
-                $app = $runtime->app;
-
-                if ($app === null) {
-                    $res->status(503);
-                    $res->end('Service not ready');
-
-                    return;
-                }
-
-                $psr7 = SwooleRequestTranslator::toPsr7($req);
-                SwooleResponseWriter::write($app->handle($psr7), $res);
-            } catch (Throwable $e) {
-                $config->logger->error('Request handling failed', ['exception' => $e]);
-
-                if (!$res->isWritable()) {
-                    return;
-                }
-
-                $res->status(500);
-                $res->end('Internal Server Error');
-            }
-        });
+        SwooleServerEventBinder::bindRequest($server, $runtime, $config->logger);
 
         if ($enableWebSocket) {
-            $server->on('Open', static function (WebSocketServer $s, Request $req) use ($config, $runtime): void {
-                try {
-                    $app = $runtime->app;
-
-                    if (!$app instanceof CompiledWsApplication) {
-                        return;
-                    }
-
-                    $psr7 = SwooleRequestTranslator::toPsr7($req);
-                    $ctx = new ThreadAwareConnectionContext($s, (int) $req->fd, $psr7);
-                    $app->dispatcher()->dispatchOpen($ctx, $psr7);
-                } catch (Throwable $e) {
-                    $config->logger->error('WebSocket Open failed', ['exception' => $e]);
-                    $s->disconnect((int) $req->fd, 1011, 'Server error');
-                }
-            });
-
-            $server->on(
-                'Message',
-                static function (WebSocketServer $s, SwooleFrame $frame) use ($config, $runtime): void {
-                    try {
-                        $app = $runtime->app;
-
-                        if (!$app instanceof CompiledWsApplication) {
-                            return;
-                        }
-
-                        $kind = (int) $frame->opcode === 2
-                            ? WebSocketFrame::KIND_BINARY
-                            : WebSocketFrame::KIND_TEXT;
-                        $wsFrame = new WebSocketFrame($kind, (string) $frame->data);
-                        $ctx = new ThreadAwareConnectionContext($s, (int) $frame->fd, new ServerRequest('GET', '/'));
-                        $app->dispatcher()->dispatchMessage($ctx, $wsFrame);
-                    } catch (Throwable $e) {
-                        $config->logger->error('WebSocket Message failed', ['exception' => $e]);
-                    }
-                },
+            assert($server instanceof WebSocketServer);
+            SwooleServerEventBinder::bindWebSocket(
+                $server,
+                $runtime,
+                static fn(WebSocketServer $s, int $fd, ServerRequestInterface $req): WebSocketContext => new ThreadAwareConnectionContext(
+                    $s,
+                    $fd,
+                    $req,
+                ),
+                $config->logger,
             );
-
-            $server->on('Close', static function (WebSocketServer $s, int $fd) use ($config, $runtime): void {
-                try {
-                    $app = $runtime->app;
-
-                    if (!$app instanceof CompiledWsApplication) {
-                        return;
-                    }
-
-                    $ctx = new ThreadAwareConnectionContext($s, $fd, new ServerRequest('GET', '/'));
-                    $app->dispatcher()->dispatchClose($ctx, 1000);
-                } catch (Throwable $e) {
-                    $config->logger->error('WebSocket Close failed', ['exception' => $e]);
-                }
-            });
         }
 
-        $server->on(
-            'WorkerStop',
-            static function (HttpServer|WebSocketServer $s, int $workerId) use ($config, $runtime): void {
-                $system = $runtime->system;
-
-                if ($system !== null) {
-                    try {
-                        $system->shutdown($config->shutdownTimeout);
-                    } catch (Throwable $e) {
-                        $config->logger->error('System shutdown failed in WorkerStop', [
-                            'exception' => $e,
-                            'workerId' => $workerId,
-                        ]);
-                    }
-                }
-
-                $runtime->reset();
-            },
-        );
+        SwooleServerEventBinder::bindWorkerStop($server, $runtime, $config->shutdownTimeout, $config->logger);
 
         // Swoole SWOOLE_THREAD mode wires SIGTERM/SIGINT natively.
         // installSignalHandlers retained for API parity with worker mode — no-op here.
 
         $server->start();
-    }
-
-    private static function recordFailureAndMaybeShutdown(
-        HttpServer|WebSocketServer $server,
-        SwooleThreadConfig $config,
-        ThreadServerRuntime $runtime,
-    ): void {
-        $now = microtime(true);
-        $bucket = $runtime->failureBucket;
-
-        if ($bucket['since'] === 0.0 || $now - $bucket['since'] > 5.0) {
-            $bucket = ['count' => 1, 'since' => $now];
-        } else {
-            $bucket['count']++;
-        }
-
-        $runtime->failureBucket = $bucket;
-
-        if ($bucket['count'] >= 3) {
-            $config->logger->error('HTTP factory failed during thread boot 3 times in 5s — shutting down server.');
-            $server->shutdown();
-        }
     }
 }
