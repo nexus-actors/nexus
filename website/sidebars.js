@@ -51,6 +51,24 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'HTTP',
+      items: [
+        'http/overview',
+        'http/getting-started',
+        'http/routing',
+        'http/handlers',
+        'http/middleware',
+        'http/responses',
+        'http/error-handling',
+        'http/websockets',
+        'http/actors-in-http',
+        'http/servers',
+        'http/observability',
+        'http/production',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Packages',
       items: [
         'packages/core',
