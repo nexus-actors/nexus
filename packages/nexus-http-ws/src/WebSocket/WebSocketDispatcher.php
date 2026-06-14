@@ -41,9 +41,14 @@ final class WebSocketDispatcher
 
     public function dispatchOpen(WebSocketContext $ctx, ServerRequestInterface $upgrade): void
     {
-        $match = $this->router->match($upgrade->getUri()->getPath());
+        $path = $upgrade->getUri()->getPath();
+        $match = $this->router->match($path);
 
         if ($match === null) {
+            $this->logger->debug(
+                'WebSocket open: no route match — closing 1000',
+                ['fd' => $ctx->id(), 'path' => $path],
+            );
             $ctx->close(1000, 'No WebSocket route');
 
             return;
@@ -55,6 +60,11 @@ final class WebSocketDispatcher
             if ($route->mode === WebSocketRoute::MODE_HANDLER) {
                 /** @var class-string<WebSocketHandler> $handlerClass */
                 $handlerClass = $route->targetClass;
+                $this->logger->debug('WebSocket open: handler route matched', [
+                    'class' => $handlerClass,
+                    'fd' => $ctx->id(),
+                    'path' => $path,
+                ]);
                 $handler = $this->instantiator->instantiate($handlerClass, $ctx);
                 $handler->onOpen();
                 $this->table->attachHandler($ctx->id(), $handler, $ctx);
@@ -68,6 +78,13 @@ final class WebSocketDispatcher
                 $keyFrom = $route->keyFrom ?? '';
                 $key = $match['params'][$keyFrom] ?? '';
                 $name = ChannelActorNameResolver::resolve($key);
+                $this->logger->debug('WebSocket open: channel route matched', [
+                    'actorClass' => $actorClass,
+                    'actorName' => $name,
+                    'fd' => $ctx->id(),
+                    'key' => $key,
+                    'path' => $path,
+                ]);
 
                 /** @psalm-suppress InvalidArgument, UnsafeInstantiation */
                 $ref = $this->registry->resolveOrSpawn(
@@ -82,7 +99,7 @@ final class WebSocketDispatcher
 
             throw new RuntimeException("Unknown WebSocket route mode: {$route->mode}");
         } catch (Throwable $e) {
-            $this->logger->error('WebSocket open dispatch failed', ['exception' => $e]);
+            $this->logger->error('WebSocket open dispatch failed', ['exception' => $e, 'fd' => $ctx->id()]);
             $ctx->close(1011, 'Server error');
         }
     }
@@ -106,7 +123,7 @@ final class WebSocketDispatcher
                 $entry['channelActor']->tell(new ChannelMessageReceived($ctx->id(), $frame));
             }
         } catch (Throwable $e) {
-            $this->logger->error('WebSocket message dispatch failed', ['exception' => $e]);
+            $this->logger->error('WebSocket message dispatch failed', ['exception' => $e, 'fd' => $ctx->id()]);
         }
     }
 
@@ -118,6 +135,13 @@ final class WebSocketDispatcher
             return;
         }
 
+        $this->logger->debug('WebSocket close: dispatching', [
+            'channelName' => $entry['channelName'],
+            'closeCode' => $code,
+            'fd' => $ctx->id(),
+            'mode' => $entry['handler'] !== null ? 'handler' : 'channel',
+        ]);
+
         try {
             if ($entry['handler'] !== null) {
                 $entry['handler']->onClose($code);
@@ -125,7 +149,7 @@ final class WebSocketDispatcher
                 $entry['channelActor']->tell(new ChannelConnectionClosed($ctx->id(), $code));
             }
         } catch (Throwable $e) {
-            $this->logger->error('WebSocket close dispatch failed', ['exception' => $e]);
+            $this->logger->error('WebSocket close dispatch failed', ['exception' => $e, 'fd' => $ctx->id()]);
         } finally {
             $this->table->remove($ctx->id());
         }
