@@ -9,6 +9,7 @@ use Monadial\Nexus\Logger\RecordProcessor;
 use Override;
 
 use function array_slice;
+use function count;
 use function debug_backtrace;
 use function str_starts_with;
 
@@ -46,36 +47,55 @@ final class CallerInfoProcessor implements RecordProcessor
     #[Override]
     public function process(Record $record): Record
     {
-        /** @var list<array{class?: string, function?: string, file?: string, line?: int}> $trace */
+        /**
+         * debug_backtrace semantics:
+         *   - frame[i].function = the function executing at frame i
+         *   - frame[i].file/line = where frame i was CALLED FROM (the caller)
+         *
+         * So when we find the first user frame[i] (the route closure), its
+         * file/line point to the dispatcher that invoked it, not the
+         * $logger->info() call site. The call site lives in frame[i-1]
+         * (the last infra frame, AbstractLogger::info). Mirror Monolog's
+         * IntrospectionProcessor: function/class from i, file/line from i-1.
+         *
+         * @var list<array{class?: string, function?: string, file?: string, line?: int}> $trace
+         */
         $trace = array_slice(debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 12), 1);
 
-        foreach ($trace as $frame) {
-            if (self::isInfra($frame)) {
-                continue;
-            }
+        $i = 0;
 
-            $extra = [];
-
-            if (isset($frame['class'])) {
-                $extra['class'] = $frame['class'];
-            }
-
-            if (isset($frame['function'])) {
-                $extra['function'] = $frame['function'];
-            }
-
-            if (isset($frame['file'])) {
-                $extra['file'] = $frame['file'];
-            }
-
-            if (isset($frame['line'])) {
-                $extra['line'] = $frame['line'];
-            }
-
-            return $record->withExtra($extra);
+        while ($i < count($trace) && self::isInfra($trace[$i])) {
+            $i++;
         }
 
-        return $record;
+        if ($i >= count($trace)) {
+            return $record;
+        }
+
+        $userFrame = $trace[$i];
+        $callerFrame = $i > 0
+            ? $trace[$i - 1]
+            : $userFrame;
+
+        $extra = [];
+
+        if (isset($userFrame['class'])) {
+            $extra['class'] = $userFrame['class'];
+        }
+
+        if (isset($userFrame['function'])) {
+            $extra['function'] = $userFrame['function'];
+        }
+
+        if (isset($callerFrame['file'])) {
+            $extra['file'] = $callerFrame['file'];
+        }
+
+        if (isset($callerFrame['line'])) {
+            $extra['line'] = $callerFrame['line'];
+        }
+
+        return $record->withExtra($extra);
     }
 
     /**

@@ -26,7 +26,7 @@ final class CallerInfoProcessorTest extends TestCase
     }
 
     #[Test]
-    public function captures_file_and_line(): void
+    public function captures_file_and_line_of_caller(): void
     {
         $processor = new CallerInfoProcessor();
 
