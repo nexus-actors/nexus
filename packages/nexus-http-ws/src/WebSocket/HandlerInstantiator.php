@@ -6,6 +6,8 @@ namespace Monadial\Nexus\Http\Ws\WebSocket;
 
 use Monadial\Nexus\Http\Ws\WebSocket\Attribute\FromContext;
 use Psr\Container\ContainerInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use ReflectionClass;
 use ReflectionNamedType;
 use ReflectionParameter;
@@ -25,7 +27,11 @@ use function count;
  */
 final class HandlerInstantiator
 {
-    public function __construct(private readonly ContainerInterface $container) {}
+    private readonly LoggerInterface $logger;
+
+    public function __construct(private readonly ContainerInterface $container, ?LoggerInterface $logger = null,) {
+        $this->logger = $logger ?? new NullLogger();
+    }
 
     /**
      * @param class-string<WebSocketHandler> $handlerClass
@@ -36,6 +42,11 @@ final class HandlerInstantiator
         $ctor = $rc->getConstructor();
 
         if ($ctor === null) {
+            $this->logger->debug(
+                'HandlerInstantiator: zero-arg handler',
+                ['class' => $handlerClass, 'fd' => $ctx->id()],
+            );
+
             /** @var WebSocketHandler */
             return $rc->newInstance();
         }
@@ -46,6 +57,12 @@ final class HandlerInstantiator
             /** @psalm-suppress MixedAssignment */
             $args[] = $this->resolveParam($param, $ctx, $handlerClass);
         }
+
+        $this->logger->debug('HandlerInstantiator: handler instantiated', [
+            'class' => $handlerClass,
+            'fd' => $ctx->id(),
+            'params' => count($args),
+        ]);
 
         /** @var WebSocketHandler */
         return $rc->newInstanceArgs($args);

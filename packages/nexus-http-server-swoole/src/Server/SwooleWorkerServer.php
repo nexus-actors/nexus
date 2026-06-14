@@ -51,11 +51,17 @@ final class SwooleWorkerServer
         $server->on(
             'WorkerStart',
             static function (HttpServer|WebSocketServer $s, int $workerId) use ($factory, $config, $runtime): void {
+                $config->logger->info('Worker starting', ['workerId' => $workerId]);
+
                 try {
                     $system = ActorSystem::create("http-worker-{$workerId}", new SwooleRuntime());
                     $app = $factory($system);
                     $runtime->system = $system;
                     $runtime->app = $app;
+                    $config->logger->info('Worker started', [
+                        'hasWebSocketRoutes' => $app->hasWebSocketRoutes(),
+                        'workerId' => $workerId,
+                    ]);
                 } catch (Throwable $e) {
                     $config->logger->error('HTTP factory failed during WorkerStart', [
                         'exception' => $e,
@@ -91,8 +97,15 @@ final class SwooleWorkerServer
 
         if ($config->installSignalHandlers) {
             ShutdownSignalHandler::install($server, $config->logger);
+            $config->logger->debug('SwooleWorkerServer: SIGTERM/SIGINT signal handlers installed');
         }
 
+        $config->logger->info('SwooleWorkerServer booting', [
+            'enableWebSocket' => $config->enableWebSocket,
+            'host' => $config->host,
+            'port' => $config->port,
+            'workers' => $config->workers,
+        ]);
         $server->start();
     }
 }

@@ -13,6 +13,7 @@ use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelMessageReceived;
 use Override;
 
 use function array_values;
+use function count;
 
 /**
  * @psalm-api
@@ -38,6 +39,10 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
     final public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
         if ($message instanceof ChannelConnectionOpened) {
+            $ctx->log()->debug('WebSocketChannelActor: connection opened', [
+                'attached' => count($this->attached) + 1,
+                'fd' => $message->fd,
+            ]);
             $this->attached[$message->fd] = $message->ctx;
 
             return $this->onOpened($ctx, $message->ctx, $state);
@@ -47,6 +52,8 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
             $conn = $this->attached[$message->fd] ?? null;
 
             if ($conn === null) {
+                $ctx->log()->debug('WebSocketChannelActor: message on unknown fd dropped', ['fd' => $message->fd]);
+
                 return BehaviorWithState::same();
             }
 
@@ -61,6 +68,11 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
             }
 
             unset($this->attached[$message->fd]);
+            $ctx->log()->debug('WebSocketChannelActor: connection closed', [
+                'attached' => count($this->attached),
+                'closeCode' => $message->code,
+                'fd' => $message->fd,
+            ]);
 
             return $this->onClosed($ctx, $conn, $message->code, $state);
         }

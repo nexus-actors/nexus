@@ -35,6 +35,8 @@ final class SwooleServerEventBinder
         ServerRuntime $runtime,
         LoggerInterface $logger,
     ): void {
+        $logger->debug('SwooleServerEventBinder: binding Request handler');
+
         $server->on('Request', static function (Request $req, Response $res) use ($runtime, $logger): void {
             try {
                 $app = $runtime->app;
@@ -70,9 +72,12 @@ final class SwooleServerEventBinder
         Closure $contextFactory,
         LoggerInterface $logger,
     ): void {
+        $logger->debug('SwooleServerEventBinder: binding WebSocket Open/Message/Close');
         $server->on(
             'Open',
             static function (WebSocketServer $s, Request $req) use ($runtime, $contextFactory, $logger): void {
+                $logger->debug('Swoole Open event', ['fd' => (int) $req->fd]);
+
                 try {
                     $app = $runtime->app;
     
@@ -115,6 +120,8 @@ final class SwooleServerEventBinder
         $server->on(
             'Close',
             static function (WebSocketServer $s, int $fd) use ($runtime, $contextFactory, $logger): void {
+                $logger->debug('Swoole Close event', ['fd' => $fd]);
+
                 try {
                     $app = $runtime->app;
     
@@ -137,14 +144,17 @@ final class SwooleServerEventBinder
         Duration $shutdownTimeout,
         LoggerInterface $logger,
     ): void {
+        $logger->debug('SwooleServerEventBinder: binding WorkerStop');
         $server->on(
             'WorkerStop',
             static function (HttpServer|WebSocketServer $s, int $workerId) use ($runtime, $shutdownTimeout, $logger): void {
+                $logger->info('Worker stopping', ['workerId' => $workerId]);
                 $system = $runtime->system;
 
                 if ($system !== null) {
                     try {
                         $system->shutdown($shutdownTimeout);
+                        $logger->info('Worker ActorSystem shutdown complete', ['workerId' => $workerId]);
                     } catch (Throwable $e) {
                         $logger->error('System shutdown failed in WorkerStop', [
                             'exception' => $e,

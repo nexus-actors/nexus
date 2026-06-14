@@ -69,6 +69,8 @@ final class SwooleThreadServer
         $server->on(
             'WorkerStart',
             static function (HttpServer|WebSocketServer $s, int $workerId) use ($factory, $config, $runtime, $enableWebSocket): void {
+                $config->logger->info('Thread starting', ['threadId' => $workerId]);
+
                 try {
                     /** @var array{0: Map, 1: ArrayList, 2: int} $args */
                     $args = Thread::getArguments();
@@ -109,6 +111,10 @@ final class SwooleThreadServer
 
                     $runtime->system = $system;
                     $runtime->app = $app;
+                    $config->logger->info('Thread started', [
+                        'hasWebSocketRoutes' => $app->hasWebSocketRoutes(),
+                        'threadId' => $workerId,
+                    ]);
                 } catch (Throwable $e) {
                     $config->logger->error('HTTP factory failed during WorkerStart', [
                         'exception' => $e,
@@ -145,6 +151,12 @@ final class SwooleThreadServer
         // Swoole SWOOLE_THREAD mode wires SIGTERM/SIGINT natively.
         // installSignalHandlers retained for API parity with worker mode — no-op here.
 
+        $config->logger->info('SwooleThreadServer booting', [
+            'enableWebSocket' => $config->enableWebSocket,
+            'host' => $config->host,
+            'port' => $config->port,
+            'threads' => $config->threads,
+        ]);
         $server->start();
     }
 }

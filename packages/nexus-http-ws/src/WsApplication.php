@@ -27,6 +27,7 @@ use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
+use Psr\Log\LoggerInterface;
 use Psr\SimpleCache\CacheInterface;
 use RuntimeException;
 
@@ -43,6 +44,8 @@ final class WsApplication implements Application
 
     private ?ContainerInterface $container = null;
 
+    private ?LoggerInterface $logger = null;
+
     private function __construct(private readonly Application $inner, private readonly ActorSystem $system) {}
 
     public static function decorate(Application $inner, ActorSystem $system): self
@@ -53,6 +56,13 @@ final class WsApplication implements Application
     public static function create(ActorSystem $system): self
     {
         return new self(HttpApplication::create($system), $system);
+    }
+
+    public function withLogger(LoggerInterface $logger): self
+    {
+        $this->logger = $logger;
+
+        return $this;
     }
 
     public function withContainer(ContainerInterface $container): self
@@ -203,9 +213,10 @@ final class WsApplication implements Application
         $dispatcher = new WebSocketDispatcher(
             $router,
             $table,
-            new ChannelActorRegistry($this->system),
-            new HandlerInstantiator($container),
+            new ChannelActorRegistry($this->system, $this->logger),
+            new HandlerInstantiator($container, $this->logger),
             $this->system,
+            $this->logger,
         );
 
         return new CompiledWsApplication($compiledHttp, $router, $dispatcher, $container);
