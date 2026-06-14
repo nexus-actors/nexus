@@ -64,6 +64,25 @@ final class MonologHandlerAdapterTest extends TestCase
     }
 
     #[Test]
+    public function monolog_processors_run_before_delegate(): void
+    {
+        $test = new TestHandler();
+        $adapter = new MonologHandlerAdapter(
+            $test,
+            [
+                static fn($r) => $r->with(extra: [...$r->extra, 'tag' => 'a']),
+                static fn($r) => $r->with(extra: [...$r->extra, 'seq' => 1]),
+            ],
+        );
+
+        $adapter->handle(new Record(Level::Info, 'm', [], 'app', 1.0));
+
+        $r = $test->getRecords()[0];
+        self::assertSame('a', $r->extra['tag'] ?? null);
+        self::assertSame(1, $r->extra['seq'] ?? null);
+    }
+
+    #[Test]
     public function level_mapping_covers_all_psr3_levels(): void
     {
         $test = new TestHandler();

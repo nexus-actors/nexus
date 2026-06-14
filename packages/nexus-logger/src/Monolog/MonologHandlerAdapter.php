@@ -39,12 +39,27 @@ use function round;
  */
 final class MonologHandlerAdapter implements Handler
 {
-    public function __construct(private readonly HandlerInterface $delegate) {}
+    /**
+     * @param list<callable(LogRecord): LogRecord> $processors
+     *   Monolog processors applied to the converted LogRecord before the
+     *   delegate handler runs. Use this to attach Monolog's stock
+     *   processors (HostnameProcessor, ProcessIdProcessor, MemoryUsageProcessor,
+     *   GitProcessor, etc.) — they would otherwise be skipped because
+     *   we bypass Monolog\Logger. All Monolog processors implement
+     *   ProcessorInterface (an __invoke contract), so they're callable.
+     */
+    public function __construct(private readonly HandlerInterface $delegate, private readonly array $processors = [],) {}
 
     #[Override]
     public function handle(Record $record): void
     {
-        $this->delegate->handle($this->toMonologRecord($record));
+        $logRecord = $this->toMonologRecord($record);
+
+        foreach ($this->processors as $processor) {
+            $logRecord = $processor($logRecord);
+        }
+
+        $this->delegate->handle($logRecord);
     }
 
     /**

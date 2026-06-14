@@ -88,4 +88,19 @@ final readonly class Record
 
         return new self($level, $rendered, $remaining, $channel, microtime(true), $extra);
     }
+
+    /**
+     * @param array<string, mixed> $extra
+     */
+    public function withExtra(array $extra): self
+    {
+        return new self(
+            $this->level,
+            $this->message,
+            $this->context,
+            $this->channel,
+            $this->timestamp,
+            [...$this->extra, ...$extra],
+        );
+    }
 }

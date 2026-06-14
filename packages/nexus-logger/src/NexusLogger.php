@@ -33,6 +33,9 @@ final class NexusLogger
     /** @var list<Handler> */
     private array $handlers = [];
 
+    /** @var list<RecordProcessor> */
+    private array $processors = [];
+
     private function __construct(private readonly ActorSystem $system, private string $channel = 'app') {}
 
     public static function create(ActorSystem $system, string $channel = 'app'): self
@@ -61,6 +64,13 @@ final class NexusLogger
         return $this;
     }
 
+    public function processor(RecordProcessor $processor): self
+    {
+        $this->processors[] = $processor;
+
+        return $this;
+    }
+
     public function build(): LoggerInterface
     {
         if ($this->handlers === []) {
@@ -77,6 +87,6 @@ final class NexusLogger
         $ref = $this->system->spawn($props, $name);
 
         /** @psalm-suppress ArgumentTypeCoercion — ActorRef<object> from spawn is the wire type; the sink only receives Record messages by construction. */
-        return new Logger($ref, $this->channel, $this->minLevel);
+        return new Logger($ref, $this->channel, $this->minLevel, $this->processors);
     }
 }

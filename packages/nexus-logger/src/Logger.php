@@ -23,11 +23,13 @@ final class Logger extends AbstractLogger
 {
     /**
      * @param ActorRef<Record> $sink
+     * @param list<RecordProcessor> $processors
      */
     public function __construct(
         private readonly ActorRef $sink,
         private readonly string $channel,
         private readonly Level $minLevel = Level::Debug,
+        private readonly array $processors = [],
     ) {}
 
     #[Override]
@@ -43,6 +45,11 @@ final class Logger extends AbstractLogger
 
         /** @var array<string, mixed> $context */
         $record = Record::create($resolved, $message, $context, $this->channel, $mdc);
+
+        foreach ($this->processors as $processor) {
+            $record = $processor->process($record);
+        }
+
         $this->sink->tell($record);
     }
 
@@ -55,11 +62,11 @@ final class Logger extends AbstractLogger
      */
     public function withChannel(string $channel): self
     {
-        return new self($this->sink, $channel, $this->minLevel);
+        return new self($this->sink, $channel, $this->minLevel, $this->processors);
     }
 
     public function withMinLevel(Level $level): self
     {
-        return new self($this->sink, $this->channel, $level);
+        return new self($this->sink, $this->channel, $level, $this->processors);
     }
 }

@@ -12,6 +12,8 @@ use Monadial\Nexus\Logger\LogActor;
 use Monadial\Nexus\Logger\Logger;
 use Monadial\Nexus\Logger\Mdc;
 use Monadial\Nexus\Logger\NexusLogger;
+use Monadial\Nexus\Logger\Record;
+use Monadial\Nexus\Logger\RecordProcessor;
 use Monadial\Nexus\Logger\Tests\Unit\Support\CapturingHandler;
 use Monadial\Nexus\Logger\Tests\Unit\Support\ExplodingHandler;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
@@ -174,6 +176,38 @@ final class LoggerTest extends TestCase
         $runtime->drain();
 
         self::assertSame(Level::Error, $capturing->records[0]->level);
+    }
+
+    #[Test]
+    public function processors_run_in_order_and_mutate_record_extra(): void
+    {
+        $runtime = new StepRuntime();
+        $system = ActorSystem::create('logger-test', $runtime);
+        $capturing = new CapturingHandler();
+
+        $stampHost = new class () implements RecordProcessor {
+            public function process(Record $record): Record
+            {
+                return $record->withExtra(['host' => 'h1']);
+            }
+        };
+        $stampPid = new class () implements RecordProcessor {
+            public function process(Record $record): Record
+            {
+                return $record->withExtra(['pid' => 42]);
+            }
+        };
+
+        $logger = NexusLogger::create($system, 'app')
+            ->handler($capturing)
+            ->processor($stampHost)
+            ->processor($stampPid)
+            ->build();
+
+        $logger->info('hello');
+        $runtime->drain();
+
+        self::assertSame(['host' => 'h1', 'pid' => 42], $capturing->records[0]->extra);
     }
 
     #[Test]
