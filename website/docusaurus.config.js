@@ -174,6 +174,11 @@ const config = {
             position: 'left',
           },
           {
+            to: '/docs/http/overview',
+            label: 'HTTP',
+            position: 'left',
+          },
+          {
             to: '/docs/packages/core',
             label: 'API',
             position: 'left',
