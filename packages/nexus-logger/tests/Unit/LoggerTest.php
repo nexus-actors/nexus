@@ -10,6 +10,7 @@ use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\LogActor;
 use Monadial\Nexus\Logger\Logger;
+use Monadial\Nexus\Logger\Mdc;
 use Monadial\Nexus\Logger\NexusLogger;
 use Monadial\Nexus\Logger\Tests\Unit\Support\CapturingHandler;
 use Monadial\Nexus\Logger\Tests\Unit\Support\ExplodingHandler;
@@ -25,6 +26,40 @@ use RuntimeException;
 #[CoversClass(LogActor::class)]
 final class LoggerTest extends TestCase
 {
+    #[Test]
+    public function mdc_values_are_merged_into_record_context(): void
+    {
+        $runtime = new StepRuntime();
+        $system = ActorSystem::create('logger-test', $runtime);
+        $capturing = new CapturingHandler();
+        $logger = NexusLogger::create($system, 'app')->handler($capturing)->build();
+
+        Mdc::put('host', 'thread-0');
+        Mdc::put('pid', 1234);
+        $logger->info('user logged in', ['userId' => 7]);
+        $runtime->drain();
+
+        self::assertSame(
+            ['userId' => 7, 'host' => 'thread-0', 'pid' => 1234],
+            $capturing->records[0]->context,
+        );
+    }
+
+    #[Test]
+    public function explicit_context_keys_win_over_mdc(): void
+    {
+        $runtime = new StepRuntime();
+        $system = ActorSystem::create('logger-test', $runtime);
+        $capturing = new CapturingHandler();
+        $logger = NexusLogger::create($system, 'app')->handler($capturing)->build();
+
+        Mdc::put('userId', 'fromMdc');
+        $logger->info('hi', ['userId' => 'fromArg']);
+        $runtime->drain();
+
+        self::assertSame('fromArg', $capturing->records[0]->context['userId']);
+    }
+
     #[Test]
     public function info_log_reaches_handler_after_drain(): void
     {
@@ -161,5 +196,10 @@ final class LoggerTest extends TestCase
         $contents = (string) stream_get_contents($stream);
         fclose($stream);
         self::assertStringContainsString('app.INFO: smoke', $contents);
+    }
+
+    protected function tearDown(): void
+    {
+        Mdc::clearStatic();
     }
 }
