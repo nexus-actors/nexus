@@ -62,6 +62,7 @@ const sidebars = {
         'packages/worker-pool',
         'packages/worker-pool-swoole',
         'packages/serialization',
+        'packages/logger',
         'packages/persistence',
         'packages/persistence-dbal',
         'packages/persistence-doctrine',

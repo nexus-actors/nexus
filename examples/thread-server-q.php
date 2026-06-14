@@ -24,15 +24,14 @@ use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadConfig;
 use Monadial\Nexus\Http\Server\Swoole\Threads\Server\SwooleThreadServer;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\HttpApplication;
+use Monadial\Nexus\Logger\Formatter\LineFormatter;
 use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\Mdc;
-use Monadial\Nexus\Logger\Monolog\MonologFormatterAdapter;
 use Monadial\Nexus\Logger\NexusLogger;
 use Monadial\Nexus\Logger\Processor\CallerInfoProcessor;
 use Monadial\Nexus\Logger\Swoole\ThreadQueueHandler;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\WorkerPool\WorkerNode;
-use Monolog\Formatter\LineFormatter as MonologLineFormatter;
 use Psr\Http\Message\ServerRequestInterface;
 use Swoole\Thread;
 use Swoole\Thread\Atomic;
@@ -59,16 +58,10 @@ SwooleThreadServer::run(
         Mdc::putStatic('threadId', $node->workerId());
         Mdc::putStatic('service', 'thread-server-q');
 
-        // Monolog LineFormatter template: any %extra.*% / %context.*% token works.
-        $template = "[%datetime%] thread-%extra.threadId%@%extra.host% "
-            . "%channel%.%level_name% %extra.class%::%extra.function%:%extra.line% "
-            . "— %message% %context%\n";
-        $monoFormatter = new MonologLineFormatter($template, 'Y-m-d H:i:s.v', true, true);
-
         $logger = NexusLogger::create($system, "thread-{$node->workerId()}")
             ->minLevel(Level::Debug)
             ->processor(CallerInfoProcessor::onlyFor(Level::Debug, Level::Error, Level::Critical))
-            ->handler(new ThreadQueueHandler($logQueue, new MonologFormatterAdapter($monoFormatter)))
+            ->handler(new ThreadQueueHandler($logQueue, new LineFormatter()))
             ->build();
 
         $logger->info('thread up');
