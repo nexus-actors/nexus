@@ -27,16 +27,31 @@ declare requirements via constructor attributes; failures map to 401 /
 **Hard dependencies:**
 
 - `nexus-actors/http` `self.version`
-- `nexus-actors/http-ws` `self.version`
 - `lcobucci/jwt` `^5`
 - `psr/http-message` `^2.0`
 - `psr/http-server-middleware` `^1.0`
 - `psr/http-factory` `^1.1`
 
-**Soft dependencies (suggested):**
+**Soft dependencies (`suggest` in composer.json; `require-dev` for tests):**
 
+- `nexus-actors/http-ws` — install when you want WebSocket auth. The
+  same middleware works on the WS upgrade because the upgrade IS an
+  HTTP request. `http-auth` has no `use` statement on any `http-ws`
+  class.
 - `nexus-actors/logger` — used by middleware for auth-failure log
   emission with MDC integration; absent install means no logs.
+
+**Dependency graph users see:**
+
+| User scenario | Installs |
+|---|---|
+| HTTP API + auth | `nexus-http` + `nexus-http-auth` |
+| HTTP + WS + auth | `nexus-http` + `nexus-http-ws` + `nexus-http-auth` |
+
+`http-auth` never pulls `http-ws` into a deployment that doesn't need
+it. The WebSocket integration is conventional (same middleware, same
+attribute, same Principal lookup on `WebSocketContext::request()`),
+not enforced by composer.
 
 **Public surface:** ~18 user-facing classes/interfaces. Concrete
 authenticators beyond JWT (API keys, OIDC, session cookies) live in
@@ -464,7 +479,13 @@ spike.
 
 1. `nexus-http/HandlerResolver` has a public registry for custom
    `#[From*]` resolvers (or we need to add one). If not, the cleanest
-   path is to extend the resolver registry.
+   path is to extend the resolver registry. **If `nexus-http-ws`
+   maintains a separate registry from `nexus-http`**, `#[FromPrincipal]`
+   on `WebSocketHandler` constructors needs conditional registration
+   via `class_exists(WebSocketHandler::class)` — keeping `http-ws` a
+   soft dep, not a hard one. The implementation plan should verify
+   whether the registries are unified before committing to either
+   approach.
 2. `nexus-http/RouteCompiler` exposes a hook for injecting per-route
    middleware based on handler attributes. If not, we may need to add
    an attribute-driven middleware injector.
