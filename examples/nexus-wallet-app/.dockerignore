@@ -1,0 +1,9 @@
+vendor/
+.git/
+.github/
+.idea/
+.vscode/
+tests/
+perf/
+*.md
+composer.lock

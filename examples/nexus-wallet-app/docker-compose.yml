@@ -1,0 +1,46 @@
+# Docker-in-Docker: this compose file is the example app's own runtime.
+# Independent of the parent Nexus monorepo's docker-compose.yml.
+#
+# Usage:
+#   make up          # start the Swoole-Threads HTTP server on :8080
+#   make perf        # run the perf client against it
+#   make logs        # tail server logs
+#
+# In production you'd swap `app` for a deployment unit and add Postgres
+# (uncomment the `db` service + flip Bootstrap to DbalEventStore).
+
+services:
+  app:
+    build: .
+    image: nexus-wallet-app:dev
+    container_name: nexus-wallet-app
+    ports:
+      - "8080:8080"
+    sysctls:
+      net.core.somaxconn: 65535
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    environment:
+      WALLET_HTTP_HOST: "0.0.0.0"
+      WALLET_HTTP_PORT: "8080"
+      WALLET_THREADS: "4"
+      WALLET_AUTH_TOKENS: "alice-token=alice,bob-token=bob,carol-token=carol"
+    volumes:
+      - ./src:/app/src:ro
+      - ./public:/app/public:ro
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/health') ? 0 : 1);"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+  perf:
+    build: .
+    image: nexus-wallet-app:dev
+    profiles: ["perf"]
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["php", "perf/deposit-load.php", "http://app:8080", "alice-token", "30", "32"]

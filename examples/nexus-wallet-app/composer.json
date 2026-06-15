@@ -1,0 +1,45 @@
+{
+    "name": "nexus-actors/example-wallet-app",
+    "description": "End-to-end Nexus example: event-sourced wallet over Swoole-Threads HTTP with bearer auth, per-request actors, in-memory event store.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-pcntl": "*",
+        "ext-swoole": "^6.0",
+        "monolog/monolog": "^3.0",
+        "nexus-actors/app": "dev-main",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/http-auth": "dev-main",
+        "nexus-actors/http-server-swoole-threads": "dev-main",
+        "nexus-actors/http-ws": "dev-main",
+        "nexus-actors/persistence": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
+        "nexus-actors/worker-pool": "dev-main",
+        "nexus-actors/worker-pool-swoole": "dev-main"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Example\\Wallet\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Example\\Wallet\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "serve": "php public/server.php"
+    }
+}

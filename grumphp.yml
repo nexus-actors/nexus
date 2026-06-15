@@ -13,12 +13,15 @@ grumphp:
         phpcs:
             standard: phpcs.xml
             triggered_by: ['php']
+            ignore_patterns:
+                - '/examples/'
         psalm:
             config: psalm.xml
             triggered_by: ['php']
             ignore_patterns:
                 - '/tests/'
                 - '/bin/'
+                - '/examples/'
         phpunit:
             testsuite: unit
             always_execute: true
