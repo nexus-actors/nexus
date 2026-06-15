@@ -75,18 +75,38 @@ final class HandlerResolver
      * @param array<string, string> $pathParams
      * @return list<mixed>
      */
-    private function buildArgs(
-        array $params,
-        ServerRequestInterface $r,
-        PerRequestActorScope $scope,
-        array $pathParams,
-    ): array {
-        $ctx = new HttpRequestContext($this->services(), $r, $pathParams, $scope);
+    /**
+     * Build an argument-list closure ONCE per handler at compile time. Captures
+     * the per-worker services bag and the pre-compiled metadata list, so the
+     * per-request hot path just allocates the request context and iterates.
+     *
+     * Saves vs. the array_map+method-call approach:
+     *   - one method-call indirection per request
+     *   - one closure allocation per request (the array_map callback)
+     *   - one ResolverServices allocation per request (now captured)
+     *
+     * @param list<ParamMetadata> $params
+     * @return Closure(ServerRequestInterface, PerRequestActorScope, array<string, string>): list<mixed>
+     */
+    private function compileArgBuilder(array $params): Closure
+    {
+        $services = $this->services();
 
-        return array_map(
-            static fn(ParamMetadata $p): mixed => $p->resolver->resolve($p, $ctx),
-            $params,
-        );
+        return static function (
+            ServerRequestInterface $r,
+            PerRequestActorScope $scope,
+            array $pathParams,
+        ) use ($params, $services): array {
+            $ctx = new HttpRequestContext($services, $r, $pathParams, $scope);
+            $args = [];
+
+            foreach ($params as $p) {
+                /** @psalm-suppress MixedAssignment */
+                $args[] = $p->resolver->resolve($p, $ctx);
+            }
+
+            return $args;
+        };
     }
 
     /**
@@ -206,6 +226,7 @@ final class HandlerResolver
         $needsScope = $this->paramsNeedScope($invokeParams);
 
         $instance = $this->instantiate($class, $ctorParams);
+        $argBuilder = $this->compileArgBuilder($invokeParams);
 
         $invoke =
             /**
@@ -215,8 +236,8 @@ final class HandlerResolver
                 ServerRequestInterface $r,
                 PerRequestActorScope $scope,
                 array $pathParams,
-            ) use ($instance, $method, $invokeParams): ResponseInterface {
-                $args = $this->buildArgs($invokeParams, $r, $scope, $pathParams);
+            ) use ($instance, $method, $argBuilder): ResponseInterface {
+                $args = $argBuilder($r, $scope, $pathParams);
 
                 /** @psalm-suppress MixedMethodCall, MixedAssignment */
                 $result = $instance->{$method}(...$args);
@@ -233,6 +254,7 @@ final class HandlerResolver
         $reflection = new ReflectionFunction($closure);
         $invokeParams = $this->describeParams($reflection->getParameters(), inConstructor: false, owner: 'closure');
         $needsScope = $this->paramsNeedScope($invokeParams);
+        $argBuilder = $this->compileArgBuilder($invokeParams);
 
         $invoke =
             /**
@@ -242,8 +264,8 @@ final class HandlerResolver
                 ServerRequestInterface $r,
                 PerRequestActorScope $scope,
                 array $pathParams,
-            ) use ($closure, $invokeParams): ResponseInterface {
-                $args = $this->buildArgs($invokeParams, $r, $scope, $pathParams);
+            ) use ($closure, $argBuilder): ResponseInterface {
+                $args = $argBuilder($r, $scope, $pathParams);
 
                 /** @psalm-suppress MixedAssignment */
                 $result = $closure(...$args);
