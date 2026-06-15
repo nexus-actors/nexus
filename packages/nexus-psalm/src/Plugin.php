@@ -8,6 +8,7 @@ use Monadial\Nexus\Psalm\Hook\AskReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
@@ -36,6 +37,7 @@ final class Plugin implements PluginEntryPointInterface
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
             AskReturnTypeProvider::class,
+            MismatchedReplyTypeRule::class,
         ];
 
         foreach ($hooks as $hook) {

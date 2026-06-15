@@ -223,6 +223,85 @@ final class PluginTest extends TestCase
         );
     }
 
+    #[Test]
+    public function mismatchedReplyTypeFlagsWrongReply(): void
+    {
+        $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');
+        $lines = $this->filterIssueLines($output, 'MismatchedReplyType');
+
+        // 2 expected mismatches: line 61 (wrongReply) + line 87 (matchPattern second arm)
+        self::assertCount(2, $lines, "Expected 2 MismatchedReplyType issues:\n" . implode("\n", $lines));
+    }
+
+    #[Test]
+    public function mismatchedReplyTypeFiresOnDirectlyTypedHandler(): void
+    {
+        $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');
+        $lines = $this->filterIssueLines($output, 'MismatchedReplyType');
+
+        // wrongReply() at line 61: message=FetchOrderMessage, expected=ReplyOrder, got=ReplyUser
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (
+                str_contains($line, ':61:')
+                && str_contains($line, 'FetchOrderMessage')
+                && str_contains($line, 'ReplyOrder')
+                && str_contains($line, 'ReplyUser')
+            ) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue($found, "Expected MismatchedReplyType on wrongReply line 61:\n" . implode("\n", $lines));
+    }
+
+    #[Test]
+    public function mismatchedReplyTypeRespectsMatchPatternNarrowing(): void
+    {
+        $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');
+        $lines = $this->filterIssueLines($output, 'MismatchedReplyType');
+
+        // matchPattern() second arm at line 87: message=FetchUserMessage, expected=ReplyUser, got=ReplyOrder
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (
+                str_contains($line, ':87:')
+                && str_contains($line, 'FetchUserMessage')
+                && str_contains($line, 'ReplyUser')
+                && str_contains($line, 'ReplyOrder')
+            ) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected MismatchedReplyType on matchPattern arm at line 87:\n" . implode("\n", $lines),
+        );
+    }
+
+    #[Test]
+    public function mismatchedReplyTypeAllowsCorrectReplies(): void
+    {
+        $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');
+        $lines = $this->filterIssueLines($output, 'MismatchedReplyType');
+
+        // No issue on correctReply (line 51), untaggedAllowsAnything (line 73),
+        // matchPattern first arm (line 83).
+        foreach ($lines as $line) {
+            self::assertFalse(
+                str_contains($line, ':51:') || str_contains($line, ':73:') || str_contains($line, ':83:'),
+                "Unexpected MismatchedReplyType on a legitimate reply:\n{$line}",
+            );
+        }
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;
