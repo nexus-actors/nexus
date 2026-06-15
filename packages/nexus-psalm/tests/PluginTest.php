@@ -287,6 +287,68 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function behaviorSetupHookInfersGenericFromTypedActorContext(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorSetupInferenceFixture.php');
+
+        // typedContextReturnsTypedSetup() declares SetupBehavior<FixtureBootstrap>.
+        // Hook must read ActorContext<FixtureBootstrap> from the closure's
+        // first param and lift it out as the SetupBehavior generic.
+        $issues = $this->filterIssueLines($output, 'typedContextReturnsTypedSetup');
+
+        self::assertEmpty(
+            $issues,
+            "Expected typedContextReturnsTypedSetup to be clean — hook should infer SetupBehavior<FixtureBootstrap>:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorSetupHookFallsThroughForBareActorContext(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorSetupInferenceFixture.php');
+
+        // bareContextReturnsObjectSetup() uses ActorContext with no generic —
+        // hook must fall through so Psalm's default kicks in. Declared
+        // SetupBehavior<object> must match cleanly either way.
+        $issues = $this->filterIssueLines($output, 'bareContextReturnsObjectSetup');
+
+        self::assertEmpty(
+            $issues,
+            "Expected bareContextReturnsObjectSetup to be clean — hook must not narrow bare ActorContext:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorSetupHookFlagsMismatchedReturn(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorSetupInferenceFixture.php');
+
+        // typedContextWithMismatchedReturnFails() declares
+        // SetupBehavior<FixtureUnrelatedSetup> but the closure types
+        // ActorContext<FixtureBootstrap>. The hook MUST rewrite the return
+        // to SetupBehavior<FixtureBootstrap> and Psalm MUST flag mismatch.
+        $lines = $this->filterIssueLines($output, 'InvalidReturnStatement');
+
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (str_contains($line, 'FixtureBootstrap') && str_contains($line, 'FixtureUnrelatedSetup')) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected an InvalidReturnStatement mentioning both FixtureBootstrap (actual) and FixtureUnrelatedSetup (declared):\n"
+            . implode("\n", $lines),
+        );
+    }
+
+    #[Test]
     public function behaviorWithStateHookInfersBothGenericsFromTypedClosure(): void
     {
         $output = $this->runPsalmOnFixture('BehaviorWithStateInferenceFixture.php');
