@@ -89,10 +89,13 @@ RUN docker-php-ext-enable swoole
 
 # OPcache + JIT — see docker/opcache.ini for the rationale per-setting
 # and website/docs/http/performance.md for the full tuning guide. The
-# -prod.ini override sets validate_timestamps=0 — only safe here because
-# php-swoole is the production image (immutable bytecode).
+# zzz- prefix on the prod override matters: PHP loads conf.d/*.ini in
+# alphabetical order and later files override earlier ones. ASCII sorts
+# '-' (0x2D) BEFORE '.' (0x2E), so a name like `zz-opcache-prod.ini`
+# would actually load BEFORE `zz-opcache.ini` and get clobbered by it.
+# `zzz-` sorts strictly after `zz-`, ensuring the prod override wins.
 COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
-COPY docker/opcache-prod.ini /usr/local/etc/php/conf.d/zz-opcache-prod.ini
+COPY docker/zzz-opcache-prod.ini /usr/local/etc/php/conf.d/zzz-opcache-prod.ini
 
 CMD ["tail", "-f", "/dev/null"]
 
