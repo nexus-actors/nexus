@@ -156,6 +156,73 @@ final class PluginTest extends TestCase
         self::assertStringNotContains('MoreSpecificReturnType', $output);
     }
 
+    #[Test]
+    public function askReturnTypeProviderRewritesTaggedMessageToTypedFuture(): void
+    {
+        $output = $this->runPsalmOnFixture('AskReplyTypeFixture.php');
+
+        // taggedAskReturnsTypedFuture() declares `@return Future<FixtureOrder>`
+        // and returns the result of $orders->ask(new GetOrderFixture(...), ...).
+        // The hook must rewrite ask() to Future<FixtureOrder> so the return
+        // matches. If the hook were broken, Psalm would report
+        // MoreSpecificReturnType (the actual return is wider than declared).
+        // The fixture compiles clean (only the deliberate mismatch fires).
+        self::assertStringNotContains(':52:', $output, 'taggedAskReturnsTypedFuture line 52 must be clean');
+        self::assertStringNotContains(':53:', $output, 'taggedAskReturnsTypedFuture line 53 must be clean');
+        self::assertStringNotContains(':54:', $output, 'taggedAskReturnsTypedFuture line 54 must be clean');
+    }
+
+    #[Test]
+    public function askReturnTypeProviderLetsTypedAwaitFlowThrough(): void
+    {
+        $output = $this->runPsalmOnFixture('AskReplyTypeFixture.php');
+
+        // taggedAskAwaitReturnsTypedValue() (lines 60-65 in the fixture)
+        // returns FixtureOrder from ->await(). Without the hook, ->await()
+        // returns object/mixed and Psalm would report
+        // InvalidReturnStatement on THAT method specifically. The
+        // mismatched-return test method (lines 70-80) deliberately
+        // produces InvalidReturnStatement; we filter it out by line.
+        $issues = $this->filterIssueLines($output, 'InvalidReturnStatement');
+
+        foreach ($issues as $line) {
+            self::assertFalse(
+                str_contains($line, ':65:') || str_contains($line, ':66:') || str_contains($line, ':67:'),
+                "Unexpected InvalidReturnStatement on taggedAskAwaitReturnsTypedValue:\n{$line}",
+            );
+        }
+    }
+
+    #[Test]
+    public function askReturnTypeProviderFlagsMismatchedDeclaredReturn(): void
+    {
+        $output = $this->runPsalmOnFixture('AskReplyTypeFixture.php');
+
+        // taggedAskMismatchedReturnFails() declares Future<UntaggedRequest>
+        // but the hook says the actual return is Future<FixtureOrder>. Psalm
+        // MUST report this — proves the hook is actually constraining the
+        // type, not just adding it as an upper bound.
+        $lines = $this->filterIssueLines($output, 'InvalidReturnStatement');
+
+        self::assertNotEmpty($lines, "Expected InvalidReturnStatement on the mismatched-return fixture:\n{$output}");
+
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (str_contains($line, 'FixtureOrder') && str_contains($line, 'UntaggedRequest')) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected an InvalidReturnStatement mentioning both FixtureOrder (actual) and UntaggedRequest (declared):\n"
+            . implode("\n", $lines),
+        );
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;

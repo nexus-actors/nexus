@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
 
+use Monadial\Nexus\Psalm\Hook\AskReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
@@ -34,6 +35,7 @@ final class Plugin implements PluginEntryPointInterface
             MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
+            AskReturnTypeProvider::class,
         ];
 
         foreach ($hooks as $hook) {
