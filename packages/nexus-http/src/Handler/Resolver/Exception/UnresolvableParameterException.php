@@ -20,11 +20,6 @@ use function sprintf;
  */
 final class UnresolvableParameterException extends LogicException
 {
-    /**
-     * @psalm-suppress UndefinedClass — CompileContext lands in T3
-     * @psalm-suppress MixedArgument — cascades from CompileContext being undefined
-     * @psalm-suppress MixedPropertyFetch — cascades from CompileContext being undefined
-     */
     public static function forParameter(ReflectionParameter $param, CompileContext $ctx): self
     {
         $reflectionType = $param->getType();
