@@ -16,11 +16,7 @@ use function str_replace;
  */
 final readonly class AuthChallenge
 {
-    public function __construct(
-        public string $scheme,
-        public ?string $realm = null,
-        public ?string $error = null,
-    ) {}
+    public function __construct(public string $scheme, public ?string $realm = null, public ?string $error = null,) {}
 
     public function toHeader(): string
     {
