@@ -71,11 +71,6 @@ final class HandlerResolver
     }
 
     /**
-     * @param list<ParamMetadata> $params
-     * @param array<string, string> $pathParams
-     * @return list<mixed>
-     */
-    /**
      * Build an argument-list closure ONCE per handler at compile time. Captures
      * the per-worker services bag and the pre-compiled metadata list, so the
      * per-request hot path just allocates the request context and iterates.
