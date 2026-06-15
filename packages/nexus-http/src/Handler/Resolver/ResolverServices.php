@@ -20,7 +20,7 @@ use Psr\Container\ContainerInterface;
 final readonly class ResolverServices
 {
     public function __construct(
-        public ResolvedActorTable $actors,
+        public ?ResolvedActorTable $actors = null,
         public ?ContainerInterface $container = null,
         public ?MessageSerializer $serializer = null,
     ) {}

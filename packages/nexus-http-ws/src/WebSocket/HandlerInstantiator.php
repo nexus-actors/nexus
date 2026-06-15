@@ -4,32 +4,49 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Ws\WebSocket;
 
-use Monadial\Nexus\Http\Ws\WebSocket\Attribute\FromContext;
+use Monadial\Nexus\Http\Actor\ResolvedActorTable;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
+use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
+use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
+use Monadial\Nexus\Http\Handler\Resolver\ResolverServices;
+use Monadial\Nexus\Http\Handler\Resolver\Scope;
+use Monadial\Nexus\Http\Ws\WebSocket\Resolver\FromContextResolver;
+use Monadial\Nexus\Http\Ws\WebSocket\Resolver\WsConnectionContext;
+use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Container\ContainerInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use ReflectionClass;
-use ReflectionNamedType;
-use ReflectionParameter;
-use RuntimeException;
 
+use function array_map;
 use function count;
+use function is_string;
+use function str_starts_with;
 
 /**
  * @psalm-api
  *
- * Reflection-driven instantiation of WebSocketHandler subclasses.
- * Walks constructor params: #[FromContext] resolves to the current context
- * (validated as WebSocketContext); everything else goes through PSR-11.
- *
- * #[FromActor] is left to the user's container layer to resolve via a
- * standard PSR-11 binding — this instantiator does not special-case it.
+ * Reflection-driven instantiation of WebSocketHandler subclasses. Dispatches
+ * constructor parameter resolution through a shared ParamResolverRegistry,
+ * symmetric with nexus-http's HandlerResolver.
  */
 final class HandlerInstantiator
 {
     private readonly LoggerInterface $logger;
 
-    public function __construct(private readonly ContainerInterface $container, ?LoggerInterface $logger = null,) {
+    public function __construct(
+        private readonly ContainerInterface $container,
+        ?LoggerInterface $logger = null,
+        private readonly ?ParamResolverRegistry $registry = null,
+        private readonly ?ResolvedActorTable $actors = null,
+        private readonly ?MessageSerializer $serializer = null,
+    ) {
         $this->logger = $logger ?? new NullLogger();
     }
 
@@ -51,12 +68,26 @@ final class HandlerInstantiator
             return $rc->newInstance();
         }
 
-        $args = [];
+        $services = $this->services();
+        $compileCtx = new CompileContext(Scope::WsConnection, $handlerClass, $services);
+        $registry = $this->registry();
 
-        foreach ($ctor->getParameters() as $param) {
-            /** @psalm-suppress MixedAssignment */
-            $args[] = $this->resolveParam($param, $ctx, $handlerClass);
-        }
+        $metadata = array_map(
+            static fn($p): ParamMetadata => $registry->compile($p, $compileCtx),
+            $ctor->getParameters(),
+        );
+
+        $invocationCtx = new WsConnectionContext(
+            $services,
+            $ctx->request(),
+            $this->extractPathParams($ctx->request()),
+            $ctx,
+        );
+
+        $args = array_map(
+            static fn(ParamMetadata $m): mixed => $m->resolver->resolve($m, $invocationCtx),
+            $metadata,
+        );
 
         $this->logger->debug('HandlerInstantiator: handler instantiated', [
             'class' => $handlerClass,
@@ -68,53 +99,49 @@ final class HandlerInstantiator
         return $rc->newInstanceArgs($args);
     }
 
-    private function resolveParam(ReflectionParameter $param, WebSocketContext $ctx, string $handlerClass): mixed
+    /**
+     * @return array<string, string>
+     *
+     * @psalm-suppress MixedAssignment
+     */
+    private function extractPathParams(ServerRequestInterface $request): array
     {
-        $type = $param->getType();
+        $out = [];
 
-        if (count($param->getAttributes(FromContext::class)) > 0) {
-            if (!$type instanceof ReflectionNamedType || $type->getName() !== WebSocketContext::class) {
-                throw new RuntimeException(
-                    "#[FromContext] on {$handlerClass}::__construct(\${$param->getName()}) requires "
-                    . 'parameter type ' . WebSocketContext::class . '.',
-                );
-            }
+        /** @var array<string, mixed> $all */
+        $all = $request->getAttributes();
 
-            return $ctx;
-        }
-
-        /** @psalm-suppress ArgumentTypeCoercion */
-        if (count($param->getAttributes('Monadial\\Nexus\\Http\\Auth\\Attribute\\FromPrincipal')) > 0) {
-            /** @var mixed $principal */
-            $principal = $ctx->request()->getAttribute('principal');
-
-            if ($principal === null) {
-                throw new RuntimeException(
-                    "WebSocketHandler {$handlerClass} requested #[FromPrincipal] but no Principal "
-                    . 'on request — register AuthenticationMiddleware globally so the upgrade '
-                    . 'request gets a Principal stamped before reaching the WS dispatcher.',
-                );
-            }
-
-            return $principal;
-        }
-
-        if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
-            $id = $type->getName();
-
-            if ($this->container->has($id)) {
-                return $this->container->get($id);
+        foreach ($all as $key => $value) {
+            if (is_string($value) && !str_starts_with($key, '_')) {
+                $out[$key] = $value;
             }
         }
 
-        if ($param->isDefaultValueAvailable()) {
-            return $param->getDefaultValue();
+        return $out;
+    }
+
+    private function registry(): ParamResolverRegistry
+    {
+        if ($this->registry !== null) {
+            return $this->registry;
         }
 
-        if ($type instanceof ReflectionNamedType && $type->allowsNull()) {
-            return null;
+        $registry = (new ParamResolverRegistry())
+            ->with(new FromContextResolver())
+            ->with(new FromServiceResolver())
+            ->with(new ServerRequestResolver())
+            ->with(new PathParamResolver())
+            ->with(new ContainerFallbackResolver());
+
+        if ($this->actors !== null) {
+            $registry = $registry->withOverride(new FromActorResolver());
         }
 
-        throw new RuntimeException("Cannot resolve parameter \${$param->getName()} of {$handlerClass}::__construct.");
+        return $registry;
+    }
+
+    private function services(): ResolverServices
+    {
+        return new ResolverServices($this->actors, $this->container, $this->serializer);
     }
 }

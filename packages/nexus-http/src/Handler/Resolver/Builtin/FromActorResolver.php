@@ -16,6 +16,7 @@ use Monadial\Nexus\Http\Handler\Resolver\Scope;
 use Override;
 use ReflectionNamedType;
 use ReflectionParameter;
+use RuntimeException;
 
 /**
  * @psalm-api
@@ -38,6 +39,12 @@ final readonly class FromActorResolver implements ParamResolver
         }
 
         $actorName = $attrs[0]->newInstance()->name;
+
+        if ($ctx->services->actors === null) {
+            throw new RuntimeException(
+                "#[FromActor('{$actorName}')] used in {$ctx->owner} but no ResolvedActorTable wired",
+            );
+        }
 
         if (!$ctx->services->actors->hasAny($actorName)) {
             throw new UnknownActorException($actorName);
@@ -69,6 +76,12 @@ final readonly class FromActorResolver implements ParamResolver
         /** @var string $actorName */
         $actorName = $metadata->payload['actorName'];
         $actors = $ctx->services->actors;
+
+        if ($actors === null) {
+            throw new RuntimeException(
+                "FromActorResolver::resolve invoked without a ResolvedActorTable for \${$metadata->name}",
+            );
+        }
 
         if ($actors->isPerRequest($actorName)) {
             /** @var HttpRequestContext $ctx */
