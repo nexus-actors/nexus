@@ -43,8 +43,10 @@ use function count;
  *     // With hook:    ReceiveBehavior<GetOrder>
  *
  * The hook only fires when the closure's second parameter is a single
- * named class. Object, union, or untyped params fall through to Psalm's
- * default behavior (typically ReceiveBehavior<object>).
+ * named class. The bare `object` keyword (parsed as TObject, rejected by
+ * the `!instanceof TNamedObject` guard), unions, and untyped params all
+ * fall through to Psalm's default behavior (typically
+ * ReceiveBehavior<object>).
  */
 final class BehaviorReceiveReturnTypeProvider implements MethodReturnTypeProviderInterface
 {
@@ -120,12 +122,11 @@ final class BehaviorReceiveReturnTypeProvider implements MethodReturnTypeProvide
 
         $paramAtomic = $paramType->getSingleAtomic();
 
+        // Psalm parses the `object` keyword as a TObject atomic, not as
+        // TNamedObject('object'), so this guard also rejects bare `object`.
+        // The only way the next return could surface "object" is if a user
+        // class were literally named `object`, which PHP disallows.
         if (!$paramAtomic instanceof TNamedObject) {
-            return null;
-        }
-
-        // Skip if it's just "object" — that's the default fallback.
-        if ($paramAtomic->value === 'object') {
             return null;
         }
 
