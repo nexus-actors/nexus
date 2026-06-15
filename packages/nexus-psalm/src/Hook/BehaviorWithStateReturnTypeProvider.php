@@ -11,6 +11,7 @@ use Psalm\Plugin\EventHandler\Event\MethodReturnTypeProviderEvent;
 use Psalm\Plugin\EventHandler\MethodReturnTypeProviderInterface;
 use Psalm\Type\Atomic\TClosure;
 use Psalm\Type\Atomic\TGenericObject;
+use Psalm\Type\Atomic\TMixed;
 use Psalm\Type\Atomic\TNamedObject;
 use Psalm\Type\Atomic\TObject;
 use Psalm\Type\Union;
@@ -95,12 +96,22 @@ final class BehaviorWithStateReturnTypeProvider implements MethodReturnTypeProvi
             return null;
         }
 
-        $messageGeneric = self::resolveMessageGeneric($params[1]->type);
-        $stateGeneric = $params[2]->type;
+        $narrowMessage = self::tryNarrowMessage($params[1]->type);
+        $narrowState = self::tryNarrowState($params[2]->type);
 
-        if ($stateGeneric === null) {
+        // CRITICAL: when BOTH params are wide (object/mixed/untyped), fall
+        // through to Psalm's natural template inference. Otherwise the hook
+        // hard-codes WithStateBehavior<object, mixed> and breaks outer
+        // template bindings — see Props::fromStatefulFactory where the
+        // inner closure `(ActorContext, object $msg, mixed $state)` must
+        // bind U/S from the surrounding `@template U of object; @template S`
+        // context on fromStatefulFactory itself.
+        if ($narrowMessage === null && $narrowState === null) {
             return null;
         }
+
+        $messageGeneric = $narrowMessage ?? new Union([new TObject()]);
+        $stateGeneric = $narrowState ?? new Union([new TMixed()]);
 
         return new Union([
             new TGenericObject(WithStateBehavior::class, [$messageGeneric, $stateGeneric]),
@@ -108,36 +119,51 @@ final class BehaviorWithStateReturnTypeProvider implements MethodReturnTypeProvi
     }
 
     /**
-     * Resolve the WithStateBehavior `T` (message) generic from the closure's
-     * second parameter. Falls back to `object` when the param is missing,
-     * untyped, a union, or already `object` — keeping the existing receive
-     * hook's behavior: only narrow when we have a single concrete class.
+     * Try to narrow the message generic from the closure's second parameter.
+     * Returns a single-class Union if the param is a concrete named class,
+     * or null when the param is wide (object / union / untyped) — caller
+     * decides whether to fall through entirely or substitute a fallback.
      */
-    private static function resolveMessageGeneric(?Union $messageParamType): Union
+    private static function tryNarrowMessage(?Union $messageParamType): ?Union
     {
-        // Docblock `object` parses to TObject, not TNamedObject('object') —
-        // use it for the fallback so the inferred generic structurally
-        // matches user-declared `WithStateBehavior<object, ...>` types.
-        $objectFallback = new Union([new TObject()]);
-
         if ($messageParamType === null) {
-            return $objectFallback;
+            return null;
         }
 
         if (count($messageParamType->getAtomicTypes()) !== 1) {
-            return $objectFallback;
+            return null;
         }
 
         $atomic = $messageParamType->getSingleAtomic();
 
+        // TObject (docblock `object` keyword) is wide — not narrowable.
         if ($atomic instanceof TObject) {
-            return $objectFallback;
+            return null;
         }
 
         if (!$atomic instanceof TNamedObject) {
-            return $objectFallback;
+            return null;
         }
 
         return new Union([new TNamedObject($atomic->value)]);
+    }
+
+    /**
+     * Try to narrow the state generic from the closure's third parameter.
+     * Returns the param's full Union verbatim, or null when the param is
+     * absent or annotated as bare `mixed` — `mixed` carries no information
+     * and should be treated as a fall-through signal, not a binding.
+     */
+    private static function tryNarrowState(?Union $stateParamType): ?Union
+    {
+        if ($stateParamType === null) {
+            return null;
+        }
+
+        if (count($stateParamType->getAtomicTypes()) === 1 && $stateParamType->getSingleAtomic() instanceof TMixed) {
+            return null;
+        }
+
+        return $stateParamType;
     }
 }
