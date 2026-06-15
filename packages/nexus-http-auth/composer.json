@@ -1,0 +1,30 @@
+{
+  "name": "nexus-actors/http-auth",
+  "description": "Pluggable authentication and authorization for the Nexus HTTP stack.",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.5",
+    "lcobucci/jwt": "^5.0",
+    "nexus-actors/http": "self.version",
+    "psr/http-factory": "^1.1",
+    "psr/http-message": "^2.0",
+    "psr/http-server-middleware": "^1.0",
+    "psr/log": "^3.0"
+  },
+  "require-dev": {
+    "nexus-actors/http-ws": "self.version",
+    "nexus-actors/http-toolkit": "self.version",
+    "nyholm/psr7": "^1.8",
+    "phpunit/phpunit": "^13.0"
+  },
+  "suggest": {
+    "nexus-actors/http-ws": "Install when you want WebSocket auth — the same middleware works on the upgrade request.",
+    "nexus-actors/logger": "Install for structured PSR-3 logs of auth decisions with MDC integration."
+  },
+  "autoload": { "psr-4": { "Monadial\\Nexus\\Http\\Auth\\": "src/" } },
+  "autoload-dev": { "psr-4": { "Monadial\\Nexus\\Http\\Auth\\Tests\\": "tests/" } },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "config": { "sort-packages": true }
+}
