@@ -12,6 +12,7 @@ use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Middleware\AuthorizationMiddleware;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
+use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Auth\Tests\Support\InMemoryAuthenticator;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Response\Response;
@@ -31,9 +32,6 @@ final class HttpAuthIntegrationTest extends TestCase
     #[Test]
     public function publicRouteAcceptsAnonymousRequest(): void
     {
-        self::markTestSkipped('Re-enabled in T15 after paramResolver() extension API');
-
-        /** @phpstan-ignore-next-line unreachable */
         HttpTestClient::for($this->buildApp())
             ->get('/health')
             ->assertOk();
@@ -42,9 +40,6 @@ final class HttpAuthIntegrationTest extends TestCase
     #[Test]
     public function requiresAuthWithValidTokenYields200(): void
     {
-        self::markTestSkipped('Re-enabled in T15 after paramResolver() extension API');
-
-        /** @phpstan-ignore-next-line unreachable */
         HttpTestClient::for($this->buildApp())
             ->withBearerToken('k_alice')
             ->get('/me')
@@ -55,9 +50,6 @@ final class HttpAuthIntegrationTest extends TestCase
     #[Test]
     public function requiresAuthWithoutTokenYields401(): void
     {
-        self::markTestSkipped('Re-enabled in T15 after paramResolver() extension API');
-
-        /** @phpstan-ignore-next-line unreachable */
         HttpTestClient::for($this->buildApp())
             ->get('/me')
             ->assertUnauthorized()
@@ -67,9 +59,6 @@ final class HttpAuthIntegrationTest extends TestCase
     #[Test]
     public function requiresScopeWithTokenMissingScopeYields403(): void
     {
-        self::markTestSkipped('Re-enabled in T15 after paramResolver() extension API');
-
-        /** @phpstan-ignore-next-line unreachable */
         HttpTestClient::for($this->buildApp())
             ->withBearerToken('k_alice')
             ->post('/orders', ['sku' => 'X'])
@@ -80,9 +69,6 @@ final class HttpAuthIntegrationTest extends TestCase
     #[Test]
     public function requiresScopeWithTokenCarryingScopeYields201(): void
     {
-        self::markTestSkipped('Re-enabled in T15 after paramResolver() extension API');
-
-        /** @phpstan-ignore-next-line unreachable */
         HttpTestClient::for($this->buildApp())
             ->withBearerToken('k_bob')
             ->post('/orders', ['sku' => 'X'])
@@ -103,7 +89,8 @@ final class HttpAuthIntegrationTest extends TestCase
         //                          because it must run AFTER RouterMiddleware stamps
         //                          _resolvedHandlerClass.
         $app = HttpApplication::create($system)
-            ->middleware(new AuthenticationMiddleware($auth));
+            ->middleware(new AuthenticationMiddleware($auth))
+            ->paramResolver(new FromPrincipalResolver());
 
         $app->get('/health', static fn(): ResponseInterface => Response::ok());
         $app->get('/me', MeHandler::class)->middleware(AuthorizationMiddleware::class);

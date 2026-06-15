@@ -11,6 +11,7 @@ use Monadial\Nexus\Http\App\ErrorMode;
 use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\SimpleCache\CacheInterface;
@@ -37,6 +38,8 @@ interface Application
     public function group(string $prefix, Closure $register): RouteGroup;
 
     public function middleware(string|MiddlewareInterface $middleware): self;
+
+    public function paramResolver(ParamResolver $resolver, bool $override = false): self;
 
     public function actor(string $name, Props $props): ActorRegistration;
 

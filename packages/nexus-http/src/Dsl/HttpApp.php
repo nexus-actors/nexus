@@ -19,6 +19,15 @@ use Monadial\Nexus\Http\Discovery\RouteDiscoverer;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromBodyResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PerRequestScopeResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
 use Monadial\Nexus\Http\Middleware\ExceptionHandlerMiddleware;
 use Monadial\Nexus\Http\Middleware\MiddlewareInvoker;
 use Monadial\Nexus\Http\Middleware\MiddlewarePipeline;
@@ -65,6 +74,9 @@ final class HttpApp
 
     /** @var list<Closure(ExceptionMapperRegistry): void> */
     private array $userExceptionRegistrations = [];
+
+    /** @var list<ParamResolver> */
+    private array $paramResolvers = [];
 
     private ErrorMode $errorMode = ErrorMode::Production;
 
@@ -174,7 +186,7 @@ final class HttpApp
 
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.
-        $resolver = new HandlerResolver($table, $this->container, $this->messageSerializer);
+        $resolver = new HandlerResolver($table, $this->container, $this->messageSerializer, $this->buildRegistry());
         $middlewareResolver = new MiddlewareResolver($this->container);
         $handlersByKey = [];
         $routeMwsByKey = [];
@@ -306,6 +318,17 @@ final class HttpApp
         return $this;
     }
 
+    public function paramResolver(ParamResolver $resolver, bool $override = false): self
+    {
+        if ($override) {
+            array_unshift($this->paramResolvers, $resolver);
+        } else {
+            $this->paramResolvers[] = $resolver;
+        }
+
+        return $this;
+    }
+
     public function patch(string $path, string|Closure $handler): RouteBuilder
     {
         return $this->registerRoute('PATCH', $path, $handler);
@@ -369,6 +392,24 @@ final class HttpApp
         $this->useDefaultExceptionHandler = false;
 
         return $this;
+    }
+
+    private function buildRegistry(): ParamResolverRegistry
+    {
+        $registry = (new ParamResolverRegistry())
+            ->with(new FromActorResolver())
+            ->with(new FromBodyResolver())
+            ->with(new FromServiceResolver())
+            ->with(new ServerRequestResolver())
+            ->with(new PerRequestScopeResolver())
+            ->with(new PathParamResolver())
+            ->with(new ContainerFallbackResolver());
+
+        foreach ($this->paramResolvers as $resolver) {
+            $registry = $registry->with($resolver);
+        }
+
+        return $registry;
     }
 
     private function registerRoute(string $method, string $path, string|Closure $handler): RouteBuilder

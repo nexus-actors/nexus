@@ -14,6 +14,7 @@ use Monadial\Nexus\Http\App\ErrorMode;
 use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
 use Monadial\Nexus\Http\Ws\WebSocket\ChannelActorRegistry;
 use Monadial\Nexus\Http\Ws\WebSocket\Exception\DuplicateRouteException;
 use Monadial\Nexus\Http\Ws\WebSocket\HandlerInstantiator;
@@ -119,6 +120,14 @@ final class WsApplication implements Application
     public function middleware(string|MiddlewareInterface $middleware): self
     {
         $this->inner->middleware($middleware);
+
+        return $this;
+    }
+
+    #[Override]
+    public function paramResolver(ParamResolver $resolver, bool $override = false): self
+    {
+        $this->inner->paramResolver($resolver, $override);
 
         return $this;
     }
