@@ -66,6 +66,7 @@ const sidebars = {
         'http/servers',
         'http/observability',
         'http/production',
+        'http/performance',
       ],
     },
     {
