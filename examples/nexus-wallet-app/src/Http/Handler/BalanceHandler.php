@@ -29,16 +29,17 @@ final readonly class BalanceHandler
         #[FromActor('wallets')]
         ActorRef $directory,
     ): ResponseInterface {
-        $reply = $request->ask(
-            static fn(ActorRef $rt): HandleRequest => new HandleRequest(
-                ownerId: $principal->id(),
-                action: 'balance',
-                amountCents: 0,
-                directory: $directory,
-                replyTo: $rt,
-            ),
-            Duration::seconds(2),
-        )->await();
+        $reply = $request
+            ->ask(
+                new HandleRequest(
+                    ownerId: $principal->id(),
+                    action: 'balance',
+                    amountCents: 0,
+                    directory: $directory,
+                ),
+                Duration::seconds(2),
+            )
+            ->await();
 
         assert($reply instanceof BalanceSnapshot);
 

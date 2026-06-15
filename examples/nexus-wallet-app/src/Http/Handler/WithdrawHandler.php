@@ -43,16 +43,17 @@ final readonly class WithdrawHandler
             return Response::badRequest('amount must be a positive integer');
         }
 
-        $reply = $request->ask(
-            static fn(ActorRef $rt): HandleRequest => new HandleRequest(
-                ownerId: $principal->id(),
-                action: 'withdraw',
-                amountCents: $amount,
-                directory: $directory,
-                replyTo: $rt,
-            ),
-            Duration::seconds(2),
-        )->await();
+        $reply = $request
+            ->ask(
+                new HandleRequest(
+                    ownerId: $principal->id(),
+                    action: 'withdraw',
+                    amountCents: $amount,
+                    directory: $directory,
+                ),
+                Duration::seconds(2),
+            )
+            ->await();
 
         assert($reply instanceof WithdrawResult);
 

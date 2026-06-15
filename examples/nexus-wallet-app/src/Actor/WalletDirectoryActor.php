@@ -15,9 +15,11 @@ use Monadial\Nexus\Persistence\Event\EventStore;
  *
  * Registered once at startup via `$app->actor('wallets', …)`. On
  * EnsureWallet it looks up the cached child by ownerId, spawns it if
- * absent, and replies with a WalletRef. Children inherit the directory's
- * supervisor — a failed wallet restarts via the default one-for-one
- * strategy without taking out the directory or its siblings.
+ * absent, and replies via `$ctx->reply(new WalletRef($child))`.
+ *
+ * Children inherit the directory's supervisor — a failed wallet
+ * restarts via the default one-for-one strategy without taking out
+ * the directory or its siblings.
  *
  * @psalm-type RegistryState = array<string, \Monadial\Nexus\Core\Actor\ActorRef<object>>
  */
@@ -40,7 +42,7 @@ final readonly class WalletDirectoryActor
                 $existing = $registry[$message->ownerId] ?? null;
 
                 if ($existing !== null && $existing->isAlive()) {
-                    $message->replyTo->tell(new WalletRef($existing));
+                    $ctx->reply(new WalletRef($existing));
 
                     return BehaviorWithState::same();
                 }
@@ -51,7 +53,7 @@ final readonly class WalletDirectoryActor
                 );
 
                 $registry[$message->ownerId] = $child;
-                $message->replyTo->tell(new WalletRef($child));
+                $ctx->reply(new WalletRef($child));
 
                 return BehaviorWithState::next($registry);
             },

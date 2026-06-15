@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Wallet\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Example\Wallet\Domain\Command\Deposit;
 use Monadial\Nexus\Example\Wallet\Domain\Command\GetBalance;
@@ -24,9 +23,13 @@ use Monadial\Nexus\Runtime\Duration;
  * rate-limit tokens, transient retry counters).
  *
  * Wire-up flow per request:
- *   handler → ask(this) → ask(directory) → ask(wallet) → reply → handler
+ *   handler --ask--> RequestActor --ask--> Directory --ask--> Wallet
  *
- * The directory ref arrives with the HandleRequest message — the
+ * Each hop uses `ask()` which stamps the temporary reply ref onto the
+ * envelope; the recipient calls `$ctx->reply(...)` to resolve the
+ * caller's Future.
+ *
+ * The directory ref arrives WITH the HandleRequest message — the HTTP
  * handler grabs both `#[FromActor('request')]` and
  * `#[FromActor('wallets')]` and threads them through.
  */
@@ -36,21 +39,14 @@ final readonly class RequestActor
     {
         return Behavior::receive(
             static function (ActorContext $ctx, HandleRequest $message): Behavior {
-                $walletRef = $message->directory->ask(
-                    static fn(ActorRef $rt): EnsureWallet => new EnsureWallet($message->ownerId, $rt),
-                    Duration::seconds(2),
-                )->await();
+                $walletRef = $message->directory
+                    ->ask(new EnsureWallet($message->ownerId), Duration::seconds(2))
+                    ->await();
 
                 $command = match ($message->action) {
-                    'deposit' => static fn(ActorRef $rt): Deposit => new Deposit(
-                        new Money($message->amountCents),
-                        $rt,
-                    ),
-                    'withdraw' => static fn(ActorRef $rt): Withdraw => new Withdraw(
-                        new Money($message->amountCents),
-                        $rt,
-                    ),
-                    'balance' => static fn(ActorRef $rt): GetBalance => new GetBalance($rt),
+                    'deposit' => new Deposit(new Money($message->amountCents)),
+                    'withdraw' => new Withdraw(new Money($message->amountCents)),
+                    'balance' => new GetBalance(),
                     default => null,
                 };
 
@@ -58,8 +54,11 @@ final readonly class RequestActor
                     return Behavior::same();
                 }
 
-                $reply = $walletRef->ref->ask($command, Duration::seconds(2))->await();
-                $message->replyTo->tell($reply);
+                $reply = $walletRef->ref
+                    ->ask($command, Duration::seconds(2))
+                    ->await();
+
+                $ctx->reply($reply);
 
                 return Behavior::same();
             },
