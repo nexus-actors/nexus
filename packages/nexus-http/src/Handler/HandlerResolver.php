@@ -86,6 +86,11 @@ final class HandlerResolver
                     $r,
                     $p->type ?? throw new LogicException('FromBody param missing type'),
                 ),
+                ParamMetadata::KIND_FROM_PRINCIPAL => $r->getAttribute('principal')
+                    ?? throw new LogicException(
+                        'Handler requested #[FromPrincipal] but no Principal on request — '
+                        . 'register AuthenticationMiddleware globally.',
+                    ),
                 ParamMetadata::KIND_FROM_SERVICE => $this->resolveService($p->serviceId ?? $p->type ?? '', $p->name),
                 ParamMetadata::KIND_CONTAINER => $this->resolveService($p->type ?? '', $p->name),
                 default => throw new LogicException("Unsupported param kind: {$p->kind}"),
@@ -163,6 +168,22 @@ final class HandlerResolver
             if ($fromService !== []) {
                 $serviceId = $fromService[0]->newInstance()->id;
                 $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_SERVICE, serviceId: $serviceId);
+
+                continue;
+            }
+
+            /** @psalm-suppress ArgumentTypeCoercion */
+            $fromPrincipal = $p->getAttributes('Monadial\\Nexus\\Http\\Auth\\Attribute\\FromPrincipal');
+
+            if ($fromPrincipal !== []) {
+                if ($inConstructor) {
+                    throw new LogicException(
+                        "Cannot resolve {$owner}::__construct(\${$name}) via #[FromPrincipal] — "
+                        . 'principal is per-request; declare it on __invoke() instead.',
+                    );
+                }
+
+                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_PRINCIPAL);
 
                 continue;
             }

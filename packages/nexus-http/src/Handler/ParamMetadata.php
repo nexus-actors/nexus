@@ -10,6 +10,7 @@ final readonly class ParamMetadata
     public const string KIND_CONTAINER = 'container';
     public const string KIND_FROM_ACTOR = 'from_actor';
     public const string KIND_FROM_BODY = 'from_body';
+    public const string KIND_FROM_PRINCIPAL = 'from_principal';
     public const string KIND_FROM_SERVICE = 'from_service';
     public const string KIND_PATH_PARAM = 'path_param';
     public const string KIND_REQUEST_SCOPE = 'request_scope';
