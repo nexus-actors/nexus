@@ -189,6 +189,157 @@ Inside a Swoole runtime this yields the coroutine — other requests on the
 same thread continue running. Use `ask` for read paths; use `tell` (no
 reply) for fire-and-forget writes where the actor is the source of truth.
 
+## Custom parameter injection
+
+The four attributes above (`#[FromActor]`, `#[FromService]`, `#[FromBody]`,
+`#[FromContext]`) cover most needs. When they don't — typically when a
+cross-cutting value lives on the request and you'd rather not thread the
+PSR-7 `ServerRequestInterface` through every handler — write a custom
+*param resolver*.
+
+The classic use case: a multi-tenant SaaS where every request resolves
+to a tenant ID (from a subdomain, a header, a JWT claim). Adding a
+`#[FromTenant]` parameter attribute is a small, isolated piece of glue
+that keeps handler signatures honest about what they depend on, without
+forcing every handler to know how the tenant is computed.
+
+Four steps.
+
+### Step 1: Define the attribute
+
+A parameter-level attribute with no constructor arguments. The class
+exists purely as a marker; the resolver below does the actual work.
+
+```php
+namespace App\Http\Attribute;
+
+use Attribute;
+
+#[Attribute(Attribute::TARGET_PARAMETER)]
+final readonly class FromTenant
+{
+}
+```
+
+If you needed configurable behaviour (e.g. `#[FromTenant(default: 'public')]`),
+you'd add constructor parameters here and read them inside the resolver
+via `$attrs[0]->newInstance()`.
+
+### Step 2: Implement the resolver
+
+The `ParamResolver` interface has two methods:
+
+- `compile()` runs once at handler-resolve time. Decide whether this
+  resolver claims the parameter; if yes return a `ParamMetadata`; if no
+  return `null` so the next resolver gets a turn.
+- `resolve()` runs per request, producing the actual value.
+
+```php
+namespace App\Http\Resolver;
+
+use App\Http\Attribute\FromTenant;
+use LogicException;
+use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
+use Monadial\Nexus\Http\Handler\Resolver\InvocationContext;
+use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\RequestBoundContext;
+use Override;
+use ReflectionParameter;
+
+final readonly class FromTenantResolver implements ParamResolver
+{
+    #[Override]
+    public function compile(ReflectionParameter $param, CompileContext $ctx): ?ParamMetadata
+    {
+        // Not our attribute? Defer.
+        if ($param->getAttributes(FromTenant::class) === []) {
+            return null;
+        }
+
+        // The tenant lives on the request, which only exists at request
+        // time. Refuse to resolve in handler constructors.
+        if (!$ctx->isRequestBound()) {
+            throw new LogicException(
+                "#[FromTenant] cannot be used in {$ctx->owner}::__construct() — "
+                . 'tenant is per-request; declare it on __invoke() instead.',
+            );
+        }
+
+        return new ParamMetadata(resolver: $this, name: $param->getName(), type: 'string');
+    }
+
+    #[Override]
+    public function resolve(ParamMetadata $metadata, InvocationContext $ctx): mixed
+    {
+        assert($ctx instanceof RequestBoundContext);
+
+        $tenant = $ctx->request->getAttribute('tenant');
+
+        if (!is_string($tenant) || $tenant === '') {
+            throw new LogicException(
+                'Handler requested #[FromTenant] but no tenant attribute on the request — '
+                . 'register TenantResolutionMiddleware globally.',
+            );
+        }
+
+        return $tenant;
+    }
+}
+```
+
+A few things worth pointing out:
+
+- Compile-time errors (used in the wrong scope) crash boot, not requests.
+  That's the right tradeoff: every handler is exercised on the first
+  cold boot, so misuses surface immediately.
+- The `assert($ctx instanceof RequestBoundContext)` is safe — the
+  framework guarantees `resolve()` is only ever called with metadata
+  this resolver produced, and our `compile()` already rejected
+  non-request-bound scopes.
+- The middleware that *stamps* the tenant attribute is your code; the
+  resolver only reads it.
+
+### Step 3: Register the resolver
+
+One line in the application bootstrap:
+
+```php
+$app = HttpApplication::create($system)
+    ->middleware(new TenantResolutionMiddleware($tenantLookup))
+    ->paramResolver(new FromTenantResolver());
+```
+
+Resolvers are stored in an ordered registry. By default new resolvers
+are *appended* — built-ins try first, then your resolver. If you ever
+need to override a built-in attribute's behaviour, pass
+`override: true` to prepend.
+
+### Step 4: Use it
+
+```php
+final class ShowDashboardHandler
+{
+    public function __invoke(
+        #[FromTenant] string $tenantId,
+        #[FromService(DashboardRepository::class)] DashboardRepository $repo,
+    ): ResponseInterface {
+        return JsonResponse::ok($repo->forTenant($tenantId)->toArray());
+    }
+}
+```
+
+The handler signature now states its real dependency: "I need a tenant
+ID and a repository." How those arrive is the framework's problem.
+
+The same pattern works for `WebSocketHandler` constructors — they run
+in `Scope::WsConnection`, which is also request-bound, so
+`isRequestBound()` returns true and the resolver fires identically.
+
+For the full list of built-in resolvers and the `ParamResolver` /
+`CompileContext` / `InvocationContext` reference, see
+[the package page](../packages/http.md#custom-param-resolvers).
+
 ## Handler Resolution
 
 For a route bound to a class-string, the framework:

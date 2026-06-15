@@ -30,6 +30,7 @@ use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Middleware\AuthorizationMiddleware;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
+use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 
@@ -56,11 +57,22 @@ final class MeHandler
 }
 
 $app = HttpApplication::create($system)
-    ->middleware(new AuthenticationMiddleware($auth));        // global
+    ->middleware(new AuthenticationMiddleware($auth))         // global
+    ->paramResolver(new FromPrincipalResolver());             // enables #[FromPrincipal]
 
 $app->get('/me', MeHandler::class)
     ->middleware(AuthorizationMiddleware::class);             // per-route
 ```
+
+The `paramResolver(new FromPrincipalResolver())` call is the one-line
+opt-in for `#[FromPrincipal]`. Without it the framework has no idea
+the attribute exists — `nexus-http` core deliberately does not depend
+on `nexus-http-auth`, so this package contributes its resolver into
+the host application's registry at boot time.
+
+A single registration covers both HTTP handlers and WebSocket handlers:
+the resolver gates itself on `Scope::isRequestBound()`, which is true
+for both `HttpRequest` and `WsConnection` scopes.
 
 ## Principal
 
@@ -340,7 +352,9 @@ policy-driven.
 
 ### #[FromPrincipal]
 
-Constructor or `__invoke()` parameter injection of the current Principal:
+Parameter injection of the current Principal on `__invoke()` (HTTP) or
+the `WebSocketHandler` constructor (WS — that constructor runs
+per-connection).
 
 ```php
 public function __invoke(#[FromPrincipal] Principal $me): JsonResponse
@@ -349,8 +363,25 @@ public function __invoke(#[FromPrincipal] Principal $me): JsonResponse
 }
 ```
 
-Use it on `__invoke()` parameters rather than the constructor — handler
-instances are constructed once at boot, but Principal is per-request.
+`#[FromPrincipal]` is **not enabled by default**. The resolver lives
+in this package; register it once on your application:
+
+```php
+use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
+
+$app = HttpApplication::create($system)
+    ->middleware(new AuthenticationMiddleware($auth))
+    ->paramResolver(new FromPrincipalResolver());   // ← required for #[FromPrincipal]
+```
+
+This is deliberate: `nexus-http` core has no dependency on
+`nexus-http-auth`, so the attribute opt-in is an explicit one-line
+registration rather than auto-magic. A single registration covers both
+HTTP handlers and WebSocket handlers — the resolver is scope-aware.
+
+Do **not** use `#[FromPrincipal]` on HTTP handler constructors. Handler
+instances are built once at boot, but the Principal is per-request; the
+resolver throws at compile time if it sees this misuse.
 
 ## WebSocket auth
 
@@ -362,10 +393,12 @@ via the upgrade request:
 $ctx->request()->getAttribute('principal');
 ```
 
-`WebSocketHandler` constructors can use `#[FromPrincipal]` directly — the
-`HandlerInstantiator` in `nexus-http-ws` (patched in T10) recognises the
-attribute via FQCN string lookup so the package still works without
-requiring `nexus-http-auth` as a hard dependency.
+`WebSocketHandler` constructors can use `#[FromPrincipal]` directly,
+provided you've registered `FromPrincipalResolver` on the application.
+The same resolver instance handles both HTTP `__invoke()` parameters
+and WS handler constructors — `nexus-http-ws` consults the same
+`ParamResolverRegistry` `nexus-http` does, so there's nothing extra
+to wire for WebSockets.
 
 ## Failure mode reference
 

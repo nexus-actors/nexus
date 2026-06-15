@@ -107,6 +107,150 @@ final class CreateOrderHandler
 - **`#[FromBody] Dto $dto`** — request body decoded into the typed DTO via
   the configured deserializer.
 
+## Custom Param Resolvers
+
+The four built-in attributes above (`#[FromActor]`, `#[FromService]`,
+`#[FromBody]`, plus per-request `#[FromContext]` for WebSockets) are not
+hard-coded into the resolver. They're implementations of one interface —
+`ParamResolver` — and you can register your own to inject anything else
+into handler parameters: a tenant ID, a feature flag, a request trace,
+a parsed query DSL.
+
+`nexus-http-auth` ships its `#[FromPrincipal]` attribute exactly this
+way. The core stays dependency-free; the auth package extends it.
+
+### The contract
+
+```php
+namespace Monadial\Nexus\Http\Handler\Resolver;
+
+interface ParamResolver
+{
+    public function compile(ReflectionParameter $param, CompileContext $ctx): ?ParamMetadata;
+
+    public function resolve(ParamMetadata $metadata, InvocationContext $ctx): mixed;
+}
+```
+
+Two phases, each called by a different layer of the framework:
+
+- **`compile()`** runs once per handler class, at *handler-resolve time*.
+  Inspect the parameter, decide whether your resolver handles it (return
+  `null` to defer to the next resolver in the chain), and if so produce
+  a `ParamMetadata` carrying everything the per-request `resolve()` will
+  need. Compile-time validation errors (unknown actor name, missing type
+  hint, missing dependency) belong here — they crash boot, not requests.
+
+- **`resolve()`** runs *per request* (or per connection, for WebSockets).
+  The framework only ever calls `resolve()` with metadata produced by the
+  same resolver, so the payload shape is yours to trust.
+
+`ParamMetadata` carries a back-ref to its producing resolver, the
+parameter name, an optional type, and an opaque `payload` array. The
+framework never inspects the payload.
+
+### Scopes
+
+A `CompileContext` carries a `Scope` enum that tells your resolver where
+in the handler lifecycle the parameter sits:
+
+| Scope | Where | Available data |
+|---|---|---|
+| `Scope::HttpBoot` | HTTP handler `__construct()` | services only (no request) |
+| `Scope::HttpRequest` | HTTP handler `__invoke()` | services + request + per-request scope |
+| `Scope::WsConnection` | `WebSocketHandler::__construct()` | services + request + connection |
+
+Resolvers that need a request body, principal, or path parameter gate
+themselves with `if (!$ctx->isRequestBound()) return null;` — that
+single line short-circuits the HttpBoot scope cleanly.
+
+### Registration
+
+```php
+$app->paramResolver(new MyResolver());                  // appended (built-ins still run first)
+$app->paramResolver(new MyResolver(), override: true);  // prepended (wins over built-ins)
+```
+
+The registry is consulted in order; first non-null `compile()` wins.
+`override: true` is the escape hatch for replacing a built-in attribute
+with your own implementation.
+
+### A worked example: `#[FromHeader]`
+
+Inject a single HTTP header value into a handler `__invoke()` parameter.
+
+```php
+// 1. The attribute.
+#[Attribute(Attribute::TARGET_PARAMETER)]
+final readonly class FromHeader
+{
+    public function __construct(public string $name) {}
+}
+
+// 2. The resolver.
+final readonly class FromHeaderResolver implements ParamResolver
+{
+    public function compile(ReflectionParameter $param, CompileContext $ctx): ?ParamMetadata
+    {
+        $attrs = $param->getAttributes(FromHeader::class);
+
+        if ($attrs === [] || !$ctx->isRequestBound()) {
+            return null;
+        }
+
+        return new ParamMetadata(
+            resolver: $this,
+            name: $param->getName(),
+            type: 'string',
+            payload: ['header' => $attrs[0]->newInstance()->name],
+        );
+    }
+
+    public function resolve(ParamMetadata $metadata, InvocationContext $ctx): mixed
+    {
+        assert($ctx instanceof RequestBoundContext);
+
+        return $ctx->request->getHeaderLine($metadata->payload['header']);
+    }
+}
+
+// 3. The handler.
+final class TraceHandler
+{
+    public function __invoke(
+        ServerRequestInterface $req,
+        #[FromHeader('X-Trace-Id')] string $traceId,
+    ): ResponseInterface {
+        return JsonResponse::ok(['trace' => $traceId]);
+    }
+}
+
+// 4. The registration.
+$app = HttpApplication::create($system)
+    ->paramResolver(new FromHeaderResolver());
+```
+
+The same resolver works for WebSocket handler constructors too — the
+WsConnection scope is also request-bound.
+
+### Built-in resolvers
+
+The seven resolvers `nexus-http` ships, in registration order:
+
+| Resolver | Recognises | Available in |
+|---|---|---|
+| `FromActorResolver` | `#[FromActor('name')]` | HttpBoot, HttpRequest, WsConnection |
+| `FromServiceResolver` | `#[FromService(Id::class)]` | HttpBoot, HttpRequest, WsConnection |
+| `FromBodyResolver` | `#[FromBody]` | HttpRequest, WsConnection |
+| `PathParamResolver` | parameter name matches `{placeholder}` | HttpRequest |
+| `ServerRequestResolver` | `ServerRequestInterface` type-hint | HttpRequest, WsConnection |
+| `PerRequestScopeResolver` | `PerRequestActorScope` type-hint | HttpRequest |
+| `ContainerFallbackResolver` | any other class type-hint, last resort | HttpBoot, HttpRequest, WsConnection |
+
+Third-party resolvers (like `FromPrincipalResolver` from
+`nexus-http-auth`) are appended after these — except when registered
+with `override: true`, which prepends.
+
 ## Route Attribute
 
 Mark a handler class with `#[Route]` and let the auto-discoverer find it:
