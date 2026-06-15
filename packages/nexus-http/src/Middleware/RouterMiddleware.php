@@ -23,6 +23,8 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Symfony\Component\Uid\Ulid;
 
+use function is_string;
+
 /**
  * @psalm-api
  *
@@ -71,6 +73,10 @@ final class RouterMiddleware implements MiddlewareInterface
 
         foreach ($result->pathParams as $name => $value) {
             $request = $request->withAttribute($name, $value);
+        }
+
+        if (is_string($route->handler)) {
+            $request = $request->withAttribute('_resolvedHandlerClass', $route->handler);
         }
 
         $externalRequestId = $request->getHeaderLine('X-Request-Id');
