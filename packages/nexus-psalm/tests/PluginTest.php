@@ -224,6 +224,69 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function behaviorReceiveHookInfersTypedMessageGeneric(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorReceiveInferenceFixture.php');
+
+        // typedClosureReturnsTypedReceive() declares `@return ReceiveBehavior<FixtureGreet>`
+        // and returns Behavior::receive(...) with a typed closure parameter.
+        // If the hook is broken, Psalm reports MoreSpecificReturnType / LessSpecificReturnStatement
+        // because the actual return resolves to ReceiveBehavior<object>.
+        $issues = $this->filterIssueLines($output, 'typedClosureReturnsTypedReceive');
+
+        self::assertEmpty(
+            $issues,
+            "Expected typedClosureReturnsTypedReceive to be clean — hook should infer ReceiveBehavior<FixtureGreet>:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorReceiveHookFallsThroughForObjectParam(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorReceiveInferenceFixture.php');
+
+        // untypedClosureReturnsObjectReceive() takes `object $msg` — hook
+        // explicitly skips this case so Psalm's default applies. Declared
+        // return is ReceiveBehavior<object> which must match either way.
+        $issues = $this->filterIssueLines($output, 'untypedClosureReturnsObjectReceive');
+
+        self::assertEmpty(
+            $issues,
+            "Expected untypedClosureReturnsObjectReceive to be clean — hook must not narrow `object` params:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorReceiveHookFlagsMismatchedReturn(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorReceiveInferenceFixture.php');
+
+        // typedClosureWithMismatchedReturnFails() declares
+        // ReceiveBehavior<FixtureUnrelated> but the closure takes FixtureGreet.
+        // The hook MUST rewrite the call's return to ReceiveBehavior<FixtureGreet>
+        // and Psalm MUST report InvalidReturnStatement mentioning both.
+        $lines = $this->filterIssueLines($output, 'InvalidReturnStatement');
+
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (str_contains($line, 'FixtureGreet') && str_contains($line, 'FixtureUnrelated')) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected an InvalidReturnStatement mentioning both FixtureGreet (actual) and FixtureUnrelated (declared):\n"
+            . implode("\n", $lines),
+        );
+    }
+
+    #[Test]
     public function mismatchedReplyTypeFlagsWrongReply(): void
     {
         $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');
