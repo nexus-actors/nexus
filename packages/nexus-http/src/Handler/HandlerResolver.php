@@ -8,11 +8,20 @@ use Closure;
 use LogicException;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
-use Monadial\Nexus\Http\Exception\PerRequestActorInConstructorException;
-use Monadial\Nexus\Http\Exception\UnknownActorException;
-use Monadial\Nexus\Http\Handler\Attribute\FromActor;
-use Monadial\Nexus\Http\Handler\Attribute\FromBody;
-use Monadial\Nexus\Http\Handler\Attribute\FromService;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromBodyResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PerRequestScopeResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
+use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
+use Monadial\Nexus\Http\Handler\Resolver\HttpBootContext;
+use Monadial\Nexus\Http\Handler\Resolver\HttpRequestContext;
+use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
+use Monadial\Nexus\Http\Handler\Resolver\ResolverServices;
+use Monadial\Nexus\Http\Handler\Resolver\Scope;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Nyholm\Psr7\Response;
@@ -22,7 +31,6 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use ReflectionClass;
 use ReflectionFunction;
-use ReflectionNamedType;
 use ReflectionParameter;
 
 /**
@@ -37,6 +45,7 @@ final class HandlerResolver
         private readonly ResolvedActorTable $actors,
         private readonly ?ContainerInterface $container,
         private readonly ?MessageSerializer $serializer = null,
+        private readonly ?ParamResolverRegistry $registry = null,
     ) {}
 
     /**
@@ -72,41 +81,12 @@ final class HandlerResolver
         PerRequestActorScope $scope,
         array $pathParams,
     ): array {
-        /** @var list<mixed> $args */
-        $args = [];
+        $ctx = new HttpRequestContext($this->services(), $r, $pathParams, $scope);
 
-        foreach ($params as $p) {
-            /** @psalm-suppress MixedAssignment */
-            $args[] = match ($p->kind) {
-                ParamMetadata::KIND_SERVER_REQUEST => $r,
-                ParamMetadata::KIND_REQUEST_SCOPE => $scope,
-                ParamMetadata::KIND_PATH_PARAM => $pathParams[$p->name] ?? '',
-                ParamMetadata::KIND_FROM_ACTOR => $this->resolveActorForCall($p, $scope),
-                ParamMetadata::KIND_FROM_BODY => $this->deserializeBody(
-                    $r,
-                    $p->type ?? throw new LogicException('FromBody param missing type'),
-                ),
-                ParamMetadata::KIND_FROM_PRINCIPAL => $r->getAttribute('principal')
-                    ?? throw new LogicException(
-                        'Handler requested #[FromPrincipal] but no Principal on request — '
-                        . 'register AuthenticationMiddleware globally.',
-                    ),
-                ParamMetadata::KIND_FROM_SERVICE => $this->resolveService($p->serviceId ?? $p->type ?? '', $p->name),
-                ParamMetadata::KIND_CONTAINER => $this->resolveService($p->type ?? '', $p->name),
-                default => throw new LogicException("Unsupported param kind: {$p->kind}"),
-            };
-        }
-
-        return $args;
-    }
-
-    private function deserializeBody(ServerRequestInterface $r, string $type): object
-    {
-        if ($this->serializer === null) {
-            throw new LogicException('No MessageSerializer wired — cannot resolve #[FromBody]');
-        }
-
-        return $this->serializer->deserialize((string) $r->getBody(), $type);
+        return array_map(
+            static fn(ParamMetadata $p): mixed => $p->resolver->resolve($p, $ctx),
+            $params,
+        );
     }
 
     /**
@@ -115,124 +95,20 @@ final class HandlerResolver
      */
     private function describeParams(array $params, bool $inConstructor, string $owner): array
     {
-        $out = [];
+        $ctx = new CompileContext(
+            $inConstructor
+                ? Scope::HttpBoot
+                : Scope::HttpRequest,
+            $owner,
+            $this->services(),
+        );
 
-        foreach ($params as $p) {
-            $name = $p->getName();
-            $reflectionType = $p->getType();
-            $type = $reflectionType instanceof ReflectionNamedType
-                ? $reflectionType->getName()
-                : null;
+        $registry = $this->registry();
 
-            $fromActor = $p->getAttributes(FromActor::class);
-
-            if ($fromActor !== []) {
-                $actorName = $fromActor[0]->newInstance()->name;
-
-                if (!$this->actors->hasAny($actorName)) {
-                    throw new UnknownActorException($actorName);
-                }
-
-                if ($inConstructor && $this->actors->isPerRequest($actorName)) {
-                    throw new PerRequestActorInConstructorException($owner, $name, $actorName);
-                }
-
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_ACTOR, $actorName);
-
-                continue;
-            }
-
-            $fromBody = $p->getAttributes(FromBody::class);
-
-            if ($fromBody !== []) {
-                if ($type === null) {
-                    throw new LogicException(
-                        "Cannot resolve {$owner} param \${$name} via #[FromBody] — no class type hint",
-                    );
-                }
-
-                if ($this->serializer === null) {
-                    throw new LogicException(
-                        "{$owner} param \${$name} uses #[FromBody] but no MessageSerializer is wired. "
-                        . 'Call HttpApp::withMessageSerializer(...) at boot.',
-                    );
-                }
-
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_BODY);
-
-                continue;
-            }
-
-            $fromService = $p->getAttributes(FromService::class);
-
-            if ($fromService !== []) {
-                $serviceId = $fromService[0]->newInstance()->id;
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_SERVICE, serviceId: $serviceId);
-
-                continue;
-            }
-
-            /** @psalm-suppress ArgumentTypeCoercion */
-            $fromPrincipal = $p->getAttributes('Monadial\\Nexus\\Http\\Auth\\Attribute\\FromPrincipal');
-
-            if ($fromPrincipal !== []) {
-                if ($inConstructor) {
-                    throw new LogicException(
-                        "Cannot resolve {$owner}::__construct(\${$name}) via #[FromPrincipal] — "
-                        . 'principal is per-request; declare it on __invoke() instead.',
-                    );
-                }
-
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_FROM_PRINCIPAL);
-
-                continue;
-            }
-
-            if ($type === ServerRequestInterface::class) {
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_SERVER_REQUEST);
-
-                continue;
-            }
-
-            if ($type === PerRequestActorScope::class) {
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_REQUEST_SCOPE);
-
-                continue;
-            }
-
-            if ($type === 'string' && !$inConstructor) {
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_PATH_PARAM);
-
-                continue;
-            }
-
-            if ($inConstructor) {
-                if ($type === null) {
-                    throw new LogicException(
-                        "Cannot resolve {$owner}::__construct(\${$name}) "
-                        . '— no type hint and no #[FromActor]/#[FromService] attribute',
-                    );
-                }
-
-                if ($this->container === null || !$this->container->has($type)) {
-                    throw new LogicException(
-                        "Cannot resolve {$owner}::__construct(\${$name}: {$type}) — no #[FromService] attribute "
-                        . "and no PSR-11 container binding for '{$type}'",
-                    );
-                }
-
-                $out[] = new ParamMetadata($name, $type, ParamMetadata::KIND_CONTAINER);
-
-                continue;
-            }
-
-            throw new LogicException(
-                "Cannot resolve {$owner} parameter \${$name}: add #[FromActor], "
-                . 'type-hint ServerRequestInterface, PerRequestActorScope, or use string for path params',
-            );
-        }
-
-        return $out;
+        return array_values(array_map(
+            static fn(ReflectionParameter $p): ParamMetadata => $registry->compile($p, $ctx),
+            $params,
+        ));
     }
 
     /**
@@ -246,22 +122,11 @@ final class HandlerResolver
             return $this->container->get($class);
         }
 
-        /** @var list<mixed> $args */
-        $args = [];
-
-        foreach ($ctorParams as $p) {
-            /** @psalm-suppress MixedAssignment */
-            $args[] = match ($p->kind) {
-                ParamMetadata::KIND_FROM_ACTOR => $this->actors->resolve($p->actorName ?? ''),
-                ParamMetadata::KIND_FROM_SERVICE => $this->resolveCtorService(
-                    $class,
-                    $p->name,
-                    $p->serviceId ?? $p->type ?? '',
-                ),
-                ParamMetadata::KIND_CONTAINER => $this->resolveCtorService($class, $p->name, $p->type ?? ''),
-                default => throw new LogicException("Unsupported constructor param kind: {$p->kind}"),
-            };
-        }
+        $bootCtx = new HttpBootContext($this->services());
+        $args = array_map(
+            static fn(ParamMetadata $p): mixed => $p->resolver->resolve($p, $bootCtx),
+            $ctorParams,
+        );
 
         /** @psalm-suppress MixedMethodCall */
         return new $class(...$args);
@@ -271,11 +136,7 @@ final class HandlerResolver
     private function paramsNeedScope(array $params): bool
     {
         foreach ($params as $p) {
-            if ($p->kind === ParamMetadata::KIND_REQUEST_SCOPE) {
-                return true;
-            }
-
-            if ($p->kind === ParamMetadata::KIND_FROM_ACTOR && $this->actors->isPerRequest($p->actorName ?? '')) {
+            if ($p->needsScope) {
                 return true;
             }
         }
@@ -313,15 +174,20 @@ final class HandlerResolver
         throw new LogicException('Handler must return ResponseInterface, Future, or a typed object');
     }
 
-    private function resolveActorForCall(ParamMetadata $p, PerRequestActorScope $scope): object
+    private function registry(): ParamResolverRegistry
     {
-        $actorName = $p->actorName ?? '';
-
-        if ($this->actors->isPerRequest($actorName)) {
-            return $scope->spawn($actorName);
+        if ($this->registry !== null) {
+            return $this->registry;
         }
 
-        return $this->actors->resolve($actorName);
+        return (new ParamResolverRegistry())
+            ->with(new FromActorResolver())
+            ->with(new FromBodyResolver())
+            ->with(new FromServiceResolver())
+            ->with(new ServerRequestResolver())
+            ->with(new PerRequestScopeResolver())
+            ->with(new PathParamResolver())
+            ->with(new ContainerFallbackResolver());
     }
 
     /**
@@ -392,19 +258,6 @@ final class HandlerResolver
     /**
      * @param class-string $class
      */
-    private function resolveCtorService(string $class, string $paramName, string $id): object
-    {
-        if ($this->container === null) {
-            throw new LogicException("Cannot resolve {$class}::{$paramName} without a container");
-        }
-
-        /** @var object */
-        return $this->container->get($id);
-    }
-
-    /**
-     * @param class-string $class
-     */
     private function resolveInvokableClass(string $class): ResolvedHandler
     {
         $reflection = new ReflectionClass($class);
@@ -420,12 +273,8 @@ final class HandlerResolver
         return $this->resolveClassMethod($class, $method);
     }
 
-    private function resolveService(string $id, string $paramName): mixed
+    private function services(): ResolverServices
     {
-        if ($this->container === null) {
-            throw new LogicException("Cannot resolve param \${$paramName} without a container");
-        }
-
-        return $this->container->get($id);
+        return new ResolverServices($this->actors, $this->container, $this->serializer);
     }
 }

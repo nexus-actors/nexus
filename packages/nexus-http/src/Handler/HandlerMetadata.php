@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Handler;
 
+use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
+
 /**
  * @psalm-api
  *
