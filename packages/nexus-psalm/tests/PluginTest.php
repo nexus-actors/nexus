@@ -287,6 +287,72 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function behaviorWithStateHookInfersBothGenericsFromTypedClosure(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorWithStateInferenceFixture.php');
+
+        // fullyTypedClosureReturnsBothGenerics() declares
+        // WithStateBehavior<FixtureIncrement, int>. Hook must rewrite the
+        // return so it matches; broken hook → MoreSpecificReturnType.
+        $issues = $this->filterIssueLines($output, 'fullyTypedClosureReturnsBothGenerics');
+
+        self::assertEmpty(
+            $issues,
+            "Expected fullyTypedClosureReturnsBothGenerics to be clean — hook should infer both generics:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorWithStateHookPartiallyInfersWhenMessageIsObject(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorWithStateInferenceFixture.php');
+
+        // objectMessageWithTypedStateReturnsPartialGeneric() takes `object $msg`
+        // but typed `int $count`. The hook should still narrow state, so the
+        // declared WithStateBehavior<object, int> must match cleanly.
+        $issues = $this->filterIssueLines($output, 'objectMessageWithTypedStateReturnsPartialGeneric');
+
+        self::assertEmpty(
+            $issues,
+            "Expected objectMessageWithTypedStateReturnsPartialGeneric to be clean — hook must still narrow state:\n"
+            . implode("\n", $issues),
+        );
+    }
+
+    #[Test]
+    public function behaviorWithStateHookFlagsMismatchedStateGeneric(): void
+    {
+        $output = $this->runPsalmOnFixture('BehaviorWithStateInferenceFixture.php');
+
+        // typedClosureWithMismatchedStateReturnFails() declares
+        // WithStateBehavior<FixtureIncrement, string> but the closure says
+        // S = int. Psalm MUST report InvalidReturnStatement — proves the
+        // hook is constraining the state generic, not just adding it.
+        $lines = $this->filterIssueLines($output, 'InvalidReturnStatement');
+
+        $found = false;
+
+        foreach ($lines as $line) {
+            if (
+                str_contains($line, 'FixtureIncrement')
+                && str_contains($line, 'string')
+                && str_contains($line, 'int')
+            ) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected InvalidReturnStatement mentioning FixtureIncrement, string (declared), int (actual):\n"
+            . implode("\n", $lines),
+        );
+    }
+
+    #[Test]
     public function mismatchedReplyTypeFlagsWrongReply(): void
     {
         $output = $this->runPsalmOnFixture('MismatchedReplyTypeFixture.php');

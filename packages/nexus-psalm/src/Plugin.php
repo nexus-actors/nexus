@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Psalm;
 use Monadial\Nexus\Psalm\Hook\AskReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BehaviorReceiveReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
+use Monadial\Nexus\Psalm\Hook\BehaviorWithStateReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
@@ -39,6 +40,7 @@ final class Plugin implements PluginEntryPointInterface
             CloneWithReturnTypeProvider::class,
             AskReturnTypeProvider::class,
             BehaviorReceiveReturnTypeProvider::class,
+            BehaviorWithStateReturnTypeProvider::class,
             MismatchedReplyTypeRule::class,
         ];
 
