@@ -45,9 +45,10 @@ use function strcasecmp;
  *     // Untyped ActorContext (no generic) falls through to Psalm's default.
  *
  * Only fires when the closure's first parameter is a TGenericObject for
- * `ActorContext` (or subclass) whose single template argument is a
- * concrete named class. Falls through for bare `ActorContext` (no
- * generic), unions, or `object` — never widens past the upstream default.
+ * `ActorContext` whose single template argument is a concrete named class.
+ * Falls through for bare `ActorContext` (no generic), unions, or the
+ * bare `object` keyword (parsed as TObject, rejected by the
+ * `!instanceof TNamedObject` guard) — never widens past Psalm's default.
  */
 final class BehaviorSetupReturnTypeProvider implements MethodReturnTypeProviderInterface
 {
@@ -145,11 +146,11 @@ final class BehaviorSetupReturnTypeProvider implements MethodReturnTypeProviderI
 
         $messageAtomic = $messageGeneric->getSingleAtomic();
 
+        // Psalm parses the `object` keyword as a TObject atomic, not as
+        // TNamedObject('object'), so this guard also rejects bare `object`.
+        // The only way the next return could surface "object" is if a user
+        // class were literally named `object`, which PHP disallows.
         if (!$messageAtomic instanceof TNamedObject) {
-            return null;
-        }
-
-        if ($messageAtomic->value === 'object') {
             return null;
         }
 
