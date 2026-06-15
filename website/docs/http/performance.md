@@ -316,16 +316,26 @@ uniformly-fast `/hello/load` benchmark:
 |---|---|---|---|---|---|
 | Baseline (registry, default Docker) | 108k | 40 ms | 99 ms | 1.40 s | 14 |
 | + Closure pre-binding (`3efe0b87`) | 112k | 34 ms | 71 ms | 1.01 s | 5 |
-| + Kernel sysctls (this page) | **115k** | **33 ms** | 68 ms | 1.00 s | **1** |
+| + Kernel sysctls | **115k** | **33 ms** | 68 ms | 1.00 s | **1** |
 | + Preemptive coroutines | 115k | 35 ms | 82 ms | 1.40 s | 4 |
-| + OPcache JIT (config — not measured) | — | — | — | — | — |
+| + OPcache + JIT tracing | **117k** | 36 ms | 88 ms | 1.01 s | 2 |
 
-Preemptive coroutine scheduling does NOT help on this workload — every
-handler returns in microseconds, so the forced yield-checks are pure
-overhead. See the
-[Preemptive coroutine scheduling](#preemptive-coroutine-scheduling)
-caveat above. For workloads with handler-duration variance, it's the
-biggest single p99 lever you have.
+**Honest findings:**
+
+- **Preemptive coroutine scheduling** does NOT help on this workload —
+  every handler returns in microseconds, so the forced yield-checks
+  are pure overhead. See the
+  [Preemptive coroutine scheduling](#preemptive-coroutine-scheduling)
+  caveat above. For workloads with handler-duration variance, it's the
+  biggest single p99 lever you have.
+
+- **OPcache + JIT** gives a small (~1-2% RPS) gain on this synthetic
+  workload because there's no hot CPU-bound loop for the JIT to trace.
+  The same config will give 10-30% on workloads with real computation
+  (JSON serialization of large payloads, template rendering, hash
+  computation, string manipulation in routing). It's also the correct
+  production config regardless of measured gain — running CLI without
+  OPcache and JIT in production is leaving free perf on the table.
 
 ## Further reading
 

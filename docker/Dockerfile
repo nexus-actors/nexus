@@ -87,6 +87,11 @@ FROM base-zts AS php-swoole
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
 
+# OPcache + JIT — production-correct config; see docker/opcache.ini for
+# the rationale per-setting and website/docs/http/performance.md for the
+# full tuning guide.
+COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
+
 CMD ["tail", "-f", "/dev/null"]
 
 # ── Target: php-full (ZTS + xdebug + swoole thread) ──
@@ -94,5 +99,7 @@ FROM xdebug-zts AS php-full
 
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
+
+COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 
 CMD ["tail", "-f", "/dev/null"]
