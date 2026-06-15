@@ -46,6 +46,7 @@ final class SwooleThreadServer
             : new HttpServer($config->host, $config->port, SWOOLE_THREAD, SWOOLE_SOCK_TCP);
 
         $server->set([
+            ...$config->swooleSettings,
             'max_request' => $config->maxRequest,
             'worker_num' => $threads,
             /**

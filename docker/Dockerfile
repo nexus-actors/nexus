@@ -87,10 +87,12 @@ FROM base-zts AS php-swoole
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
 
-# OPcache + JIT — production-correct config; see docker/opcache.ini for
-# the rationale per-setting and website/docs/http/performance.md for the
-# full tuning guide.
+# OPcache + JIT — see docker/opcache.ini for the rationale per-setting
+# and website/docs/http/performance.md for the full tuning guide. The
+# -prod.ini override sets validate_timestamps=0 — only safe here because
+# php-swoole is the production image (immutable bytecode).
 COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
+COPY docker/opcache-prod.ini /usr/local/etc/php/conf.d/zz-opcache-prod.ini
 
 CMD ["tail", "-f", "/dev/null"]
 
@@ -100,6 +102,11 @@ FROM xdebug-zts AS php-full
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
 
+# DEV image: base OPcache only — NO -prod.ini override. Devs editing
+# volume-mounted code expect changes to take effect; validate_timestamps=1
+# (the default in opcache.ini) re-stats every 2 seconds. Xdebug also
+# disables JIT at load, so the jit_buffer_size in opcache.ini is unused
+# here — acceptable cost for a dev image.
 COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 
 CMD ["tail", "-f", "/dev/null"]

@@ -18,6 +18,9 @@ use Swoole\Thread\Queue;
  */
 final readonly class SwooleThreadConfig
 {
+    /**
+     * @param array<string, mixed> $swooleSettings
+     */
     public function __construct(
         public string $host,
         public int $port,
@@ -28,6 +31,7 @@ final readonly class SwooleThreadConfig
         public LoggerInterface $logger,
         public bool $enableWebSocket,
         public ?Queue $logQueue = null,
+        public array $swooleSettings = [],
     ) {}
 
     public static function bind(string $host, int $port = 8080): self
@@ -42,7 +46,23 @@ final readonly class SwooleThreadConfig
             logger: new NullLogger(),
             enableWebSocket: false,
             logQueue: null,
+            swooleSettings: [],
         );
+    }
+
+    /**
+     * Merge arbitrary Swoole server settings into the `$server->set([...])`
+     * call. Use for tcp_nodelay, tcp_defer_accept, socket_buffer_size,
+     * backlog, etc. — see website/docs/http/performance.md for the full list.
+     *
+     * Framework-controlled keys (max_request, worker_num, init_arguments)
+     * always win; user settings can't override them.
+     *
+     * @param array<string, mixed> $settings
+     */
+    public function withSwooleSetting(array $settings): self
+    {
+        return clone($this, ['swooleSettings' => [...$this->swooleSettings, ...$settings]]);
     }
 
     /**

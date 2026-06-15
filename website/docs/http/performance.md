@@ -28,6 +28,12 @@ Reasonable targets for an 8-thread Nexus deploy on commodity hardware:
 Hitting the comfortable column is mostly free — install Nexus, write
 handlers, ship. The stretch column requires the tuning below.
 
+**Caveat:** these numbers are measured against an empty-handler workload
+(`/hello/load` — single JSON response, no I/O). Expect 30–50% reduction
+for handlers that touch a database, send actor messages, or render
+templates. The framework overhead stays the same; your application
+workload dominates from there.
+
 ## The four bottlenecks
 
 In production load, latency comes from one of:
@@ -100,6 +106,12 @@ The JIT specifically helps polymorphic dispatch — every `$resolver->resolve($p
 $ctx)` is a virtual call that the JIT can trace and inline. Without it, each
 call costs a vtable lookup.
 
+Nexus does NOT ship a default `preload.php` — preload requires a stable
+absolute `realpath` and an `opcache.preload_user`, which are
+deployment-specific. The example below is a starting point; copy it into
+your project root and adjust the paths to match where your `vendor/` and
+`packages/` live.
+
 A minimal preload file:
 
 ```php title="preload.php"
@@ -122,16 +134,15 @@ foreach (glob(__DIR__ . '/packages/nexus-http/src/Middleware/*.php') as $f) {
 opcache_compile_file(__DIR__ . '/packages/nexus-http/src/Routing/Dispatcher.php');
 ```
 
-In production, also disable runtime asserts:
+In production, compile asserts out entirely:
 
 ```ini
-assert.active=0
 zend.assertions=-1
 ```
 
-Several Nexus resolvers use `assert($ctx instanceof RequestBoundContext)` —
-in production these become no-ops the JIT removes entirely. With asserts
-active, you pay the `instanceof` per resolver per request.
+With `zend.assertions=-1` PHP compiles `assert(...)` calls out at parse
+time — any defensive `assert()` checks in your code or dependencies cost
+literally zero. This is also the default in our `docker/opcache.ini`.
 
 ## Swoole: server config
 
