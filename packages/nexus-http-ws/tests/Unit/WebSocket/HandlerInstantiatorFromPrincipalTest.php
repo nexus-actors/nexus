@@ -4,9 +4,17 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Ws\Tests\Unit\WebSocket;
 
+use LogicException;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
 use Monadial\Nexus\Http\Ws\Tests\Unit\WebSocket\Support\ArrayContainer;
 use Monadial\Nexus\Http\Ws\WebSocket\HandlerInstantiator;
+use Monadial\Nexus\Http\Ws\WebSocket\Resolver\FromContextResolver;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketHandler;
@@ -16,7 +24,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\ServerRequestInterface;
-use RuntimeException;
 use stdClass;
 
 #[CoversClass(HandlerInstantiator::class)]
@@ -25,9 +32,6 @@ final class HandlerInstantiatorFromPrincipalTest extends TestCase
     #[Test]
     public function from_principal_constructor_param_resolves_principal_from_request_attribute(): void
     {
-        self::markTestSkipped('Re-enabled in T14 after FromPrincipalResolver registration');
-
-        /** @phpstan-ignore-next-line unreachable */
         $principal = new stdClass();
         $principal->id = 'tomas';
 
@@ -36,7 +40,7 @@ final class HandlerInstantiatorFromPrincipalTest extends TestCase
 
         $ctx = new PrincipalCarryingWebSocketContext(42, $request);
 
-        $handler = (new HandlerInstantiator(new ArrayContainer()))
+        $handler = (new HandlerInstantiator(new ArrayContainer(), null, $this->registry()))
             ->instantiate(PrincipalAwareWebSocketHandler::class, $ctx);
 
         self::assertInstanceOf(PrincipalAwareWebSocketHandler::class, $handler);
@@ -46,18 +50,26 @@ final class HandlerInstantiatorFromPrincipalTest extends TestCase
     #[Test]
     public function from_principal_throws_when_no_principal_on_request(): void
     {
-        self::markTestSkipped('Re-enabled in T14 after FromPrincipalResolver registration');
-
-        /** @phpstan-ignore-next-line unreachable */
         $request = new ServerRequest('GET', '/ws/echo');
         $ctx = new PrincipalCarryingWebSocketContext(7, $request);
 
-        $instantiator = new HandlerInstantiator(new ArrayContainer());
+        $instantiator = new HandlerInstantiator(new ArrayContainer(), null, $this->registry());
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(LogicException::class);
         $this->expectExceptionMessage('FromPrincipal');
 
         $instantiator->instantiate(PrincipalAwareWebSocketHandler::class, $ctx);
+    }
+
+    private function registry(): ParamResolverRegistry
+    {
+        return (new ParamResolverRegistry())
+            ->with(new FromContextResolver())
+            ->with(new FromServiceResolver())
+            ->with(new ServerRequestResolver())
+            ->with(new PathParamResolver())
+            ->with(new ContainerFallbackResolver())
+            ->with(new FromPrincipalResolver());
     }
 }
 

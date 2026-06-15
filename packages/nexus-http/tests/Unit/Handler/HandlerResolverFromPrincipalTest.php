@@ -10,7 +10,16 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromBodyResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\PerRequestScopeResolver;
+use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
 use Monadial\Nexus\Http\Response\Response;
 use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -49,12 +58,9 @@ final class HandlerResolverFromPrincipalTest extends TestCase
     #[Test]
     public function from_principal_param_reads_the_principal_request_attribute(): void
     {
-        self::markTestSkipped('Re-enabled in T14 after FromPrincipalResolver registration');
-
-        /** @phpstan-ignore-next-line unreachable */
         $system = ActorSystem::create('test', new TestRuntime());
         $table = ResolvedActorTable::build([], $system, null);
-        $resolver = new HandlerResolver($table, null);
+        $resolver = new HandlerResolver($table, null, null, $this->registry());
 
         $resolved = $resolver->resolve(_PrincipalInvokeHandler::class);
 
@@ -73,12 +79,9 @@ final class HandlerResolverFromPrincipalTest extends TestCase
     #[Test]
     public function from_principal_in_constructor_throws_logic_exception(): void
     {
-        self::markTestSkipped('Re-enabled in T14 after FromPrincipalResolver registration');
-
-        /** @phpstan-ignore-next-line unreachable */
         $system = ActorSystem::create('test', new TestRuntime());
         $table = ResolvedActorTable::build([], $system, null);
-        $resolver = new HandlerResolver($table, null);
+        $resolver = new HandlerResolver($table, null, null, $this->registry());
 
         $this->expectException(LogicException::class);
         $this->expectExceptionMessage('#[FromPrincipal]');
@@ -89,12 +92,9 @@ final class HandlerResolverFromPrincipalTest extends TestCase
     #[Test]
     public function from_principal_missing_request_attribute_throws_logic_exception(): void
     {
-        self::markTestSkipped('Re-enabled in T14 after FromPrincipalResolver registration');
-
-        /** @phpstan-ignore-next-line unreachable */
         $system = ActorSystem::create('test', new TestRuntime());
         $table = ResolvedActorTable::build([], $system, null);
-        $resolver = new HandlerResolver($table, null);
+        $resolver = new HandlerResolver($table, null, null, $this->registry());
 
         $resolved = $resolver->resolve(_PrincipalInvokeHandler::class);
 
@@ -104,5 +104,18 @@ final class HandlerResolverFromPrincipalTest extends TestCase
         $this->expectExceptionMessage('AuthenticationMiddleware');
 
         ($resolved->invoke)(new ServerRequest('GET', '/me'), $scope, []);
+    }
+
+    private function registry(): ParamResolverRegistry
+    {
+        return (new ParamResolverRegistry())
+            ->with(new FromActorResolver())
+            ->with(new FromBodyResolver())
+            ->with(new FromServiceResolver())
+            ->with(new ServerRequestResolver())
+            ->with(new PerRequestScopeResolver())
+            ->with(new PathParamResolver())
+            ->with(new ContainerFallbackResolver())
+            ->with(new FromPrincipalResolver());
     }
 }
