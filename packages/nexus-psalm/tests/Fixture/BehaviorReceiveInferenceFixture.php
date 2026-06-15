@@ -44,16 +44,21 @@ final class BehaviorReceiveInferenceFixture
     /**
      * Untyped (just `object`) closure → hook falls through (the early-skip
      * for "object" param), Psalm's default applies and returns
-     * ReceiveBehavior<object>. This guards against the hook accidentally
-     * narrowing to never or widening past object.
+     * ReceiveBehavior<object>. The @psalm-trace pins the literal resolved
+     * type so a regression where the hook eagerly returns the wrong generic
+     * (e.g., ReceiveBehavior<never>) gets caught — a passing covariant
+     * return-type check alone is not strong enough.
      *
      * @return ReceiveBehavior<object>
      */
     public function untypedClosureReturnsObjectReceive(): ReceiveBehavior
     {
-        return Behavior::receive(
+        $b = Behavior::receive(
             static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
         );
+
+        /** @psalm-trace $b */
+        return $b;
     }
 
     /**

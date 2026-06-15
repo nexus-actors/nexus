@@ -246,15 +246,27 @@ final class PluginTest extends TestCase
     {
         $output = $this->runPsalmOnFixture('BehaviorReceiveInferenceFixture.php');
 
-        // untypedClosureReturnsObjectReceive() takes `object $msg` — hook
-        // explicitly skips this case so Psalm's default applies. Declared
-        // return is ReceiveBehavior<object> which must match either way.
-        $issues = $this->filterIssueLines($output, 'untypedClosureReturnsObjectReceive');
+        // untypedClosureReturnsObjectReceive() takes `object $msg`. The
+        // fixture binds the result to $b and emits @psalm-trace $b so the
+        // RESOLVED type is observable in Psalm's output. Declared-return
+        // matching alone is too loose — it would pass even if the hook
+        // returned ReceiveBehavior<never>. The trace pins the literal type.
+        $traces = $this->filterIssueLines($output, 'Trace');
 
-        self::assertEmpty(
-            $issues,
-            "Expected untypedClosureReturnsObjectReceive to be clean — hook must not narrow `object` params:\n"
-            . implode("\n", $issues),
+        $found = false;
+
+        foreach ($traces as $line) {
+            if (str_contains($line, 'ReceiveBehavior<object>')) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected @psalm-trace to report ReceiveBehavior<object> for the object-param fall-through case:\n"
+            . implode("\n", $traces),
         );
     }
 
@@ -308,15 +320,27 @@ final class PluginTest extends TestCase
     {
         $output = $this->runPsalmOnFixture('BehaviorSetupInferenceFixture.php');
 
-        // bareContextReturnsObjectSetup() uses ActorContext with no generic —
-        // hook must fall through so Psalm's default kicks in. Declared
-        // SetupBehavior<object> must match cleanly either way.
-        $issues = $this->filterIssueLines($output, 'bareContextReturnsObjectSetup');
+        // bareContextReturnsObjectSetup() uses ActorContext with no generic.
+        // The fixture binds the result to $b and emits @psalm-trace $b so
+        // the RESOLVED type is observable. Declared-return matching alone
+        // would pass even if the hook returned SetupBehavior<never>; the
+        // trace pins the literal type that Psalm's default produces.
+        $traces = $this->filterIssueLines($output, 'Trace');
 
-        self::assertEmpty(
-            $issues,
-            "Expected bareContextReturnsObjectSetup to be clean — hook must not narrow bare ActorContext:\n"
-            . implode("\n", $issues),
+        $found = false;
+
+        foreach ($traces as $line) {
+            if (str_contains($line, 'SetupBehavior<object>')) {
+                $found = true;
+
+                break;
+            }
+        }
+
+        self::assertTrue(
+            $found,
+            "Expected @psalm-trace to report SetupBehavior<object> for the bare-ActorContext fall-through case:\n"
+            . implode("\n", $traces),
         );
     }
 

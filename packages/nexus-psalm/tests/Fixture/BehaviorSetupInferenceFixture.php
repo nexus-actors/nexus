@@ -41,16 +41,21 @@ final class BehaviorSetupInferenceFixture
 
     /**
      * Bare ActorContext (no generic) → hook falls through, Psalm's default
-     * applies. Declared return is SetupBehavior<object> which matches the
-     * default.
+     * applies. The @psalm-trace pins the literal resolved type so a
+     * regression where the hook returns a wrong generic (e.g.,
+     * SetupBehavior<never>) gets caught — a passing covariant return-type
+     * check alone is not strong enough.
      *
      * @return SetupBehavior<object>
      */
     public function bareContextReturnsObjectSetup(): SetupBehavior
     {
-        return Behavior::setup(
+        $b = Behavior::setup(
             static fn(ActorContext $ctx): Behavior => Behavior::same(),
         );
+
+        /** @psalm-trace $b */
+        return $b;
     }
 
     /**
