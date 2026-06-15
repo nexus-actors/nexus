@@ -83,6 +83,22 @@ final class HandlerInstantiator
             return $ctx;
         }
 
+        /** @psalm-suppress ArgumentTypeCoercion */
+        if (count($param->getAttributes('Monadial\\Nexus\\Http\\Auth\\Attribute\\FromPrincipal')) > 0) {
+            /** @var mixed $principal */
+            $principal = $ctx->request()->getAttribute('principal');
+
+            if ($principal === null) {
+                throw new RuntimeException(
+                    "WebSocketHandler {$handlerClass} requested #[FromPrincipal] but no Principal "
+                    . 'on request — register AuthenticationMiddleware globally so the upgrade '
+                    . 'request gets a Principal stamped before reaching the WS dispatcher.',
+                );
+            }
+
+            return $principal;
+        }
+
         if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
             $id = $type->getName();
 
