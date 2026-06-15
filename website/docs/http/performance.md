@@ -169,9 +169,9 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
 
 ### Preemptive coroutine scheduling
 
-If you have any handlers that can run for more than a few ms (anything
-talking to a slow DB, a remote API, a CPU-bound transform), turn on
-preemptive scheduling **at boot**, before `Server::start()`:
+Preemptive scheduling forces every coroutine to yield every few ms,
+regardless of whether it would otherwise. Turn it on **at boot**, before
+`Server::start()`:
 
 ```php
 \Swoole\Coroutine::set([
@@ -180,9 +180,23 @@ preemptive scheduling **at boot**, before `Server::start()`:
 ]);
 ```
 
-This is the single biggest p99 win on Swoole. Without it, one 50ms handler
-can starve 99 other coroutines for the full duration. With it, the scheduler
-forces yields every few ms regardless of what the coroutine is doing.
+**When this pays off:** workloads where handler durations vary widely
+(one 50ms handler blocking 99 fast ones), or where some handlers do
+genuine CPU-bound work (big JSON serialization, hash computation, image
+processing). On those workloads, preemptive scheduling is the single
+biggest p99 win on Swoole — measured 2–5× p99 improvements are typical
+in the wild.
+
+**When it costs you:** uniformly-fast workloads where every coroutine
+returns in microseconds. The forced yield-checks add measurable overhead
+without any benefit. We measured this against `/hello/load` (immediate
+JSON response) and saw throughput unchanged but tail latency
+*marginally worse* — preemption running on coroutines that wouldn't
+have yielded anyway.
+
+**Rule of thumb:** if your p99 is more than 10× your p50, turn it on.
+If your p99 is within 3× of your p50, leave it off and don't pay the
+preemption tax. Measure both ways on your actual workload.
 
 ## Kernel: TCP sysctls
 
@@ -295,18 +309,23 @@ users feel.
 
 ## Measured impact summary
 
-Cumulative impact of the four optimizations on the same workload:
+Cumulative impact of the framework- and kernel-level optimizations on the
+uniformly-fast `/hello/load` benchmark:
 
 | Configuration | RPS | Avg | Stddev | Max | Timeouts |
 |---|---|---|---|---|---|
 | Baseline (registry, default Docker) | 108k | 40 ms | 99 ms | 1.40 s | 14 |
-| + Closure pre-binding (T3efe0b87) | 112k | 34 ms | 71 ms | 1.01 s | 5 |
+| + Closure pre-binding (`3efe0b87`) | 112k | 34 ms | 71 ms | 1.01 s | 5 |
 | + Kernel sysctls (this page) | **115k** | **33 ms** | 68 ms | 1.00 s | **1** |
-| + OPcache JIT (config) | ~120k (est.) | ~28 ms (est.) | — | — | — |
-| + Preemptive coroutines | — | — | **bounded** | **~250 ms** | — |
+| + Preemptive coroutines | 115k | 35 ms | 82 ms | 1.40 s | 4 |
+| + OPcache JIT (config — not measured) | — | — | — | — | — |
 
-The first three rows are measured; rows 4–5 are projected from documented
-Swoole gains. Apply, measure, report back.
+Preemptive coroutine scheduling does NOT help on this workload — every
+handler returns in microseconds, so the forced yield-checks are pure
+overhead. See the
+[Preemptive coroutine scheduling](#preemptive-coroutine-scheduling)
+caveat above. For workloads with handler-duration variance, it's the
+biggest single p99 lever you have.
 
 ## Further reading
 
