@@ -61,6 +61,7 @@
             "Monadial\\Nexus\\WorkerPool\\Swoole\\": "packages/nexus-worker-pool-swoole/src/",
             "Monadial\\Nexus\\App\\": "packages/nexus-app/src/",
             "Monadial\\Nexus\\Persistence\\": "packages/nexus-persistence/src/",
+            "Monadial\\Nexus\\Doctrine\\Dbal\\": "packages/nexus-doctrine-dbal/src/",
             "Monadial\\Nexus\\Persistence\\Dbal\\": "packages/nexus-persistence-dbal/src/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\": "packages/nexus-persistence-doctrine/src/"
         }
@@ -88,6 +89,7 @@
             "Monadial\\Nexus\\WorkerPool\\Swoole\\Tests\\": "packages/nexus-worker-pool-swoole/tests/",
             "Monadial\\Nexus\\App\\Tests\\": "packages/nexus-app/tests/",
             "Monadial\\Nexus\\Persistence\\Tests\\": "packages/nexus-persistence/tests/",
+            "Monadial\\Nexus\\Doctrine\\Dbal\\Tests\\": "packages/nexus-doctrine-dbal/tests/",
             "Monadial\\Nexus\\Persistence\\Dbal\\Tests\\": "packages/nexus-persistence-dbal/tests/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\Tests\\": "packages/nexus-persistence-doctrine/tests/"
         }

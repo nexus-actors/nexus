@@ -102,6 +102,11 @@ deptrac:
         - type: directory
           value: packages/nexus-http-server-swoole-threads/src/.*
 
+    - name: DoctrineDbal
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-dbal/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -172,3 +177,6 @@ deptrac:
       - RuntimeSwoole
       - WorkerPool
       - WorkerPoolSwoole
+    DoctrineDbal:
+      - Core
+      - Http
