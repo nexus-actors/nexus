@@ -148,7 +148,6 @@ final class ConnectionPool
     public function close(Duration $timeout): void
     {
         $this->closed = true;
-        $this->idle->close();
 
         $drained = $this->idle->pop(Duration::zero());
 
@@ -162,6 +161,8 @@ final class ConnectionPool
 
             $drained = $this->idle->pop(Duration::zero());
         }
+
+        $this->idle->close();
     }
 
     public function stats(): PoolStats

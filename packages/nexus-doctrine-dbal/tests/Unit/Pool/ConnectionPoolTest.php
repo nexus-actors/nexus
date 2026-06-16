@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit\Pool;
 
+use Monadial\Nexus\Doctrine\Dbal\Exception\PoolClosedException;
+use Monadial\Nexus\Doctrine\Dbal\Exception\PoolExhaustedException;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
 use Monadial\Nexus\Doctrine\Dbal\Tests\Support\StubConnectionFactory;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -125,5 +128,87 @@ final class ConnectionPoolTest extends TestCase
 
         self::assertSame(0, $pool->stats()->total);
         self::assertSame(0, $pool->stats()->idle);
+    }
+
+    #[Test]
+    public function takeThrowsWhenAtMaxAndChannelEmpty(): void
+    {
+        $factory = new StubConnectionFactory();
+        $pool = new ConnectionPool(
+            name: 'orders',
+            factory: $factory,
+            config: new PoolConfig(borrowTimeout: Duration::millis(1), max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+
+        $held = $pool->take();
+        $this->expectException(PoolExhaustedException::class);
+
+        try {
+            $pool->take();
+        } finally {
+            $pool->release($held);
+        }
+    }
+
+    #[Test]
+    public function statsCountTimeouts(): void
+    {
+        $factory = new StubConnectionFactory();
+        $pool = new ConnectionPool(
+            name: 'orders',
+            factory: $factory,
+            config: new PoolConfig(borrowTimeout: Duration::millis(1), max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+
+        $held = $pool->take();
+
+        try {
+            $pool->take();
+        } catch (PoolExhaustedException) {
+            // expected
+        }
+
+        self::assertSame(1, $pool->stats()->totalTimeouts);
+        self::assertSame(1, $pool->stats()->totalWaits);
+        $pool->release($held);
+    }
+
+    #[Test]
+    public function closeDrainsIdleConnections(): void
+    {
+        $factory = new StubConnectionFactory();
+        $pool = new ConnectionPool(
+            name: 'orders',
+            factory: $factory,
+            config: new PoolConfig(max: 3, minIdle: 0),
+            channel: new FiberChannel(3),
+        );
+
+        $a = $pool->take();
+        $b = $pool->take();
+        $pool->release($a);
+        $pool->release($b);
+
+        $pool->close(Duration::seconds(1));
+
+        self::assertSame(0, $pool->stats()->idle);
+        self::assertSame(0, $pool->stats()->total);
+    }
+
+    #[Test]
+    public function takeAfterCloseThrows(): void
+    {
+        $pool = new ConnectionPool(
+            name: 'orders',
+            factory: new StubConnectionFactory(),
+            config: new PoolConfig(max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+        $pool->close(Duration::seconds(1));
+
+        $this->expectException(PoolClosedException::class);
+        $pool->take();
     }
 }
