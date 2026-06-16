@@ -22,11 +22,12 @@ final class DoctrineBootstrap
             return;
         }
 
-        if (extension_loaded('swoole')) {
-            /** @psalm-suppress UndefinedClass, UndefinedConstant */
-            SwooleRuntime::enableCoroutine(SWOOLE_HOOK_ALL);
+        if (!extension_loaded('swoole')) {
+            return;
         }
 
+        /** @psalm-suppress UndefinedClass, UndefinedConstant */
+        SwooleRuntime::enableCoroutine(SWOOLE_HOOK_ALL);
         self::$enabled = true;
     }
 

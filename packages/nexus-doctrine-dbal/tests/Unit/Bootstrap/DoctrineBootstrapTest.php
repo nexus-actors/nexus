@@ -13,17 +13,13 @@ use PHPUnit\Framework\TestCase;
 final class DoctrineBootstrapTest extends TestCase
 {
     #[Test]
-    public function enableMarksItselfEnabled(): void
+    public function enableIsNoOpWithoutSwoole(): void
     {
-        DoctrineBootstrap::enable();
-        self::assertTrue(DoctrineBootstrap::isEnabled());
-    }
+        if (extension_loaded('swoole')) {
+            self::markTestSkipped('Swoole-on path is covered by DoctrineBootstrapSwooleTest');
+        }
 
-    #[Test]
-    public function enableIsIdempotent(): void
-    {
         DoctrineBootstrap::enable();
-        DoctrineBootstrap::enable();
-        self::assertTrue(DoctrineBootstrap::isEnabled());
+        self::assertFalse(DoctrineBootstrap::isEnabled());
     }
 }
