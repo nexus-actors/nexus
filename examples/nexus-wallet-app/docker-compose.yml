@@ -15,7 +15,7 @@ services:
     image: nexus-wallet-app:dev
     container_name: nexus-wallet-app
     ports:
-      - "8080:8080"
+      - "9080:8080"
     sysctls:
       net.core.somaxconn: 65535
     ulimits:
@@ -28,8 +28,16 @@ services:
       WALLET_THREADS: "4"
       WALLET_AUTH_TOKENS: "alice-token=alice,bob-token=bob,carol-token=carol"
     volumes:
+      - ./composer.json:/app/composer.json
+      - ./vendor:/app/vendor
       - ./src:/app/src:ro
       - ./public:/app/public:ro
+      - ./perf:/app/perf:ro
+      - ./tests:/app/tests:ro
+      # Path-repository source for nexus-actors/* — see composer.json.
+      # When this folder is published to its own GitHub repo, remove this
+      # mount and let composer resolve packages from Packagist instead.
+      - ../../packages:/nexus-packages:ro
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/health') ? 0 : 1);"]
       interval: 5s

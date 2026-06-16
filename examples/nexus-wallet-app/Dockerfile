@@ -1,8 +1,8 @@
-# PHP 8.5 ZTS + Swoole 6.0 compiled with --enable-swoole-thread.
-# Mirrors the Nexus monorepo's php-swoole image so the example
+# PHP 8.5 ZTS + Swoole 6.2 compiled with --enable-swoole-thread.
+# Mirrors the Nexus monorepo's php-swoole image so the example is
 # binary-compatible with `make test-swoole` and the worker-pool-swoole
 # runners.
-FROM php:8.5-zts-bookworm
+FROM php:8.5-zts
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf build-essential pkg-config \
@@ -10,23 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zlib1g-dev unzip git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN docker-php-ext-install pcntl sockets opcache
-
-# Swoole 6.0 with thread support — required for SwooleThreadServer / WorkerPoolApp.
-RUN pecl channel-update pecl.php.net \
-    && yes '' | pecl install swoole-6.0.2 \
+# Swoole 6.2 with thread support — required for SwooleThreadServer / WorkerPoolApp.
+RUN git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git /tmp/swoole-src \
+    && cd /tmp/swoole-src \
+    && phpize \
+    && ./configure --enable-swoole --enable-swoole-thread \
+    && make -j"$(nproc)" \
+    && make install \
+    && rm -rf /tmp/swoole-src \
     && docker-php-ext-enable swoole \
-    && echo "swoole.enable_coroutine = On" >> /usr/local/etc/php/conf.d/swoole.ini \
-    && echo "opcache.enable_cli = 1"        >> /usr/local/etc/php/conf.d/opcache.ini \
-    && echo "opcache.jit_buffer_size = 128M" >> /usr/local/etc/php/conf.d/opcache.ini \
-    && echo "opcache.jit = tracing"          >> /usr/local/etc/php/conf.d/opcache.ini
+    && echo "swoole.enable_coroutine = On" >> /usr/local/etc/php/conf.d/swoole.ini
 
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 WORKDIR /app
-
-COPY composer.json ./
-RUN composer install --no-interaction --no-progress --prefer-dist --no-scripts || true
 
 COPY . /app
 

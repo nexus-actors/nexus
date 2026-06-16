@@ -5,52 +5,50 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Wallet\Http\Handler;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Example\Wallet\Actor\EnsureWallet;
 use Monadial\Nexus\Example\Wallet\Actor\HandleRequest;
+use Monadial\Nexus\Example\Wallet\Actor\WalletRef;
+use Monadial\Nexus\Example\Wallet\Domain\Command\Deposit;
+use Monadial\Nexus\Example\Wallet\Domain\Money;
 use Monadial\Nexus\Example\Wallet\Domain\Reply\DepositResult;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
-use Monadial\Nexus\Http\Handler\Attribute\FromBody;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Runtime\Duration;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 
-/**
- * POST /wallet/deposit — body: {"amount": <cents>}. Deposits always
- * succeed when amount > 0; the WalletActor persists MoneyDeposited
- * before replying so the new balance is durable by the time the
- * handler reads it.
- */
 final readonly class DepositHandler
 {
-    /** @param array{amount?: int} $body */
     public function __invoke(
-        #[FromBody]
-        array $body,
+        ServerRequestInterface $request,
         #[FromPrincipal]
         Principal $principal,
         #[FromActor('request')]
-        ActorRef $request,
+        ActorRef $observer,
         #[FromActor('wallets')]
         ActorRef $directory,
     ): ResponseInterface {
+        /** @var array{amount?: int}|null $body */
+        $body = json_decode((string) $request->getBody(), true);
         $amount = (int) ($body['amount'] ?? 0);
 
         if ($amount <= 0) {
             return Response::badRequest('amount must be a positive integer');
         }
 
-        $reply = $request
-            ->ask(
-                new HandleRequest(
-                    ownerId: $principal->id(),
-                    action: 'deposit',
-                    amountCents: $amount,
-                    directory: $directory,
-                ),
-                Duration::seconds(2),
-            )
+        $observer->tell(new HandleRequest($principal->id(), 'deposit', $amount));
+
+        $walletRef = $directory
+            ->ask(new EnsureWallet($principal->id()), Duration::seconds(2))
+            ->await();
+
+        assert($walletRef instanceof WalletRef);
+
+        $reply = $walletRef->ref
+            ->ask(new Deposit(new Money($amount)), Duration::seconds(2))
             ->await();
 
         assert($reply instanceof DepositResult);

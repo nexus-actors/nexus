@@ -5,27 +5,47 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
-        "ext-pcntl": "*",
         "ext-swoole": "^6.0",
+        "brick/math": "^0.12",
+        "cuyz/valinor": "^2.3",
         "monolog/monolog": "^3.0",
-        "nexus-actors/app": "dev-main",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/http": "dev-main",
-        "nexus-actors/http-auth": "dev-main",
-        "nexus-actors/http-server-swoole-threads": "dev-main",
-        "nexus-actors/http-ws": "dev-main",
-        "nexus-actors/persistence": "dev-main",
-        "nexus-actors/runtime": "dev-main",
-        "nexus-actors/runtime-swoole": "dev-main",
-        "nexus-actors/worker-pool": "dev-main",
-        "nexus-actors/worker-pool-swoole": "dev-main"
+        "nikic/fast-route": "^1.3",
+        "nyholm/psr7": "^1.8",
+        "opis/closure": "^4.0",
+        "psr/clock": "^1.0",
+        "psr/container": "^2.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/http-factory": "^1.1",
+        "psr/http-message": "^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/log": "^3.0",
+        "psr/simple-cache": "^3.0",
+        "symfony/uid": "^8.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"
     },
     "autoload": {
+        "files": [
+            "/nexus-packages/nexus-core/src/Actor/Functions/functions.php"
+        ],
         "psr-4": {
-            "Monadial\\Nexus\\Example\\Wallet\\": "src/"
+            "Monadial\\Nexus\\App\\": "/nexus-packages/nexus-app/src/",
+            "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Example\\Wallet\\": "src/",
+            "Monadial\\Nexus\\Http\\": "/nexus-packages/nexus-http/src/",
+            "Monadial\\Nexus\\Http\\Auth\\": "/nexus-packages/nexus-http-auth/src/",
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\": "/nexus-packages/nexus-http-server-swoole/src/",
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\": "/nexus-packages/nexus-http-server-swoole-threads/src/",
+            "Monadial\\Nexus\\Http\\Ws\\": "/nexus-packages/nexus-http-ws/src/",
+            "Monadial\\Nexus\\Logger\\": "/nexus-packages/nexus-logger/src/",
+            "Monadial\\Nexus\\Persistence\\": "/nexus-packages/nexus-persistence/src/",
+            "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
+            "Monadial\\Nexus\\Runtime\\Swoole\\": "/nexus-packages/nexus-runtime-swoole/src/",
+            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/",
+            "Monadial\\Nexus\\WorkerPool\\": "/nexus-packages/nexus-worker-pool/src/",
+            "Monadial\\Nexus\\WorkerPool\\Swoole\\": "/nexus-packages/nexus-worker-pool-swoole/src/"
         }
     },
     "autoload-dev": {

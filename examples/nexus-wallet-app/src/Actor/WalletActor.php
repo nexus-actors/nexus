@@ -72,13 +72,13 @@ final readonly class WalletActor
                 }),
 
                 $command instanceof Withdraw => $state->balance->isLessThan($command->amount)
-                    ? Effect::none()->thenRun(static function () use ($sender, $state): void {
-                        $sender?->tell(new WithdrawResult(
+                    ? ($sender !== null
+                        ? Effect::reply($sender, new WithdrawResult(
                             accepted: false,
                             balanceCents: $state->balance->cents,
                             rejectionReason: 'insufficient funds',
-                        ));
-                    })
+                        ))
+                        : Effect::none())
                     : Effect::persist(
                         ...[...$openIfNeeded, new MoneyWithdrawn($command->amount->cents)],
                     )->thenRun(static function (WalletState $newState) use ($sender): void {
@@ -88,17 +88,15 @@ final readonly class WalletActor
                         ));
                     }),
 
-                $command instanceof GetBalance => Effect::none()->thenRun(
-                    static function () use ($sender, $state): void {
-                        $sender?->tell(new BalanceSnapshot($state->balance->cents));
-                    },
-                ),
+                $command instanceof GetBalance => $sender !== null
+                    ? Effect::reply($sender, new BalanceSnapshot($state->balance->cents))
+                    : Effect::none(),
 
                 default => Effect::unhandled(),
             };
         };
 
-        $eventHandler = static fn (WalletState $state, object $event): WalletState => match (true) {
+        $eventHandler = static fn(WalletState $state, object $event): WalletState => match (true) {
             $event instanceof WalletOpened => $state->open(),
             $event instanceof MoneyDeposited => $state->deposited(new Money($event->amountCents)),
             $event instanceof MoneyWithdrawn => $state->withdrew(new Money($event->amountCents)),
