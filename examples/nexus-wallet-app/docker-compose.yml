@@ -25,7 +25,9 @@ services:
     environment:
       WALLET_HTTP_HOST: "0.0.0.0"
       WALLET_HTTP_PORT: "8080"
-      WALLET_THREADS: "4"
+      # Worker count — override at boot via `WALLET_THREADS=N docker compose up -d app`.
+      # 4 is enough for ~42k rps at low concurrency; 8 hits ~56k at 256 clients.
+      WALLET_THREADS: "${WALLET_THREADS:-4}"
       WALLET_AUTH_TOKENS: "alice-token=alice,bob-token=bob,carol-token=carol"
     volumes:
       - ./composer.json:/app/composer.json
