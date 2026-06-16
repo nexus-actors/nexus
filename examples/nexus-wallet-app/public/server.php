@@ -48,12 +48,12 @@ use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\NexusLogger;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
 use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Monolog\Formatter\LineFormatter as MonologLineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Level as MonologLevel;
 use Monolog\Logger as MonologLogger;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerInterface;
 
 /** @return non-empty-string */
@@ -84,8 +84,8 @@ $bootstrapLogger = static function (string $channel): LoggerInterface {
 
 $boot = $bootstrapLogger('bootstrap');
 $boot->info('booting nexus-wallet-app', [
-    'pid' => getmypid(),
     'php' => PHP_VERSION,
+    'pid' => getmypid(),
     'swoole' => phpversion('swoole'),
 ]);
 
@@ -146,7 +146,7 @@ try {
 
                 // Surface every uncaught handler exception to stderr — the
                 // framework's default catch-all returns 500 with no log line.
-                $app->onException(\Throwable::class, static function (\Throwable $e) use ($log): \Psr\Http\Message\ResponseInterface {
+                $app->onException(Throwable::class, static function (Throwable $e) use ($log): ResponseInterface {
                     $log->error('handler exception', [
                         'class' => $e::class,
                         'message' => $e->getMessage(),
@@ -164,17 +164,17 @@ try {
                     );
                 });
 
-                $app->get('/', static fn (): mixed => JsonResponse::ok([
-                    'name' => 'nexus-wallet-app',
-                    'thread' => $node->workerId(),
+                $app->get('/', static fn(): mixed => JsonResponse::ok([
                     'links' => [
                         ['method' => 'GET',  'href' => '/health'],
                         ['method' => 'GET',  'href' => '/wallet/balance'],
                         ['method' => 'POST', 'href' => '/wallet/deposit'],
                         ['method' => 'POST', 'href' => '/wallet/withdraw'],
                     ],
+                    'name' => 'nexus-wallet-app',
+                    'thread' => $node->workerId(),
                 ]));
-                $app->get('/health', static fn (): mixed => Response::ok());
+                $app->get('/health', static fn(): mixed => Response::ok());
 
                 $app->get('/wallet/balance', BalanceHandler::class);
                 $app->post('/wallet/deposit', DepositHandler::class);
@@ -184,7 +184,7 @@ try {
                 $log->info('worker startup: app compiled, accepting requests');
 
                 return $compiled;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // Use the synchronous preActorLog — if the async logger's
                 // mailbox/LogActor is what crashed, NexusLogger would
                 // re-throw inside this catch.
@@ -197,7 +197,7 @@ try {
             }
         },
     );
-} catch (\Throwable $e) {
+} catch (Throwable $e) {
     $boot->critical('server crashed', [
         'error' => $e::class . ': ' . $e->getMessage(),
         'trace' => $e->getTraceAsString(),
