@@ -135,6 +135,7 @@ deptrac:
     DoctrineDbal:
       - Core
       - Http
+      - Runtime
     WorkerPool:
       - Core
       - Runtime

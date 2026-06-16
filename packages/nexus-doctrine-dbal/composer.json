@@ -8,6 +8,7 @@
         "doctrine/dbal": "^4.0",
         "nexus-actors/core": "dev-main",
         "nexus-actors/http": "dev-main",
+        "nexus-actors/runtime": "dev-main",
         "psr/event-dispatcher": "^1.0",
         "psr/http-factory": "^1.1",
         "psr/http-message": "^2.0",
