@@ -10,10 +10,10 @@ use Monadial\Nexus\Doctrine\Dbal\Pool\LeakDetector;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
 use Monadial\Nexus\Doctrine\Dbal\Tests\Support\StubConnectionFactory;
 use Monadial\Nexus\Runtime\Duration;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Override;
 use Psr\Log\AbstractLogger;
 use Stringable;
 
