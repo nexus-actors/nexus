@@ -30,6 +30,9 @@
             <directory>packages/nexus-http-server-swoole-threads/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/UnitSwoole</directory>
         </testsuite>
+        <testsuite name="integration-doctrine-fiber">
+            <directory>tests/Integration/Doctrine/Fiber</directory>
+        </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
         </testsuite>
