@@ -213,6 +213,26 @@ final class ConnectionPool
         }
     }
 
+    public function warnOnLeaks(int $nowNanos): void
+    {
+        foreach ($this->inUse as $conn) {
+            $meta = $this->inUse[$conn];
+            $ageNanos = $nowNanos - $meta['takenAt'];
+
+            if ($ageNanos < $this->config->acquireTtl->toNanos()) {
+                continue;
+            }
+
+            $this->logger->warning(
+                \sprintf(
+                    'Connection borrow in pool "%s" held for %dms (acquireTtl exceeded)',
+                    $this->name,
+                    intdiv($ageNanos, 1_000_000),
+                ),
+            );
+        }
+    }
+
     public function warmToMinIdle(): void
     {
         while ($this->total < $this->config->minIdle) {
