@@ -13,6 +13,7 @@ use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Override;
 use Psr\Log\AbstractLogger;
 use Stringable;
 
@@ -27,8 +28,9 @@ final class LeakDetectorTest extends TestCase
             public array $warnings = [];
 
             /**
-             * @param array<string, mixed> $context
+             * @param array<array-key, mixed> $context
              */
+            #[Override]
             public function log(mixed $level, string|Stringable $message, array $context = []): void
             {
                 if ($level === 'warning') {

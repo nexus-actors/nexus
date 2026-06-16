@@ -37,7 +37,11 @@ final class StubConnectionFactory implements ConnectionFactory
             return array_shift($this->prepared);
         }
 
-        /** @var Connection $mock */
+        /**
+         * @psalm-suppress InternalClass
+         * @psalm-suppress InternalMethod
+         * @var Connection $mock
+         */
         $mock = (new Generator())->testDouble(
             Connection::class,
             true,

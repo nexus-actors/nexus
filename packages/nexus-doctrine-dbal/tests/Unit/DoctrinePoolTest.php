@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit;
 use Monadial\Nexus\Doctrine\Dbal\DoctrinePool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
+use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -26,10 +27,10 @@ final class DoctrinePoolTest extends TestCase
 
         self::assertInstanceOf(ConnectionPool::class, $pool);
         $conn = $pool->take();
-        self::assertNotNull($conn);
         $pool->release($conn);
     }
 
+    #[Override]
     protected function setUp(): void
     {
         // SwooleChannel::pop() requires a coroutine context. Skip in the

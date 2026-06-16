@@ -33,10 +33,10 @@ final class ConnectionScopeMiddlewareTest extends TestCase
 
         $handler = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
-                $lease = $req->getAttribute(ConnectionLease::class);
-                ConnectionScopeMiddlewareTest::assertSomeInstance($lease);
+                $lease = $request->getAttribute(ConnectionLease::class);
+                TestCase::assertInstanceOf(ConnectionLease::class, $lease);
                 $lease->get();
 
                 return new Response(200);
@@ -61,10 +61,10 @@ final class ConnectionScopeMiddlewareTest extends TestCase
 
         $handler = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
-                $lease = $req->getAttribute(ConnectionLease::class);
-                ConnectionScopeMiddlewareTest::assertSomeInstance($lease);
+                $lease = $request->getAttribute(ConnectionLease::class);
+                TestCase::assertInstanceOf(ConnectionLease::class, $lease);
                 $lease->get();
 
                 throw new RuntimeException('boom');
@@ -81,11 +81,6 @@ final class ConnectionScopeMiddlewareTest extends TestCase
         }
 
         self::assertSame(0, $pool->stats()->total);
-    }
-
-    public static function assertSomeInstance(mixed $lease): void
-    {
-        self::assertInstanceOf(ConnectionLease::class, $lease);
     }
 
     private function pool(StubConnectionFactory $factory): ConnectionPool

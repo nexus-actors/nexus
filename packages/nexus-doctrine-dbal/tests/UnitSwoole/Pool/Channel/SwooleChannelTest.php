@@ -22,6 +22,7 @@ final class SwooleChannelTest extends TestCase
     #[Test]
     public function pushPopRoundTrip(): void
     {
+        /** @psalm-suppress UnusedFunctionCall */
         run(static function (): void {
             $channel = new SwooleChannel(capacity: 4);
             $item = new stdClass();
@@ -35,6 +36,7 @@ final class SwooleChannelTest extends TestCase
     public function popSuspendsUntilPushFromAnotherCoroutine(): void
     {
         $received = null;
+        /** @psalm-suppress UnusedFunctionCall */
         run(static function () use (&$received): void {
             $channel = new SwooleChannel(capacity: 4);
             $item = new stdClass();
@@ -54,6 +56,7 @@ final class SwooleChannelTest extends TestCase
     public function popReturnsNullOnTimeout(): void
     {
         $result = 'unset';
+        /** @psalm-suppress UnusedFunctionCall */
         run(static function () use (&$result): void {
             $channel = new SwooleChannel(capacity: 4);
             $result = $channel->pop(Duration::nanos(1_000_000));

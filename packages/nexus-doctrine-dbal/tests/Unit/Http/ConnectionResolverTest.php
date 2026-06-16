@@ -33,6 +33,7 @@ final class ConnectionResolverTest extends TestCase
     public function compileMatchesConnectionTypedParameter(): void
     {
         $resolver = new ConnectionResolver();
+        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (Connection $c): void {});
         $param = $reflection->getParameters()[0];
 
@@ -47,6 +48,7 @@ final class ConnectionResolverTest extends TestCase
     public function compileSkipsNonConnectionParameter(): void
     {
         $resolver = new ConnectionResolver();
+        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (int $i): void {});
         $param = $reflection->getParameters()[0];
 
@@ -69,6 +71,7 @@ final class ConnectionResolverTest extends TestCase
             ->withAttribute(ConnectionLease::class, $lease);
 
         $resolver = new ConnectionResolver();
+        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (Connection $c): void {});
         $metadata = $resolver->compile($reflection->getParameters()[0], $this->compileContext());
 
@@ -84,6 +87,7 @@ final class ConnectionResolverTest extends TestCase
     {
         $request = new ServerRequest('GET', '/');
         $resolver = new ConnectionResolver();
+        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (Connection $c): void {});
         $metadata = $resolver->compile($reflection->getParameters()[0], $this->compileContext());
 

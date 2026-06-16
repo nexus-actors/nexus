@@ -47,7 +47,7 @@ final class TransactionalDecoratorTest extends TestCase
 
         $inner = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
                 return new Response(200);
             }
@@ -82,7 +82,7 @@ final class TransactionalDecoratorTest extends TestCase
 
         $inner = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
                 throw new RuntimeException('boom');
             }

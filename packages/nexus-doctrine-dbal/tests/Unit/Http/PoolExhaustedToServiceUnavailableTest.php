@@ -27,7 +27,7 @@ final class PoolExhaustedToServiceUnavailableTest extends TestCase
 
         $handler = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
                 throw PoolExhaustedException::after('orders', PoolStats::empty());
             }
@@ -49,7 +49,7 @@ final class PoolExhaustedToServiceUnavailableTest extends TestCase
 
         $handler = new class implements RequestHandlerInterface {
             #[Override]
-            public function handle(ServerRequestInterface $req): ResponseInterface
+            public function handle(ServerRequestInterface $request): ResponseInterface
             {
                 throw new RuntimeException('something else');
             }
