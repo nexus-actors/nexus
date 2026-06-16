@@ -517,6 +517,37 @@ final class PluginTest extends TestCase
         }
     }
 
+    #[Test]
+    public function pooledConnectionRuleDetectsDbalConnectionInActorHandler(): void
+    {
+        $output = $this->runPsalmOnFixture('PooledConnectionFixture.php');
+
+        self::assertStringContains(
+            'PooledConnectionInActorProperty',
+            $output,
+            'Expected PooledConnectionInActorProperty issue',
+        );
+        self::assertStringContains('ActorWithDbalConnection', $output);
+    }
+
+    #[Test]
+    public function pooledConnectionRuleDetectsEntityManagerInStatefulActorHandler(): void
+    {
+        $output = $this->runPsalmOnFixture('PooledConnectionFixture.php');
+        $lines = $this->filterIssueLines($output, 'PooledConnectionInActorProperty');
+
+        self::assertCount(2, $lines, 'Expected exactly 2 PooledConnectionInActorProperty issues');
+        self::assertStringContains('StatefulActorWithEntityManager', $output);
+    }
+
+    #[Test]
+    public function pooledConnectionRuleIgnoresRegularServices(): void
+    {
+        $output = $this->runPsalmOnFixture('PooledConnectionFixture.php');
+
+        self::assertStringNotContains('RegularServiceWithConnection', $output);
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;

@@ -15,6 +15,7 @@ use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
+use Monadial\Nexus\Psalm\Hook\PooledConnectionInActorPropertyRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Override;
@@ -35,6 +36,7 @@ final class Plugin implements PluginEntryPointInterface
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
             NonSerializableRemoteMessageRule::class,
+            PooledConnectionInActorPropertyRule::class,
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
