@@ -35,6 +35,8 @@ final class ConnectionPool
     /** @var SplObjectStorage<Connection, BorrowMeta> */
     private SplObjectStorage $inUse;
 
+    /** @var array<int, int> */
+    private array $idleSince = [];
     private int $total = 0;
     private int $totalBorrows = 0;
     private int $totalWaits = 0;
@@ -119,6 +121,8 @@ final class ConnectionPool
             return;
         }
 
+        $this->idleSince[spl_object_id($conn)] = hrtime(true);
+
         if ($this->events !== null) {
             $this->events->dispatch(new ConnectionReleased($this->name, Duration::nanos($heldNanos)));
         }
@@ -183,8 +187,54 @@ final class ConnectionPool
         return $this->name;
     }
 
+    public function evictIdleOlderThan(int $cutoffNanos): void
+    {
+        $kept = [];
+
+        while (($next = $this->idle->pop(Duration::zero())) !== null) {
+            $id = spl_object_id($next);
+            $stamp = $this->idleSince[$id] ?? 0;
+            $age = $cutoffNanos - $stamp;
+
+            if ($age >= $this->config->idleTtl->toNanos()) {
+                $this->total--;
+                $this->safeClose($next);
+                unset($this->idleSince[$id]);
+                $this->dispatchDestroyed();
+
+                continue;
+            }
+
+            $kept[] = $next;
+        }
+
+        foreach ($kept as $conn) {
+            $this->idle->push($conn);
+        }
+    }
+
+    public function warmToMinIdle(): void
+    {
+        while ($this->total < $this->config->minIdle) {
+            $fresh = $this->factory->create();
+            $this->total++;
+            $this->idleSince[spl_object_id($fresh)] = hrtime(true);
+            $this->dispatchCreated();
+
+            if (!$this->idle->push($fresh)) {
+                $this->total--;
+                $this->safeClose($fresh);
+                unset($this->idleSince[spl_object_id($fresh)]);
+                $this->dispatchDestroyed();
+
+                return;
+            }
+        }
+    }
+
     private function markBorrowed(Connection $conn, int $startNanos): Connection
     {
+        unset($this->idleSince[spl_object_id($conn)]);
         $meta = ['takenAt' => hrtime(true)];
         $this->inUse[$conn] = $meta;
         $this->totalBorrows++;
@@ -220,6 +270,20 @@ final class ConnectionPool
         }
 
         return $this->markBorrowed($waited, $startNanos);
+    }
+
+    private function dispatchCreated(): void
+    {
+        if ($this->events !== null) {
+            $this->events->dispatch(new ConnectionCreated($this->name));
+        }
+    }
+
+    private function dispatchDestroyed(): void
+    {
+        if ($this->events !== null) {
+            $this->events->dispatch(new ConnectionDestroyed($this->name));
+        }
     }
 
     private function safeClose(Connection $conn): void
