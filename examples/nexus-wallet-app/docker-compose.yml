@@ -49,6 +49,10 @@ services:
     image: nexus-wallet-app:dev
     profiles: ["perf"]
     depends_on:
-      app:
-        condition: service_healthy
+      - app
+    volumes:
+      - ./perf:/app/perf:ro
+      - ./composer.json:/app/composer.json:ro
+      - ./vendor:/app/vendor:ro
+      - ../../packages:/nexus-packages:ro
     command: ["php", "perf/deposit-load.php", "http://app:8080", "alice-token", "30", "32"]
