@@ -37,8 +37,12 @@ final class SwooleChannel implements Channel
     #[Override]
     public function pop(Duration $timeout): ?object
     {
+        $seconds = $timeout->toSecondsFloat() === 0.0
+            ? self::NON_BLOCKING_TIMEOUT
+            : $timeout->toSecondsFloat();
+
         /** @var T|false $result */
-        $result = $this->channel->pop($timeout->toSecondsFloat());
+        $result = $this->channel->pop($seconds);
 
         if ($result === false) {
             return null;

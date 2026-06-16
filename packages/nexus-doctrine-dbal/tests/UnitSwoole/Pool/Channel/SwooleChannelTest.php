@@ -64,4 +64,17 @@ final class SwooleChannelTest extends TestCase
 
         self::assertNull($result);
     }
+
+    #[Test]
+    public function popWithZeroDurationReturnsNullImmediately(): void
+    {
+        $result = 'unset';
+        /** @psalm-suppress UnusedFunctionCall */
+        run(static function () use (&$result): void {
+            $channel = new SwooleChannel(capacity: 4);
+            $result = $channel->pop(Duration::zero());
+        });
+
+        self::assertNull($result);
+    }
 }

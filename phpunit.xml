@@ -33,6 +33,9 @@
         <testsuite name="integration-doctrine-fiber">
             <directory>tests/Integration/Doctrine/Fiber</directory>
         </testsuite>
+        <testsuite name="integration-doctrine-swoole">
+            <directory>tests/Integration/Doctrine/Swoole</directory>
+        </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
         </testsuite>
