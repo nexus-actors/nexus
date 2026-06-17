@@ -31,6 +31,9 @@
             <directory>packages/nexus-http-server-swoole-threads/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/UnitSwoole</directory>
         </testsuite>
+        <testsuite name="integration-doctrine-entity-behavior">
+            <directory>tests/Integration/Doctrine/Orm/EntityBehavior</directory>
+        </testsuite>
         <testsuite name="integration-doctrine-fiber">
             <directory>tests/Integration/Doctrine/Fiber</directory>
         </testsuite>
