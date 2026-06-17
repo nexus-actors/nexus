@@ -358,3 +358,26 @@ $ref->tell(new PoisonPill());
 // Immediate shutdown
 $ref->tell(new Kill());
 ```
+
+## System shutdown
+
+`ActorSystem::shutdown(Duration $timeout)` is deadline-driven:
+
+1. Marks the system as `stopping` (idempotent).
+2. Sends `PoisonPill` to every top-level child.
+3. Yields cooperatively (via `Runtime::yield()`) until either every
+   child has stopped or the deadline expires.
+4. Force-stops any survivors by closing their mailbox, which unblocks
+   their message loop and lets `PostStop` deliver naturally.
+5. Tells the runtime to release timers/handles.
+
+The shutdown is safe to call from outside a coroutine context — under
+Swoole, `Mailbox::enqueue()` transparently wraps the `Channel::push()` in
+a fresh coroutine when no current coroutine exists, so broadcasting
+`PoisonPill` from a signal handler works correctly.
+
+On Swoole's thread-mode HTTP server (`nexus-http-server-swoole-threads`)
+shutdown is also wired into the server's `BeforeShutdown` event so each
+worker thread tears down cleanly when SIGTERM/SIGINT reaches the main
+thread. See the [Swoole runtime](../runtimes/swoole.md) page for the
+full sequence.

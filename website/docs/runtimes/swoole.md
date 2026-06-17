@@ -128,6 +128,38 @@ The Swoole runtime is designed for:
   and a shared `Thread\Map` actor directory. See
   [Scaling Overview](../scaling/overview.md).
 
+## Graceful shutdown (thread mode)
+
+`SwooleThreadServer` (in `nexus-http-server-swoole-threads`) installs a
+`BeforeShutdown` listener on the underlying server so SIGTERM/SIGINT
+triggers a deterministic teardown:
+
+1. SIGTERM reaches the main thread. Swoole invokes the `BeforeShutdown`
+   event.
+2. The listener flips a shared `Swoole\Thread\Atomic` flag.
+3. Each worker thread runs a watchdog coroutine spawned during
+   `WorkerStart`. The watchdog polls the atomic every 50 ms, so it
+   reacts well within Swoole's worker-exit window.
+4. When the flag flips, the watchdog calls
+   `ThreadQueueTransport::stop()` (which exits the receive loop on its
+   next backoff tick) and then `ActorSystem::shutdown(timeout)` (which
+   broadcasts `PoisonPill`, drains under deadline, and force-closes any
+   survivors).
+5. Worker threads exit cooperatively before Swoole's reactor-exit
+   timeout, so neither the "all coroutines asleep — deadlock" nor the
+   `Worker_reactor_try_to_exit() ERRNO 9101` warnings ever appear.
+
+This wiring is necessary because Swoole's per-worker `WorkerStop` event
+fires *after* the reactor exit timeout in thread mode — too late to
+close mailboxes before the deadlock detector flags blocked coroutines.
+
+`SwooleRuntime::yield()` resolves to `Coroutine::sleep(0)` (not
+`Coroutine::yield()`, which is a generator-style suspend that requires
+explicit `Coroutine::resume($cid)`). This makes drain-loops behave
+cooperatively: the suspending coroutine resumes on the next scheduler
+tick, giving actor message loops time to observe their closed mailbox
+and exit.
+
 ## Limitations
 
 - Requires the Swoole PHP extension (5.0+).

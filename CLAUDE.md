@@ -162,7 +162,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 - `ActorSystem::create(string $name, Runtime, ?Clock, ?Logger, ?EventDispatcher)`
 - `spawn(Props<T>, string $name): ActorRef<T>` — Spawn a child actor. If a child with the given name has already terminated, it is pruned automatically and a new actor is spawned in its place. If a **live** child with that name already exists, throws `ActorNameExistsException`. This enables passivation patterns like `EntityRefFactory::of($id)` where dead actors are transparently respawned. / `spawnAnonymous(Props<T>): ActorRef<T>`
 - `run(): void` — Start event loop (blocking)
-- `shutdown(Duration $timeout): void`
+- `shutdown(Duration $timeout): void` — Deadline-driven graceful shutdown: marks system stopping, broadcasts `PoisonPill` to root children, yields cooperatively until drained or deadline, force-closes survivors' mailboxes, signals runtime shutdown. Coroutine-safe (`Mailbox::enqueue` wraps `Channel::push` when called outside a coroutine). On Swoole thread mode, `SwooleThreadServer` flips a `Thread\Atomic` from `BeforeShutdown` so per-worker watchdog coroutines invoke this before Swoole's reactor exit timeout.
 - `deadLetters(): DeadLetterRef`
 
 **`ActorCell<T>`** (`Actor/ActorCell.php`) — Internal engine implementing `ActorContext<T>`. Manages the behavior state machine, children map, watchers, stash buffer, and message processing. States: `New → Starting → Running → {Suspended, Stopping} → Stopped`.
