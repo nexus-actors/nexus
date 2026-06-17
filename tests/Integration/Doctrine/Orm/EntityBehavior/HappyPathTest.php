@@ -17,14 +17,10 @@ use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Tests\Integration\Doctrine\Orm\EntityBehavior\Fixture\Add;
 use Monadial\Nexus\Tests\Integration\Doctrine\Orm\EntityBehavior\Fixture\Counter;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-
-final readonly class Add
-{
-    public function __construct(public int $delta) {}
-}
 
 final class HappyPathTest extends TestCase
 {
