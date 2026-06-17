@@ -12,6 +12,7 @@ use Monadial\Nexus\Runtime\Duration;
 use Nyholm\Psr7\ServerRequest;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
+use Swoole\Coroutine;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 use Swoole\Http\Server as HttpServer;
@@ -152,18 +153,31 @@ final class SwooleServerEventBinder
                 $system = $runtime->system;
 
                 if ($system !== null) {
-                    try {
-                        $system->shutdown($shutdownTimeout);
-                        $logger->info('Worker ActorSystem shutdown complete', ['workerId' => $workerId]);
-                    } catch (Throwable $e) {
-                        $logger->error('System shutdown failed in WorkerStop', [
-                            'exception' => $e,
-                            'workerId' => $workerId,
-                        ]);
-                    }
-                }
+                    // WorkerStop fires outside any coroutine. ActorSystem::shutdown()
+                    // calls runtime->yield() inside its deadline loop, which requires
+                    // a coroutine context. Wrap in a fresh coroutine when needed.
+                    $doShutdown = static function () use ($system, $shutdownTimeout, $workerId, $logger, $runtime): void {
+                        try {
+                            $system->shutdown($shutdownTimeout);
+                            $logger->info('Worker ActorSystem shutdown complete', ['workerId' => $workerId]);
+                        } catch (Throwable $e) {
+                            $logger->error('System shutdown failed in WorkerStop', [
+                                'exception' => $e,
+                                'workerId' => $workerId,
+                            ]);
+                        }
 
-                $runtime->reset();
+                        $runtime->reset();
+                    };
+
+                    if (Coroutine::getCid() === -1) {
+                        Coroutine::create($doShutdown);
+                    } else {
+                        $doShutdown();
+                    }
+                } else {
+                    $runtime->reset();
+                }
             },
         );
     }
