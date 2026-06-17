@@ -13,6 +13,7 @@ use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\EntityBehaviorReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
+use Monadial\Nexus\Psalm\Hook\MissingTransactionalDeclarationRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
@@ -37,6 +38,7 @@ final class Plugin implements PluginEntryPointInterface
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
             NonSerializableRemoteMessageRule::class,
+            MissingTransactionalDeclarationRule::class,
             PooledConnectionInActorPropertyRule::class,
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,

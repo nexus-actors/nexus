@@ -548,6 +548,45 @@ final class PluginTest extends TestCase
         self::assertStringNotContains('RegularServiceWithConnection', $output);
     }
 
+    #[Test]
+    public function missingTransactionalDeclarationRuleDetectsMissingConnectionParam(): void
+    {
+        $output = $this->runPsalmOnFixture('MissingTransactionalFixture.php');
+
+        self::assertStringContains(
+            'MissingTransactionalDeclaration',
+            $output,
+            'Expected MissingTransactionalDeclaration issue for BadTransactionalHandler',
+        );
+        self::assertStringContains('BadTransactionalHandler', $output);
+    }
+
+    #[Test]
+    public function missingTransactionalDeclarationRuleAllowsConnectionParam(): void
+    {
+        $output = $this->runPsalmOnFixture('MissingTransactionalFixture.php');
+        $lines = $this->filterIssueLines($output, 'MissingTransactionalDeclaration');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 MissingTransactionalDeclaration issue');
+        self::assertStringNotContains('GoodTransactionalWithConnection', $output);
+    }
+
+    #[Test]
+    public function missingTransactionalDeclarationRuleAllowsEntityManagerParam(): void
+    {
+        $output = $this->runPsalmOnFixture('MissingTransactionalFixture.php');
+
+        self::assertStringNotContains('GoodTransactionalWithEntityManager', $output);
+    }
+
+    #[Test]
+    public function missingTransactionalDeclarationRuleIgnoresClassesWithoutAttribute(): void
+    {
+        $output = $this->runPsalmOnFixture('MissingTransactionalFixture.php');
+
+        self::assertStringNotContains('PlainHandlerNoAttribute', $output);
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;
