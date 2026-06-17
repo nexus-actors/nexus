@@ -156,7 +156,16 @@ final class SwooleServerEventBinder
                     // WorkerStop fires outside any coroutine. ActorSystem::shutdown()
                     // calls runtime->yield() inside its deadline loop, which requires
                     // a coroutine context. Wrap in a fresh coroutine when needed.
-                    $doShutdown = static function () use ($system, $shutdownTimeout, $workerId, $logger, $runtime): void {
+                    $transport = $runtime->transport;
+                    $doShutdown = static function () use ($system, $transport, $shutdownTimeout, $workerId, $logger, $runtime): void {
+                        // Stop the transport receive loop FIRST so its coroutine
+                        // exits before we yield-wait in ActorSystem::shutdown().
+                        // Without this the worker exits with "all coroutines asleep"
+                        // because the transport poll loop never gets woken.
+                        if ($transport !== null) {
+                            $transport->stop();
+                        }
+
                         try {
                             $system->shutdown($shutdownTimeout);
                             $logger->info('Worker ActorSystem shutdown complete', ['workerId' => $workerId]);

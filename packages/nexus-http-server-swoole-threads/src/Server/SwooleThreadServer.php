@@ -93,16 +93,18 @@ final class SwooleThreadServer
 
                     $ring = new ConsistentHashRing($totalThreads);
                     $system = ActorSystem::create("http-thread-{$workerId}", new SwooleRuntime());
+                    $transport = new ThreadQueueTransport($queues, $workerId);
                     $node = new WorkerNode(
                         $workerId,
                         $system,
-                        new ThreadQueueTransport($queues, $workerId),
+                        $transport,
                         $ring,
                         new ThreadMapDirectory($directory),
                     );
                     $node->start();
 
                     $app = $factory($system, $node);
+                    $runtime->transport = $transport;
 
                     if ($enableWebSocket && $app instanceof CompiledWsApplication) {
                         // Channel routes rejected at boot — silent degradation would violate

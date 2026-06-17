@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Http\Server\Swoole\Bridge;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
+use Monadial\Nexus\WorkerPool\Transport\WorkerTransport;
 
 /**
  * @internal
@@ -21,6 +22,15 @@ abstract class ServerRuntime
 
     public ?CompiledApplication $app = null;
 
+    /**
+     * Optional worker-pool transport (e.g. ThreadQueueTransport in the
+     * Swoole-threads variant). When present, bindWorkerStop calls stop()
+     * on it so the transport's receive loop exits cooperatively — without
+     * this, the coroutine blocks on its poll loop and the worker can't
+     * exit, triggering Swoole's "all coroutines asleep - deadlock" fatal.
+     */
+    public ?WorkerTransport $transport = null;
+
     /** @var array{count: int, since: float} */
     public array $failureBucket = ['count' => 0, 'since' => 0.0];
 
@@ -28,5 +38,6 @@ abstract class ServerRuntime
     {
         $this->system = null;
         $this->app = null;
+        $this->transport = null;
     }
 }
