@@ -139,6 +139,13 @@ $boot->info('config resolved', [
     'threads' => $threads,
 ]);
 
+// SWOOLE_HOOK_ALL must be installed on the MAIN thread BEFORE any worker
+// threads are spawned — Swoole rejects the hook silently in child threads
+// (`PHPCoroutine::enable_hook(): The runtime hook can only set on the main
+// thread and no child threads have been created`). Doing this here makes
+// the hook stick for every worker that the thread pool spawns.
+DoctrineBootstrap::enable();
+
 try {
     SwooleThreadServer::run(
         SwooleThreadConfig::bind($host, $port)
@@ -175,9 +182,10 @@ try {
                 // docker-compose.yml). All worker threads point at the same
                 // Postgres instance — Postgres is the single source of truth.
                 //
-                // - DoctrineBootstrap::enable() flips SWOOLE_HOOK_ALL so PDO
-                //   suspends the coroutine on I/O.
-                // - Two independent pools share the Postgres budget:
+                // SWOOLE_HOOK_ALL was enabled on the main thread above —
+                // PDO calls in this worker thread already suspend the
+                // coroutine on I/O. Two independent pools share the
+                // Postgres connection budget:
                 //   * `connPool` — DBAL `ConnectionPool` for handlers that
                 //     declare `Connection $conn` (raw SQL, e.g.
                 //     AdminAllLedgersHandler).
@@ -186,12 +194,10 @@ try {
                 //     repositories, e.g. LedgerHandler, LedgerEntriesHandler).
                 //   Each pool owns its own connections. Sizes tuned
                 //   independently.
-                // - SchemaTool::updateSchema is idempotent — runs on every
-                //   worker startup, but creates rows only if missing.
-                // - LedgerActor uses its OWN dedicated EM per actor (not
-                //   from any pool) — this is the EntityBehavior invariant.
-                DoctrineBootstrap::enable();
-
+                // SchemaTool::updateSchema is idempotent — runs on every
+                // worker startup, but creates rows only if missing.
+                // LedgerActor uses its OWN dedicated EM per actor (not
+                // from any pool) — this is the EntityBehavior invariant.
                 $ledgerConnParams = $resolveDbParams();
 
                 $ormConfig = ORMSetup::createAttributeMetadataConfig(
