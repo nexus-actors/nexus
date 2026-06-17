@@ -71,6 +71,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Doctrine',
+      items: [
+        'doctrine/overview',
+        'doctrine/connection-pool',
+        'doctrine/entity-manager-pool',
+        'doctrine/http-integration',
+        'doctrine/entity-behavior',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Packages',
       items: [
         'packages/core',
@@ -91,6 +102,8 @@ const sidebars = {
         'packages/persistence',
         'packages/persistence-dbal',
         'packages/persistence-doctrine',
+        'packages/doctrine-dbal',
+        'packages/doctrine-orm',
         'packages/app',
         'packages/psalm',
       ],
