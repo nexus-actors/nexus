@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\EntityReplayPolicy;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
+use Monadial\Nexus\Runtime\Duration;
 
 /**
  * Spawns and caches one ActorRef per entity identity, enforcing a single writer per entity
@@ -36,6 +37,7 @@ final class EntityRefFactory
         private readonly Closure $connectionSource,
         private readonly Closure $commandHandler,
         private readonly EntityReplayPolicy $replayPolicy,
+        private readonly ?Duration $receiveTimeout = null,
     ) {}
 
     /**
@@ -50,8 +52,17 @@ final class EntityRefFactory
         Closure $connectionSource,
         Closure $commandHandler,
         EntityReplayPolicy $replayPolicy,
+        ?Duration $receiveTimeout = null,
     ): self {
-        return new self($spawner, $entityClass, $emFactory, $connectionSource, $commandHandler, $replayPolicy);
+        return new self(
+            $spawner,
+            $entityClass,
+            $emFactory,
+            $connectionSource,
+            $commandHandler,
+            $replayPolicy,
+            $receiveTimeout,
+        );
     }
 
     /**
@@ -61,17 +72,22 @@ final class EntityRefFactory
     {
         $name = self::deriveName($this->entityClass, $id);
 
-        if (isset($this->cache[$name])) {
+        if (isset($this->cache[$name]) && $this->cache[$name]->isAlive()) {
             return $this->cache[$name];
         }
 
-        $behavior = EntityBehavior::create($this->entityClass, $id, $this->commandHandler)
+        unset($this->cache[$name]);
+
+        $behaviorBuilder = EntityBehavior::create($this->entityClass, $id, $this->commandHandler)
             ->withEntityManagerFactory($this->emFactory)
             ->withConnectionSource($this->connectionSource)
-            ->withReplayPolicy($this->replayPolicy)
-            ->toBehavior();
+            ->withReplayPolicy($this->replayPolicy);
 
-        return $this->cache[$name] = $this->spawner->spawn(Props::fromBehavior($behavior), $name);
+        if ($this->receiveTimeout !== null) {
+            $behaviorBuilder = $behaviorBuilder->withReceiveTimeout($this->receiveTimeout);
+        }
+
+        return $this->cache[$name] = $this->spawner->spawn(Props::fromBehavior($behaviorBuilder->toBehavior()), $name);
     }
 
     /** Entry point for the fluent builder. */

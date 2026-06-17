@@ -31,9 +31,15 @@ final class EntityRefFactoryTest extends TestCase
     public function ofCachesByEntityId(): void
     {
         $callCount = 0;
+        $makeAliveStub = function (): ActorRef {
+            $stub = $this->createStub(ActorRef::class);
+            $stub->method('isAlive')->willReturn(true);
+
+            return $stub;
+        };
         $stubRefs = [
-            $this->createStub(ActorRef::class),
-            $this->createStub(ActorRef::class),
+            $makeAliveStub(),
+            $makeAliveStub(),
         ];
         $spawner = new class ($stubRefs, $callCount) implements ActorSpawner {
             /** @param list<ActorRef> $refs */

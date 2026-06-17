@@ -9,11 +9,13 @@ use LogicException;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\EntityReplayPolicy;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\FailIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
+use Monadial\Nexus\Runtime\Duration;
 
 /** @psalm-api */
 final class EntityRefFactoryBuilder
 {
     private EntityReplayPolicy $replayPolicy;
+    private ?Duration $receiveTimeout = null;
     private ?EntityManagerFactory $emFactory = null;
     private ?Closure $connectionSource = null;
     private ?Closure $commandHandler = null;
@@ -43,6 +45,13 @@ final class EntityRefFactoryBuilder
         return $this;
     }
 
+    public function withReceiveTimeout(Duration $timeout): self
+    {
+        $this->receiveTimeout = $timeout;
+
+        return $this;
+    }
+
     public function handle(Closure $commandHandler): self
     {
         $this->commandHandler = $commandHandler;
@@ -68,6 +77,7 @@ final class EntityRefFactoryBuilder
             $this->connectionSource,
             $this->commandHandler,
             $this->replayPolicy,
+            $this->receiveTimeout,
         );
     }
 }
