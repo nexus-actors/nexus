@@ -106,4 +106,38 @@ final class EntityEffectTest extends TestCase
         self::assertCount(0, $base->runHooks);
         self::assertCount(1, $composed->runHooks);
     }
+
+    #[Test]
+    public function removeWithThenRunCarriesBothKindAndHook(): void
+    {
+        $effect = EntityEffect::remove()->thenRun(static fn(object $e) => null);
+
+        self::assertSame(EntityEffectKind::Remove, $effect->kind);
+        self::assertCount(1, $effect->runHooks);
+    }
+
+    #[Test]
+    public function stopRetainsHooksOnEffect(): void
+    {
+        // Hooks ARE stored on the effect; the runner (Plan 3 T7) is responsible
+        // for NOT firing them when kind === Stop (stop means "no flush" → entity
+        // may be inconsistent). This test verifies the data shape only.
+        $effect = EntityEffect::stop()->thenRun(static fn(object $e) => null);
+
+        self::assertSame(EntityEffectKind::Stop, $effect->kind);
+        self::assertCount(1, $effect->runHooks);
+    }
+
+    #[Test]
+    public function persistWithReplyAndThenRunCombines(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $effect = EntityEffect::reply($ref, new stdClass())
+            ->thenRun(static fn(object $e) => null);
+
+        // reply() set kind to Same with immediateReplyRef populated
+        self::assertSame(EntityEffectKind::Same, $effect->kind);
+        self::assertSame($ref, $effect->immediateReplyRef);
+        self::assertCount(1, $effect->runHooks);
+    }
 }
