@@ -70,12 +70,12 @@ See:
 | Class | Description |
 |---|---|
 | `Behavior\EntityBehavior` | Static factory: `create($entityClass, $id, $commandHandler)` returns a builder. |
-| `Behavior\EntityBehaviorBuilder` | Fluent: `withEntityManagerFactory`, `withReplayPolicy`, `withLockMode`, `withConnectionSource`, `withDirectConnection`, `toBehavior()`. |
+| `Behavior\EntityBehaviorBuilder` | Fluent: `withEntityManagerFactory`, `withReplayPolicy`, `withLockMode`, `withConnectionSource`, `withReceiveTimeout`, `withDirectConnection`, `toBehavior()`. |
 | `Behavior\EntityBehaviorRunner` | Internal — wires actor lifecycle to entity persistence. Called from `toBehavior()`. |
 | `Behavior\EntityEffect` | `same()`, `persist()`, `remove()`, `stop()`, `stash()`, `reply()`, `thenRun()`, `thenReply()`. |
 | `Behavior\EntityEffectKind` | Enum: `Same`, `Persist`, `Remove`, `Stop`, `Stash`. |
 | `Behavior\EntityRefFactory` | `for($spawner, $entityClass)` returns a builder; `of($id): ActorRef` spawns once and caches. |
-| `Behavior\EntityRefFactoryBuilder` | Fluent: `using`, `withConnectionSource`, `withReplayPolicy`, `handle`, `build`. |
+| `Behavior\EntityRefFactoryBuilder` | Fluent: `using`, `withConnectionSource`, `withReplayPolicy`, `withReceiveTimeout`, `handle`, `build`. |
 | `Behavior\ActorSpawner` | Interface: `spawn(Props, string $name): ActorRef`. |
 | `Behavior\ActorSystemSpawner` | `final readonly` adapter wrapping `ActorSystem` as `ActorSpawner`. |
 

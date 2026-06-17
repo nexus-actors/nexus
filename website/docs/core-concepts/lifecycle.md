@@ -106,6 +106,50 @@ use Monadial\Nexus\Core\Lifecycle\Terminated;
 $signal->ref; // ActorRef
 ```
 
+### ReceiveTimeout
+
+Fired by the actor cell when no user message arrives within a configured
+duration. Opt-in via `$ctx->setReceiveTimeout(Duration::seconds(N))` from
+inside `Behavior::setup` (or any handler -- call it whenever you want to arm
+the timer).
+
+Handle the signal in `behavior->onSignal(...)`. The canonical pattern is
+**self-passivation** -- return `Behavior::stopped()` to terminate the actor.
+The actor's `PostStop` runs as normal, so release resources there.
+
+```php
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
+
+$behavior = Behavior::setup(static function (ActorContext $ctx): Behavior {
+    $ctx->setReceiveTimeout(Duration::seconds(120));
+
+    return Behavior::receive(
+        static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+    )->onSignal(static function (ActorContext $ctx, object $signal): Behavior {
+        if ($signal instanceof ReceiveTimeout) {
+            return Behavior::stopped();
+        }
+        return Behavior::same();
+    });
+});
+```
+
+**Reset semantics:** the timer resets on every user message. System messages
+(`Watch`, `Unwatch`, `PoisonPill`) do not reset. This matches Akka.
+
+**Cancellation:** call `$ctx->setReceiveTimeout(null)` to disable.
+Re-calling with a different `Duration` replaces the current setting; the first
+user message after the call uses the new timeout.
+
+**Timing gotcha:** `Behavior::setup` runs synchronously inside `spawn()`,
+*before* `$system->run()` starts the event loop. A timer armed during setup
+begins counting from the moment of `spawn()`, not from the first event-loop
+tick. For sub-second timeouts in tests, arm the timer from the first message
+handler instead, or use a generous duration (>500ms) that absorbs the gap.
+
 ## Handling signals
 
 Attach a signal handler to any behavior with `onSignal()`. The handler receives

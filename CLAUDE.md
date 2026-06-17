@@ -160,7 +160,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 
 **`ActorSystem`** (`Actor/ActorSystem.php`) — Entry point:
 - `ActorSystem::create(string $name, Runtime, ?Clock, ?Logger, ?EventDispatcher)`
-- `spawn(Props<T>, string $name): ActorRef<T>` / `spawnAnonymous(Props<T>): ActorRef<T>`
+- `spawn(Props<T>, string $name): ActorRef<T>` — Spawn a child actor. If a child with the given name has already terminated, it is pruned automatically and a new actor is spawned in its place. If a **live** child with that name already exists, throws `ActorNameExistsException`. This enables passivation patterns like `EntityRefFactory::of($id)` where dead actors are transparently respawned. / `spawnAnonymous(Props<T>): ActorRef<T>`
 - `run(): void` — Start event loop (blocking)
 - `shutdown(Duration $timeout): void`
 - `deadLetters(): DeadLetterRef`
@@ -243,6 +243,7 @@ readonly class Greeted { public function __construct(public string $greeting) {}
 - `PostStop` — During shutdown, after children stopped
 - `Terminated(ActorRef)` — Watched actor terminated
 - `ChildFailed(ActorRef, Throwable)` — Child threw exception
+- `ReceiveTimeout` — No user message received within the duration set by `$ctx->setReceiveTimeout(Duration)`. Resets on every user message; system messages do not reset. Cancel with `$ctx->setReceiveTimeout(null)`.
 
 ### Mailbox System
 

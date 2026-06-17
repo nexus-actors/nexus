@@ -135,6 +135,66 @@ DB connections. Mitigations:
   router actor that maintains a fixed-size LRU of spawned aggregates,
   stopping the LRU-evicted one when adding a new one.
 
+## Passivation
+
+`EntityBehavior` actors hold their EM and Connection for their whole lifetime.
+For hot entities that's fine; for the long tail it's expensive. Opt into
+idle-passivation via `withReceiveTimeout`:
+
+```php
+use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehavior;
+
+$behavior = EntityBehavior::create(Order::class, $id, $handler)
+    ->withEntityManagerFactory($emFactory)
+    ->withConnectionSource($connSource)
+    ->withReceiveTimeout(Duration::seconds(120))   // passivate after 2 min idle
+    ->toBehavior();
+```
+
+After 120s without messages, the actor self-terminates. The runner's `PostStop`
+handler closes the EM and Connection automatically -- no manual cleanup needed.
+The next call to `EntityRefFactory::of($id)` notices the cached ref is dead,
+spawns a fresh actor, reloads the entity from DB via the replay policy, and
+processes the incoming message -- transparent to the caller.
+
+`EntityRefFactoryBuilder` has a matching `withReceiveTimeout(Duration)` that
+forwards the timeout to every spawned actor:
+
+```php
+use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
+use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
+
+$factory = EntityRefFactory::for(new ActorSystemSpawner($system), Order::class)
+    ->using($emFactory)
+    ->withConnectionSource($connSource)
+    ->withReceiveTimeout(Duration::seconds(120))    // applied to every spawned actor
+    ->handle($commandHandler)
+    ->build();
+```
+
+### Cost trade-off
+
+- **Pinned connection vs cold-start latency.** Without passivation, every active
+  aggregate pins a connection. With passivation, only *concurrently-active*
+  aggregates have connections -- but the first message after passivation pays a
+  connection-open + EM-build + entity-load cost (typically tens of milliseconds
+  against Postgres+TLS).
+- **In-flight messages during the passivation → rehydration gap go to dead
+  letters.** For most write paths this is acceptable -- clients retry. For
+  high-stakes commands, send via `ask()` so the per-message timeout surfaces the
+  failure rather than silently dropping it.
+
+### Caveats
+
+- **Use a generous timeout in production.** Sub-second timeouts amplify the
+  rehydration cost relative to the work done per message. 60s--10min is the
+  sensible range for most aggregates.
+- **`EntityRefFactory` caches across the whole `ActorSystem`.** If two factories
+  are constructed against the same system pointing at the same entity class,
+  they'll race on actor names. Use one factory per `(system, entityClass)`.
+
 ## `EntityRefFactory`
 
 Spawn-once-and-cache by entity id. Enforces single-writer
