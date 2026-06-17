@@ -5,9 +5,12 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
+        "ext-pdo_sqlite": "*",
         "ext-swoole": "^6.0",
         "brick/math": "^0.12",
         "cuyz/valinor": "^2.3",
+        "doctrine/dbal": "^4.0",
+        "doctrine/orm": "^3.0",
         "monolog/monolog": "^3.0",
         "nikic/fast-route": "^1.3",
         "nyholm/psr7": "^1.8",
@@ -33,6 +36,8 @@
         "psr-4": {
             "Monadial\\Nexus\\App\\": "/nexus-packages/nexus-app/src/",
             "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Doctrine\\Dbal\\": "/nexus-packages/nexus-doctrine-dbal/src/",
+            "Monadial\\Nexus\\Doctrine\\Orm\\": "/nexus-packages/nexus-doctrine-orm/src/",
             "Monadial\\Nexus\\Example\\Wallet\\": "src/",
             "Monadial\\Nexus\\Http\\": "/nexus-packages/nexus-http/src/",
             "Monadial\\Nexus\\Http\\Auth\\": "/nexus-packages/nexus-http-auth/src/",

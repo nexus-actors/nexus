@@ -79,8 +79,43 @@ curl -X POST -H "Authorization: Bearer alice-token" \
      -d '{"amount":99999}' \
      http://localhost:8080/wallet/withdraw
 
+# Record a deposit on the Doctrine-backed ledger (single-writer per owner,
+# state persisted to SQLite via the EntityBehavior actor)
+curl -X POST -H "Authorization: Bearer alice-token" \
+     -H "Content-Type: application/json" \
+     -d '{"kind":"deposit","amountCents":1000}' \
+     http://localhost:8080/wallet/ledger/record
+
+# Read Alice's denormalised ledger (pooled EntityManager injection)
+curl -H "Authorization: Bearer alice-token" \
+     http://localhost:8080/wallet/ledger
+
 make down
 ```
+
+## Doctrine ledger — the new path
+
+Alongside the in-memory event-sourced wallet, the app demonstrates the
+`nexus-doctrine-dbal` + `nexus-doctrine-orm` integration with a
+denormalised per-owner ledger:
+
+| Concern                         | How it shows up                                                  |
+|---------------------------------|------------------------------------------------------------------|
+| Doctrine entity                 | `Domain\Entity\WalletLedger` — running totals per owner          |
+| Pooled `EntityManagerInterface` | `LedgerHandler::__invoke(... EntityManagerInterface $em)`        |
+| `EntityManagerScopeMiddleware`  | Borrows EM from pool on first use, releases at response          |
+| `EntityBehavior` actor          | `Actor\LedgerActor` — one actor per owner, entity-as-state       |
+| `EntityRefFactory`              | Single-writer per `(WalletLedger, ownerId)`; spawn-once cache    |
+| `EntityEffect::persist()`       | Auto-flush inside the actor on each successful command           |
+| Schema bootstrap                | `SchemaTool::updateSchema()` once per worker startup             |
+
+The ledger uses **file-backed SQLite** per worker thread
+(`/tmp/wallet-ledger-{worker}.db`). This is a demo. In production, point
+all workers at one Postgres URL and the EM pool handles concurrent
+borrows — the actor's single-writer guarantee per `(class, ownerId)`
+still holds within each worker. For a single source of truth across
+workers, route writes through a shared lookup actor (the same pattern as
+`WalletDirectoryActor`).
 
 ## Performance testing
 
