@@ -32,6 +32,11 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Doctrine\Dbal\Bootstrap\DoctrineBootstrap;
+use Monadial\Nexus\Doctrine\Dbal\DoctrinePool;
+use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionResolver;
+use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionScopeMiddleware;
+use Monadial\Nexus\Doctrine\Dbal\Http\PoolExhaustedToServiceUnavailable;
+use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
 use Monadial\Nexus\Doctrine\Orm\DoctrineEmPool;
 use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerResolver;
 use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerScopeMiddleware;
@@ -40,13 +45,17 @@ use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
 use Monadial\Nexus\Example\Wallet\Actor\LedgerActor;
 use Monadial\Nexus\Example\Wallet\Actor\RequestActor;
 use Monadial\Nexus\Example\Wallet\Actor\WalletDirectoryActor;
+use Monadial\Nexus\Example\Wallet\Domain\Entity\LedgerEntry;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\WalletLedger;
 use Monadial\Nexus\Example\Wallet\Http\Auth\DemoUsers;
+use Monadial\Nexus\Example\Wallet\Http\Handler\AdminAllLedgersHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\BalanceHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\DepositHandler;
+use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerEntriesHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerRecordHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\WithdrawHandler;
+use Nyholm\Psr7\Factory\Psr17Factory;
 use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Response\JsonResponse;
@@ -107,6 +116,23 @@ $port = (int) $env('WALLET_HTTP_PORT', '8080');
 $threads = (int) $env('WALLET_THREADS', '4');
 $tokensEnv = $env('WALLET_AUTH_TOKENS', 'alice-token=alice,bob-token=bob,carol-token=carol');
 
+/**
+ * Resolve Doctrine DBAL connection params from WALLET_DB_* env vars.
+ * Defaults to the Postgres service in docker-compose.yml.
+ *
+ * @return array<string, mixed>
+ */
+$resolveDbParams = static function () use ($env): array {
+    return [
+        'driver' => $env('WALLET_DB_DRIVER', 'pdo_pgsql'),
+        'host' => $env('WALLET_DB_HOST', 'db'),
+        'port' => (int) $env('WALLET_DB_PORT', '5432'),
+        'dbname' => $env('WALLET_DB_NAME', 'wallet'),
+        'user' => $env('WALLET_DB_USER', 'wallet'),
+        'password' => $env('WALLET_DB_PASS', 'wallet'),
+    ];
+};
+
 $boot->info('config resolved', [
     'host' => $host,
     'port' => $port,
@@ -118,7 +144,7 @@ try {
         SwooleThreadConfig::bind($host, $port)
             ->threads($threads)
             ->shutdownTimeout(Duration::seconds(5)),
-        static function (ActorSystem $system, WorkerNode $node) use ($tokensEnv, $bootstrapLogger): CompiledApplication {
+        static function (ActorSystem $system, WorkerNode $node) use ($tokensEnv, $bootstrapLogger, $resolveDbParams): CompiledApplication {
             $workerId = (string) $node->workerId();
 
             // Async NexusLogger: records flow into a mailbox-backed
@@ -142,48 +168,58 @@ try {
                 $eventStore = new InMemoryEventStore();
 
                 // -----------------------------------------------------------------
-                // Doctrine wiring: per-worker SQLite-backed ledger
+                // Doctrine wiring: shared Postgres-backed ledger
                 // -----------------------------------------------------------------
                 //
-                // The ledger is a denormalised read model (per-owner running totals)
-                // that lives in SQLite at `WALLET_LEDGER_DB` (default `/tmp/wallet-ledger-{worker}.db`).
-                // Each worker thread has its own DB file — this is a demo, not a
-                // shared write target. Production would point at a single Postgres
-                // and let the EM pool handle concurrent borrows.
+                // Connection params come from WALLET_DB_* env vars (see
+                // docker-compose.yml). All worker threads point at the same
+                // Postgres instance — Postgres is the single source of truth.
                 //
-                // - DoctrineBootstrap::enable() flips SWOOLE_HOOK_ALL so the EM
-                //   pool's PDO connections suspend the coroutine on I/O.
-                // - DoctrineEmPool::forConfig() builds the pool + internal
-                //   ConnectionPool + DefaultEntityManagerFactory.
-                // - SchemaTool creates `wallet_ledgers` once per worker startup.
-                // - The pool is wired into HTTP via EntityManagerScopeMiddleware +
-                //   EntityManagerResolver (handler param `EntityManagerInterface $em`
-                //   is borrowed lazily, released at response).
-                // - LedgerActor::factory() builds an EntityRefFactory — one
-                //   LedgerActor per owner, single writer.
+                // - DoctrineBootstrap::enable() flips SWOOLE_HOOK_ALL so PDO
+                //   suspends the coroutine on I/O.
+                // - Two independent pools share the Postgres budget:
+                //   * `connPool` — DBAL `ConnectionPool` for handlers that
+                //     declare `Connection $conn` (raw SQL, e.g.
+                //     AdminAllLedgersHandler).
+                //   * `emPool` — `EntityManagerPool` for handlers that
+                //     declare `EntityManagerInterface $em` (ORM / DQL /
+                //     repositories, e.g. LedgerHandler, LedgerEntriesHandler).
+                //   Each pool owns its own connections. Sizes tuned
+                //   independently.
+                // - SchemaTool::updateSchema is idempotent — runs on every
+                //   worker startup, but creates rows only if missing.
+                // - LedgerActor uses its OWN dedicated EM per actor (not
+                //   from any pool) — this is the EntityBehavior invariant.
                 DoctrineBootstrap::enable();
 
-                $ledgerDbEnv = getenv('WALLET_LEDGER_DB');
-                $ledgerDbPath = $ledgerDbEnv === false || $ledgerDbEnv === ''
-                    ? '/tmp/wallet-ledger-' . $workerId . '.db'
-                    : $ledgerDbEnv;
-                $ledgerConnParams = ['driver' => 'pdo_sqlite', 'path' => $ledgerDbPath];
+                $ledgerConnParams = $resolveDbParams();
 
                 $ormConfig = ORMSetup::createAttributeMetadataConfig(
                     paths: [dirname(__DIR__) . '/src/Domain/Entity'],
                 );
                 $ormConfig->enableNativeLazyObjects(true);
 
-                // Schema bootstrap — idempotent: create if missing
+                // Schema bootstrap — idempotent: create if missing. Covers
+                // both WalletLedger (running totals, single row per owner)
+                // and LedgerEntry (one row per recorded operation).
                 $bootstrapConn = DriverManager::getConnection($ledgerConnParams);
                 $bootstrapEm = (new DefaultEntityManagerFactory($ormConfig))->create($bootstrapConn);
                 $schemaTool = new SchemaTool($bootstrapEm);
-                $schemaTool->updateSchema([$bootstrapEm->getClassMetadata(WalletLedger::class)]);
+                $schemaTool->updateSchema([
+                    $bootstrapEm->getClassMetadata(LedgerEntry::class),
+                    $bootstrapEm->getClassMetadata(WalletLedger::class),
+                ]);
                 $bootstrapEm->close();
                 $bootstrapConn->close();
 
+                $connPool = DoctrinePool::fromParams(
+                    name: 'wallet-dbal',
+                    connParams: $ledgerConnParams,
+                    config: new PoolConfig(max: 8, minIdle: 1),
+                );
+
                 $emPool = DoctrineEmPool::forConfig(
-                    name: 'wallet-ledger',
+                    name: 'wallet-em',
                     connParams: $ledgerConnParams,
                     ormSetup: $ormConfig,
                     config: new EmPoolConfig(max: 8, minIdle: 1),
@@ -207,10 +243,17 @@ try {
                 $app->middleware(new AuthenticationMiddleware($authenticator, $log));
                 $app->paramResolver(new FromPrincipalResolver());
 
-                // Wire the EM pool into the HTTP pipeline. Handlers that declare an
-                // `EntityManagerInterface $em` param (see LedgerHandler) borrow lazily
-                // on first use; the middleware releases on response.
+                // Wire both Doctrine pools into the HTTP pipeline. Each is
+                // independent — handlers declare what they want and the
+                // framework borrows lazily:
+                //   - `Connection $conn`             → DBAL pool (raw SQL)
+                //   - `EntityManagerInterface $em`   → EM pool (ORM / DQL)
+                // PoolExhaustedToServiceUnavailable maps pool exhaustion
+                // (from either pool) to HTTP 503 with Retry-After: 1.
+                $app->middleware(new ConnectionScopeMiddleware($connPool));
                 $app->middleware(new EntityManagerScopeMiddleware($emPool));
+                $app->middleware(new PoolExhaustedToServiceUnavailable(new Psr17Factory()));
+                $app->paramResolver(new ConnectionResolver());
                 $app->paramResolver(new EntityManagerResolver());
 
                 // Surface every uncaught handler exception to stderr — the
@@ -235,9 +278,13 @@ try {
 
                 $app->get('/', static fn(): mixed => JsonResponse::ok([
                     'links' => [
+                        ['method' => 'GET',  'href' => '/admin/wallets'],
                         ['method' => 'GET',  'href' => '/health'],
                         ['method' => 'GET',  'href' => '/wallet/balance'],
                         ['method' => 'POST', 'href' => '/wallet/deposit'],
+                        ['method' => 'GET',  'href' => '/wallet/ledger'],
+                        ['method' => 'GET',  'href' => '/wallet/ledger/entries'],
+                        ['method' => 'POST', 'href' => '/wallet/ledger/record'],
                         ['method' => 'POST', 'href' => '/wallet/withdraw'],
                     ],
                     'name' => 'nexus-wallet-app',
@@ -255,8 +302,15 @@ try {
                 // (no PSR-11 container is wired in this example, so we register
                 // it as an instance-binding closure).
                 $app->get('/wallet/ledger', LedgerHandler::class);
+                $app->get('/wallet/ledger/entries', LedgerEntriesHandler::class);
                 $recordHandler = new LedgerRecordHandler($ledgerFactory);
                 $app->post('/wallet/ledger/record', static fn(...$args): ResponseInterface => $recordHandler(...$args));
+
+                // Admin endpoint — list all ledgers ranked by net balance.
+                // Demonstrates raw SQL through the injected DBAL Connection
+                // (NOT the ORM EM) plus `#[Transactional]` wrapping the
+                // call in a Postgres read-only snapshot transaction.
+                $app->get('/admin/wallets', AdminAllLedgersHandler::class);
 
                 $compiled = $app->compile();
                 $log->info('worker startup: app compiled, accepting requests');

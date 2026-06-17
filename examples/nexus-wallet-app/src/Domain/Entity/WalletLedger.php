@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Wallet\Domain\Entity;
 
 use DateTimeImmutable;
+use Doctrine\Common\Collections\ArrayCollection;
+use Doctrine\Common\Collections\Collection;
 use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Entity;
 use Doctrine\ORM\Mapping\Id;
+use Doctrine\ORM\Mapping\OneToMany;
 use Doctrine\ORM\Mapping\Table;
 
 /**
@@ -45,9 +48,19 @@ class WalletLedger
     #[Column(nullable: true)]
     public ?DateTimeImmutable $lastActivityAt = null;
 
+    /**
+     * Append-only audit trail. Cascade-persist means the actor only
+     * needs to call `appendEntry()`; flush picks them up automatically.
+     *
+     * @var Collection<int, LedgerEntry>
+     */
+    #[OneToMany(targetEntity: LedgerEntry::class, mappedBy: 'ledger', cascade: ['persist'])]
+    public Collection $entries;
+
     public function __construct(string $ownerId)
     {
         $this->ownerId = $ownerId;
+        $this->entries = new ArrayCollection();
     }
 
     public function recordDeposit(int $cents, DateTimeImmutable $at): void
@@ -62,5 +75,10 @@ class WalletLedger
         $this->withdrawCount++;
         $this->withdrawCents += $cents;
         $this->lastActivityAt = $at;
+    }
+
+    public function appendEntry(LedgerEntry $entry): void
+    {
+        $this->entries->add($entry);
     }
 }

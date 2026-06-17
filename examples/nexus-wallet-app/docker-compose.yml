@@ -29,6 +29,18 @@ services:
       # 4 is enough for ~42k rps at low concurrency; 8 hits ~56k at 256 clients.
       WALLET_THREADS: "${WALLET_THREADS:-4}"
       WALLET_AUTH_TOKENS: "alice-token=alice,bob-token=bob,carol-token=carol"
+      # Doctrine wiring — the ledger is now a shared Postgres database
+      # (one source of truth across all worker threads) instead of
+      # per-worker SQLite files.
+      WALLET_DB_DRIVER: "pdo_pgsql"
+      WALLET_DB_HOST: "db"
+      WALLET_DB_PORT: "5432"
+      WALLET_DB_NAME: "wallet"
+      WALLET_DB_USER: "wallet"
+      WALLET_DB_PASS: "wallet"
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - ./composer.json:/app/composer.json
       - ./vendor:/app/vendor
@@ -58,3 +70,23 @@ services:
       - ./vendor:/app/vendor:ro
       - ../../packages:/nexus-packages:ro
     command: ["php", "perf/deposit-load.php", "http://app:8080", "alice-token", "30", "32"]
+
+  db:
+    image: postgres:16-alpine
+    container_name: nexus-wallet-db
+    environment:
+      POSTGRES_DB: "wallet"
+      POSTGRES_USER: "wallet"
+      POSTGRES_PASSWORD: "wallet"
+    ports:
+      - "5433:5432"
+    volumes:
+      - wallet-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  wallet-db-data:

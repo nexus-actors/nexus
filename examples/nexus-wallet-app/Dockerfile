@@ -21,6 +21,9 @@ RUN git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src
     && docker-php-ext-enable swoole \
     && echo "swoole.enable_coroutine = On" >> /usr/local/etc/php/conf.d/swoole.ini
 
+# Database extensions: pdo_pgsql for Postgres (production), pdo_sqlite for tests.
+RUN docker-php-ext-install -j"$(nproc)" pdo_pgsql pdo_sqlite
+
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
 
 WORKDIR /app

@@ -5,6 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5",
+        "ext-pdo_pgsql": "*",
         "ext-pdo_sqlite": "*",
         "ext-swoole": "^6.0",
         "brick/math": "^0.12",

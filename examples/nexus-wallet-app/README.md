@@ -80,7 +80,7 @@ curl -X POST -H "Authorization: Bearer alice-token" \
      http://localhost:8080/wallet/withdraw
 
 # Record a deposit on the Doctrine-backed ledger (single-writer per owner,
-# state persisted to SQLite via the EntityBehavior actor)
+# state persisted to Postgres via the EntityBehavior actor)
 curl -X POST -H "Authorization: Bearer alice-token" \
      -H "Content-Type: application/json" \
      -d '{"kind":"deposit","amountCents":1000}' \
@@ -90,6 +90,14 @@ curl -X POST -H "Authorization: Bearer alice-token" \
 curl -H "Authorization: Bearer alice-token" \
      http://localhost:8080/wallet/ledger
 
+# Last 20 transaction entries (DQL via pooled EM)
+curl -H "Authorization: Bearer alice-token" \
+     "http://localhost:8080/wallet/ledger/entries?limit=20"
+
+# Admin view — raw SQL via injected DBAL Connection (NOT the ORM EM),
+# wrapped in #[Transactional]. Lists all wallets ranked by net balance.
+curl http://localhost:8080/admin/wallets
+
 make down
 ```
 
@@ -97,25 +105,52 @@ make down
 
 Alongside the in-memory event-sourced wallet, the app demonstrates the
 `nexus-doctrine-dbal` + `nexus-doctrine-orm` integration with a
-denormalised per-owner ledger:
+denormalised ledger backed by **Postgres** (single source of truth
+across all worker threads).
 
-| Concern                         | How it shows up                                                  |
-|---------------------------------|------------------------------------------------------------------|
-| Doctrine entity                 | `Domain\Entity\WalletLedger` — running totals per owner          |
-| Pooled `EntityManagerInterface` | `LedgerHandler::__invoke(... EntityManagerInterface $em)`        |
-| `EntityManagerScopeMiddleware`  | Borrows EM from pool on first use, releases at response          |
-| `EntityBehavior` actor          | `Actor\LedgerActor` — one actor per owner, entity-as-state       |
-| `EntityRefFactory`              | Single-writer per `(WalletLedger, ownerId)`; spawn-once cache    |
-| `EntityEffect::persist()`       | Auto-flush inside the actor on each successful command           |
-| Schema bootstrap                | `SchemaTool::updateSchema()` once per worker startup             |
+| Concern                         | How it shows up                                                                          |
+|---------------------------------|------------------------------------------------------------------------------------------|
+| Two Doctrine entities           | `Domain\Entity\WalletLedger` (running totals) + `Domain\Entity\LedgerEntry` (history)    |
+| Pooled `EntityManagerInterface` | `LedgerHandler`, `LedgerEntriesHandler` — ORM/DQL injection                              |
+| Pooled DBAL `Connection`        | `AdminAllLedgersHandler` — raw SQL injection (separate pool from the EM pool)            |
+| `#[Transactional]` decorator    | `AdminAllLedgersHandler` — wraps the call in `Connection::beginTransaction()` / `commit()` |
+| `EntityManagerScopeMiddleware`  | Borrows EM lazily, releases (and clears UoW) at response                                 |
+| `ConnectionScopeMiddleware`     | Same shape for the DBAL pool                                                             |
+| `EntityBehavior` actor          | `Actor\LedgerActor` — one actor per owner, entity-as-state                               |
+| `EntityRefFactory`              | Single-writer per `(WalletLedger, ownerId)`; spawn-once cache + isAlive() re-check       |
+| `EntityEffect::persist()`       | Auto-flush inside the actor on each successful command — cascades to `LedgerEntry` rows  |
+| `withReceiveTimeout`            | 120s idle → actor passivates, releases EM + Connection; next command rehydrates from DB  |
+| Schema bootstrap                | `SchemaTool::updateSchema()` once per worker startup (idempotent)                        |
 
-The ledger uses **file-backed SQLite** per worker thread
-(`/tmp/wallet-ledger-{worker}.db`). This is a demo. In production, point
-all workers at one Postgres URL and the EM pool handles concurrent
-borrows — the actor's single-writer guarantee per `(class, ownerId)`
-still holds within each worker. For a single source of truth across
-workers, route writes through a shared lookup actor (the same pattern as
-`WalletDirectoryActor`).
+### Two pools, one Postgres
+
+The app boots **two independent pools** against the same database:
+
+- **`ConnectionPool`** — for handlers that declare `Connection $conn`.
+  Raw SQL, no ORM overhead.
+- **`EntityManagerPool`** — for handlers that declare
+  `EntityManagerInterface $em`. Full ORM/DQL/repository ergonomics.
+
+Each pool owns its own connections — sized independently. The EM pool
+also internally manages its own connections (one per pooled EM); the
+DBAL pool is for handlers that bypass the ORM. Total connections to
+Postgres = `(EM pool max + DBAL pool max) × worker threads`.
+
+Mixed: a handler can declare BOTH a `Connection` and an
+`EntityManagerInterface` and the framework borrows from each
+independently.
+
+### Endpoints summary
+
+| Method | Path                       | Injection                  | Notes                                          |
+|--------|----------------------------|----------------------------|------------------------------------------------|
+| GET    | `/wallet/balance`          | `#[FromActor]`             | Original event-sourced wallet                  |
+| POST   | `/wallet/deposit`          | `#[FromActor]`             | Original event-sourced wallet                  |
+| POST   | `/wallet/withdraw`         | `#[FromActor]`             | Original event-sourced wallet                  |
+| GET    | `/wallet/ledger`           | `EntityManagerInterface`   | Pooled EM, single-row find                     |
+| GET    | `/wallet/ledger/entries`   | `EntityManagerInterface`   | Pooled EM, DQL paginated                       |
+| POST   | `/wallet/ledger/record`    | `EntityRefFactory` (closure) | Fire RecordLedger at the per-owner actor     |
+| GET    | `/admin/wallets`           | `Connection`               | Raw SQL + `#[Transactional]` snapshot          |
 
 ## Performance testing
 
