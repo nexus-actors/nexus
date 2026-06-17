@@ -35,12 +35,18 @@ final class ActorSystem
     /** @var array<string, ActorRef<object>> */
     private array $children;
 
+    /** @var array<string, ActorCell<object>> */
+    private array $cells;
+
+    private bool $stopping = false;
+
     private int $anonymousCounter = 0;
 
     private readonly ActorPath $userGuardianPath;
 
     /**
      * @param array<string, ActorRef<object>> $initialChildren
+     * @param array<string, ActorCell<object>> $initialCells
      */
     private function __construct(
         private readonly string $systemName,
@@ -51,8 +57,10 @@ final class ActorSystem
         private readonly DeadLetterRef $deadLetters,
         private readonly Ulid $writerId,
         array $initialChildren,
+        array $initialCells,
     ) {
         $this->children = $initialChildren;
+        $this->cells = $initialCells;
         $this->userGuardianPath = ActorPath::fromString('/user');
     }
 
@@ -83,6 +91,7 @@ final class ActorSystem
             new DeadLetterRef(),
             self::generateUlid(),
             [],
+            [],
         );
     }
 
@@ -102,11 +111,12 @@ final class ActorSystem
                 throw new ActorNameExistsException($this->userGuardianPath, $name);
             }
 
-            unset($this->children[$name]);
+            unset($this->children[$name], $this->cells[$name]);
         }
 
-        $ref = $this->createActorCell($props, $name);
+        [$ref, $cell] = $this->createActorCell($props, $name);
         $this->children[$name] = $ref;
+        $this->cells[$name] = $cell;
 
         return $ref;
     }
@@ -122,8 +132,9 @@ final class ActorSystem
     public function spawnAnonymous(Props $props): ActorRef
     {
         $name = 'auto-' . $this->anonymousCounter++;
-        $ref = $this->createActorCell($props, $name);
+        [$ref, $cell] = $this->createActorCell($props, $name);
         $this->children[$name] = $ref;
+        $this->cells[$name] = $cell;
 
         return $ref;
     }
@@ -200,15 +211,35 @@ final class ActorSystem
     /**
      * Gracefully shut down the system within the given timeout.
      *
-     * Stops all top-level actors (which closes their mailboxes, causing
-     * message-processing fibers to terminate), then signals the runtime
-     * to shut down.
+     * 1. Marks the system as stopping (idempotent on repeated calls).
+     * 2. Sends PoisonPill to all top-level actors so cooperative actors stop cleanly.
+     * 3. Yields cooperatively until all children are stopped or the deadline expires.
+     * 4. Force-stops any survivors by calling initiateStop() directly, which closes
+     *    their mailbox (unblocking dequeueBlocking) and delivers PostStop.
+     * 5. Signals the runtime to shut down.
      */
     public function shutdown(Duration $timeout): void
     {
-        // Stop all top-level actors — this closes mailboxes so message loops exit
+        if ($this->stopping) {
+            return;
+        }
+
+        $this->stopping = true;
+
+        $deadlineNanos = hrtime(true) + $timeout->toNanos();
+
         foreach ($this->children as $child) {
-            $this->stop($child);
+            $child->tell(new PoisonPill());
+        }
+
+        while (hrtime(true) < $deadlineNanos && $this->hasAliveChildren()) {
+            $this->runtime->yield();
+        }
+
+        foreach ($this->cells as $cell) {
+            if ($cell->isAlive()) {
+                $cell->initiateStop();
+            }
         }
 
         $this->runtime->shutdown($timeout);
@@ -222,13 +253,25 @@ final class ActorSystem
         return $this->runtime->isRunning();
     }
 
+    private function hasAliveChildren(): bool
+    {
+        foreach ($this->children as $child) {
+            if ($child->isAlive()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * @template T of object
      * @param Props<T> $props
-     * @return ActorRef<T>
+     * @return array{ActorRef<T>, ActorCell<object>}
      * @throws ActorInitializationException
+     * @psalm-suppress MoreSpecificReturnType,LessSpecificReturnStatement
      */
-    private function createActorCell(Props $props, string $name): ActorRef
+    private function createActorCell(Props $props, string $name): array
     {
         $childPath = $this->userGuardianPath->child($name);
         /** @var Mailbox<Envelope> $childMailbox */
@@ -251,7 +294,8 @@ final class ActorSystem
 
         $this->spawnMessageLoop($childCell, $childMailbox);
 
-        return $childCell->self();
+        /** @var ActorCell<object> $childCell */
+        return [$childCell->self(), $childCell];
     }
 
     /**
