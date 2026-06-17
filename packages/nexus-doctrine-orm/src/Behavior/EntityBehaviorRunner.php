@@ -11,6 +11,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
+use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Doctrine\Orm\Exception\EntityConflictException;
 use RuntimeException;
 
@@ -42,6 +43,10 @@ final class EntityBehaviorRunner
                 $connection = ($connectionSource)();
                 $em = $emFactory->create($connection);
                 $entity = $builder->replayPolicy->resolve($em, $builder->entityClass, $builder->id);
+
+                if ($builder->receiveTimeout !== null) {
+                    $_ctx->setReceiveTimeout($builder->receiveTimeout);
+                }
 
                 return Behavior::withState(
                     $entity,
@@ -104,6 +109,10 @@ final class EntityBehaviorRunner
                     },
                 )->onSignal(
                     static function (ActorContext $innerCtx, object $signal) use ($em, $connection): Behavior {
+                        if ($signal instanceof ReceiveTimeout) {
+                            return Behavior::stopped();
+                        }
+
                         if ($signal instanceof PostStop) {
                             $em->close();
                             $connection->close();
