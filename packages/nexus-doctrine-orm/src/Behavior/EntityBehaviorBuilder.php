@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Orm\Behavior;
 
-use BadMethodCallException;
 use Closure;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\LockMode;
@@ -120,6 +119,6 @@ final readonly class EntityBehaviorBuilder
             );
         }
 
-        throw new BadMethodCallException('EntityBehaviorRunner not wired yet — see Plan 3 Task 7');
+        return EntityBehaviorRunner::build($this);
     }
 }

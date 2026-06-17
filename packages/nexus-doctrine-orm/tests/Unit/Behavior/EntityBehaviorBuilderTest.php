@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Orm\Tests\Unit\Behavior;
 
-use BadMethodCallException;
+use Doctrine\DBAL\Connection;
 use LogicException;
+use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehaviorBuilder;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
@@ -14,7 +15,6 @@ use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use stdClass;
 
 #[CoversClass(EntityBehaviorBuilder::class)]
@@ -42,15 +42,16 @@ final class EntityBehaviorBuilderTest extends TestCase
     }
 
     #[Test]
-    public function toBehaviorIsWiredInT7WhenFullyConfigured(): void
+    public function toBehaviorReturnsBehaviorWhenFullyConfigured(): void
     {
-        $builder = $this->builder()
-            ->withEntityManagerFactory($this->createStub(EntityManagerFactory::class))
-            ->withConnectionSource(static fn() => throw new RuntimeException('not invoked'));
+        $factory = $this->createStub(EntityManagerFactory::class);
+        $conn = $this->createStub(Connection::class);
 
-        $this->expectException(BadMethodCallException::class);
-        $this->expectExceptionMessage('Plan 3 Task 7');
-        $builder->toBehavior();
+        $builder = $this->builder()
+            ->withEntityManagerFactory($factory)
+            ->withConnectionSource(static fn(): Connection => $conn);
+
+        self::assertInstanceOf(Behavior::class, $builder->toBehavior());
     }
 
     #[Test]
