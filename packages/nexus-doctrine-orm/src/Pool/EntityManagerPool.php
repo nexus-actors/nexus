@@ -72,7 +72,15 @@ final class EntityManagerPool
         }
 
         if ($this->total < $this->config->max) {
-            return $this->createAndBorrow();
+            $this->total++;
+
+            try {
+                return $this->createAndBorrow();
+            } catch (Throwable $e) {
+                $this->total--;
+
+                throw $e;
+            }
         }
 
         $waited = $this->idle->pop($timeout ?? $this->config->borrowTimeout);
@@ -188,7 +196,6 @@ final class EntityManagerPool
         $em = new PooledEntityManager($inner);
         $meta = ['conn' => $conn];
         $this->live[$em] = $meta;
-        $this->total++;
         $this->dispatchCreated();
 
         return $this->markBorrowed($em);
