@@ -50,4 +50,37 @@ final readonly class EntityEffect
     {
         return new self(EntityEffectKind::Stash);
     }
+
+    public static function reply(ActorRef $to, object $message): self
+    {
+        return new self(EntityEffectKind::Same, immediateReplyRef: $to, immediateReplyMessage: $message);
+    }
+
+    /**
+     * @param Closure(T): void $hook
+     */
+    public function thenRun(Closure $hook): self
+    {
+        return new self(
+            kind: $this->kind,
+            immediateReplyRef: $this->immediateReplyRef,
+            immediateReplyMessage: $this->immediateReplyMessage,
+            runHooks: [...$this->runHooks, $hook],
+            replyHooks: $this->replyHooks,
+        );
+    }
+
+    /**
+     * @param Closure(T): object $build
+     */
+    public function thenReply(ActorRef $to, Closure $build): self
+    {
+        return new self(
+            kind: $this->kind,
+            immediateReplyRef: $this->immediateReplyRef,
+            immediateReplyMessage: $this->immediateReplyMessage,
+            runHooks: $this->runHooks,
+            replyHooks: [...$this->replyHooks, ['ref' => $to, 'build' => $build]],
+        );
+    }
 }

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Orm\Tests\Unit\Behavior;
 
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffectKind;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(EntityEffect::class)]
 #[CoversClass(EntityEffectKind::class)]
@@ -51,5 +53,57 @@ final class EntityEffectTest extends TestCase
         self::assertEmpty(EntityEffect::persist()->replyHooks);
         self::assertNull(EntityEffect::same()->immediateReplyRef);
         self::assertNull(EntityEffect::same()->immediateReplyMessage);
+    }
+
+    #[Test]
+    public function replyCarriesImmediateRefAndMessage(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $msg = new stdClass();
+
+        $effect = EntityEffect::reply($ref, $msg);
+        self::assertSame($ref, $effect->immediateReplyRef);
+        self::assertSame($msg, $effect->immediateReplyMessage);
+        self::assertSame(EntityEffectKind::Same, $effect->kind);
+    }
+
+    #[Test]
+    public function thenRunAppendsHook(): void
+    {
+        $effect = EntityEffect::persist()->thenRun(static fn(object $e) => null);
+        self::assertCount(1, $effect->runHooks);
+        self::assertSame(EntityEffectKind::Persist, $effect->kind);
+    }
+
+    #[Test]
+    public function thenReplyAppendsHook(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $effect = EntityEffect::persist()->thenReply($ref, static fn(object $e): object => new stdClass());
+        self::assertCount(1, $effect->replyHooks);
+        self::assertSame($ref, $effect->replyHooks[0]['ref']);
+    }
+
+    #[Test]
+    public function composersChain(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $effect = EntityEffect::persist()
+            ->thenRun(static fn(object $e) => null)
+            ->thenReply($ref, static fn(object $e): object => new stdClass());
+
+        self::assertCount(1, $effect->runHooks);
+        self::assertCount(1, $effect->replyHooks);
+    }
+
+    #[Test]
+    public function thenRunReturnsNewInstance(): void
+    {
+        $base = EntityEffect::persist();
+        $composed = $base->thenRun(static fn(object $e) => null);
+
+        self::assertNotSame($base, $composed);
+        self::assertCount(0, $base->runHooks);
+        self::assertCount(1, $composed->runHooks);
     }
 }
