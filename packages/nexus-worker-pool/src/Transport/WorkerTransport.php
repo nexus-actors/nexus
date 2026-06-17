@@ -30,4 +30,20 @@ interface WorkerTransport
      * Close the transport and release resources.
      */
     public function close(): void;
+
+    /**
+     * Signal the transport to stop. The receive loop exits cooperatively
+     * on its next backoff wakeup (within ~10ms in the worst case).
+     *
+     * Idempotent — calling stop() on an already-stopped transport is a no-op.
+     *
+     * Required for graceful shutdown: without stop(), the receive loop blocks
+     * indefinitely and the worker cannot exit cleanly.
+     */
+    public function stop(): void;
+
+    /**
+     * Whether stop() has been called on this transport.
+     */
+    public function isStopped(): bool;
 }

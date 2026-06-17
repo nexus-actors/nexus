@@ -38,6 +38,8 @@ final class ThreadQueueTransport implements WorkerTransport
 
     private bool $closed = false;
 
+    private bool $stopping = false;
+
     /**
      * @param array<int, Queue> $queues All workers' queues, keyed by worker ID
      */
@@ -69,6 +71,18 @@ final class ThreadQueueTransport implements WorkerTransport
         $this->listener = null;
     }
 
+    #[Override]
+    public function stop(): void
+    {
+        $this->stopping = true;
+    }
+
+    #[Override]
+    public function isStopped(): bool
+    {
+        return $this->stopping;
+    }
+
     private function startReceiveLoop(): void
     {
         $queue = $this->queues[$this->workerId] ?? null;
@@ -80,7 +94,7 @@ final class ThreadQueueTransport implements WorkerTransport
         Coroutine::create(function () use ($queue): void {
             $emptyCount = 0;
 
-            while (!$this->closed) {
+            while (!$this->closed && !$this->stopping) {
                 /** @var Envelope|null $envelope */
                 $envelope = $queue->pop(0);
 
