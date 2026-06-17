@@ -14,6 +14,7 @@ use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
+use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\PoisonPill;
@@ -74,6 +75,10 @@ final class ActorCell implements ActorContext
     private ?TimerScheduler $timerScheduler = null;
 
     private ?SupervisionStrategy $behaviorSupervision = null;
+
+    private ?Duration $receiveTimeout = null;
+
+    private ?Cancellable $receiveTimer = null;
 
     /**
      * @param Behavior<T> $behavior
@@ -153,6 +158,7 @@ final class ActorCell implements ActorContext
             } elseif ($message instanceof Signal) {
                 $this->handleSignal($message);
             } else {
+                $this->resetReceiveTimer();
                 $this->handleUserMessage($message);
             }
         } finally {
@@ -176,6 +182,12 @@ final class ActorCell implements ActorContext
         // Cancel all keyed timers
         if ($this->timerScheduler !== null) {
             $this->timerScheduler->cancelAll();
+        }
+
+        // Cancel the receive-timeout timer
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+            $this->receiveTimer = null;
         }
 
         // Stop all children
@@ -394,7 +406,18 @@ final class ActorCell implements ActorContext
     #[Override]
     public function setReceiveTimeout(?Duration $timeout): void
     {
-        // Wired in Plan 4 T3.
+        $this->receiveTimeout = $timeout;
+
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+            $this->receiveTimer = null;
+        }
+
+        if ($timeout === null) {
+            return;
+        }
+
+        $this->armReceiveTimer($timeout);
     }
 
     /** @param Closure(TaskContext): void $task */
@@ -507,6 +530,42 @@ final class ActorCell implements ActorContext
         } elseif ($message instanceof Unwatch) {
             unset($this->watchers[(string) $message->watcher->path()]);
         }
+    }
+
+    private function resetReceiveTimer(): void
+    {
+        $timeout = $this->receiveTimeout;
+
+        if ($timeout === null) {
+            return;
+        }
+
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+        }
+
+        $this->armReceiveTimer($timeout);
+    }
+
+    private function armReceiveTimer(Duration $timeout): void
+    {
+        $self = $this;
+        $this->receiveTimer = $this->runtime->scheduleOnce(
+            $timeout,
+            static function () use ($self, $timeout): void {
+                $self->onReceiveTimeoutFired($timeout);
+            },
+        );
+    }
+
+    private function onReceiveTimeoutFired(Duration $configured): void
+    {
+        if ($this->receiveTimer === null) {
+            return;
+        }
+
+        $this->receiveTimer = null;
+        $this->handleSignal(new ReceiveTimeout($configured));
     }
 
     private function handleSignal(Signal $signal): void
