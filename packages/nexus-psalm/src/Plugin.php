@@ -11,6 +11,7 @@ use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
 use Monadial\Nexus\Psalm\Hook\BehaviorWithStateReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\EntityBehaviorReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
@@ -45,6 +46,7 @@ final class Plugin implements PluginEntryPointInterface
             BehaviorReceiveReturnTypeProvider::class,
             BehaviorSetupReturnTypeProvider::class,
             BehaviorWithStateReturnTypeProvider::class,
+            EntityBehaviorReturnTypeProvider::class,
             MismatchedReplyTypeRule::class,
         ];
 
