@@ -23,8 +23,8 @@ final class EntityRefFactoryTest extends TestCase
     #[Test]
     public function derivesDeterministicActorName(): void
     {
-        self::assertSame('stdClass::42', EntityRefFactory::deriveName(stdClass::class, 42));
-        self::assertSame('App.Order::abc', EntityRefFactory::deriveName('App\\Order', 'abc'));
+        self::assertSame('stdClass--42', EntityRefFactory::deriveName(stdClass::class, 42));
+        self::assertSame('App.Order--abc', EntityRefFactory::deriveName('App\\Order', 'abc'));
     }
 
     #[Test]

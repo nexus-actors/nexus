@@ -83,9 +83,10 @@ final class EntityRefFactory
     /**
      * Derive the deterministic actor name for a given entity class and id.
      * Namespace separators are replaced with dots so the name is path-safe.
+     * The separator '--' satisfies ActorPath's NAME_PATTERN ([a-zA-Z0-9_\-\.]+).
      */
     public static function deriveName(string $entityClass, mixed $id): string
     {
-        return str_replace('\\', '.', $entityClass) . '::' . (string) $id;
+        return str_replace('\\', '.', $entityClass) . '--' . (string) $id;
     }
 }
