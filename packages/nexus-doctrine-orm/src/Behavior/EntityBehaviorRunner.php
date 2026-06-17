@@ -51,12 +51,12 @@ final class EntityBehaviorRunner
                         ?object $state,
                     ) use ($builder, $em): BehaviorWithState {
                         if ($state === null) {
-                            $resolved = $builder->replayPolicy->resolve($em, $builder->entityClass, $builder->id);
+                            $resolved = $em->find($builder->entityClass, $builder->id);
 
                             if ($resolved === null) {
                                 throw new RuntimeException(
                                     sprintf(
-                                        'OnDemand replay returned null for %s::%s on first command',
+                                        'Entity %s::%s not found on deferred load',
                                         $builder->entityClass,
                                         (string) $builder->id,
                                     ),
