@@ -44,8 +44,8 @@ test-cluster: ## Cluster integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
 
 test-doctrine: ## Doctrine DBAL pool + ORM pool integration tests
-	$(DC) vendor/bin/phpunit --testsuite=integration-doctrine-fiber
-	$(DC) vendor/bin/phpunit --testsuite=integration-doctrine-orm-fiber
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-fiber
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-orm-fiber
 	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-swoole
 	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-orm-swoole
 
