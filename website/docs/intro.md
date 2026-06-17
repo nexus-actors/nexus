@@ -69,6 +69,8 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-persistence** | `nexus-actors/persistence` | Event sourcing and durable state abstractions. Effects, snapshots, retention policies, concurrency control, and in-memory stores for testing. |
 | **nexus-persistence-dbal** | `nexus-actors/persistence-dbal` | Doctrine DBAL storage backends for persistence. SQL-backed event, snapshot, and durable state stores. |
 | **nexus-persistence-doctrine** | `nexus-actors/persistence-doctrine` | Doctrine ORM adapter for persistence. Entity-based stores using `EntityManagerInterface`. |
+| **nexus-doctrine-dbal** | `nexus-actors/doctrine-dbal` | Coroutine-aware DBAL `ConnectionPool` + HTTP middleware/resolver + `#[Transactional]` + actor-side helpers. General-purpose data access (separate from `persistence-dbal` which is event-sourcing storage). |
+| **nexus-doctrine-orm** | `nexus-actors/doctrine-orm` | Pooled `EntityManagerInterface` injection for HTTP handlers + `EntityBehavior` DSL: treat a Doctrine entity as the state of an aggregate actor with single-writer semantics and optional idle-passivation. |
 | **nexus-serialization** | `nexus-actors/serialization` | Valinor-based message serialization with a type registry for wire-format encoding and decoding. |
 | **nexus-app** | `nexus-actors/app` | Application kernel for declarative actor registration and single-process execution. |
 | **nexus-psalm** | `nexus-actors/psalm` | Psalm plugin providing static analysis support for actor message protocols and behavior types. |

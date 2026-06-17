@@ -562,3 +562,20 @@ $ref->tell(new TurnOn());  // Light is ON
 ```
 
 When the handler returns a new `Behavior` (instead of `Behavior::same()`), the actor system replaces the current behavior entirely. The next message will be processed by the new behavior. This pattern is often called "become" in actor model literature.
+
+## Higher-level behavior DSLs
+
+The factory methods above (`receive`, `withState`, `setup`) are the primitives. Other packages ship opinionated **DSLs** built on top of them — each one is still a `Behavior<T>` under the hood but adds machinery for a specific persistence or aggregate pattern.
+
+| DSL | Package | Use case |
+|---|---|---|
+| **`EventSourcedBehavior`** | `nexus-persistence` | Commands produce events; events replay to rebuild state. Full audit trail. See [Persistence / Event Sourcing](./persistence.md#event-sourcing). |
+| **`DurableStateBehavior`** | `nexus-persistence` | State snapshots without event history. Simpler model when you don't need the audit trail. See [Persistence / Durable State](./persistence.md#durable-state). |
+| **`EntityBehavior`** | `nexus-doctrine-orm` | Treat a Doctrine entity as the actor's state. Mutate the entity normally, return `EntityEffect::persist()` and the runner flushes. Single-writer per `(class, id)` via `EntityRefFactory`. See [EntityBehavior DSL](../doctrine/entity-behavior.md). |
+
+All three:
+- Return a `Behavior` from `toBehavior()` that fits the same `Props::fromBehavior(...)` spawn flow.
+- Run replay/load on `PreStart`, persist on a command-handler-returned effect, clean up on `PostStop`.
+- Support **idle-passivation** via `setReceiveTimeout` (the underlying primitive lives in `nexus-core`; `EntityBehavior` exposes it as `withReceiveTimeout(Duration)`).
+
+When you'd reach for one of these instead of writing `Behavior::withState(...)` by hand: when the state needs to **survive restart** (`EventSourced`/`DurableState`) or when the state IS a **Doctrine entity with invariants** (`EntityBehavior`).

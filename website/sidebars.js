@@ -25,6 +25,7 @@ const sidebars = {
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
         'core-concepts/persistence',
+        'core-concepts/passivation',
       ],
     },
     {

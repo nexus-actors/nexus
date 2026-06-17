@@ -144,6 +144,8 @@ interface ActorContext
 
     public function unstashAll(): void;
 
+    public function setReceiveTimeout(?Duration $timeout): void;
+
     public function log(): LoggerInterface;
 
     /** @return ?ActorRef<object> */

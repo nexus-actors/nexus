@@ -10,15 +10,21 @@ due to a failure, a deployment, or a system shutdown -- its in-memory state is
 lost. Persistence solves this by automatically saving and recovering state so
 that an actor can pick up exactly where it left off.
 
-Nexus supports two persistence models. **Event Sourcing** persists a sequence of
+Nexus supports three persistence models. **Event Sourcing** persists a sequence of
 events and rebuilds state by replaying them. **Durable State** persists the
-current state directly as a single value. Both models share the same
-`PersistenceId` addressing scheme, storage backend abstraction, and recovery
-lifecycle.
+current state directly as a single value. **Entity Behavior** uses a Doctrine
+entity as the actor's state and persists via the Doctrine ORM. The first two
+share the same `PersistenceId` addressing scheme, storage backend abstraction,
+and recovery lifecycle; Entity Behavior is documented separately under
+[Doctrine / EntityBehavior DSL](../doctrine/entity-behavior.md).
 
-Choose the model that fits your domain. Event Sourcing gives you a full audit
-trail and temporal queries; Durable State gives you simplicity and lower storage
-overhead. Both can be mixed within the same actor system.
+Choose the model that fits your domain:
+
+- **Event Sourcing** — full audit trail and temporal queries; commands → events → replay.
+- **Durable State** — simplicity and lower storage overhead; state is the row.
+- **Entity Behavior** — when your aggregate is already a Doctrine entity with invariants. Single-writer per `(class, id)` via `EntityRefFactory`; optional idle-passivation.
+
+All three can be mixed within the same actor system.
 
 ## Event Sourcing
 
