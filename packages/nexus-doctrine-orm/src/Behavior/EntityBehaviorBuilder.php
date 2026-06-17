@@ -12,6 +12,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\EntityReplayPolicy;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\FailIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
+use Monadial\Nexus\Runtime\Duration;
 
 /**
  * @template T of object
@@ -36,6 +37,7 @@ final readonly class EntityBehaviorBuilder
         ?EntityReplayPolicy $replayPolicy = null,
         public ?LockMode $lockMode = null,
         public ?Closure $connectionSource = null,
+        public ?Duration $receiveTimeout = null,
     ) {
         $this->replayPolicy = $replayPolicy ?? new FailIfMissing();
     }
@@ -50,6 +52,7 @@ final readonly class EntityBehaviorBuilder
             replayPolicy: $this->replayPolicy,
             lockMode: $this->lockMode,
             connectionSource: $this->connectionSource,
+            receiveTimeout: $this->receiveTimeout,
         );
     }
 
@@ -63,6 +66,7 @@ final readonly class EntityBehaviorBuilder
             replayPolicy: $policy,
             lockMode: $this->lockMode,
             connectionSource: $this->connectionSource,
+            receiveTimeout: $this->receiveTimeout,
         );
     }
 
@@ -76,6 +80,7 @@ final readonly class EntityBehaviorBuilder
             replayPolicy: $this->replayPolicy,
             lockMode: $mode,
             connectionSource: $this->connectionSource,
+            receiveTimeout: $this->receiveTimeout,
         );
     }
 
@@ -92,6 +97,21 @@ final readonly class EntityBehaviorBuilder
             replayPolicy: $this->replayPolicy,
             lockMode: $this->lockMode,
             connectionSource: $source,
+            receiveTimeout: $this->receiveTimeout,
+        );
+    }
+
+    public function withReceiveTimeout(Duration $timeout): self
+    {
+        return new self(
+            entityClass: $this->entityClass,
+            id: $this->id,
+            commandHandler: $this->commandHandler,
+            emFactory: $this->emFactory,
+            replayPolicy: $this->replayPolicy,
+            lockMode: $this->lockMode,
+            connectionSource: $this->connectionSource,
+            receiveTimeout: $timeout,
         );
     }
 
