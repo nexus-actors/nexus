@@ -29,12 +29,16 @@ final readonly class AdminAllLedgersHandler
 {
     public function __invoke(Connection $conn): ResponseInterface
     {
-        /** @var list<array{owner_id: string, deposit_count: int, withdraw_count: int, deposit_cents: int, withdraw_cents: int, last_activity_at: ?string}> $rows */
+        // Postgres folds unquoted identifiers to lowercase, so the
+        // camelCase Doctrine property names ($ownerId, $depositCount, …)
+        // become `ownerid`, `depositcount`, etc. when DDL runs without
+        // an underscore naming strategy.
+        /** @var list<array{ownerid: string, depositcount: int, withdrawcount: int, depositcents: int, withdrawcents: int, lastactivityat: ?string}> $rows */
         $rows = $conn->fetchAllAssociative(
-            'SELECT owner_id, deposit_count, withdraw_count,
-                    deposit_cents, withdraw_cents, last_activity_at
+            'SELECT ownerid, depositcount, withdrawcount,
+                    depositcents, withdrawcents, lastactivityat
              FROM wallet_ledgers
-             ORDER BY deposit_cents - withdraw_cents DESC
+             ORDER BY depositcents - withdrawcents DESC
              LIMIT 100',
         );
 
@@ -42,13 +46,13 @@ final readonly class AdminAllLedgersHandler
             'count' => count($rows),
             'wallets' => array_map(
                 static fn(array $r): array => [
-                    'depositCents' => (int) $r['deposit_cents'],
-                    'depositCount' => (int) $r['deposit_count'],
-                    'lastActivityAt' => $r['last_activity_at'],
-                    'netCents' => (int) $r['deposit_cents'] - (int) $r['withdraw_cents'],
-                    'ownerId' => (string) $r['owner_id'],
-                    'withdrawCents' => (int) $r['withdraw_cents'],
-                    'withdrawCount' => (int) $r['withdraw_count'],
+                    'depositCents' => (int) $r['depositcents'],
+                    'depositCount' => (int) $r['depositcount'],
+                    'lastActivityAt' => $r['lastactivityat'],
+                    'netCents' => (int) $r['depositcents'] - (int) $r['withdrawcents'],
+                    'ownerId' => (string) $r['ownerid'],
+                    'withdrawCents' => (int) $r['withdrawcents'],
+                    'withdrawCount' => (int) $r['withdrawcount'],
                 ],
                 $rows,
             ),

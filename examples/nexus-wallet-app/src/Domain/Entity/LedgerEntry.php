@@ -9,6 +9,7 @@ use Doctrine\ORM\Mapping\Column;
 use Doctrine\ORM\Mapping\Entity;
 use Doctrine\ORM\Mapping\GeneratedValue;
 use Doctrine\ORM\Mapping\Id;
+use Doctrine\ORM\Mapping\JoinColumn;
 use Doctrine\ORM\Mapping\ManyToOne;
 use Doctrine\ORM\Mapping\Table;
 
@@ -33,7 +34,8 @@ class LedgerEntry
     #[Column]
     public ?int $id = null;
 
-    #[ManyToOne(targetEntity: WalletLedger::class)]
+    #[ManyToOne(targetEntity: WalletLedger::class, inversedBy: 'entries')]
+    #[JoinColumn(name: 'owner_id', referencedColumnName: 'ownerId')]
     public WalletLedger $ledger;
 
     #[Column(length: 16)]

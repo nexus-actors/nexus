@@ -7,6 +7,7 @@ FROM php:8.5-zts
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf build-essential pkg-config \
         libssl-dev libcurl4-openssl-dev libbrotli-dev libnghttp2-dev libpq-dev \
+        libsqlite3-dev \
         zlib1g-dev unzip git \
     && rm -rf /var/lib/apt/lists/*
 

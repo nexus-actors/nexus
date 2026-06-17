@@ -202,13 +202,21 @@ try {
                 // Schema bootstrap — idempotent: create if missing. Covers
                 // both WalletLedger (running totals, single row per owner)
                 // and LedgerEntry (one row per recorded operation).
+                //
+                // All worker threads run this concurrently — wrap in
+                // try/catch so the winner creates and the rest no-op.
+                // Postgres's pg_class lookups race on first-create.
                 $bootstrapConn = DriverManager::getConnection($ledgerConnParams);
                 $bootstrapEm = (new DefaultEntityManagerFactory($ormConfig))->create($bootstrapConn);
                 $schemaTool = new SchemaTool($bootstrapEm);
-                $schemaTool->updateSchema([
-                    $bootstrapEm->getClassMetadata(LedgerEntry::class),
-                    $bootstrapEm->getClassMetadata(WalletLedger::class),
-                ]);
+                try {
+                    $schemaTool->updateSchema([
+                        $bootstrapEm->getClassMetadata(LedgerEntry::class),
+                        $bootstrapEm->getClassMetadata(WalletLedger::class),
+                    ]);
+                } catch (\Doctrine\DBAL\Exception\UniqueConstraintViolationException) {
+                    // Lost the race — another worker already created the schema. Fine.
+                }
                 $bootstrapEm->close();
                 $bootstrapConn->close();
 
@@ -303,8 +311,21 @@ try {
                 // it as an instance-binding closure).
                 $app->get('/wallet/ledger', LedgerHandler::class);
                 $app->get('/wallet/ledger/entries', LedgerEntriesHandler::class);
+                // The wallet-app doesn't wire a PSR-11 container so we can't
+                // use #[FromService] to inject the EntityRefFactory. Instead,
+                // build the handler instance up front and register a closure
+                // whose params the handler-resolver registry can introspect
+                // (ServerRequestInterface + Principal here — same as the
+                // handler class's __invoke signature).
                 $recordHandler = new LedgerRecordHandler($ledgerFactory);
-                $app->post('/wallet/ledger/record', static fn(...$args): ResponseInterface => $recordHandler(...$args));
+                $app->post(
+                    '/wallet/ledger/record',
+                    static fn(
+                        \Psr\Http\Message\ServerRequestInterface $request,
+                        #[\Monadial\Nexus\Http\Auth\Attribute\FromPrincipal]
+                        \Monadial\Nexus\Http\Auth\Principal $principal,
+                    ): ResponseInterface => $recordHandler($request, $principal),
+                );
 
                 // Admin endpoint — list all ledgers ranked by net balance.
                 // Demonstrates raw SQL through the injected DBAL Connection
