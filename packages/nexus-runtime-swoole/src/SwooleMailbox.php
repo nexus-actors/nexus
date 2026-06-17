@@ -179,6 +179,12 @@ final class SwooleMailbox implements Mailbox
     }
 
     #[Override]
+    public function isClosed(): bool
+    {
+        return $this->closed;
+    }
+
+    #[Override]
     public function close(): void
     {
         if ($this->closed) {

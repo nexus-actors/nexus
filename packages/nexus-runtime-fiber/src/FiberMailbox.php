@@ -162,6 +162,12 @@ final class FiberMailbox implements Mailbox
         $this->wakeAllWaiters();
     }
 
+    #[Override]
+    public function isClosed(): bool
+    {
+        return $this->closed;
+    }
+
     /**
      * @return list<Fiber<mixed, mixed, mixed, mixed>>
      */
