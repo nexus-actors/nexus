@@ -57,6 +57,11 @@ deptrac:
         - type: directory
           value: packages/nexus-doctrine-dbal/src/.*
 
+    - name: DoctrineOrm
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-orm/src/.*
+
     - name: WorkerPool
       collectors:
         - type: directory
@@ -134,6 +139,11 @@ deptrac:
       - Core
     DoctrineDbal:
       - Core
+      - Http
+      - Runtime
+    DoctrineOrm:
+      - Core
+      - DoctrineDbal
       - Http
       - Runtime
     WorkerPool:

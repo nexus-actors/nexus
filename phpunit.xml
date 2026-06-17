@@ -13,6 +13,7 @@
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
             <directory>packages/nexus-persistence/tests/Unit</directory>
@@ -95,6 +96,7 @@
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>
+            <directory>packages/nexus-doctrine-orm/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>
             <directory>packages/nexus-worker-pool-swoole/src</directory>
             <directory>packages/nexus-app/src</directory>
