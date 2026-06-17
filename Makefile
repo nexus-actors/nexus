@@ -43,9 +43,10 @@ test-serialization: ## Serialization integration tests
 test-cluster: ## Cluster integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
 
-test-doctrine: ## Doctrine DBAL pool + ORM pool integration tests
+test-doctrine: ## Doctrine DBAL pool + ORM pool + EntityBehavior integration tests
 	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-fiber
 	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-orm-fiber
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-entity-behavior
 	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-swoole
 	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-orm-swoole
 
