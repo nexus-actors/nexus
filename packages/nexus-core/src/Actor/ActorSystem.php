@@ -98,7 +98,11 @@ final class ActorSystem
     public function spawn(Props $props, string $name): ActorRef
     {
         if (isset($this->children[$name])) {
-            throw new ActorNameExistsException($this->userGuardianPath, $name);
+            if ($this->children[$name]->isAlive()) {
+                throw new ActorNameExistsException($this->userGuardianPath, $name);
+            }
+
+            unset($this->children[$name]);
         }
 
         $ref = $this->createActorCell($props, $name);
