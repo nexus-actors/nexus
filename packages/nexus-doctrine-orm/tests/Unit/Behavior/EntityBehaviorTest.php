@@ -18,6 +18,7 @@ final class EntityBehaviorTest extends TestCase
     #[Test]
     public function createReturnsBuilder(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $b = EntityBehavior::create(
             entityClass: stdClass::class,
             id: 'k',

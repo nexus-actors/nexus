@@ -59,8 +59,10 @@ final class EntityBehaviorBuilderTest extends TestCase
     {
         $base = $this->builder();
         $emFactory = $this->createStub(EntityManagerFactory::class);
+        /** @psalm-suppress UnusedClosureParam */
         $policy = new CreateIfMissing(static fn(mixed $id): object => new stdClass());
 
+        /** @psalm-suppress InvalidArgument */
         $configured = $base
             ->withEntityManagerFactory($emFactory)
             ->withReplayPolicy($policy);
@@ -84,6 +86,7 @@ final class EntityBehaviorBuilderTest extends TestCase
         return new EntityBehaviorBuilder(
             entityClass: stdClass::class,
             id: 'k',
+            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn($ctx, object $msg, object $entity): EntityEffect => EntityEffect::same(),
         );
     }

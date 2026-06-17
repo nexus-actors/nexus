@@ -70,6 +70,7 @@ final class EntityEffectTest extends TestCase
     #[Test]
     public function thenRunAppendsHook(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::persist()->thenRun(static fn(object $e) => null);
         self::assertCount(1, $effect->runHooks);
         self::assertSame(EntityEffectKind::Persist, $effect->kind);
@@ -79,6 +80,7 @@ final class EntityEffectTest extends TestCase
     public function thenReplyAppendsHook(): void
     {
         $ref = $this->createStub(ActorRef::class);
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::persist()->thenReply($ref, static fn(object $e): object => new stdClass());
         self::assertCount(1, $effect->replyHooks);
         self::assertSame($ref, $effect->replyHooks[0]['ref']);
@@ -88,6 +90,7 @@ final class EntityEffectTest extends TestCase
     public function composersChain(): void
     {
         $ref = $this->createStub(ActorRef::class);
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::persist()
             ->thenRun(static fn(object $e) => null)
             ->thenReply($ref, static fn(object $e): object => new stdClass());
@@ -100,6 +103,7 @@ final class EntityEffectTest extends TestCase
     public function thenRunReturnsNewInstance(): void
     {
         $base = EntityEffect::persist();
+        /** @psalm-suppress UnusedClosureParam */
         $composed = $base->thenRun(static fn(object $e) => null);
 
         self::assertNotSame($base, $composed);
@@ -110,6 +114,7 @@ final class EntityEffectTest extends TestCase
     #[Test]
     public function removeWithThenRunCarriesBothKindAndHook(): void
     {
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::remove()->thenRun(static fn(object $e) => null);
 
         self::assertSame(EntityEffectKind::Remove, $effect->kind);
@@ -122,6 +127,7 @@ final class EntityEffectTest extends TestCase
         // Hooks ARE stored on the effect; the runner (Plan 3 T7) is responsible
         // for NOT firing them when kind === Stop (stop means "no flush" → entity
         // may be inconsistent). This test verifies the data shape only.
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::stop()->thenRun(static fn(object $e) => null);
 
         self::assertSame(EntityEffectKind::Stop, $effect->kind);
@@ -132,6 +138,7 @@ final class EntityEffectTest extends TestCase
     public function persistWithReplyAndThenRunCombines(): void
     {
         $ref = $this->createStub(ActorRef::class);
+        /** @psalm-suppress UnusedClosureParam */
         $effect = EntityEffect::reply($ref, new stdClass())
             ->thenRun(static fn(object $e) => null);
 

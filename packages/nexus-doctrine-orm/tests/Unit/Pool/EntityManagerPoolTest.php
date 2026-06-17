@@ -90,8 +90,10 @@ final class EntityManagerPoolTest extends TestCase
         $emFactory->prepend($this->openEm());
         $pool = $this->pool($emFactory, new EmPoolConfig(max: 1, minIdle: 0));
 
+        /** @psalm-suppress UnusedClosureParam */
         $result = $pool->withEntityManager(static fn(EntityManagerInterface $em): string => 'ok');
 
+        /** @psalm-suppress RedundantConditionGivenDocblockType */
         self::assertSame('ok', $result);
         self::assertSame(0, $pool->stats()->inUse);
     }
@@ -128,6 +130,7 @@ final class EntityManagerPoolTest extends TestCase
         return $em;
     }
 
+    /** @psalm-suppress ArgumentTypeCoercion */
     private function pool(StubEntityManagerFactory $emFactory, EmPoolConfig $config): EntityManagerPool
     {
         $connPool = new ConnectionPool(

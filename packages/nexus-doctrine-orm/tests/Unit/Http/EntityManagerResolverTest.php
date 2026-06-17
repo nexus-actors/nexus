@@ -107,6 +107,7 @@ final class EntityManagerResolverTest extends TestCase
         return new HttpRequestContext(new ResolverServices(), $request, [], $scope);
     }
 
+    /** @psalm-suppress ArgumentTypeCoercion */
     private function pool(): EntityManagerPool
     {
         $em = $this->createMock(EntityManagerInterface::class);

@@ -92,6 +92,7 @@ final class DoctrineOrmHttpTest extends TestCase
         $registry->compile($param, $ctx);
     }
 
+    /** @psalm-suppress ArgumentTypeCoercion */
     private function makePool(): EntityManagerPool
     {
         $connPool = new ConnectionPool(

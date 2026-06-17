@@ -31,8 +31,10 @@ final class PooledEntityManagerTest extends TestCase
 
         self::assertSame(0, $pem->borrowCount());
         $pem->markBorrowed();
+        /** @psalm-suppress DocblockTypeContradiction */
         self::assertSame(1, $pem->borrowCount());
         $pem->markBorrowed();
+        /** @psalm-suppress DocblockTypeContradiction */
         self::assertSame(2, $pem->borrowCount());
     }
 

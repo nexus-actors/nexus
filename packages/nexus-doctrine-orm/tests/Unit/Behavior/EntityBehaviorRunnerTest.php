@@ -15,6 +15,7 @@ use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(EntityBehaviorRunner::class)]
 final class EntityBehaviorRunnerTest extends TestCase
@@ -25,6 +26,7 @@ final class EntityBehaviorRunnerTest extends TestCase
         $factory = $this->createStub(EntityManagerFactory::class);
         $conn = $this->createStub(Connection::class);
 
+        /** @psalm-suppress MixedArgumentTypeCoercion, MixedArgument, UnusedClosureParam */
         $behavior = EntityBehavior::create(
             entityClass: stdClass::class,
             id: 'k',
