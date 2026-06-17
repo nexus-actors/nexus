@@ -73,6 +73,17 @@ interface ActorContext
     public function reply(object $message): void;
 
     /**
+     * Configure a receive-timeout: if no user message arrives within $timeout
+     * after the last user-message dispatch, the actor receives a
+     * Monadial\Nexus\Core\Lifecycle\ReceiveTimeout signal via onSignal().
+     *
+     * Call with null to cancel. Re-calling with a new Duration replaces the
+     * current setting; the first user message after the call uses the new
+     * timeout.
+     */
+    public function setReceiveTimeout(?Duration $timeout): void;
+
+    /**
      * Spawn a background task bound to this actor's lifecycle.
      *
      * The task closure receives a {@see TaskContext} for cooperative cancellation

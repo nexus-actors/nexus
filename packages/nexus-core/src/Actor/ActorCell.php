@@ -391,6 +391,12 @@ final class ActorCell implements ActorContext
         $sender->tell($message);
     }
 
+    #[Override]
+    public function setReceiveTimeout(?Duration $timeout): void
+    {
+        // Wired in Plan 4 T3.
+    }
+
     /** @param Closure(TaskContext): void $task */
     #[Override]
     public function spawnTask(Closure $task): Cancellable
