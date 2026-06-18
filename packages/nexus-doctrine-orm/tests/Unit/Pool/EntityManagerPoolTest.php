@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Doctrine\Orm\Tests\Unit\Pool;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Monadial\Nexus\Doctrine\Dbal\Exception\PoolExhaustedException;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
@@ -13,6 +14,7 @@ use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
 use Monadial\Nexus\Doctrine\Orm\Pool\PooledEntityManager;
 use Monadial\Nexus\Doctrine\Orm\Tests\Support\StubEntityManagerFactory;
+use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -120,6 +122,37 @@ final class EntityManagerPoolTest extends TestCase
         $c = $pool->take();    // fresh EM
         self::assertNotSame($a, $c);
         $pool->release($c);
+    }
+
+    #[Test]
+    public function exhaustionStatsTrackWaitAndTimeout(): void
+    {
+        $emFactory = new StubEntityManagerFactory();
+        $emFactory->prepend($this->openEm());
+
+        $pool = $this->pool($emFactory, new EmPoolConfig(
+            borrowTimeout: Duration::millis(10),
+            max: 1,
+            minIdle: 0,
+        ));
+
+        $borrowed = $pool->take();
+
+        try {
+            $pool->take();
+            self::fail('expected PoolExhaustedException');
+        } catch (PoolExhaustedException $e) {
+            self::assertSame(1, $e->stats->totalWaits);
+            self::assertSame(1, $e->stats->totalTimeouts);
+            self::assertSame(0, $e->stats->waitingCoroutines);
+        }
+
+        $stats = $pool->stats();
+        self::assertSame(1, $stats->totalWaits);
+        self::assertSame(1, $stats->totalTimeouts);
+        self::assertSame(0, $stats->waitingCoroutines);
+
+        $pool->release($borrowed);
     }
 
     private function openEm(): EntityManagerInterface

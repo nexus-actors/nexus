@@ -39,6 +39,9 @@ final class EntityManagerPool
     private int $inUse = 0;
     private int $totalBorrows = 0;
     private int $totalEvictions = 0;
+    private int $totalWaits = 0;
+    private int $totalTimeouts = 0;
+    private int $waitingCoroutines = 0;
     private bool $closed = false;
 
     /**
@@ -83,19 +86,28 @@ final class EntityManagerPool
             }
         }
 
-        $waited = $this->idle->pop($timeout ?? $this->config->borrowTimeout);
+        $this->totalWaits++;
+        $this->waitingCoroutines++;
+
+        try {
+            $waited = $this->idle->pop($timeout ?? $this->config->borrowTimeout);
+        } finally {
+            $this->waitingCoroutines--;
+        }
 
         if ($waited === null) {
+            $this->totalTimeouts++;
+
             throw PoolExhaustedException::after(
                 $this->name,
                 new PoolStats(
                     idle: $this->idle->size(),
                     inUse: $this->inUse,
                     total: $this->total,
-                    waitingCoroutines: 0,
+                    waitingCoroutines: $this->waitingCoroutines,
                     totalBorrows: $this->totalBorrows,
-                    totalWaits: 0,
-                    totalTimeouts: 0,
+                    totalWaits: $this->totalWaits,
+                    totalTimeouts: $this->totalTimeouts,
                 ),
             );
         }
@@ -173,6 +185,9 @@ final class EntityManagerPool
             total: $this->total,
             totalBorrows: $this->totalBorrows,
             totalEvictions: $this->totalEvictions,
+            waitingCoroutines: $this->waitingCoroutines,
+            totalWaits: $this->totalWaits,
+            totalTimeouts: $this->totalTimeouts,
         );
     }
 
