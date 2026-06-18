@@ -116,18 +116,43 @@ How the runner loads the entity on `PreStart`.
 - **`CreateIfMissing`** for "spawn on first access" — user sessions, shopping carts, per-entity counters.
 - **`OnDemand`** for very-many-rarely-used entities — spawning an actor is cheap; loading rows is expensive. The DB row must already exist by the time the first command arrives.
 
-## Dedicated, non-pooled EM
+## Two connection modes
 
-Each `EntityBehavior` actor gets a **dedicated** EM constructed from
-`EntityManagerFactory` — **not** from `EntityManagerPool`. Reasoning:
+Each `EntityBehavior` actor gets a **dedicated** `EntityManager` constructed
+from `EntityManagerFactory` — never a pooled one. The reason is identity:
+swapping EMs mid-lifecycle would lose UoW tracking for the entity the actor
+holds. The connection is what you choose:
 
-- Actor lifetime ≠ request lifetime. A hot entity actor may run for
-  minutes or hours. Pooling would either pin a pool slot forever or
-  require swapping EMs (which loses UoW identity for the tracked entity).
-- The connection is held for the whole actor lifetime.
+**Dedicated mode (default — `withConnectionSource`):** the runner owns the
+connection and calls `close()` on `PostStop`. Use this for fresh
+`DriverManager::getConnection()` calls.
 
-**This is a real cost.** An app with 10k hot entity actors needs ≥10k
-DB connections. Mitigations:
+```php
+$behavior
+    ->withConnectionSource(static fn(): Connection => DriverManager::getConnection($params))
+    ->toBehavior();
+```
+
+**Pool-backed mode (`withConnectionLifecycle`):** the runner borrows from
+your `ConnectionPool` and releases the slot on `PostStop` instead of
+closing the connection. The slot is returned to the pool when the actor
+passivates, so an app with N idle entity actors doesn't pin N pool slots
+forever.
+
+```php
+$behavior
+    ->withConnectionLifecycle(
+        acquire: static fn() => $connPool->take(),
+        release: static fn(Connection $c) => $connPool->release($c),
+    )
+    ->toBehavior();
+```
+
+The runner closes the EM first in both cases (so any open transaction
+rolls back), then dispatches the connection lifecycle hook.
+
+**Capacity is still a real cost.** An app with 10k *live* entity actors
+needs 10k connections — either dedicated or pinned in the pool. Mitigations:
 
 - **Passivation**: configure `ReceiveTimeout`; on the signal return
   `Behavior::stopped()`. Idle actors release their connection.
@@ -142,8 +167,8 @@ For hot entities that's fine; for the long tail it's expensive. Opt into
 idle-passivation via `withReceiveTimeout`:
 
 ```php
-use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehavior;
+use Monadial\Nexus\Runtime\Duration;
 
 $behavior = EntityBehavior::create(Order::class, $id, $handler)
     ->withEntityManagerFactory($emFactory)

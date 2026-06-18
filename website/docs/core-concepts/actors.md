@@ -51,7 +51,7 @@ $greeter->tell(new Greet('Alice'));
 
 ### ask -- request-response
 
-`ask()` sends a message and waits for a reply within a timeout. The `$messageFactory` receives a temporary `ActorRef` that the target actor should reply to.
+`ask()` sends a message and returns a `Future` that resolves when the actor replies. Call `->await()` (with the same timeout enforced) to materialise the result. The message must carry a reply destination (`ActorRef $replyTo` or a `FutureSlot`) — see [Ask pattern](./ask-pattern.md) for the supported reply mechanisms.
 
 ```php
 readonly class GetCount
@@ -65,15 +65,14 @@ readonly class CountResult
 }
 
 /** @var CountResult $result */
-$result = $counter->ask(
-    fn (ActorRef $replyTo) => new GetCount($replyTo),
-    Duration::seconds(5),
-);
+$result = $counter
+    ->ask(new GetCount($replyTo), Duration::seconds(5))
+    ->await();
 
 echo $result->count; // 42
 ```
 
-If the actor does not respond within the timeout, an `AskTimeoutException` is thrown.
+If the actor does not respond within the timeout, the `Future`'s `await()` throws `AskTimeoutException`.
 
 ### path and isAlive
 

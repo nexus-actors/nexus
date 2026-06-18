@@ -92,21 +92,21 @@ Use `tell` for:
 ### Ask — request-response with timeout
 
 ```php
-$order = $this->orders->ask(
-    static fn(ActorRef $reply) => new GetOrder($id, $reply),
-    timeout: Duration::seconds(2),
-);
+$order = $this->orders
+    ->ask(new GetOrder($id), Duration::seconds(2))
+    ->await();
 
 return JsonResponse::ok($order->toArray());
 ```
 
-The handler **suspends the fiber/coroutine** until the actor sends a
-reply or the timeout expires. Other requests on the same thread keep
-running — this isn't a system-thread block, it's a cooperative await.
+`ask()` returns a `Future` immediately; `await()` **suspends the
+fiber/coroutine** until the actor sends a reply or the timeout expires.
+Other requests on the same thread keep running — this isn't a
+system-thread block, it's a cooperative await.
 
-The closure receives an ephemeral reply `ActorRef`; the actor uses it to
-send the response back. The framework correlates the reply with the
-waiting fiber and resumes it with the typed result.
+The framework attaches an ephemeral reply ref to the envelope as the
+sender. The actor reads it via `$ctx->sender()->tell($reply)` and the
+framework resumes the waiting fiber with the typed result.
 
 ### Choosing Between Them
 
@@ -131,7 +131,7 @@ Or catch it locally if you have a fallback:
 
 ```php
 try {
-    $cached = $this->cache->ask(fn($r) => new Get($key, $r), Duration::millis(50));
+    $cached = $this->cache->ask(new Get($key), Duration::millis(50))->await();
     return JsonResponse::ok($cached->value);
 } catch (AskTimeoutException) {
     $fresh = $this->repo->fetch($key);
@@ -146,7 +146,7 @@ Pick the timeout per call. There's no global default — be explicit.
 
 The router supports handlers that return `Future<ResponseInterface>`
 directly. The dispatcher awaits the future before serialising; the
-handler doesn't have to block on `ask`:
+handler doesn't have to block on `await`:
 
 ```php
 use Monadial\Nexus\Runtime\Async\Future;
@@ -156,15 +156,16 @@ public function __invoke(ServerRequestInterface $req): Future
     $id = (string) $req->getAttribute('id');
 
     return $this->orders
-        ->askFuture(static fn($reply) => new GetOrder($id, $reply))
+        ->ask(new GetOrder($id), Duration::seconds(2))
         ->map(static fn(Order $order) => JsonResponse::ok($order->toArray()));
 }
 ```
 
-This is useful when you want to compose multiple async steps via
-`Future::map` / `Future::flatMap` without nesting `try`/`catch` blocks.
-The router awaits whatever you return: `ResponseInterface`, `Future`, or
-a `Future` that resolves to a `ResponseInterface`.
+`ask()` already returns a `Future` — `map()` chains the transformation
+without ever blocking. This is useful when you want to compose multiple
+async steps via `Future::map` / `Future::flatMap` without nested
+`try`/`catch`. The router awaits whatever you return: `ResponseInterface`,
+`Future`, or a `Future` that resolves to a `ResponseInterface`.
 
 ### Combining Futures
 
@@ -174,8 +175,8 @@ public function __invoke(ServerRequestInterface $req): Future
     $userId = (string) $req->getAttribute('id');
 
     return Future::all([
-        'user'   => $this->users->askFuture(fn($r) => new GetUser($userId, $r)),
-        'orders' => $this->orders->askFuture(fn($r) => new ListByUser($userId, $r)),
+        'user'   => $this->users->ask(new GetUser($userId), Duration::seconds(2)),
+        'orders' => $this->orders->ask(new ListByUser($userId), Duration::seconds(2)),
     ])->map(static fn(array $parts) => JsonResponse::ok([
         'user'   => $parts['user']->toArray(),
         'orders' => array_map(fn($o) => $o->toArray(), $parts['orders']),
@@ -187,16 +188,16 @@ public function __invoke(ServerRequestInterface $req): Future
 the resulting future rejects with the first error — caught by the
 exception middleware like any other thrown exception.
 
-### When to Pick Future-Returning vs Ask-Blocking
+### When to Pick await() vs Future-chaining
 
 | Style | Pick when |
 |---|---|
-| `$ref->ask(...)` blocking | Simple, single-actor reads; you want try/catch semantics |
-| `$ref->askFuture(...)` + `map` | Composing 2+ async steps; you want the chain to read top-to-bottom |
+| `$ref->ask(...)->await()` | Simple, single-actor reads; you want try/catch semantics |
+| `$ref->ask(...)->map(...)` | Composing 2+ async steps; you want the chain to read top-to-bottom |
 | `Future::all([...])` | True fan-out where multiple actors can work in parallel |
 
-The performance is similar — `ask` is implemented on top of `askFuture`
-internally. The choice is about readability.
+The performance is identical — `await()` is just a synchronous unwrap
+of the same `Future` `map()` chains on. The choice is about readability.
 
 ## Per-Request State
 
@@ -215,8 +216,8 @@ final class CreateOrderHandler
     public function __invoke(ServerRequestInterface $req, #[FromBody] CreateOrderDto $dto): ResponseInterface
     {
         $this->uow->tell(new BeginTransaction());
-        $orderId = $this->orders->ask(fn($r) => new Place($dto, $this->uow, $r), Duration::seconds(2));
-        $this->uow->ask(fn($r) => new Commit($r), Duration::seconds(2));
+        $orderId = $this->orders->ask(new Place($dto, $this->uow), Duration::seconds(2))->await();
+        $this->uow->ask(new Commit(), Duration::seconds(2))->await();
 
         return JsonResponse::ok(['id' => $orderId]);
     }
@@ -306,9 +307,9 @@ RouterMiddleware
     ▼
 Handler::__invoke()
     │
-    ├── $actor->tell(...)         → fire-and-forget
-    ├── $actor->ask(...)          → suspend until reply
-    ├── $actor->askFuture(...)    → compose Futures
+    ├── $actor->tell(...)              → fire-and-forget
+    ├── $actor->ask(...)->await()      → suspend until reply
+    ├── $actor->ask(...)->map(...)     → compose Futures
     │
     ▼
 return ResponseInterface | Future

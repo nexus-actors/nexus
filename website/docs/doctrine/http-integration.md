@@ -82,9 +82,12 @@ Each lease has a single `get()` method that memoizes the borrow. On
 response (or exception), the middleware's `finally` block releases.
 
 The DBAL lease additionally has `poison()` — called by
-`ConnectionScopeMiddleware` on uncaught exception, so the connection is
-destroyed rather than returned to the pool. The EM lease has no poison
-flag; the pool handles EM-closed state on its own.
+`ConnectionScopeMiddleware` when the handler throws a
+`Doctrine\DBAL\Exception` (the documented root for connection-state-corrupting
+errors). The connection is destroyed rather than returned to the pool. Other
+throwables (domain, validation, 404) propagate but release the connection
+intact, so a single buggy handler can't shrink the pool. The EM lease has
+no poison flag; the pool handles EM-closed state on its own.
 
 ## `#[Transactional]`
 

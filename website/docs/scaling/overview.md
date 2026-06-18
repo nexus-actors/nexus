@@ -84,7 +84,7 @@ WorkerPool::create()
     ->onStart(static function (WorkerNode $node): void {
         // runs on every worker thread after ActorSystem boots
     })
-    ->run(WorkerPoolConfig::withWorkers(swoole_cpu_num()));
+    ->run(WorkerPoolConfig::withThreads(swoole_cpu_num()));
 ```
 
 `WorkerPool::actor()` registers a class-based actor on every worker. The hash ring
@@ -102,7 +102,7 @@ WorkerPool::create()
     ->behavior('counter', static fn (): Props => Props::fromBehavior(
         Behavior::withState(0, static fn ($ctx, $msg, $n) => BehaviorWithState::next($n + 1)),
     ))
-    ->run(WorkerPoolConfig::withWorkers(4));
+    ->run(WorkerPoolConfig::withThreads(4));
 ```
 
 See [Worker Pool Swoole package reference](../packages/worker-pool-swoole.md) for all

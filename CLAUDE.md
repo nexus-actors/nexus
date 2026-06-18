@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 15 packages under `packages/`, each published independently to Packagist.
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 24 packages under `packages/`, each published independently to Packagist.
 
 ## Development Environment
 

@@ -31,18 +31,25 @@ make shell
 
 ## Running tests
 
-All tests use PHPUnit 11. The test suites are organized by package and runtime:
+All tests use PHPUnit 13. The test suites are organised by package and runtime:
 
 ```bash
-make test                 # Run all tests
-make test-unit            # Unit tests only
-make test-fiber           # Fiber runtime integration tests
-make test-swoole          # Swoole runtime integration tests (uses php-swoole container)
-make test-serialization   # Serialization integration tests
+make test                       # Run every suite
+make test-unit                  # Unit tests across all packages
+make test-fiber                 # Fiber runtime integration tests
+make test-swoole                # Swoole runtime integration tests
+make test-worker-pool-swoole    # Worker-pool (Swoole threads) integration tests
+make test-cluster               # Multi-machine cluster contracts (no remote transport yet)
+make test-serialization         # Envelope/message serialization tests
+make test-persistence           # Persistence unit + integration tests
+make test-doctrine              # Doctrine DBAL pool + ORM pool + EntityBehavior tests
+make test-http                  # HTTP layer integration tests
+make test-http-swoole           # HTTP + Swoole-threads server integration tests
+make mutation                   # Infection mutation testing (min 80% MSI, 90% covered)
 ```
 
-The Swoole tests run in a separate `php-swoole` Docker container that has the
-Swoole extension installed.
+Swoole-flavoured suites run inside the `php-swoole` Docker container; the rest
+run in the default `php` (or `php-fiber`) container.
 
 ## Static analysis
 

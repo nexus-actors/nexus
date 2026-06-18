@@ -45,7 +45,7 @@ final class ShowOrderHandler
     {
         $id = (string) $req->getAttribute('id');
         $this->log->info('fetching order {id}', ['id' => $id]);
-        $order = $this->orders->ask(fn($reply) => new GetOrder($id, $reply), Duration::seconds(2));
+        $order = $this->orders->ask(new GetOrder($id), Duration::seconds(2))->await();
 
         return JsonResponse::ok($order->toArray());
     }
@@ -166,17 +166,16 @@ stopped after the response is written, regardless of exceptions.
 
 ## The Ask Pattern in Handlers
 
-`ask()` blocks the calling fiber/coroutine until the actor replies or the
-timeout expires:
+`ask()` returns a `Future` immediately. `->await()` blocks the calling
+fiber/coroutine until the actor replies or the timeout expires:
 
 ```php
 public function __invoke(ServerRequestInterface $req): ResponseInterface
 {
     try {
-        $order = $this->orders->ask(
-            static fn(ActorRef $reply) => new GetOrder($req->getAttribute('id'), $reply),
-            timeout: Duration::seconds(2),
-        );
+        $order = $this->orders
+            ->ask(new GetOrder($req->getAttribute('id')), Duration::seconds(2))
+            ->await();
     } catch (AskTimeoutException) {
         return Response::gatewayTimeout();
     }
@@ -185,9 +184,12 @@ public function __invoke(ServerRequestInterface $req): ResponseInterface
 }
 ```
 
-Inside a Swoole runtime this yields the coroutine — other requests on the
-same thread continue running. Use `ask` for read paths; use `tell` (no
-reply) for fire-and-forget writes where the actor is the source of truth.
+The reply is routed via `$ctx->sender()` on the actor side — see
+[Ask pattern](../core-concepts/ask-pattern.md) for the message shapes
+the framework accepts. Inside a Swoole runtime `await()` yields the
+coroutine, so other requests on the same thread continue running.
+Use `ask` for read paths; use `tell` (no reply) for fire-and-forget
+writes where the actor is the source of truth.
 
 ## Custom parameter injection
 

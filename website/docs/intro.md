@@ -72,6 +72,13 @@ Nexus is organized as a monorepo of focused packages:
 | **nexus-doctrine-dbal** | `nexus-actors/doctrine-dbal` | Coroutine-aware DBAL `ConnectionPool` + HTTP middleware/resolver + `#[Transactional]` + actor-side helpers. General-purpose data access (separate from `persistence-dbal` which is event-sourcing storage). |
 | **nexus-doctrine-orm** | `nexus-actors/doctrine-orm` | Pooled `EntityManagerInterface` injection for HTTP handlers + `EntityBehavior` DSL: treat a Doctrine entity as the state of an aggregate actor with single-writer semantics and optional idle-passivation. |
 | **nexus-serialization** | `nexus-actors/serialization` | Valinor-based message serialization with a type registry for wire-format encoding and decoding. |
+| **nexus-logger** | `nexus-actors/logger` | Async PSR-3 logger backed by a `LogActor` mailbox, with Monolog-compatible handlers and a synchronous fallback for the pre-actor boot window. |
+| **nexus-http** | `nexus-actors/http` | PSR-7/15-based HTTP routing core: route registry, handler-param resolution registry, exception mapper, `ResponseInterface` helpers. |
+| **nexus-http-ws** | `nexus-actors/http-ws` | `HttpApplication` / `WsApplication` composition root, `CompiledApplication` runtime, WebSocket router, dispatcher, and channel registry. |
+| **nexus-http-toolkit** | `nexus-actors/http-toolkit` | Reusable middlewares (rate limit, body size limit, CORS, etc.) and helper resolvers that work with both server runners. |
+| **nexus-http-auth** | `nexus-actors/http-auth` | Bearer-token authentication middleware + `Principal` + `#[FromPrincipal]` param resolver. |
+| **nexus-http-server-swoole** | `nexus-actors/http-server-swoole` | Swoole HTTP server runner (worker-process mode). Bridges PSR-7 requests to the compiled application; installs graceful-shutdown hooks. |
+| **nexus-http-server-swoole-threads** | `nexus-actors/http-server-swoole-threads` | Swoole thread-mode HTTP server. Per-thread `ActorSystem`, shared `Thread\Map` directory, `BeforeShutdown` watchdog for clean exits. |
 | **nexus-app** | `nexus-actors/app` | Application kernel for declarative actor registration and single-process execution. |
 | **nexus-psalm** | `nexus-actors/psalm` | Psalm plugin providing static analysis support for actor message protocols and behavior types. |
 

@@ -145,31 +145,38 @@ custom runtimes or debugging mailbox behavior.
 
 ```php
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Monadial\Nexus\Runtime\Duration;
-use Fp\Functional\Option\Option;
 
+/**
+ * @template T of object
+ */
 interface Mailbox
 {
-    public function enqueue(Envelope $envelope): EnqueueResult;
-    public function dequeue(): Option;           // Option<Envelope>
-    public function dequeueBlocking(Duration $timeout): Envelope;
+    public function enqueue(object $message): EnqueueResult;
+    public function dequeue(): mixed;            // T|null
+    public function dequeueBlocking(Duration $timeout): object;  // T
     public function count(): int;
     public function isFull(): bool;
     public function isEmpty(): bool;
     public function close(): void;
+    public function isClosed(): bool;
 }
 ```
 
 - `enqueue()` is marked `#[NoDiscard]` -- the `EnqueueResult` must be inspected.
   Throws `MailboxClosedException` if the mailbox has been closed.
-- `dequeue()` returns `null` if the mailbox is empty, or an `Envelope` otherwise.
+- `dequeue()` returns `null` if the mailbox is empty, or a message of type `T`
+  otherwise. The actor cell wraps messages in `Envelope` before enqueueing, so
+  the concrete type at runtime is usually `Envelope` — but the interface itself
+  is generic so a custom mailbox could carry any object type.
 - `dequeueBlocking()` blocks the current fiber/coroutine until a message arrives
   or the timeout elapses. Throws `MailboxClosedException` if the mailbox is
   closed while waiting.
 - `close()` permanently shuts down the mailbox. Subsequent `enqueue()` calls
-  throw `MailboxClosedException`.
+  throw `MailboxClosedException`. Blocked `dequeueBlocking()` waiters are
+  woken so the actor message loop can exit during system shutdown.
+- `isClosed()` reports whether `close()` has been called.
 
 ### EnqueueResult
 

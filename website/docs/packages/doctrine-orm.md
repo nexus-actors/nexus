@@ -44,7 +44,7 @@ See:
 | `Pool\EntityManagerPool` | The pool. `take()`, `release()`, `withEntityManager()`, `close()`, `stats()`. |
 | `Pool\PooledEntityManager` | Extends `Doctrine\ORM\Decorator\EntityManagerDecorator`. Adds `markBorrowed()`, `borrowCount()`. |
 | `Pool\EmPoolConfig` | `max`, `minIdle`, `borrowTimeout`, `clearOnReturn`, `recreateAfter`. |
-| `Pool\EmPoolStats` | `idle`, `inUse`, `total`, `totalBorrows`, `totalEvictions`. |
+| `Pool\EmPoolStats` | `idle`, `inUse`, `total`, `totalBorrows`, `totalEvictions`, `waitingCoroutines`, `totalWaits`, `totalTimeouts`. |
 | `Pool\EntityManagerFactory` | Interface: `create(Connection): EntityManagerInterface`. |
 | `Pool\DefaultEntityManagerFactory` | Default impl: `new EntityManager($conn, $config)`. |
 | `DoctrineEmPool` | Static facade `forConfig(name, connParams, ormSetup, config?, events?, logger?)`. |
@@ -70,12 +70,12 @@ See:
 | Class | Description |
 |---|---|
 | `Behavior\EntityBehavior` | Static factory: `create($entityClass, $id, $commandHandler)` returns a builder. |
-| `Behavior\EntityBehaviorBuilder` | Fluent: `withEntityManagerFactory`, `withReplayPolicy`, `withLockMode`, `withConnectionSource`, `withReceiveTimeout`, `withDirectConnection`, `toBehavior()`. |
+| `Behavior\EntityBehaviorBuilder` | Fluent: `withEntityManagerFactory`, `withReplayPolicy`, `withLockMode`, `withConnectionSource` (dedicated mode — runner calls `close()` on PostStop), `withConnectionLifecycle($acquire, $release)` (pool-backed mode — runner calls `$release($conn)` on PostStop), `withReceiveTimeout`, `withDirectConnection`, `toBehavior()`. |
 | `Behavior\EntityBehaviorRunner` | Internal — wires actor lifecycle to entity persistence. Called from `toBehavior()`. |
 | `Behavior\EntityEffect` | `same()`, `persist()`, `remove()`, `stop()`, `stash()`, `reply()`, `thenRun()`, `thenReply()`. |
 | `Behavior\EntityEffectKind` | Enum: `Same`, `Persist`, `Remove`, `Stop`, `Stash`. |
 | `Behavior\EntityRefFactory` | `for($spawner, $entityClass)` returns a builder; `of($id): ActorRef` spawns once and caches. |
-| `Behavior\EntityRefFactoryBuilder` | Fluent: `using`, `withConnectionSource`, `withReplayPolicy`, `withReceiveTimeout`, `handle`, `build`. |
+| `Behavior\EntityRefFactoryBuilder` | Fluent: `using`, `withConnectionSource`, `withConnectionLifecycle($acquire, $release)`, `withReplayPolicy`, `withReceiveTimeout`, `handle`, `build`. |
 | `Behavior\ActorSpawner` | Interface: `spawn(Props, string $name): ActorRef`. |
 | `Behavior\ActorSystemSpawner` | `final readonly` adapter wrapping `ActorSystem` as `ActorSpawner`. |
 

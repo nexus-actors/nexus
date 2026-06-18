@@ -87,9 +87,10 @@ that may have left the connection in a corrupt state.
 
 **SQL errors don't poison.** A unique-constraint violation or syntax error
 is a caller bug, not a connection bug; the connection itself is still
-healthy. The HTTP `ConnectionScopeMiddleware` poisons on any uncaught
-exception from the handler — adjust this if you need finer-grained
-control.
+healthy. The HTTP `ConnectionScopeMiddleware` only poisons on
+`Doctrine\DBAL\Exception` (the documented root for connection-state-corrupting
+errors); domain / HTTP exceptions (validation, 404s) release the connection
+back to the pool intact.
 
 ### `withConnection(Closure $fn): mixed`
 

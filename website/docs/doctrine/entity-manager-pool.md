@@ -140,8 +140,14 @@ manually if you're writing tests or have unusual setup needs.
 
 ```php
 $stats = $pool->stats();
-// $stats->idle, ->inUse, ->total, ->totalBorrows, ->totalEvictions
+// $stats->idle, ->inUse, ->total,
+// $stats->totalBorrows, ->totalEvictions,
+// $stats->waitingCoroutines, ->totalWaits, ->totalTimeouts
 ```
+
+The last three are populated in the exhaustion-wait path (the `borrowTimeout`
+branch of `take()`); they let you tell "we're occasionally bursting past
+`max`" from "every other borrow is timing out — raise `max`".
 
 ### PSR-14 events
 

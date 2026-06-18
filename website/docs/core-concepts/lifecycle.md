@@ -120,7 +120,7 @@ The actor's `PostStop` runs as normal, so release resources there.
 ```php
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 
 $behavior = Behavior::setup(static function (ActorContext $ctx): Behavior {
