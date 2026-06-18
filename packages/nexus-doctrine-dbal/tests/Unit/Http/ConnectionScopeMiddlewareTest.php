@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit\Http;
 
+use Doctrine\DBAL\Driver\PDO\Exception as PdoDriverException;
+use Doctrine\DBAL\Exception\DriverException;
 use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionLease;
 use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionScopeMiddleware;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
@@ -53,7 +55,7 @@ final class ConnectionScopeMiddlewareTest extends TestCase
     }
 
     #[Test]
-    public function poisonsLeaseOnException(): void
+    public function poisonsLeaseOnDbalException(): void
     {
         $factory = new StubConnectionFactory();
         $pool = $this->pool($factory);
@@ -67,7 +69,41 @@ final class ConnectionScopeMiddlewareTest extends TestCase
                 TestCase::assertInstanceOf(ConnectionLease::class, $lease);
                 $lease->get();
 
-                throw new RuntimeException('boom');
+                /** @psalm-suppress InternalMethod */
+                throw new DriverException(new PdoDriverException('connection lost'), null);
+            }
+        };
+
+        $factory17 = new Psr17Factory();
+
+        try {
+            $middleware->process($factory17->createServerRequest('GET', '/'), $handler);
+            self::fail('expected throw');
+        } catch (DriverException) {
+            // expected
+        }
+
+        // Poisoned: connection evicted, pool total drops back to 0.
+        self::assertSame(0, $pool->stats()->total);
+    }
+
+    #[Test]
+    public function nonDbalExceptionReleasesWithoutPoisoning(): void
+    {
+        $factory = new StubConnectionFactory();
+        $pool = $this->pool($factory);
+        $middleware = new ConnectionScopeMiddleware($pool);
+
+        $handler = new class implements RequestHandlerInterface {
+            #[Override]
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                $lease = $request->getAttribute(ConnectionLease::class);
+                TestCase::assertInstanceOf(ConnectionLease::class, $lease);
+                $lease->get();
+
+                // Domain / validation / 404 — does NOT corrupt the connection.
+                throw new RuntimeException('validation failure');
             }
         };
 
@@ -80,7 +116,10 @@ final class ConnectionScopeMiddlewareTest extends TestCase
             // expected
         }
 
-        self::assertSame(0, $pool->stats()->total);
+        // Released, not poisoned: connection is still in the pool ready for reuse.
+        self::assertSame(1, $pool->stats()->total);
+        self::assertSame(1, $pool->stats()->idle);
+        self::assertSame(0, $pool->stats()->inUse);
     }
 
     private function pool(StubConnectionFactory $factory): ConnectionPool
