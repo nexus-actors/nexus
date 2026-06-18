@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Exception\AuthMiddlewareNotRegisteredException;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
@@ -100,7 +101,7 @@ final class HandlerResolverFromPrincipalTest extends TestCase
 
         $scope = new PerRequestActorScope($system, [], 'r-1');
 
-        $this->expectException(LogicException::class);
+        $this->expectException(AuthMiddlewareNotRegisteredException::class);
         $this->expectExceptionMessage('AuthenticationMiddleware');
 
         ($resolved->invoke)(new ServerRequest('GET', '/me'), $scope, []);

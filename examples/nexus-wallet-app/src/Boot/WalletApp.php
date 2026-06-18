@@ -17,8 +17,10 @@ use Monadial\Nexus\Example\Wallet\Actor\WalletDirectoryActor;
 use Monadial\Nexus\Example\Wallet\Http\Auth\DemoUsers;
 use Monadial\Nexus\Example\Wallet\Http\JsonExceptionRenderer;
 use Monadial\Nexus\Example\Wallet\Http\WalletRoutes;
+use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
 use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
+use Nyholm\Psr7\Response as Psr7Response;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 use Monadial\Nexus\Logger\Formatter\LineFormatter;
@@ -67,8 +69,19 @@ final class WalletApp
 
                 self::registerActors($app);
                 self::registerMiddlewares($app, $config, $doctrine, $log);
+                // 401 has to be registered BEFORE the Throwable catch-all,
+                // otherwise the catch-all wins for any subclass of Throwable.
+                $app->onException(
+                    Unauthenticated::class,
+                    static fn(): Psr7Response => new Psr7Response(
+                        401,
+                        ['content-type' => 'application/json', 'www-authenticate' => 'Bearer'],
+                        '{"error":"authentication required"}',
+                    ),
+                );
+
                 $renderer = new JsonExceptionRenderer($log);
-                $app->onException(Throwable::class, static fn(Throwable $e) => $renderer($e));
+                $app->onException(Throwable::class, $renderer(...));
 
                 WalletRoutes::register($app, $workerId, $doctrine->ledgerFactory);
 

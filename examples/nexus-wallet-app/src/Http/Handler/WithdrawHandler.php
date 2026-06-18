@@ -32,12 +32,12 @@ final readonly class WithdrawHandler
         #[FromActor('wallets')]
         ActorRef $directory,
     ): ResponseInterface {
-        /** @var array{amount?: int}|null $body */
+        /** @var array{amountCents?: int}|null $body */
         $body = json_decode((string) $request->getBody(), true);
-        $amount = (int) ($body['amount'] ?? 0);
+        $amount = (int) ($body['amountCents'] ?? 0);
 
         if ($amount <= 0) {
-            return Response::badRequest('amount must be a positive integer');
+            return Response::badRequest('amountCents must be a positive integer');
         }
 
         $observer->tell(new HandleRequest($principal->id(), 'withdraw', $amount));

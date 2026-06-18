@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Ws\Tests\Unit\WebSocket;
 
-use LogicException;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Exception\AuthMiddlewareNotRegisteredException;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromServiceResolver;
@@ -55,7 +55,7 @@ final class HandlerInstantiatorFromPrincipalTest extends TestCase
 
         $instantiator = new HandlerInstantiator(new ArrayContainer(), null, $this->registry());
 
-        $this->expectException(LogicException::class);
+        $this->expectException(AuthMiddlewareNotRegisteredException::class);
         $this->expectExceptionMessage('FromPrincipal');
 
         $instantiator->instantiate(PrincipalAwareWebSocketHandler::class, $ctx);

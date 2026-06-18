@@ -10,6 +10,9 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Exception\AuthMiddlewareNotRegisteredException;
+use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
+use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
@@ -125,8 +128,11 @@ final class FromPrincipalResolverTest extends TestCase
     }
 
     #[Test]
-    public function throws_logic_exception_when_principal_attribute_missing(): void
+    public function throws_middleware_not_registered_when_no_auth_attribute_stamped(): void
     {
+        // No `nexus.auth.checked` attribute on the request → AuthenticationMiddleware
+        // never ran. This is a config bug; the exception bubbles to a 500 with a
+        // diagnostic hint, not a 401.
         $resolver = new FromPrincipalResolver();
         $param = $this->refOf(static function (#[FromPrincipal] stdClass $principal): void {});
         $services = $this->services();
@@ -143,8 +149,35 @@ final class FromPrincipalResolverTest extends TestCase
         $scope = new PerRequestActorScope($system, [], 'r-1');
         $invocationCtx = new HttpRequestContext($services, $request, [], $scope);
 
-        $this->expectException(LogicException::class);
+        $this->expectException(AuthMiddlewareNotRegisteredException::class);
         $this->expectExceptionMessage('AuthenticationMiddleware');
+
+        $resolver->resolve($metadata, $invocationCtx);
+    }
+
+    #[Test]
+    public function throws_unauthenticated_when_middleware_ran_but_no_principal(): void
+    {
+        // `nexus.auth.checked` set → middleware ran. Principal absent → caller
+        // didn't present credentials. That's a user-facing 401, not a 500.
+        $resolver = new FromPrincipalResolver();
+        $param = $this->refOf(static function (#[FromPrincipal] stdClass $principal): void {});
+        $services = $this->services();
+
+        $metadata = $resolver->compile(
+            $param,
+            new CompileContext(Scope::HttpRequest, 'TestOwner', $services),
+        );
+
+        self::assertNotNull($metadata);
+
+        $request = (new ServerRequest('GET', '/me'))
+            ->withAttribute(AuthenticationMiddleware::CHECKED_ATTRIBUTE, true);
+        $system = ActorSystem::create('test', new TestRuntime());
+        $scope = new PerRequestActorScope($system, [], 'r-1');
+        $invocationCtx = new HttpRequestContext($services, $request, [], $scope);
+
+        $this->expectException(Unauthenticated::class);
 
         $resolver->resolve($metadata, $invocationCtx);
     }

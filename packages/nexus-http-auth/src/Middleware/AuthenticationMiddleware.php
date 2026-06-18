@@ -29,6 +29,13 @@ use Psr\Log\NullLogger;
  */
 final class AuthenticationMiddleware implements MiddlewareInterface
 {
+    /**
+     * Request attribute set unconditionally on every passage. Resolvers and
+     * downstream middleware use it to tell "middleware ran, no credentials"
+     * (401) apart from "middleware never registered" (500 / config error).
+     */
+    public const string CHECKED_ATTRIBUTE = 'nexus.auth.checked';
+
     public function __construct(
         private readonly Authenticator $authenticator,
         private readonly LoggerInterface $logger = new NullLogger(),
@@ -38,6 +45,7 @@ final class AuthenticationMiddleware implements MiddlewareInterface
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         $principal = $this->authenticator->authenticate($request);
+        $request = $request->withAttribute(self::CHECKED_ATTRIBUTE, true);
 
         if ($principal !== null) {
             $this->logger->debug('auth.principal.stamped', ['principalId' => $principal->id()]);

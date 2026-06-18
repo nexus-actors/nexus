@@ -6,6 +6,9 @@ namespace Monadial\Nexus\Http\Auth\Resolver;
 
 use LogicException;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Exception\AuthMiddlewareNotRegisteredException;
+use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
+use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
 use Monadial\Nexus\Http\Handler\Resolver\InvocationContext;
 use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
@@ -68,13 +71,27 @@ final readonly class FromPrincipalResolver implements ParamResolver
         /** @var mixed $principal */
         $principal = $ctx->request->getAttribute('principal');
 
-        if ($principal === null) {
-            throw new LogicException(
-                'Handler requested #[FromPrincipal] but no Principal on request — '
-                . 'register AuthenticationMiddleware globally.',
+        if ($principal !== null) {
+            return $principal;
+        }
+
+        // Principal absent. Two genuinely different failure modes:
+        //
+        //   1. AuthenticationMiddleware never ran (or wasn't registered).
+        //      That's a developer/config error — fail loud with the
+        //      diagnostic exception that maps to 500.
+        //   2. The middleware ran, no valid credentials presented.
+        //      That's a user-facing 401, not a 500.
+        $middlewareRan = (bool) $ctx->request->getAttribute(AuthenticationMiddleware::CHECKED_ATTRIBUTE, false);
+
+        if (!$middlewareRan) {
+            throw AuthMiddlewareNotRegisteredException::forHandler(
+                $metadata->name === 'principal'
+                    ? '<handler>'
+                    : "<handler>::\${$metadata->name}",
             );
         }
 
-        return $principal;
+        throw new Unauthenticated();
     }
 }

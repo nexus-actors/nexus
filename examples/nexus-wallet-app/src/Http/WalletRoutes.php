@@ -13,12 +13,9 @@ use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerEntriesHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerRecordHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\WithdrawHandler;
-use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
-use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * All HTTP routes for the wallet-app, grouped by feature.
@@ -42,8 +39,11 @@ final class WalletRoutes
 
     private static function meta(HttpApplication $app, int $workerId): void
     {
+        // First-class callable syntax: `$obj(...)` returns a Closure that
+        // calls the invokable's __invoke method. No `object` type in the
+        // framework signature — invokables opt in at the call site.
         $index = new IndexHandler($workerId);
-        $app->get('/', static fn(): ResponseInterface => $index());
+        $app->get('/', $index(...));
         $app->get('/health', static fn(): ResponseInterface => Response::ok());
     }
 
@@ -64,26 +64,21 @@ final class WalletRoutes
      * via `EntityManagerInterface $em`; the write path goes through
      * `LedgerActor` (EntityBehavior) to serialise per-owner updates.
      *
-     * The POST handler is wrapped in a closure with explicit parameter
-     * types so the handler-resolver registry can introspect param resolvers
-     * (ServerRequestInterface + #[FromPrincipal] Principal) — the framework
-     * needs that signature to wire the request and principal into the
-     * captured handler instance.
+     * The POST handler is registered via PHP's first-class callable syntax
+     * (`$recordHandler(...)`) so the param resolver still sees the
+     * underlying `__invoke()`'s `#[FromPrincipal]` attribute through
+     * reflection.
      */
     private static function doctrineLedger(HttpApplication $app, EntityRefFactory $ledgerFactory): void
     {
         $app->get('/wallet/ledger', LedgerHandler::class);
         $app->get('/wallet/ledger/entries', LedgerEntriesHandler::class);
 
+        // First-class callable preserves the underlying __invoke()'s
+        // #[FromPrincipal] attribute via reflection, so the param resolver
+        // still injects the Principal correctly.
         $recordHandler = new LedgerRecordHandler($ledgerFactory);
-        $app->post(
-            '/wallet/ledger/record',
-            static fn(
-                ServerRequestInterface $request,
-                #[FromPrincipal]
-                Principal $principal,
-            ): ResponseInterface => $recordHandler($request, $principal),
-        );
+        $app->post('/wallet/ledger/record', $recordHandler(...));
     }
 
     /**
