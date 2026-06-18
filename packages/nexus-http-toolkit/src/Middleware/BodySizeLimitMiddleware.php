@@ -9,6 +9,7 @@ use Override;
 use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\StreamFactoryInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
@@ -37,9 +38,24 @@ use function strtolower;
 final class BodySizeLimitMiddleware implements MiddlewareInterface
 {
     private readonly ResponseFactoryInterface $responseFactory;
+    private readonly StreamFactoryInterface $streamFactory;
 
-    public function __construct(private readonly int $maxBytes, ?ResponseFactoryInterface $responseFactory = null,) {
-        $this->responseFactory = $responseFactory ?? new Psr17Factory();
+    public function __construct(
+        private readonly int $maxBytes,
+        ?ResponseFactoryInterface $responseFactory = null,
+        ?StreamFactoryInterface $streamFactory = null,
+    ) {
+        // Default to Psr17Factory which implements both interfaces.
+        // Callers that pass a custom response factory should pass a matching
+        // stream factory so 413 responses use a consistent stream impl.
+        if ($responseFactory === null || $streamFactory === null) {
+            $default = new Psr17Factory();
+            $this->responseFactory = $responseFactory ?? $default;
+            $this->streamFactory = $streamFactory ?? $default;
+        } else {
+            $this->responseFactory = $responseFactory;
+            $this->streamFactory = $streamFactory;
+        }
     }
 
     #[Override]
@@ -84,7 +100,7 @@ final class BodySizeLimitMiddleware implements MiddlewareInterface
 
     private function rejectResponse(): ResponseInterface
     {
-        $body = (new Psr17Factory())->createStream(
+        $body = $this->streamFactory->createStream(
             sprintf('{"error":"payload too large","maxBytes":%d}', $this->maxBytes),
         );
 
