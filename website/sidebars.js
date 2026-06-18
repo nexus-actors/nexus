@@ -14,6 +14,14 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Examples',
+      items: [
+        'examples/overview',
+        'examples/wallet-app',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core Concepts',
       items: [
         'core-concepts/nexus-thesis',
