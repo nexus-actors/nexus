@@ -81,6 +81,37 @@ final class EntityBehaviorBuilderTest extends TestCase
         self::assertNotNull($builder->connectionSource);
     }
 
+    #[Test]
+    public function withConnectionLifecycleStoresBothAcquireAndRelease(): void
+    {
+        $conn = $this->createStub(Connection::class);
+        $acquire = static fn(): Connection => $conn;
+        /** @psalm-suppress UnusedClosureParam */
+        $release = static fn(Connection $c): null => null;
+
+        $builder = $this->builder()->withConnectionLifecycle($acquire, $release);
+
+        self::assertSame($acquire, $builder->connectionSource);
+        self::assertSame($release, $builder->connectionRelease);
+    }
+
+    #[Test]
+    public function withConnectionSourceClearsAnyPriorReleaseHook(): void
+    {
+        $conn = $this->createStub(Connection::class);
+        $acquire = static fn(): Connection => $conn;
+        /** @psalm-suppress UnusedClosureParam */
+        $release = static fn(Connection $c): null => null;
+        $dedicated = static fn(): Connection => $conn;
+
+        $builder = $this->builder()
+            ->withConnectionLifecycle($acquire, $release)
+            ->withConnectionSource($dedicated);
+
+        self::assertSame($dedicated, $builder->connectionSource);
+        self::assertNull($builder->connectionRelease);
+    }
+
     private function builder(): EntityBehaviorBuilder
     {
         return new EntityBehaviorBuilder(

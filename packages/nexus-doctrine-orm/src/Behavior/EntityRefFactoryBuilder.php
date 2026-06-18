@@ -18,6 +18,7 @@ final class EntityRefFactoryBuilder
     private ?Duration $receiveTimeout = null;
     private ?EntityManagerFactory $emFactory = null;
     private ?Closure $connectionSource = null;
+    private ?Closure $connectionRelease = null;
     private ?Closure $commandHandler = null;
 
     public function __construct(private readonly ActorSpawner $spawner, private readonly string $entityClass,) {
@@ -31,9 +32,30 @@ final class EntityRefFactoryBuilder
         return $this;
     }
 
+    /**
+     * Dedicated-connection mode: each spawned actor owns the connection
+     * returned by `$source` and `close()`s it on PostStop. Use for fresh
+     * connections (e.g. `DriverManager::getConnection`).
+     */
     public function withConnectionSource(Closure $source): self
     {
         $this->connectionSource = $source;
+        $this->connectionRelease = null;
+
+        return $this;
+    }
+
+    /**
+     * Pool-backed mode: the actor borrows via `$acquire` and the pool slot
+     * is returned via `$release($conn)` on PostStop instead of `close()`.
+     *
+     * @param Closure(): \Doctrine\DBAL\Connection $acquire
+     * @param Closure(\Doctrine\DBAL\Connection): void $release
+     */
+    public function withConnectionLifecycle(Closure $acquire, Closure $release): self
+    {
+        $this->connectionSource = $acquire;
+        $this->connectionRelease = $release;
 
         return $this;
     }
@@ -78,6 +100,7 @@ final class EntityRefFactoryBuilder
             $this->commandHandler,
             $this->replayPolicy,
             $this->receiveTimeout,
+            $this->connectionRelease,
         );
     }
 }

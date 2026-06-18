@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Doctrine\Orm\Behavior;
 
 use Closure;
+use InvalidArgumentException;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\EntityReplayPolicy;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
 use Monadial\Nexus\Runtime\Duration;
+use Stringable;
 
 /**
  * Spawns and caches one ActorRef per entity identity, enforcing a single writer per entity
@@ -29,6 +31,7 @@ final class EntityRefFactory
      * @param class-string<T>                                                              $entityClass
      * @param Closure(): \Doctrine\DBAL\Connection                                        $connectionSource
      * @param Closure(\Monadial\Nexus\Core\Actor\ActorContext<C>, C, T): EntityEffect<T>  $commandHandler
+     * @param Closure(\Doctrine\DBAL\Connection): void|null                              $connectionRelease
      */
     private function __construct(
         private readonly ActorSpawner $spawner,
@@ -38,6 +41,7 @@ final class EntityRefFactory
         private readonly Closure $commandHandler,
         private readonly EntityReplayPolicy $replayPolicy,
         private readonly ?Duration $receiveTimeout = null,
+        private readonly ?Closure $connectionRelease = null,
     ) {}
 
     /**
@@ -53,6 +57,7 @@ final class EntityRefFactory
         Closure $commandHandler,
         EntityReplayPolicy $replayPolicy,
         ?Duration $receiveTimeout = null,
+        ?Closure $connectionRelease = null,
     ): self {
         return new self(
             $spawner,
@@ -62,6 +67,7 @@ final class EntityRefFactory
             $commandHandler,
             $replayPolicy,
             $receiveTimeout,
+            $connectionRelease,
         );
     }
 
@@ -80,8 +86,11 @@ final class EntityRefFactory
 
         $behaviorBuilder = EntityBehavior::create($this->entityClass, $id, $this->commandHandler)
             ->withEntityManagerFactory($this->emFactory)
-            ->withConnectionSource($this->connectionSource)
             ->withReplayPolicy($this->replayPolicy);
+
+        $behaviorBuilder = $this->connectionRelease !== null
+            ? $behaviorBuilder->withConnectionLifecycle($this->connectionSource, $this->connectionRelease)
+            : $behaviorBuilder->withConnectionSource($this->connectionSource);
 
         if ($this->receiveTimeout !== null) {
             $behaviorBuilder = $behaviorBuilder->withReceiveTimeout($this->receiveTimeout);
@@ -100,9 +109,30 @@ final class EntityRefFactory
      * Derive the deterministic actor name for a given entity class and id.
      * Namespace separators are replaced with dots so the name is path-safe.
      * The separator '--' satisfies ActorPath's NAME_PATTERN ([a-zA-Z0-9_\-\.]+).
+     *
+     * Accepts scalar ids and any object implementing `__toString()`. Other
+     * objects (e.g. Symfony's `Uuid`, which is Stringable) work; raw
+     * non-Stringable objects throw because there is no path-safe
+     * representation we can derive automatically.
      */
     public static function deriveName(string $entityClass, mixed $id): string
     {
+        if (is_object($id) && !$id instanceof Stringable) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Entity id of type %s is not Stringable; pass a scalar or Stringable id, '
+                    . 'or use EntityRefFactory::of() with a pre-stringified key',
+                    $id::class,
+                ),
+            );
+        }
+
+        if (!is_scalar($id) && !$id instanceof Stringable) {
+            throw new InvalidArgumentException(
+                sprintf('Entity id of type %s cannot be derived into an actor name', get_debug_type($id)),
+            );
+        }
+
         return str_replace('\\', '.', $entityClass) . '--' . (string) $id;
     }
 }

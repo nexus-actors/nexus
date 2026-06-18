@@ -37,9 +37,10 @@ final class EntityBehaviorRunner
 
         $emFactory = $builder->emFactory;
         $connectionSource = $builder->connectionSource;
+        $connectionRelease = $builder->connectionRelease;
 
         return Behavior::setup(
-            static function (ActorContext $_ctx) use ($builder, $emFactory, $connectionSource): Behavior {
+            static function (ActorContext $_ctx) use ($builder, $emFactory, $connectionSource, $connectionRelease): Behavior {
                 $connection = ($connectionSource)();
                 $em = $emFactory->create($connection);
                 $entity = $builder->replayPolicy->resolve($em, $builder->entityClass, $builder->id);
@@ -108,14 +109,24 @@ final class EntityBehaviorRunner
                         };
                     },
                 )->onSignal(
-                    static function (ActorContext $innerCtx, object $signal) use ($em, $connection): Behavior {
+                    static function (ActorContext $innerCtx, object $signal) use ($em, $connection, $connectionRelease): Behavior {
                         if ($signal instanceof ReceiveTimeout) {
                             return Behavior::stopped();
                         }
 
                         if ($signal instanceof PostStop) {
+                            // EM goes first either way — closing it lets any
+                            // open transaction roll back on the connection
+                            // before we hand the connection back.
                             $em->close();
-                            $connection->close();
+
+                            if ($connectionRelease !== null) {
+                                // Pool-backed: return the slot, do not close.
+                                ($connectionRelease)($connection);
+                            } else {
+                                // Dedicated: we owned this connection.
+                                $connection->close();
+                            }
                         }
 
                         return Behavior::same();

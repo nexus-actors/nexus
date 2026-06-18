@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Doctrine\Orm\Tests\Unit\Behavior;
 
 use Doctrine\DBAL\Connection;
+use InvalidArgumentException;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSpawner;
@@ -16,6 +17,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Stringable;
 
 #[CoversClass(EntityRefFactory::class)]
 final class EntityRefFactoryTest extends TestCase
@@ -25,6 +27,37 @@ final class EntityRefFactoryTest extends TestCase
     {
         self::assertSame('stdClass--42', EntityRefFactory::deriveName(stdClass::class, 42));
         self::assertSame('App.Order--abc', EntityRefFactory::deriveName('App\\Order', 'abc'));
+    }
+
+    #[Test]
+    public function derivesNameForStringableObjectId(): void
+    {
+        $id = new class implements Stringable {
+            #[Override]
+            public function __toString(): string
+            {
+                return 'user-7';
+            }
+        };
+
+        self::assertSame('stdClass--user-7', EntityRefFactory::deriveName(stdClass::class, $id));
+    }
+
+    #[Test]
+    public function rejectsNonStringableObjectId(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('not Stringable');
+        EntityRefFactory::deriveName(stdClass::class, new stdClass());
+    }
+
+    #[Test]
+    public function rejectsArrayId(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot be derived into an actor name');
+        /** @psalm-suppress InvalidArgument */
+        EntityRefFactory::deriveName(stdClass::class, ['k' => 1]);
     }
 
     #[Test]

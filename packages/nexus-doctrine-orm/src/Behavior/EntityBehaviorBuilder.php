@@ -28,6 +28,12 @@ final readonly class EntityBehaviorBuilder
      * @param class-string<T> $entityClass
      * @param Closure(\Monadial\Nexus\Core\Actor\ActorContext<C>, C, T): EntityEffect<T> $commandHandler
      * @param Closure(): \Doctrine\DBAL\Connection|null $connectionSource
+     * @param Closure(\Doctrine\DBAL\Connection): void|null $connectionRelease
+     *        Optional release hook invoked on PostStop. When null the runner
+     *        falls back to `$connection->close()` (dedicated-connection mode).
+     *        Pass a release callback when the connection comes from an
+     *        external pool, so the slot is returned instead of permanently
+     *        consumed.
      */
     public function __construct(
         public string $entityClass,
@@ -38,6 +44,7 @@ final readonly class EntityBehaviorBuilder
         public ?LockMode $lockMode = null,
         public ?Closure $connectionSource = null,
         public ?Duration $receiveTimeout = null,
+        public ?Closure $connectionRelease = null,
     ) {
         $this->replayPolicy = $replayPolicy ?? new FailIfMissing();
     }
@@ -53,6 +60,7 @@ final readonly class EntityBehaviorBuilder
             lockMode: $this->lockMode,
             connectionSource: $this->connectionSource,
             receiveTimeout: $this->receiveTimeout,
+            connectionRelease: $this->connectionRelease,
         );
     }
 
@@ -67,6 +75,7 @@ final readonly class EntityBehaviorBuilder
             lockMode: $this->lockMode,
             connectionSource: $this->connectionSource,
             receiveTimeout: $this->receiveTimeout,
+            connectionRelease: $this->connectionRelease,
         );
     }
 
@@ -81,10 +90,18 @@ final readonly class EntityBehaviorBuilder
             lockMode: $mode,
             connectionSource: $this->connectionSource,
             receiveTimeout: $this->receiveTimeout,
+            connectionRelease: $this->connectionRelease,
         );
     }
 
     /**
+     * Dedicated-connection mode: the runner takes ownership of the connection
+     * returned by `$source` and `close()`s it on PostStop. Use this when the
+     * source creates a fresh connection (e.g. `DriverManager::getConnection`).
+     *
+     * For pool-backed connections use {@see self::withConnectionLifecycle()}
+     * so the slot is released instead of closed.
+     *
      * @param Closure(): \Doctrine\DBAL\Connection $source
      */
     public function withConnectionSource(Closure $source): self
@@ -98,6 +115,31 @@ final readonly class EntityBehaviorBuilder
             lockMode: $this->lockMode,
             connectionSource: $source,
             receiveTimeout: $this->receiveTimeout,
+            connectionRelease: null,
+        );
+    }
+
+    /**
+     * Pool-backed mode: the runner acquires via `$acquire`, hands off, and
+     * calls `$release($conn)` on PostStop instead of `close()`. Use this when
+     * the connection comes from a `ConnectionPool` so the slot is returned
+     * to the pool when the actor passivates.
+     *
+     * @param Closure(): \Doctrine\DBAL\Connection $acquire
+     * @param Closure(\Doctrine\DBAL\Connection): void $release
+     */
+    public function withConnectionLifecycle(Closure $acquire, Closure $release): self
+    {
+        return new self(
+            entityClass: $this->entityClass,
+            id: $this->id,
+            commandHandler: $this->commandHandler,
+            emFactory: $this->emFactory,
+            replayPolicy: $this->replayPolicy,
+            lockMode: $this->lockMode,
+            connectionSource: $acquire,
+            receiveTimeout: $this->receiveTimeout,
+            connectionRelease: $release,
         );
     }
 
@@ -112,6 +154,7 @@ final readonly class EntityBehaviorBuilder
             lockMode: $this->lockMode,
             connectionSource: $this->connectionSource,
             receiveTimeout: $timeout,
+            connectionRelease: $this->connectionRelease,
         );
     }
 
