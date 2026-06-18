@@ -124,7 +124,7 @@ final class HttpApp
     public function clearRouteCache(): void
     {
         if ($this->routeCache !== null) {
-            (new RouteCachePersister($this->routeCache, $this->routeCacheKey))->clear();
+            new RouteCachePersister($this->routeCache, $this->routeCacheKey)->clear();
         }
     }
 

@@ -13,8 +13,11 @@ use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\SimpleCache\CacheInterface;
+use Throwable;
 
 /**
  * @psalm-api
@@ -25,16 +28,28 @@ use Psr\SimpleCache\CacheInterface;
  */
 interface Application
 {
+    /**
+     * @param class-string|Closure $handler  Either a class FQN whose `__invoke`
+     *        is resolved by the registry, or a Closure whose params are
+     *        resolved by registered ParamResolvers (`#[FromPrincipal]`,
+     *        `#[FromBody]`, `ServerRequestInterface`, ...) and which returns
+     *        either a `ResponseInterface` or a `Future<ResponseInterface>`.
+     */
     public function get(string $path, string|Closure $handler): RouteBuilder;
 
+    /** @param class-string|Closure $handler  See {@see self::get()} for the closure contract. */
     public function post(string $path, string|Closure $handler): RouteBuilder;
 
+    /** @param class-string|Closure $handler  See {@see self::get()} for the closure contract. */
     public function put(string $path, string|Closure $handler): RouteBuilder;
 
+    /** @param class-string|Closure $handler  See {@see self::get()} for the closure contract. */
     public function patch(string $path, string|Closure $handler): RouteBuilder;
 
+    /** @param class-string|Closure $handler  See {@see self::get()} for the closure contract. */
     public function delete(string $path, string|Closure $handler): RouteBuilder;
 
+    /** @param Closure(RouteGroup): void $register */
     public function group(string $prefix, Closure $register): RouteGroup;
 
     public function middleware(string|MiddlewareInterface $middleware): self;
@@ -49,6 +64,7 @@ interface Application
 
     public function errorMode(ErrorMode $mode): self;
 
+    /** @param Closure(Throwable, ServerRequestInterface): ResponseInterface $mapper */
     public function onException(string $exceptionClass, Closure $mapper): self;
 
     public function requiresPoolSingleton(): bool;
