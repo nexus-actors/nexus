@@ -68,7 +68,7 @@ RUN echo "xdebug.mode=${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/docker-php-ex
 FROM base-zts AS swoole-build
 
 RUN cd /tmp \
-    && git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git \
+    && git clone --depth 1 --branch v6.2.1 https://github.com/swoole/swoole-src.git \
     && cd swoole-src \
     && phpize \
     && ./configure --enable-swoole --enable-swoole-thread \

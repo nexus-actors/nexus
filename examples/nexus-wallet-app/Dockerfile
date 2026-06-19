@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Swoole 6.2 with thread support — required for SwooleThreadServer / WorkerPoolApp.
-RUN git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git /tmp/swoole-src \
+RUN git clone --depth 1 --branch v6.2.1 https://github.com/swoole/swoole-src.git /tmp/swoole-src \
     && cd /tmp/swoole-src \
     && phpize \
     && ./configure --enable-swoole --enable-swoole-thread \
