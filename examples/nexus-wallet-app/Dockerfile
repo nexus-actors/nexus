@@ -2,7 +2,7 @@
 # Mirrors the Nexus monorepo's php-swoole image so the example is
 # binary-compatible with `make test-swoole` and the worker-pool-swoole
 # runners.
-FROM php:8.5-zts
+FROM php:8.5.7-zts
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf build-essential pkg-config \

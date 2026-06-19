@@ -1,5 +1,5 @@
 # ── Base stage (non-ZTS, for Fiber + Xdebug) ──
-FROM php:8.5-cli AS base
+FROM php:8.5.7-cli AS base
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # ── Base ZTS stage (thread-safe, for Swoole Thread) ──
-FROM php:8.5-zts AS base-zts
+FROM php:8.5.7-zts AS base-zts
 
 WORKDIR /app
 
