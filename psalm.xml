@@ -31,11 +31,9 @@
         <directory name="packages/nexus-serialization/src" />
         <directory name="packages/nexus-worker-pool/src" />
         <directory name="packages/nexus-worker-pool-swoole/src" />
-        <directory name="examples/nexus-wallet-app/src" />
-        <directory name="examples/nexus-wallet-app/public" />
         <ignoreFiles>
             <directory name="vendor" />
-            <directory name="examples/nexus-wallet-app/vendor" />
+            <directory name="examples" />
         </ignoreFiles>
     </projectFiles>
 
@@ -58,17 +56,6 @@
                 <directory name="packages/nexus-psalm/src" />
             </errorLevel>
         </InternalClass>
-
-        <!-- The wallet-app keeps assert() as belt-and-suspenders for reader
-             clarity around ask().await() results; Psalm sees them as
-             redundant given the inferred type. Casts were eliminated by
-             tightening the relevant type signatures. -->
-        <RedundantCondition>
-            <errorLevel type="suppress">
-                <directory name="examples/nexus-wallet-app/src" />
-            </errorLevel>
-        </RedundantCondition>
-
 
         <!-- WebSocket actor / handler base classes use abstract methods
              whose params are unused in the base impl; subclasses use them. -->
