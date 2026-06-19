@@ -16,7 +16,7 @@ use Monadial\Nexus\Example\Wallet\Domain\Money;
  */
 final readonly class WalletState
 {
-    public function __construct(public bool $opened, public Money $balance,) {}
+    public function __construct(public bool $opened, public Money $balance) {}
 
     public static function empty(): self
     {

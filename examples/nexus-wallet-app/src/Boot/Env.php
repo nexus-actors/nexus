@@ -11,7 +11,10 @@ namespace Monadial\Nexus\Example\Wallet\Boot;
  */
 final class Env
 {
-    /** @return non-empty-string */
+    /**
+     * @param non-empty-string $default
+     * @return non-empty-string
+     */
     public static function get(string $name, string $default): string
     {
         $value = getenv($name);

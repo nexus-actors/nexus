@@ -9,15 +9,18 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\Configuration;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
+use Monadial\Nexus\Example\Wallet\Domain\Command\LedgerCommand;
 use Monadial\Nexus\Example\Wallet\Domain\Command\RecordLedger;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\LedgerEntry;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\WalletLedger;
+use Monadial\Nexus\Example\Wallet\Domain\LedgerKind;
 use Monadial\Nexus\Runtime\Duration;
 
 /**
@@ -39,13 +42,17 @@ use Monadial\Nexus\Runtime\Duration;
 final class LedgerActor
 {
     /**
-     * @param array<string, mixed> $connParams
+     * @param array{
+     *     dbname: string,
+     *     driver: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+     *     host: string,
+     *     password: string,
+     *     port: int,
+     *     user: string,
+     * } $connParams
      */
-    public static function factory(
-        ActorSystem $system,
-        Configuration $ormConfig,
-        array $connParams,
-    ): EntityRefFactory {
+    public static function factory(ActorSystem $system, Configuration $ormConfig, array $connParams): EntityRefFactory
+    {
         return EntityRefFactory::for(new ActorSystemSpawner($system), WalletLedger::class)
             ->using(new DefaultEntityManagerFactory($ormConfig))
             ->withConnectionSource(static fn(): Connection => DriverManager::getConnection($connParams))
@@ -60,32 +67,29 @@ final class LedgerActor
             ->build();
     }
 
+    /**
+     * @return Closure(ActorContext<LedgerCommand>, LedgerCommand, WalletLedger): EntityEffect<WalletLedger>
+     */
     private static function commandHandler(): Closure
     {
-        return static function ($ctx, object $msg, WalletLedger $ledger): EntityEffect {
-            // The ActorContext exposes the actor's dedicated EntityManager
-            // so we can `persist()` related entities (the LedgerEntry rows)
-            // and let the runner's flush commit everything in one UoW.
-            // The EM is reachable because Behavior::setup stored it in
-            // closure scope inside EntityBehaviorRunner — for this demo we
-            // build the entry inside applyAndPersist and let cascade
-            // handle the connection.
-            return match (true) {
-                $msg instanceof RecordLedger => self::applyAndPersist($ledger, $msg),
-                default                      => EntityEffect::same(),
+        return
+            /**
+             * @return EntityEffect<WalletLedger>
+             */
+            static fn(ActorContext $ctx, LedgerCommand $cmd, WalletLedger $ledger): EntityEffect => match (true) {
+                $cmd instanceof RecordLedger => self::applyAndPersist($ledger, $cmd),
             };
-        };
     }
 
+    /** @return EntityEffect<WalletLedger> */
     private static function applyAndPersist(WalletLedger $ledger, RecordLedger $cmd): EntityEffect
     {
         $now = new DateTimeImmutable();
 
-        if ($cmd->kind === 'deposit') {
-            $ledger->recordDeposit($cmd->amountCents, $now);
-        } else {
-            $ledger->recordWithdraw($cmd->amountCents, $now);
-        }
+        match ($cmd->kind) {
+            LedgerKind::Deposit  => $ledger->recordDeposit($cmd->amountCents, $now),
+            LedgerKind::Withdraw => $ledger->recordWithdraw($cmd->amountCents, $now),
+        };
 
         // Stage a new entry on the ledger — the bidirectional relation +
         // EM->persist on the entry happens on the next persist effect.

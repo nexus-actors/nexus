@@ -7,11 +7,16 @@ namespace Monadial\Nexus\Example\Wallet\Http\Handler;
 use DateTimeInterface;
 use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\LedgerEntry;
+use Monadial\Nexus\Example\Wallet\Http\Response\LedgerEntriesResponse;
+use Monadial\Nexus\Example\Wallet\Http\Response\LedgerEntryResponse;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+
+use function array_map;
+use function count;
 
 /**
  * GET /wallet/ledger/entries?limit=N — last N transaction history rows
@@ -20,9 +25,6 @@ use Psr\Http\Message\ServerRequestInterface;
  * Demonstrates DQL through the pooled `EntityManagerInterface`. The EM
  * is borrowed lazily on first use and released by
  * `EntityManagerScopeMiddleware` after the response is built.
- *
- * The query uses parameter binding (not string concatenation) — DBAL +
- * PDO handle the escaping.
  */
 final readonly class LedgerEntriesHandler
 {
@@ -33,6 +35,7 @@ final readonly class LedgerEntriesHandler
         EntityManagerInterface $em,
     ): ResponseInterface {
         $params = $request->getQueryParams();
+        /** @psalm-suppress MixedArgument query param shape is mixed by PSR-7 contract */
         $limit = (int) ($params['limit'] ?? 20);
 
         if ($limit < 1 || $limit > 200) {
@@ -50,18 +53,18 @@ final readonly class LedgerEntriesHandler
         /** @var list<LedgerEntry> $entries */
         $entries = $query->getResult();
 
-        return JsonResponse::ok([
-            'count' => count($entries),
-            'entries' => array_map(
-                static fn(LedgerEntry $e): array => [
-                    'amountCents' => $e->amountCents,
-                    'id' => $e->id,
-                    'kind' => $e->kind,
-                    'occurredAt' => $e->occurredAt->format(DateTimeInterface::ATOM),
-                ],
+        return JsonResponse::ok(new LedgerEntriesResponse(
+            ownerId: $principal->id(),
+            count: count($entries),
+            entries: array_map(
+                static fn(LedgerEntry $e): LedgerEntryResponse => new LedgerEntryResponse(
+                    id: $e->id,
+                    kind: $e->kind,
+                    amountCents: $e->amountCents,
+                    occurredAt: $e->occurredAt->format(DateTimeInterface::ATOM),
+                ),
                 $entries,
             ),
-            'ownerId' => $principal->id(),
-        ]);
+        ));
     }
 }

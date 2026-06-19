@@ -22,13 +22,22 @@ use Monadial\Nexus\Example\Wallet\Domain\Entity\WalletLedger;
  */
 final class SchemaBootstrap
 {
-    /** @param array<string, mixed> $connParams */
+    /**
+     * @param array{
+     *     dbname: string,
+     *     driver: 'ibm_db2'|'mysqli'|'oci8'|'pdo_mysql'|'pdo_oci'|'pdo_pgsql'|'pdo_sqlite'|'pdo_sqlsrv'|'pgsql'|'sqlite3'|'sqlsrv',
+     *     host: string,
+     *     password: string,
+     *     port: int,
+     *     user: string,
+     * } $connParams
+     */
     public static function sync(array $connParams, Configuration $ormConfig): void
     {
         $conn = DriverManager::getConnection($connParams);
 
         try {
-            $em = (new DefaultEntityManagerFactory($ormConfig))->create($conn);
+            $em = new DefaultEntityManagerFactory($ormConfig)->create($conn);
 
             try {
                 new SchemaTool($em)->updateSchema([

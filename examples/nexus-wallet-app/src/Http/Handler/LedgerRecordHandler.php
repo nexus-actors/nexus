@@ -6,60 +6,49 @@ namespace Monadial\Nexus\Example\Wallet\Http\Handler;
 
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 use Monadial\Nexus\Example\Wallet\Domain\Command\RecordLedger;
+use Monadial\Nexus\Example\Wallet\Http\Request\LedgerRecordRequest;
+use Monadial\Nexus\Example\Wallet\Http\Response\LedgerRecordResponse;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
 use Monadial\Nexus\Http\Auth\Principal;
+use Monadial\Nexus\Http\Handler\Attribute\FromBody;
 use Monadial\Nexus\Http\Response\JsonResponse;
+use Monadial\Nexus\Http\Response\Response;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 
 /**
  * POST /wallet/ledger/record — record one deposit/withdraw against the
  * authenticated user's ledger.
  *
  * Demonstrates the `EntityRefFactory` + `EntityBehavior` flow:
- * - Lookup (or spawn) the LedgerActor for this owner — single writer
- *   per (`WalletLedger`, ownerId).
- * - Fire-and-forget `RecordLedger` command. The actor mutates the entity
- *   and flushes inside its own dedicated EntityManager.
+ *   - Lookup (or spawn) the LedgerActor for this owner — single writer
+ *     per (`WalletLedger`, ownerId).
+ *   - Fire-and-forget `RecordLedger` command. The actor mutates the entity
+ *     and flushes inside its own dedicated EntityManager.
  *
- * Body shape: `{"kind": "deposit" | "withdraw", "amountCents": int}`.
- *
- * The factory is constructor-injected (instantiated once per worker
- * thread in `server.php`) — the wallet-app doesn't run a PSR-11
- * container, so we register this handler via a closure that captures
- * the factory rather than relying on `#[FromService]`.
+ * The body is decoded via `#[FromBody]` + Valinor into a typed
+ * {@see LedgerRecordRequest} (with `kind` as a `LedgerKind` enum) — no
+ * raw `json_decode`, no array access, no string-matching.
  */
 final readonly class LedgerRecordHandler
 {
     public function __construct(private EntityRefFactory $ledgerFactory) {}
 
     public function __invoke(
-        ServerRequestInterface $request,
         #[FromPrincipal]
         Principal $principal,
+        #[FromBody]
+        LedgerRecordRequest $body,
     ): ResponseInterface {
-        /** @var array{kind?: string, amountCents?: int} $body */
-        $body = json_decode((string) $request->getBody(), associative: true) ?: [];
-        $kind = (string) ($body['kind'] ?? 'deposit');
-        $amount = (int) ($body['amountCents'] ?? 0);
-
-        if (!in_array($kind, ['deposit', 'withdraw'], true)) {
-            return JsonResponse::ok(['error' => 'kind must be deposit or withdraw'])
-                ->withStatus(400);
+        if ($body->amountCents <= 0) {
+            return Response::badRequest('amountCents must be a positive integer');
         }
 
-        if ($amount <= 0) {
-            return JsonResponse::ok(['error' => 'amountCents must be positive'])
-                ->withStatus(400);
-        }
+        $this->ledgerFactory->of($principal->id())->tell(new RecordLedger($body->kind, $body->amountCents));
 
-        $this->ledgerFactory->of($principal->id())->tell(new RecordLedger($kind, $amount));
-
-        return JsonResponse::ok([
-            'amountCents' => $amount,
-            'kind' => $kind,
-            'ownerId' => $principal->id(),
-            'status' => 'recorded',
-        ]);
+        return JsonResponse::ok(new LedgerRecordResponse(
+            ownerId: $principal->id(),
+            kind: $body->kind,
+            amountCents: $body->amountCents,
+        ));
     }
 }

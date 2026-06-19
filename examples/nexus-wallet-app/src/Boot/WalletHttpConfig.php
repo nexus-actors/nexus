@@ -6,11 +6,7 @@ namespace Monadial\Nexus\Example\Wallet\Boot;
 
 final readonly class WalletHttpConfig
 {
-    public function __construct(
-        public string $host,
-        public int $port,
-        public int $threads,
-    ) {}
+    public function __construct(public string $host, public int $port, public int $threads) {}
 
     public static function fromEnv(): self
     {

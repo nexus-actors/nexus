@@ -12,7 +12,6 @@ use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionScopeMiddleware;
 use Monadial\Nexus\Doctrine\Dbal\Http\PoolExhaustedToServiceUnavailable;
 use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerResolver;
 use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerScopeMiddleware;
-use Monadial\Nexus\Example\Wallet\Actor\RequestActor;
 use Monadial\Nexus\Example\Wallet\Actor\WalletDirectoryActor;
 use Monadial\Nexus\Example\Wallet\Http\Auth\DemoUsers;
 use Monadial\Nexus\Example\Wallet\Http\JsonExceptionRenderer;
@@ -20,7 +19,6 @@ use Monadial\Nexus\Example\Wallet\Http\WalletRoutes;
 use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
 use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
-use Nyholm\Psr7\Response as Psr7Response;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 use Monadial\Nexus\Logger\Formatter\LineFormatter;
@@ -28,8 +26,11 @@ use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\NexusLogger;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
+use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
+use Monadial\Nexus\Serialization\ValinorJsonSerializer;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7\Response as Psr7Response;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
@@ -67,16 +68,30 @@ final class WalletApp
 
                 $app = HttpApplication::create($system);
 
+                // Body decoding for #[FromBody]: Valinor maps JSON directly
+                // onto the param's typed DTO. No raw json_decode in handlers.
+                $app->withMessageSerializer(new ValinorJsonSerializer());
+
                 self::registerActors($app);
                 self::registerMiddlewares($app, $config, $doctrine, $log);
-                // 401 has to be registered BEFORE the Throwable catch-all,
-                // otherwise the catch-all wins for any subclass of Throwable.
+                // Order matters — specific subclasses must be registered
+                // BEFORE the Throwable catch-all, otherwise the catch-all
+                // wins for any subclass.
                 $app->onException(
                     Unauthenticated::class,
                     static fn(): Psr7Response => new Psr7Response(
                         401,
                         ['content-type' => 'application/json', 'www-authenticate' => 'Bearer'],
                         '{"error":"authentication required"}',
+                    ),
+                );
+
+                $app->onException(
+                    MessageDeserializationException::class,
+                    static fn(MessageDeserializationException $e): Psr7Response => new Psr7Response(
+                        400,
+                        ['content-type' => 'application/json'],
+                        (string) json_encode(['error' => 'invalid request body', 'detail' => $e->getMessage()]),
                     ),
                 );
 
@@ -116,10 +131,6 @@ final class WalletApp
         $app->actor(
             name: 'wallets',
             props: Props::fromBehavior(WalletDirectoryActor::behavior(new InMemoryEventStore())),
-        );
-        $app->perRequestActor(
-            name: 'request',
-            props: Props::fromBehavior(RequestActor::behavior()),
         );
     }
 

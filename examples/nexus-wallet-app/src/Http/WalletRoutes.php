@@ -13,9 +13,14 @@ use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerEntriesHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerRecordHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\WithdrawHandler;
+use Monadial\Nexus\Example\Wallet\Http\Response\IndexLink;
+use Monadial\Nexus\Example\Wallet\Http\Response\IndexResponse;
 use Monadial\Nexus\Http\Response\Response;
+use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 use Psr\Http\Message\ResponseInterface;
+
+use function array_map;
 
 /**
  * All HTTP routes for the wallet-app, grouped by feature.
@@ -26,25 +31,27 @@ use Psr\Http\Message\ResponseInterface;
  */
 final class WalletRoutes
 {
-    public static function register(
-        HttpApplication $app,
-        int $workerId,
-        EntityRefFactory $ledgerFactory,
-    ): void {
-        self::meta($app, $workerId);
+    public static function register(HttpApplication $app, int $workerId, EntityRefFactory $ledgerFactory): void
+    {
+        $app->get('/health', static fn(): ResponseInterface => Response::ok());
         self::eventSourcedWallet($app);
         self::doctrineLedger($app, $ledgerFactory);
         self::admin($app);
+
+        // Register the index LAST so the link map covers every other route
+        // that the framework already knows about (snapshot taken now via
+        // $app->registeredRoutes()).
+        $app->get('/', new IndexHandler(self::index($app, $workerId))(...));
     }
 
-    private static function meta(HttpApplication $app, int $workerId): void
+    private static function index(HttpApplication $app, int $workerId): IndexResponse
     {
-        // First-class callable syntax: `$obj(...)` returns a Closure that
-        // calls the invokable's __invoke method. No `object` type in the
-        // framework signature — invokables opt in at the call site.
-        $index = new IndexHandler($workerId);
-        $app->get('/', $index(...));
-        $app->get('/health', static fn(): ResponseInterface => Response::ok());
+        $links = array_map(
+            static fn(RouteSummary $r): IndexLink => new IndexLink($r->method, $r->path),
+            $app->registeredRoutes(),
+        );
+
+        return new IndexResponse(name: 'nexus-wallet-app', thread: $workerId, links: $links);
     }
 
     /**
@@ -63,11 +70,6 @@ final class WalletRoutes
      * Doctrine ledger demo: read paths borrow an EntityManager from the pool
      * via `EntityManagerInterface $em`; the write path goes through
      * `LedgerActor` (EntityBehavior) to serialise per-owner updates.
-     *
-     * The POST handler is registered via PHP's first-class callable syntax
-     * (`$recordHandler(...)`) so the param resolver still sees the
-     * underlying `__invoke()`'s `#[FromPrincipal]` attribute through
-     * reflection.
      */
     private static function doctrineLedger(HttpApplication $app, EntityRefFactory $ledgerFactory): void
     {
@@ -75,10 +77,8 @@ final class WalletRoutes
         $app->get('/wallet/ledger/entries', LedgerEntriesHandler::class);
 
         // First-class callable preserves the underlying __invoke()'s
-        // #[FromPrincipal] attribute via reflection, so the param resolver
-        // still injects the Principal correctly.
-        $recordHandler = new LedgerRecordHandler($ledgerFactory);
-        $app->post('/wallet/ledger/record', $recordHandler(...));
+        // #[FromPrincipal] attribute via reflection.
+        $app->post('/wallet/ledger/record', new LedgerRecordHandler($ledgerFactory)(...));
     }
 
     /**

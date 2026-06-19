@@ -6,8 +6,13 @@ namespace Monadial\Nexus\Example\Wallet\Http\Handler;
 
 use Doctrine\DBAL\Connection;
 use Monadial\Nexus\Doctrine\Dbal\Http\Attribute\Transactional;
+use Monadial\Nexus\Example\Wallet\Http\Response\AdminWalletsResponse;
+use Monadial\Nexus\Example\Wallet\Http\Response\AdminWalletSummary;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
+
+use function array_map;
+use function count;
 
 /**
  * GET /admin/wallets — list every wallet ledger with running totals,
@@ -42,20 +47,20 @@ final readonly class AdminAllLedgersHandler
              LIMIT 100',
         );
 
-        return JsonResponse::ok([
-            'count' => count($rows),
-            'wallets' => array_map(
-                static fn(array $r): array => [
-                    'depositCents' => (int) $r['depositcents'],
-                    'depositCount' => (int) $r['depositcount'],
-                    'lastActivityAt' => $r['lastactivityat'],
-                    'netCents' => (int) $r['depositcents'] - (int) $r['withdrawcents'],
-                    'ownerId' => (string) $r['ownerid'],
-                    'withdrawCents' => (int) $r['withdrawcents'],
-                    'withdrawCount' => (int) $r['withdrawcount'],
-                ],
+        return JsonResponse::ok(new AdminWalletsResponse(
+            count: count($rows),
+            wallets: array_map(
+                static fn(array $r): AdminWalletSummary => new AdminWalletSummary(
+                    ownerId: $r['ownerid'],
+                    depositCents: $r['depositcents'],
+                    depositCount: $r['depositcount'],
+                    withdrawCents: $r['withdrawcents'],
+                    withdrawCount: $r['withdrawcount'],
+                    netCents: $r['depositcents'] - $r['withdrawcents'],
+                    lastActivityAt: $r['lastactivityat'],
+                ),
                 $rows,
             ),
-        ]);
+        ));
     }
 }

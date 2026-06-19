@@ -12,6 +12,7 @@ use Doctrine\ORM\Mapping\Id;
 use Doctrine\ORM\Mapping\JoinColumn;
 use Doctrine\ORM\Mapping\ManyToOne;
 use Doctrine\ORM\Mapping\Table;
+use Monadial\Nexus\Example\Wallet\Domain\LedgerKind;
 
 /**
  * One row per recorded deposit or withdrawal — the full transaction
@@ -24,10 +25,12 @@ use Doctrine\ORM\Mapping\Table;
  * The many-to-one back to `WalletLedger` keeps the DB foreign key in
  * place but the actor doesn't traverse it — the running totals on the
  * ledger entity stay authoritative for fast reads.
+ *
+ * @psalm-api
  */
 #[Entity]
 #[Table(name: 'ledger_entries')]
-class LedgerEntry
+final class LedgerEntry
 {
     #[Id]
     #[GeneratedValue]
@@ -38,8 +41,8 @@ class LedgerEntry
     #[JoinColumn(name: 'owner_id', referencedColumnName: 'ownerId')]
     public WalletLedger $ledger;
 
-    #[Column(length: 16)]
-    public string $kind;
+    #[Column(type: 'string', length: 16, enumType: LedgerKind::class)]
+    public LedgerKind $kind;
 
     #[Column]
     public int $amountCents;
@@ -47,12 +50,8 @@ class LedgerEntry
     #[Column]
     public DateTimeImmutable $occurredAt;
 
-    public function __construct(
-        WalletLedger $ledger,
-        string $kind,
-        int $amountCents,
-        DateTimeImmutable $occurredAt,
-    ) {
+    public function __construct(WalletLedger $ledger, LedgerKind $kind, int $amountCents, DateTimeImmutable $occurredAt)
+    {
         $this->ledger = $ledger;
         $this->kind = $kind;
         $this->amountCents = $amountCents;

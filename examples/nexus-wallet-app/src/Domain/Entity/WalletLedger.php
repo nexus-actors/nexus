@@ -27,7 +27,7 @@ use Doctrine\ORM\Mapping\Table;
  */
 #[Entity]
 #[Table(name: 'wallet_ledgers')]
-class WalletLedger
+final class WalletLedger
 {
     #[Id]
     #[Column]

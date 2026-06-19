@@ -11,10 +11,7 @@ final readonly class WalletAuthConfig
     public static function fromEnv(): self
     {
         return new self(
-            tokens: Env::get(
-                'WALLET_AUTH_TOKENS',
-                'alice-token=alice,bob-token=bob,carol-token=carol',
-            ),
+            tokens: Env::get('WALLET_AUTH_TOKENS', 'alice-token=alice,bob-token=bob,carol-token=carol'),
         );
     }
 }

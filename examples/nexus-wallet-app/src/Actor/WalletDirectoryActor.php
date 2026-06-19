@@ -20,43 +20,47 @@ use Monadial\Nexus\Persistence\Event\EventStore;
  * Children inherit the directory's supervisor — a failed wallet
  * restarts via the default one-for-one strategy without taking out
  * the directory or its siblings.
- *
- * @psalm-type RegistryState = array<string, \Monadial\Nexus\Core\Actor\ActorRef<object>>
  */
 final readonly class WalletDirectoryActor
 {
+    /**
+     * @return Behavior<object>
+     */
     public static function behavior(EventStore $eventStore): Behavior
     {
+        /** @var Behavior<object> */
         return Behavior::withState(
-            /** @var RegistryState */
-            initialState: [],
-            handler: static function (
-                ActorContext $ctx,
-                object $message,
-                array $registry,
-            ) use ($eventStore): BehaviorWithState {
-                if (!$message instanceof EnsureWallet) {
-                    return BehaviorWithState::same();
-                }
+            initialState: new WalletRegistry(),
+            handler: /**
+                 * @param ActorContext<object> $ctx
+                 * @return BehaviorWithState<object, WalletRegistry>
+                 */
+                static function (
+                    ActorContext $ctx,
+                    object $message,
+                    WalletRegistry $registry,
+                ) use ($eventStore): BehaviorWithState {
+                    if (!$message instanceof EnsureWallet) {
+                        return BehaviorWithState::next($registry);
+                    }
 
-                $existing = $registry[$message->ownerId] ?? null;
+                    $existing = $registry->find($message->ownerId);
 
-                if ($existing !== null && $existing->isAlive()) {
-                    $ctx->reply(new WalletRef($existing));
+                    if ($existing !== null && $existing->isAlive()) {
+                        $ctx->reply(new WalletRef($existing));
 
-                    return BehaviorWithState::same();
-                }
+                        return BehaviorWithState::next($registry);
+                    }
 
-                $child = $ctx->spawn(
-                    Props::fromBehavior(WalletActor::behavior($message->ownerId, $eventStore)),
-                    'wallet-' . $message->ownerId,
-                );
+                    $child = $ctx->spawn(
+                        Props::fromBehavior(WalletActor::behavior($message->ownerId, $eventStore)),
+                        'wallet-' . $message->ownerId,
+                    );
 
-                $registry[$message->ownerId] = $child;
-                $ctx->reply(new WalletRef($child));
+                    $ctx->reply(new WalletRef($child));
 
-                return BehaviorWithState::next($registry);
-            },
+                    return BehaviorWithState::next($registry->with($message->ownerId, $child));
+                },
         );
     }
 }

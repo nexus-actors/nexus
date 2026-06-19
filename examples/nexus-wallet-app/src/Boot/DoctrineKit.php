@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Wallet\Boot;
 
-use Doctrine\ORM\Configuration;
 use Doctrine\ORM\ORMSetup;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Doctrine\Dbal\DoctrinePool;
@@ -37,7 +36,6 @@ final readonly class DoctrineKit
         public ConnectionPool $connPool,
         public EntityManagerPool $emPool,
         public EntityRefFactory $ledgerFactory,
-        public Configuration $ormConfig,
     ) {}
 
     public static function build(WalletDbConfig $db, ActorSystem $system): self
@@ -64,7 +62,6 @@ final readonly class DoctrineKit
                 config: new EmPoolConfig(max: 8, minIdle: 1),
             ),
             ledgerFactory: LedgerActor::factory($system, $ormConfig, $connParams),
-            ormConfig: $ormConfig,
         );
     }
 }
