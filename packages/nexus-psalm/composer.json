@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "nexus-actors/worker-pool": "dev-main",
-        "php": ">=8.5",
+        "php": ">=8.5.7",
         "vimeo/psalm": "^6.0"
     },
     "autoload": {

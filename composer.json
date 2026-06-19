@@ -4,7 +4,7 @@
     "type": "project",
     "license": "MIT",
     "require": {
-        "php": ">=8.5",
+        "php": ">=8.5.7",
         "brick/math": "^0.12",
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",

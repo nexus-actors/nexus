@@ -4,7 +4,7 @@
   "type": "library",
   "license": "MIT",
   "require": {
-    "php": "^8.5",
+    "php": ">=8.5.7",
     "nexus-actors/http": "self.version",
     "nexus-actors/http-ws": "self.version",
     "nyholm/psr7": "^1.8",
