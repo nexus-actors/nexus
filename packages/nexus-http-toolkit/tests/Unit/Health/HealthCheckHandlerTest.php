@@ -97,7 +97,7 @@ final class HealthCheckHandlerTest extends TestCase
 
 final readonly class StubCheck implements HealthCheck
 {
-    public function __construct(private string $name, private HealthStatus $status,) {}
+    public function __construct(private string $name, private HealthStatus $status) {}
 
     #[Override]
     public function name(): string
@@ -114,7 +114,7 @@ final readonly class StubCheck implements HealthCheck
 
 final readonly class ThrowingCheck implements HealthCheck
 {
-    public function __construct(private string $name, private Throwable $throwable,) {}
+    public function __construct(private string $name, private Throwable $throwable) {}
 
     #[Override]
     public function name(): string

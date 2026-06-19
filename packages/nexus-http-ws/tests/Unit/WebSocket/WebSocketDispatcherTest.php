@@ -99,7 +99,6 @@ final class WebSocketDispatcherTest extends TestCase
             $table ?? new InMemoryConnectionTable(),
             new ChannelActorRegistry($system),
             new HandlerInstantiator(new ArrayContainer()),
-            $system,
         );
     }
 }

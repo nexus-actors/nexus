@@ -8,21 +8,34 @@
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
 >
     <projectFiles>
+        <directory name="packages/nexus-app/src" />
+        <directory name="packages/nexus-cluster/src" />
         <directory name="packages/nexus-core/src" />
+        <directory name="packages/nexus-doctrine-dbal/src" />
+        <directory name="packages/nexus-doctrine-orm/src" />
+        <directory name="packages/nexus-http/src" />
+        <directory name="packages/nexus-http-auth/src" />
+        <directory name="packages/nexus-http-server-swoole/src" />
+        <directory name="packages/nexus-http-server-swoole-threads/src" />
+        <directory name="packages/nexus-http-toolkit/src" />
+        <directory name="packages/nexus-http-ws/src" />
+        <directory name="packages/nexus-logger/src" />
+        <directory name="packages/nexus-persistence/src" />
+        <directory name="packages/nexus-persistence-dbal/src" />
+        <directory name="packages/nexus-persistence-doctrine/src" />
+        <directory name="packages/nexus-psalm/src" />
+        <directory name="packages/nexus-runtime/src" />
         <directory name="packages/nexus-runtime-fiber/src" />
         <directory name="packages/nexus-runtime-step/src" />
         <directory name="packages/nexus-runtime-swoole/src" />
         <directory name="packages/nexus-serialization/src" />
-        <directory name="packages/nexus-psalm/src" />
-        <directory name="packages/nexus-cluster/src" />
         <directory name="packages/nexus-worker-pool/src" />
         <directory name="packages/nexus-worker-pool-swoole/src" />
-        <directory name="packages/nexus-app/src" />
-        <directory name="packages/nexus-persistence/src" />
-        <directory name="packages/nexus-persistence-dbal/src" />
-        <directory name="packages/nexus-persistence-doctrine/src" />
+        <directory name="examples/nexus-wallet-app/src" />
+        <directory name="examples/nexus-wallet-app/public" />
         <ignoreFiles>
             <directory name="vendor" />
+            <directory name="examples/nexus-wallet-app/vendor" />
         </ignoreFiles>
     </projectFiles>
 
@@ -45,5 +58,34 @@
                 <directory name="packages/nexus-psalm/src" />
             </errorLevel>
         </InternalClass>
+
+        <!-- The wallet-app keeps assert() as belt-and-suspenders for reader
+             clarity around ask().await() results; Psalm sees them as
+             redundant given the inferred type. Casts were eliminated by
+             tightening the relevant type signatures. -->
+        <RedundantCondition>
+            <errorLevel type="suppress">
+                <directory name="examples/nexus-wallet-app/src" />
+            </errorLevel>
+        </RedundantCondition>
+
+
+        <!-- WebSocket actor / handler base classes use abstract methods
+             whose params are unused in the base impl; subclasses use them. -->
+        <PossiblyUnusedParam>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-http-ws/src" />
+                <directory name="packages/nexus-http-toolkit/src" />
+            </errorLevel>
+        </PossiblyUnusedParam>
+
+        <!-- Logger Mdc methods are public API surface — Psalm can't see
+             user-code calls. -->
+        <PossiblyUnusedMethod>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-logger/src" />
+                <directory name="packages/nexus-http-ws/src" />
+            </errorLevel>
+        </PossiblyUnusedMethod>
     </issueHandlers>
 </psalm>

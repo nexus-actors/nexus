@@ -50,7 +50,8 @@ final class TraceContextMiddleware implements MiddlewareInterface
     private const string TRACEPARENT_REGEX = '/^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i';
 
     #[Override]
-    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler,): ResponseInterface {
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
         [$traceId, $parentSpanId, $flags] = $this->parseInbound($request);
         $spanId = bin2hex(random_bytes(8));
 

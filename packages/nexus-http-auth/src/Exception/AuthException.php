@@ -12,6 +12,4 @@ use Monadial\Nexus\Core\Exception\NexusException;
  * Abstract base for auth-related exceptions. Sits under NexusException so
  * code that catches the project-wide base catches auth errors too.
  */
-abstract class AuthException extends NexusException
-{
-}
+abstract class AuthException extends NexusException {}

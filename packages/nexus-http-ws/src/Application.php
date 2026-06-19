@@ -12,6 +12,7 @@ use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -64,7 +65,11 @@ interface Application
 
     public function errorMode(ErrorMode $mode): self;
 
-    /** @param Closure(Throwable, ServerRequestInterface): ResponseInterface $mapper */
+    /**
+     * @template TException of Throwable
+     * @param class-string<TException> $exceptionClass
+     * @param Closure(TException, ServerRequestInterface): ResponseInterface $mapper
+     */
     public function onException(string $exceptionClass, Closure $mapper): self;
 
     public function requiresPoolSingleton(): bool;
@@ -80,4 +85,12 @@ interface Application
     public function clearRouteCache(): void;
 
     public function compile(): CompiledApplication;
+
+    /**
+     * Snapshot of every route registered so far. Intended for index pages,
+     * smoke tests, and admin/debugging tooling.
+     *
+     * @return list<RouteSummary>
+     */
+    public function registeredRoutes(): array;
 }

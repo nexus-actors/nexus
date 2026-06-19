@@ -9,6 +9,4 @@ use Monadial\Nexus\Http\Server\Swoole\Bridge\ServerRuntime;
 /**
  * @internal Per-worker-process runtime state for SwooleWorkerServer.
  */
-final class WorkerServerRuntime extends ServerRuntime
-{
-}
+final class WorkerServerRuntime extends ServerRuntime {}

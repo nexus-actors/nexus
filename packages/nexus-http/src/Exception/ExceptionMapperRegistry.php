@@ -22,13 +22,24 @@ use function class_parents;
  */
 final class ExceptionMapperRegistry
 {
-    /** @var array<class-string, Closure(Throwable, ServerRequestInterface): ResponseInterface> */
+    /**
+     * Storage uses bare `Closure` because mappers are stored by exception
+     * class — each entry only ever gets invoked with an instance of its
+     * key class, but PHP/Psalm can't carry a per-key narrowing through
+     * an array. `map()` invokes via `$mapper($e, $r)` which is safe by
+     * construction (we only call with an `$e` matching the key class).
+     *
+     * @var array<class-string, Closure>
+     */
     private array $mappers = [];
 
-    /** @param Closure(Throwable, ServerRequestInterface): ResponseInterface $mapper */
+    /**
+     * @template TException of Throwable
+     * @param class-string<TException> $exceptionClass
+     * @param Closure(TException, ServerRequestInterface): ResponseInterface $mapper
+     */
     public function register(string $exceptionClass, Closure $mapper): void
     {
-        /** @psalm-suppress PropertyTypeCoercion */
         $this->mappers[$exceptionClass] = $mapper;
     }
 
@@ -36,6 +47,7 @@ final class ExceptionMapperRegistry
     {
         $mapper = $this->find($e);
 
+        /** @var ResponseInterface */
         return $mapper($e, $r);
     }
 
@@ -44,7 +56,6 @@ final class ExceptionMapperRegistry
         return isset($this->mappers[$exceptionClass]);
     }
 
-    /** @return Closure(Throwable, ServerRequestInterface): ResponseInterface */
     private function find(Throwable $e): Closure
     {
         $class = $e::class;

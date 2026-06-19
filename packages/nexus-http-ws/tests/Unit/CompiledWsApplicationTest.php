@@ -49,7 +49,6 @@ final class CompiledWsApplicationTest extends TestCase
                 $table,
                 new ChannelActorRegistry($system),
                 new HandlerInstantiator($container),
-                $system,
             ),
             $container,
         );
@@ -76,7 +75,6 @@ final class CompiledWsApplicationTest extends TestCase
                 $table,
                 new ChannelActorRegistry($system),
                 new HandlerInstantiator($container),
-                $system,
             ),
             $container,
         );

@@ -63,7 +63,7 @@ final class ResolvedActorTableTest extends TestCase
         $system = ActorSystem::create('test', new TestRuntime());
         $entries = [
             new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::WorkerLocal, null, null),
-            new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
+            new ActorRegistrationEntry('saga', $this->noopProps(), ActorMode::PerRequest, null, null),
         ];
 
         $table = ResolvedActorTable::build($entries, $system, spawner: null);
@@ -79,7 +79,7 @@ final class ResolvedActorTableTest extends TestCase
         $system = ActorSystem::create('test', new TestRuntime());
         $entries = [
             new ActorRegistrationEntry('store', $this->noopProps(), ActorMode::WorkerLocal, null, null),
-            new ActorRegistrationEntry('saga',  $this->noopProps(), ActorMode::PerRequest,  null, null),
+            new ActorRegistrationEntry('saga', $this->noopProps(), ActorMode::PerRequest, null, null),
         ];
 
         $table = ResolvedActorTable::build($entries, $system, spawner: null);

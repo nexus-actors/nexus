@@ -24,7 +24,7 @@ final class SwooleResponseWriter
 
         foreach ($psr7->getHeaders() as $name => $values) {
             foreach ($values as $value) {
-                $swoole->header($name, $value);
+                $swoole->header((string) $name, $value);
             }
         }
 

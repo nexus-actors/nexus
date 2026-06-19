@@ -21,7 +21,7 @@ namespace Monadial\Nexus\Http\Toolkit\Health;
 final readonly class HealthStatus
 {
     /** @param array<string, scalar|null> $detail */
-    public function __construct(public State $state, public array $detail = [],) {}
+    public function __construct(public State $state, public array $detail = []) {}
 
     /** @param array<string, scalar|null> $detail */
     public static function up(array $detail = []): self

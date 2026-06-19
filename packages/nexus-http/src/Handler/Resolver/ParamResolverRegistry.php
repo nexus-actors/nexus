@@ -21,9 +21,7 @@ use ReflectionParameter;
 final readonly class ParamResolverRegistry
 {
     /** @param list<ParamResolver> $resolvers */
-    public function __construct(private array $resolvers = [])
-    {
-    }
+    public function __construct(private array $resolvers = []) {}
 
     public function with(ParamResolver $resolver): self
     {

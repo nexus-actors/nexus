@@ -26,28 +26,53 @@ final readonly class EntityEffect
         public array $replyHooks = [],
     ) {}
 
+    /**
+     * @template U of object
+     * @return EntityEffect<U>
+     */
     public static function same(): self
     {
+        /** @var EntityEffect<U> */
         return new self(EntityEffectKind::Same);
     }
 
+    /**
+     * @template U of object
+     * @return EntityEffect<U>
+     */
     public static function persist(): self
     {
+        /** @var EntityEffect<U> */
         return new self(EntityEffectKind::Persist);
     }
 
+    /**
+     * @template U of object
+     * @return EntityEffect<U>
+     */
     public static function remove(): self
     {
+        /** @var EntityEffect<U> */
         return new self(EntityEffectKind::Remove);
     }
 
+    /**
+     * @template U of object
+     * @return EntityEffect<U>
+     */
     public static function stop(): self
     {
+        /** @var EntityEffect<U> */
         return new self(EntityEffectKind::Stop);
     }
 
+    /**
+     * @template U of object
+     * @return EntityEffect<U>
+     */
     public static function stash(): self
     {
+        /** @var EntityEffect<U> */
         return new self(EntityEffectKind::Stash);
     }
 

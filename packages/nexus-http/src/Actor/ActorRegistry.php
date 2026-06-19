@@ -58,10 +58,18 @@ final class ActorRegistry
     /**
      * Called by ActorRegistration on every mutation. The registration mutates
      * itself in place; the bundle in $entries holds the same instance, so the
-     * registry sees fresh values at freeze() time without any bookkeeping here.
+     * registry sees fresh values at freeze() time without any extra bookkeeping
+     * here. The parameter stays on the signature so future bookkeeping (e.g.
+     * change-tracking, freeze-after-first-compile guards) can land as a non-
+     * breaking change.
+     *
+     * @psalm-suppress UnusedParam Part of the public mutation contract.
      */
     public function update(ActorRegistration $registration): void
     {
-        // Intentionally empty — part of the contract to make future bookkeeping a non-breaking change.
+        // Intentionally empty — registrations mutate in place and the bundle
+        // in $entries already holds the same instance; this hook reserves
+        // the contract for future bookkeeping (change tracking, freeze
+        // guards) without breaking callers.
     }
 }

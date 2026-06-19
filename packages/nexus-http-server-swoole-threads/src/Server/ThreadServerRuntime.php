@@ -13,6 +13,4 @@ use Monadial\Nexus\Http\Server\Swoole\Bridge\ServerRuntime;
  * lives per worker thread and is captured by the server's event closures
  * via `use ($runtime)`.
  */
-final class ThreadServerRuntime extends ServerRuntime
-{
-}
+final class ThreadServerRuntime extends ServerRuntime {}

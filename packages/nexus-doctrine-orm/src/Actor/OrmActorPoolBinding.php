@@ -15,5 +15,5 @@ use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
  */
 final readonly class OrmActorPoolBinding
 {
-    public function __construct(public ActorPoolBinding $base, public EntityManagerPool $emPool,) {}
+    public function __construct(public ActorPoolBinding $base, public EntityManagerPool $emPool) {}
 }

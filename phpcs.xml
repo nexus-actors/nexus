@@ -6,8 +6,39 @@
     <arg name="colors" />
     <arg value="sp" />
 
+    <file>packages/nexus-app/src</file>
+    <file>packages/nexus-app/tests</file>
+    <file>packages/nexus-cluster/src</file>
+    <file>packages/nexus-cluster/tests</file>
     <file>packages/nexus-core/src</file>
     <file>packages/nexus-core/tests</file>
+    <file>packages/nexus-doctrine-dbal/src</file>
+    <file>packages/nexus-doctrine-dbal/tests</file>
+    <file>packages/nexus-doctrine-orm/src</file>
+    <file>packages/nexus-doctrine-orm/tests</file>
+    <file>packages/nexus-http/src</file>
+    <file>packages/nexus-http/tests</file>
+    <file>packages/nexus-http-auth/src</file>
+    <file>packages/nexus-http-auth/tests</file>
+    <file>packages/nexus-http-server-swoole/src</file>
+    <file>packages/nexus-http-server-swoole/tests</file>
+    <file>packages/nexus-http-server-swoole-threads/src</file>
+    <file>packages/nexus-http-server-swoole-threads/tests</file>
+    <file>packages/nexus-http-toolkit/src</file>
+    <file>packages/nexus-http-toolkit/tests</file>
+    <file>packages/nexus-http-ws/src</file>
+    <file>packages/nexus-http-ws/tests</file>
+    <file>packages/nexus-logger/src</file>
+    <file>packages/nexus-logger/tests</file>
+    <file>packages/nexus-persistence/src</file>
+    <file>packages/nexus-persistence/tests</file>
+    <file>packages/nexus-persistence-dbal/src</file>
+    <file>packages/nexus-persistence-dbal/tests</file>
+    <file>packages/nexus-persistence-doctrine/src</file>
+    <file>packages/nexus-persistence-doctrine/tests</file>
+    <file>packages/nexus-psalm/src</file>
+    <file>packages/nexus-psalm/tests</file>
+    <file>packages/nexus-runtime/src</file>
     <file>packages/nexus-runtime-fiber/src</file>
     <file>packages/nexus-runtime-fiber/tests</file>
     <file>packages/nexus-runtime-step/src</file>
@@ -16,22 +47,12 @@
     <file>packages/nexus-runtime-swoole/tests</file>
     <file>packages/nexus-serialization/src</file>
     <file>packages/nexus-serialization/tests</file>
-    <file>packages/nexus-psalm/src</file>
-    <file>packages/nexus-psalm/tests</file>
-    <file>packages/nexus-cluster/src</file>
-    <file>packages/nexus-cluster/tests</file>
     <file>packages/nexus-worker-pool/src</file>
     <file>packages/nexus-worker-pool/tests</file>
     <file>packages/nexus-worker-pool-swoole/src</file>
     <file>packages/nexus-worker-pool-swoole/tests</file>
-    <file>packages/nexus-app/src</file>
-    <file>packages/nexus-app/tests</file>
-    <file>packages/nexus-persistence/src</file>
-    <file>packages/nexus-persistence/tests</file>
-    <file>packages/nexus-persistence-dbal/src</file>
-    <file>packages/nexus-persistence-dbal/tests</file>
-    <file>packages/nexus-persistence-doctrine/src</file>
-    <file>packages/nexus-persistence-doctrine/tests</file>
+    <file>examples/nexus-wallet-app/src</file>
+    <file>examples/nexus-wallet-app/public</file>
     <file>tests</file>
 
     <!-- Slevomat: Type Hints -->
@@ -122,6 +143,9 @@
         <exclude name="SlevomatCodingStandard.ControlStructures.NewWithoutParentheses" />
         <!-- Early exit is not always clearer -->
         <exclude name="SlevomatCodingStandard.ControlStructures.EarlyExit" />
+        <!-- We allow and prefer ?->; the conflicting Require rule below stays active -->
+        <exclude name="SlevomatCodingStandard.ControlStructures.DisallowNullSafeObjectOperator" />
+        <!-- ?? is preferred over short ternary; the Disallow rule below stays active -->
     </rule>
 
     <!-- Slevomat: Operators -->

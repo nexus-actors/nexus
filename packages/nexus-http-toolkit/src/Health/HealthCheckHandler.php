@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Http\Toolkit\Health;
 
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ServerRequestInterface;
 use Throwable;
 
 /**
@@ -41,7 +40,7 @@ final class HealthCheckHandler
 {
     public function __construct(private readonly HealthCheckRegistry $registry) {}
 
-    public function __invoke(ServerRequestInterface $request): ResponseInterface
+    public function __invoke(): ResponseInterface
     {
         $results = [];
         $anyDown = false;

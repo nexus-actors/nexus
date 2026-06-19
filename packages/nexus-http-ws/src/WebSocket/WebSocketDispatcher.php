@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Ws\WebSocket;
 
-use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionClosed;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionOpened;
@@ -33,7 +32,6 @@ final class WebSocketDispatcher
         private readonly ConnectionTable $table,
         private readonly ChannelActorRegistry $registry,
         private readonly HandlerInstantiator $instantiator,
-        private readonly ActorSystem $system,
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();

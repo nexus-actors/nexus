@@ -53,7 +53,9 @@ final class Effect
     }
 
     /**
-     * @param Closure(object): object $fn receives final state, returns reply message
+     * @template TState of object
+     * @template TReply of object
+     * @param Closure(TState): TReply $fn receives final state, returns reply message
      */
     public function thenReply(ActorRef $to, Closure $fn): self
     {
@@ -64,7 +66,9 @@ final class Effect
             replyMsg: $this->replyMsg,
             sideEffects: [
                 ...$this->sideEffects,
+                /** @psalm-suppress InvalidArgument $fn accepts any TState; runtime always invokes with the actor's state object */
                 static function (object $state) use ($to, $fn): void {
+                    /** @var TState $state */
                     $to->tell($fn($state));
                 },
             ],
@@ -72,7 +76,8 @@ final class Effect
     }
 
     /**
-     * @param Closure(object): void $fn receives final state
+     * @template TState of object
+     * @param Closure(TState): void $fn receives final state
      */
     public function thenRun(Closure $fn): self
     {
@@ -83,7 +88,9 @@ final class Effect
             replyMsg: $this->replyMsg,
             sideEffects: [
                 ...$this->sideEffects,
+                /** @psalm-suppress InvalidArgument $fn accepts any TState; runtime always invokes with the actor's state object */
                 static function (object $state) use ($fn): void {
+                    /** @var TState $state */
                     $fn($state);
                 },
             ],

@@ -76,7 +76,7 @@ final class EntityRefFactoryTest extends TestCase
         ];
         $spawner = new class ($stubRefs, $callCount) implements ActorSpawner {
             /** @param list<ActorRef> $refs */
-            public function __construct(private readonly array $refs, private int &$callCount,) {}
+            public function __construct(private readonly array $refs, private int &$callCount) {}
 
             #[Override]
             public function spawn(Props $props, string $name): ActorRef

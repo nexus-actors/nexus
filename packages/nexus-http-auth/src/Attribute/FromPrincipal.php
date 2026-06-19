@@ -22,6 +22,4 @@ use Attribute;
  *   ) {}
  */
 #[Attribute(Attribute::TARGET_PARAMETER)]
-final readonly class FromPrincipal
-{
-}
+final readonly class FromPrincipal {}

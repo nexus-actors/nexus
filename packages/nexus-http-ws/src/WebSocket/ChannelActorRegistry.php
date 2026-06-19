@@ -23,7 +23,8 @@ final class ChannelActorRegistry
 
     private readonly LoggerInterface $logger;
 
-    public function __construct(private readonly ActorSystem $system, ?LoggerInterface $logger = null,) {
+    public function __construct(private readonly ActorSystem $system, ?LoggerInterface $logger = null)
+    {
         $this->logger = $logger ?? new NullLogger();
     }
 

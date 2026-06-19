@@ -81,11 +81,11 @@ final class SwooleServerEventBinder
 
                 try {
                     $app = $runtime->app;
-    
+
                     if (!$app instanceof CompiledWsApplication) {
                         return;
                     }
-    
+
                     $psr7 = SwooleRequestTranslator::toPsr7($req);
                     $ctx = $contextFactory($s, (int) $req->fd, $psr7);
                     $app->dispatcher()->dispatchOpen($ctx, $psr7);
@@ -101,11 +101,11 @@ final class SwooleServerEventBinder
             static function (WebSocketServer $s, SwooleFrame $frame) use ($runtime, $contextFactory, $logger): void {
                 try {
                     $app = $runtime->app;
-    
+
                     if (!$app instanceof CompiledWsApplication) {
                         return;
                     }
-    
+
                     $kind = (int) $frame->opcode === 2
                         ? WebSocketFrame::KIND_BINARY
                         : WebSocketFrame::KIND_TEXT;
@@ -125,11 +125,11 @@ final class SwooleServerEventBinder
 
                 try {
                     $app = $runtime->app;
-    
+
                     if (!$app instanceof CompiledWsApplication) {
                         return;
                     }
-    
+
                     $ctx = $contextFactory($s, $fd, new ServerRequest('GET', '/'));
                     $app->dispatcher()->dispatchClose($ctx, 1000);
                 } catch (Throwable $e) {

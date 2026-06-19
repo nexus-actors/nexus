@@ -16,6 +16,4 @@ use Attribute;
  * otherwise.
  */
 #[Attribute(Attribute::TARGET_PARAMETER)]
-final readonly class FromBody
-{
-}
+final readonly class FromBody {}

@@ -17,6 +17,17 @@ use Swoole\Http\Request as SwooleRequest;
  */
 final class SwooleRequestTranslator
 {
+    /**
+     * Swoole\Http\Request exposes `$server`, `$header`, `$cookie`, `$get`,
+     * `$post`, `$files` as plain `mixed` (the stubs don't model them
+     * precisely). The runtime guarantees these are arrays or null and we
+     * defend each access; suppressing Psalm here keeps the code linear.
+     *
+     * @psalm-suppress MixedAssignment
+     * @psalm-suppress MixedArrayAccess
+     * @psalm-suppress MixedArgument
+     * @psalm-suppress MixedArgumentTypeCoercion
+     */
     public static function toPsr7(SwooleRequest $req): ServerRequestInterface
     {
         $server = $req->server ?? [];

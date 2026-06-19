@@ -22,6 +22,8 @@ use Psr\Log\NullLogger;
 use SplObjectStorage;
 use Throwable;
 
+use function sprintf;
+
 /**
  * @psalm-api
  *
@@ -149,6 +151,12 @@ final class ConnectionPool
         }
     }
 
+    /**
+     * @psalm-suppress UnusedParam $timeout is part of the public lifecycle
+     *   contract; the current sync drain is fast enough that we don't need
+     *   to enforce the deadline yet, but the param is kept so callers
+     *   compile against a deadline-aware API.
+     */
     public function close(Duration $timeout): void
     {
         $this->closed = true;
@@ -224,7 +232,7 @@ final class ConnectionPool
             }
 
             $this->logger->warning(
-                \sprintf(
+                sprintf(
                     'Connection borrow in pool "%s" held for %dms (acquireTtl exceeded)',
                     $this->name,
                     intdiv($ageNanos, 1_000_000),

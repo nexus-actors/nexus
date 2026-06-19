@@ -16,6 +16,4 @@ use Attribute;
  *   final class MyHandler { … }
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class RequiresAuth
-{
-}
+final readonly class RequiresAuth {}

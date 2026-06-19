@@ -141,7 +141,8 @@ final class HandlerResolverTest extends TestCase
 
         $resolved = $resolver->resolve(static fn(
             ServerRequestInterface $r,
-            #[FromActor('saga')] ActorRef $saga,
+            #[FromActor('saga')]
+            ActorRef $saga,
         ): ResponseInterface => Response::ok());
 
         self::assertTrue($resolved->needsRequestScope);
@@ -252,7 +253,8 @@ final class HandlerResolverTest extends TestCase
         $this->expectException(UnknownActorException::class);
         $resolver->resolve(static fn(
             ServerRequestInterface $r,
-            #[FromActor('does-not-exist')] ActorRef $what,
+            #[FromActor('does-not-exist')]
+            ActorRef $what,
         ): ResponseInterface => Response::ok());
     }
 

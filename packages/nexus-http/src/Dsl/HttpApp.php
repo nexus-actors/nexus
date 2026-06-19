@@ -35,6 +35,7 @@ use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
 use Monadial\Nexus\Http\Routing\RouteCollection;
+use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -308,7 +309,11 @@ final class HttpApp
 
     // ─── Errors ────────────────────────────────────────────────────
 
-    /** @param Closure(Throwable, ServerRequestInterface): ResponseInterface $mapper */
+    /**
+     * @template TException of Throwable
+     * @param class-string<TException> $exceptionClass
+     * @param Closure(TException, ServerRequestInterface): ResponseInterface $mapper
+     */
     public function onException(string $exceptionClass, Closure $mapper): self
     {
         $this->userExceptionRegistrations[] = static function (ExceptionMapperRegistry $r) use ($exceptionClass, $mapper): void {
@@ -392,6 +397,32 @@ final class HttpApp
         $this->useDefaultExceptionHandler = false;
 
         return $this;
+    }
+
+    /**
+     * Snapshot of every route registered so far — both the ones already
+     * promoted into the route collection (via attribute discovery or by
+     * a prior `compile()`) and the ones still queued in pending builders.
+     *
+     * Intended for index pages, smoke tests, and admin/debugging tooling.
+     * Returns immutable {@see RouteSummary} value objects so callers don't
+     * couple to the internal `Route` shape.
+     *
+     * @return list<RouteSummary>
+     */
+    public function registeredRoutes(): array
+    {
+        $summaries = [];
+
+        foreach ($this->routes->all() as $route) {
+            $summaries[] = RouteSummary::fromRoute($route);
+        }
+
+        foreach ($this->pendingBuilders as $builder) {
+            $summaries[] = RouteSummary::fromRoute($builder->build());
+        }
+
+        return $summaries;
     }
 
     private function buildRegistry(): ParamResolverRegistry

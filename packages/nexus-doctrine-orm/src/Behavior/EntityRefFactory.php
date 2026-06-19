@@ -99,7 +99,13 @@ final class EntityRefFactory
         return $this->cache[$name] = $this->spawner->spawn(Props::fromBehavior($behaviorBuilder->toBehavior()), $name);
     }
 
-    /** Entry point for the fluent builder. */
+    /**
+     * Entry point for the fluent builder.
+     *
+     * @template U of object
+     * @param class-string<U> $entityClass
+     * @return EntityRefFactoryBuilder<U, object>
+     */
     public static function for(ActorSpawner $spawner, string $entityClass): EntityRefFactoryBuilder
     {
         return new EntityRefFactoryBuilder($spawner, $entityClass);

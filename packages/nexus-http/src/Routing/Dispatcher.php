@@ -37,12 +37,25 @@ final class Dispatcher
 
     public function dispatch(string $method, string $path): DispatchResult
     {
+        /**
+         * FastRoute returns one of three shapes; the variant is fully
+         * determined by $info[0]. Psalm's runtime type for the underlying
+         * dispatcher call is `array<int, mixed>` so we annotate per branch.
+         *
+         * @var array<int, mixed> $info
+         */
         $info = $this->delegate->dispatch($method, $path);
 
-        return match ($info[0]) {
-            FastRouteDispatcher::FOUND              => DispatchResult::found($this->routes[$info[1]], $info[2]),
-            FastRouteDispatcher::METHOD_NOT_ALLOWED => DispatchResult::methodNotAllowed($info[1]),
-            default                                 => DispatchResult::notFound(),
-        };
+        if ($info[0] === FastRouteDispatcher::FOUND) {
+            /** @var array{int, int, array<string, string>} $info */
+            return DispatchResult::found($this->routes[$info[1]], $info[2]);
+        }
+
+        if ($info[0] === FastRouteDispatcher::METHOD_NOT_ALLOWED) {
+            /** @var array{int, list<string>} $info */
+            return DispatchResult::methodNotAllowed($info[1]);
+        }
+
+        return DispatchResult::notFound();
     }
 }

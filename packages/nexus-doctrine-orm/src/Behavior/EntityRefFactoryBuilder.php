@@ -11,9 +11,15 @@ use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\FailIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerFactory;
 use Monadial\Nexus\Runtime\Duration;
 
-/** @psalm-api */
+/**
+ * @template T of object
+ * @template C of object
+ *
+ * @psalm-api
+ */
 final class EntityRefFactoryBuilder
 {
+    /** @var EntityReplayPolicy<T> */
     private EntityReplayPolicy $replayPolicy;
     private ?Duration $receiveTimeout = null;
     private ?EntityManagerFactory $emFactory = null;
@@ -21,7 +27,12 @@ final class EntityRefFactoryBuilder
     private ?Closure $connectionRelease = null;
     private ?Closure $commandHandler = null;
 
-    public function __construct(private readonly ActorSpawner $spawner, private readonly string $entityClass,) {
+    /**
+     * @param class-string<T> $entityClass
+     */
+    public function __construct(private readonly ActorSpawner $spawner, private readonly string $entityClass)
+    {
+        /** @var EntityReplayPolicy<T> */
         $this->replayPolicy = new FailIfMissing();
     }
 
@@ -60,6 +71,9 @@ final class EntityRefFactoryBuilder
         return $this;
     }
 
+    /**
+     * @param EntityReplayPolicy<T> $policy
+     */
     public function withReplayPolicy(EntityReplayPolicy $policy): self
     {
         $this->replayPolicy = $policy;

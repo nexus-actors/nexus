@@ -42,7 +42,8 @@ final class AccessLogMiddleware implements MiddlewareInterface
     ) {}
 
     #[Override]
-    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler,): ResponseInterface {
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
         $startNs = hrtime(true);
         $thrown = null;
         $response = null;

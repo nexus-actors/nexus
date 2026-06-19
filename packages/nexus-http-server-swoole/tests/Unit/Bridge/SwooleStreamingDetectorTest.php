@@ -17,7 +17,9 @@ final class SwooleStreamingDetectorTest extends TestCase
     #[Test]
     public function iterator_stream_with_unknown_size_is_streaming(): void
     {
-        $iter = (static function () { yield 'a'; })();
+        $iter = (static function () {
+            yield 'a';
+        })();
         self::assertTrue(SwooleStreamingDetector::isStreaming(new IteratorStream($iter)));
     }
 

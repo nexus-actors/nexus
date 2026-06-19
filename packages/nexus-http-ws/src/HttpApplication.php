@@ -14,6 +14,7 @@ use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
 use Psr\Http\Server\MiddlewareInterface;
@@ -110,10 +111,14 @@ final class HttpApplication implements Application
         return $this;
     }
 
+    /**
+     * @template TException of \Throwable
+     * @param class-string<TException> $exceptionClass
+     * @param Closure(TException, \Psr\Http\Message\ServerRequestInterface): \Psr\Http\Message\ResponseInterface $mapper
+     */
     #[Override]
     public function onException(string $exceptionClass, Closure $mapper): self
     {
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         $this->http->onException($exceptionClass, $mapper);
 
         return $this;
@@ -167,6 +172,13 @@ final class HttpApplication implements Application
     public function compile(): CompiledHttpApplication
     {
         return new CompiledHttpApplication($this->http->compile());
+    }
+
+    /** @return list<RouteSummary> */
+    #[Override]
+    public function registeredRoutes(): array
+    {
+        return $this->http->registeredRoutes();
     }
 
     public function inner(): HttpApp

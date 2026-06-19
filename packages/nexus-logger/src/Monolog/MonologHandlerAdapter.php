@@ -48,7 +48,7 @@ final class MonologHandlerAdapter implements Handler
      *   we bypass Monolog\Logger. All Monolog processors implement
      *   ProcessorInterface (an __invoke contract), so they're callable.
      */
-    public function __construct(private readonly HandlerInterface $delegate, private readonly array $processors = [],) {}
+    public function __construct(private readonly HandlerInterface $delegate, private readonly array $processors = []) {}
 
     #[Override]
     public function handle(Record $record): void

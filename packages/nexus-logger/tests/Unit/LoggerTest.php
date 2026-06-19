@@ -185,13 +185,13 @@ final class LoggerTest extends TestCase
         $system = ActorSystem::create('logger-test', $runtime);
         $capturing = new CapturingHandler();
 
-        $stampHost = new class () implements RecordProcessor {
+        $stampHost = new class implements RecordProcessor {
             public function process(Record $record): Record
             {
                 return $record->withExtra(['host' => 'h1']);
             }
         };
-        $stampPid = new class () implements RecordProcessor {
+        $stampPid = new class implements RecordProcessor {
             public function process(Record $record): Record
             {
                 return $record->withExtra(['pid' => 42]);

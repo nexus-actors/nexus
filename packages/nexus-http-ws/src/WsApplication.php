@@ -15,6 +15,7 @@ use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Http\Ws\WebSocket\ChannelActorRegistry;
 use Monadial\Nexus\Http\Ws\WebSocket\Exception\DuplicateRouteException;
 use Monadial\Nexus\Http\Ws\WebSocket\HandlerInstantiator;
@@ -160,6 +161,11 @@ final class WsApplication implements Application
         return $this;
     }
 
+    /**
+     * @template TException of \Throwable
+     * @param class-string<TException> $exceptionClass
+     * @param Closure(TException, \Psr\Http\Message\ServerRequestInterface): \Psr\Http\Message\ResponseInterface $mapper
+     */
     #[Override]
     public function onException(string $exceptionClass, Closure $mapper): self
     {
@@ -212,6 +218,13 @@ final class WsApplication implements Application
         $this->inner->clearRouteCache();
     }
 
+    /** @return list<RouteSummary> */
+    #[Override]
+    public function registeredRoutes(): array
+    {
+        return $this->inner->registeredRoutes();
+    }
+
     #[Override]
     public function compile(): CompiledWsApplication
     {
@@ -224,7 +237,6 @@ final class WsApplication implements Application
             $table,
             new ChannelActorRegistry($this->system, $this->logger),
             new HandlerInstantiator($container, $this->logger),
-            $this->system,
             $this->logger,
         );
 

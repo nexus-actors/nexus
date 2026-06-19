@@ -59,7 +59,8 @@ final class BodySizeLimitMiddleware implements MiddlewareInterface
     }
 
     #[Override]
-    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler,): ResponseInterface {
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
         if (!$this->isBodyMethod($request->getMethod())) {
             return $handler->handle($request);
         }
