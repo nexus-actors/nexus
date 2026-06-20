@@ -136,6 +136,26 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Reference',
+      link: { type: 'doc', id: 'reference/overview' },
+      items: [
+        'reference/overview',
+        {
+          type: 'category',
+          label: 'Front-door classes',
+          collapsed: false,
+          items: [
+            'reference/classes/duration',
+            'reference/classes/actor-system',
+            'reference/classes/behavior',
+            'reference/classes/props',
+            'reference/classes/actor-ref',
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Architecture',
       items: [
         'architecture/design-philosophy',
