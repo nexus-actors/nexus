@@ -37,10 +37,10 @@ These are the classes you will interact with most often when building with Nexus
 | [DurableStateBehavior](classes/durable-state-behavior) | `nexus-persistence` | Durable-state behavior builder |
 | [Effect](classes/effect) | `nexus-persistence` | Side-effect descriptor for event-sourced commands |
 | [EventStore](classes/event-store) | `nexus-persistence` | Interface for reading and writing event streams |
-| DurableEffect | `nexus-persistence` | Side-effect descriptor for durable-state commands (coming in batch 4) |
-| SnapshotStrategy | `nexus-persistence` | Controls when snapshots are written (coming in batch 4) |
-| RetentionPolicy | `nexus-persistence` | Controls how many snapshots and events to keep (coming in batch 4) |
-| PersistenceEngine | `nexus-persistence` | Wires the recovery pipeline at actor start (coming in batch 4) |
+| DurableEffect | `nexus-persistence` | Side-effect descriptor for durable-state commands (coming soon) |
+| SnapshotStrategy | `nexus-persistence` | Controls when snapshots are written (coming soon) |
+| RetentionPolicy | `nexus-persistence` | Controls how many snapshots and events to keep (coming soon) |
+| PersistenceEngine | `nexus-persistence` | Wires the recovery pipeline at actor start (coming soon) |
 
 ### Infrastructure
 
@@ -49,19 +49,29 @@ These are the classes you will interact with most often when building with Nexus
 | [Runtime](classes/runtime) | `nexus-runtime` | Concurrency backend abstraction (Fiber / Swoole / Step) |
 | [MailboxConfig](classes/mailbox-config) | `nexus-runtime` | Bounded or unbounded mailbox configuration |
 | [Envelope](classes/envelope) | `nexus-core` | Immutable message wrapper with routing metadata |
-| SupervisionStrategy | `nexus-core` | Configures how failures in children are handled (coming in batch 4) |
-| WorkerPoolConfig | `nexus-worker-pool` | Worker-pool size and topology configuration (coming in batch 4) |
-| NexusApp | `nexus-app` | High-level bootstrap helper (coming in batch 4) |
+| SupervisionStrategy | `nexus-core` | Configures how failures in children are handled (coming soon) |
+| WorkerPoolConfig | `nexus-worker-pool` | Worker-pool size and topology configuration (coming soon) |
+| NexusApp | `nexus-app` | High-level bootstrap helper (coming soon) |
 
 ### Lifecycle signals
 
 | Class | Package | Role |
 |---|---|---|
+| [Signal](classes/signal) | `nexus-core` | Marker interface for runtime lifecycle notifications |
 | PreStart | `nexus-core` | Signal delivered before the first message (coming in batch 5) |
 | PostStop | `nexus-core` | Signal delivered after the actor stops (coming in batch 5) |
 | Terminated | `nexus-core` | Signal delivered when a watched actor terminates (coming in batch 5) |
 | ChildFailed | `nexus-core` | Signal delivered when a child actor throws (coming in batch 5) |
 | PoisonPill | `nexus-core` | System message that initiates graceful shutdown (coming in batch 5) |
+
+### HTTP
+
+| Class | Package | Role |
+|---|---|---|
+| [HttpApp](classes/http-app) | `nexus-http` | Fluent DSL entry point for building HTTP applications |
+| [RouteBuilder](classes/route-builder) | `nexus-http` | Per-route middleware and naming configuration |
+| [CompiledHttpApp](classes/compiled-http-app) | `nexus-http` | Immutable PSR-15 handler produced by `HttpApp::compile()` |
+| [WebSocketHandler](classes/websocket-handler) | `nexus-http-ws` | Base class for WebSocket connection handlers |
 
 ## Auto-generated API documentation
 
