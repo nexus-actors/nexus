@@ -45,6 +45,7 @@ const config = {
           { from: '/docs/architecture/performance', to: '/docs/operations/performance-tuning' },
           { from: '/docs/runtimes/runtime-without-actors', to: '/docs/runtimes/standalone' },
           { from: '/docs/runtimes/runtime-standalone', to: '/docs/runtimes/standalone' },
+          { from: '/docs/intro', to: '/docs/welcome' },
         ],
       },
     ],
