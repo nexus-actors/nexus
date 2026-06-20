@@ -35,19 +35,21 @@ These are the classes you will interact with most often when building with Nexus
 | [PersistenceId](classes/persistence-id) | `nexus-persistence` | Unique identity for a persistent actor |
 | [EventSourcedBehavior](classes/event-sourced-behavior) | `nexus-persistence` | Event-sourced behavior builder |
 | [DurableStateBehavior](classes/durable-state-behavior) | `nexus-persistence` | Durable-state behavior builder |
-| Effect | `nexus-persistence` | Side-effect descriptor for event-sourced commands (coming in batch 3) |
-| DurableEffect | `nexus-persistence` | Side-effect descriptor for durable-state commands (coming in batch 3) |
-| SnapshotStrategy | `nexus-persistence` | Controls when snapshots are written (coming in batch 3) |
-| RetentionPolicy | `nexus-persistence` | Controls how many snapshots and events to keep (coming in batch 3) |
-| PersistenceEngine | `nexus-persistence` | Wires the recovery pipeline at actor start (coming in batch 3) |
+| [Effect](classes/effect) | `nexus-persistence` | Side-effect descriptor for event-sourced commands |
+| [EventStore](classes/event-store) | `nexus-persistence` | Interface for reading and writing event streams |
+| DurableEffect | `nexus-persistence` | Side-effect descriptor for durable-state commands (coming in batch 4) |
+| SnapshotStrategy | `nexus-persistence` | Controls when snapshots are written (coming in batch 4) |
+| RetentionPolicy | `nexus-persistence` | Controls how many snapshots and events to keep (coming in batch 4) |
+| PersistenceEngine | `nexus-persistence` | Wires the recovery pipeline at actor start (coming in batch 4) |
 
 ### Infrastructure
 
 | Class | Package | Role |
 |---|---|---|
-| Envelope | `nexus-core` | Immutable message wrapper with metadata (coming in batch 3) |
+| [Runtime](classes/runtime) | `nexus-runtime` | Concurrency backend abstraction (Fiber / Swoole / Step) |
+| [MailboxConfig](classes/mailbox-config) | `nexus-runtime` | Bounded or unbounded mailbox configuration |
+| [Envelope](classes/envelope) | `nexus-core` | Immutable message wrapper with routing metadata |
 | SupervisionStrategy | `nexus-core` | Configures how failures in children are handled (coming in batch 4) |
-| MailboxConfig | `nexus-runtime` | Bounded or unbounded mailbox configuration (coming in batch 4) |
 | WorkerPoolConfig | `nexus-worker-pool` | Worker-pool size and topology configuration (coming in batch 4) |
 | NexusApp | `nexus-app` | High-level bootstrap helper (coming in batch 4) |
 
