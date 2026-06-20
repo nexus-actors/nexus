@@ -233,5 +233,5 @@ Handler::__invoke() ──→ throws DomainException
 ```
 
 Up next: [WebSockets](./websockets.md), or jump to
-[Observability](./observability.md) for how to log exceptions with full
+[Observability](../operations/observability.md) for how to log exceptions with full
 context.

@@ -97,9 +97,6 @@ const sidebars = {
         'http/websockets',
         'http/actors-in-http',
         'http/servers',
-        'http/observability',
-        'http/production',
-        'http/performance',
       ],
     },
     {
@@ -143,11 +140,29 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Operations',
+      items: [
+        'operations/overview',
+        'operations/deployment',
+        {
+          type: 'category',
+          label: 'Deployment',
+          items: [
+            'operations/deployment/docker',
+            'operations/deployment/systemd',
+            'operations/deployment/kubernetes',
+          ],
+        },
+        'operations/observability',
+        'operations/performance-tuning',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Architecture',
       items: [
         'architecture/design-philosophy',
         'architecture/internals',
-        'architecture/performance',
       ],
     },
     {

@@ -203,7 +203,7 @@ final class AccessLogMiddleware implements MiddlewareInterface
 }
 ```
 
-Pair with [MDC](./observability.md#mdc) so per-request metadata flows
+Pair with [MDC](../operations/observability.md#mdc) so per-request metadata flows
 into every downstream log line, not just the access log.
 
 ### Exception Translation Inside Middleware
