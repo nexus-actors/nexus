@@ -25,16 +25,16 @@ These are the classes you will interact with most often when building with Nexus
 | [Behavior](classes/behavior) | `nexus-core` | Immutable actor message-handler definition |
 | [Props](classes/props) | `nexus-core` | Immutable spawn configuration for an actor |
 | [ActorRef](classes/actor-ref) | `nexus-core` | Type-safe reference to a running actor |
-| ActorContext | `nexus-core` | Runtime context available inside every handler (coming in batch 2) |
-| BehaviorWithState | `nexus-core` | Return type for stateful closure handlers (coming in batch 2) |
+| [ActorContext](classes/actor-context) | `nexus-core` | Runtime context available inside every handler |
+| [BehaviorWithState](classes/behavior-with-state) | `nexus-core` | Return type for stateful closure handlers |
 
 ### Persistence
 
 | Class | Package | Role |
 |---|---|---|
-| PersistenceId | `nexus-persistence` | Unique identity for a persistent actor (coming in batch 2) |
-| EventSourcedBehavior | `nexus-persistence` | Event-sourced behavior builder (coming in batch 2) |
-| DurableStateBehavior | `nexus-persistence` | Durable-state behavior builder (coming in batch 2) |
+| [PersistenceId](classes/persistence-id) | `nexus-persistence` | Unique identity for a persistent actor |
+| [EventSourcedBehavior](classes/event-sourced-behavior) | `nexus-persistence` | Event-sourced behavior builder |
+| [DurableStateBehavior](classes/durable-state-behavior) | `nexus-persistence` | Durable-state behavior builder |
 | Effect | `nexus-persistence` | Side-effect descriptor for event-sourced commands (coming in batch 3) |
 | DurableEffect | `nexus-persistence` | Side-effect descriptor for durable-state commands (coming in batch 3) |
 | SnapshotStrategy | `nexus-persistence` | Controls when snapshots are written (coming in batch 3) |
