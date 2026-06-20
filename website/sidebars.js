@@ -66,8 +66,7 @@ const sidebars = {
       items: [
         'runtimes/overview',
         'runtimes/bootstrap',
-        'runtimes/runtime-standalone',
-        'runtimes/runtime-without-actors',
+        'runtimes/standalone',
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',

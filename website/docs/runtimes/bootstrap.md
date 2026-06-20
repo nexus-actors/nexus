@@ -88,7 +88,7 @@ $result = $future->await();
 ```
 
 For complete standalone guidance and richer examples, see:
-[Runtime Without Actors](./runtime-without-actors.md).
+[Runtime Without Actors](./standalone.md).
 
 ## Bootstrap Checklist
 
