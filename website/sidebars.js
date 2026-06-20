@@ -56,7 +56,7 @@ const sidebars = {
         'core-concepts/mailboxes',
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
-        'core-concepts/persistence',
+        'persistence/overview',
         'core-concepts/passivation',
       ],
     },

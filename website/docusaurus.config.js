@@ -38,6 +38,7 @@ const config = {
           { from: '/docs/best-practices/message-design', to: '/docs/guides/message-design' },
           { from: '/docs/best-practices/ask-vs-tell', to: '/docs/guides/ask-vs-tell' },
           { from: '/docs/best-practices/single-writer-aggregates', to: '/docs/guides/single-writer-aggregates' },
+          { from: '/docs/core-concepts/persistence', to: '/docs/persistence/overview' },
         ],
       },
     ],

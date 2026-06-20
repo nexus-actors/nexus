@@ -56,7 +56,7 @@ unique constraints + optimistic versioning catch the cross-thread
 conflict. The actor still serialises within a thread; conflicts only
 ever happen across threads, and the `WriterConflictException` /
 `OptimisticLockException` paths in [Single-writer
-persistence](../core-concepts/persistence.md#single-writer-guarantee)
+persistence](../persistence/overview.md#single-writer-guarantee)
 take it from there.
 
 **2. Route the same id to the same thread.** The

@@ -569,8 +569,8 @@ The factory methods above (`receive`, `withState`, `setup`) are the primitives. 
 
 | DSL | Package | Use case |
 |---|---|---|
-| **`EventSourcedBehavior`** | `nexus-persistence` | Commands produce events; events replay to rebuild state. Full audit trail. See [Persistence / Event Sourcing](./persistence.md#event-sourcing). |
-| **`DurableStateBehavior`** | `nexus-persistence` | State snapshots without event history. Simpler model when you don't need the audit trail. See [Persistence / Durable State](./persistence.md#durable-state). |
+| **`EventSourcedBehavior`** | `nexus-persistence` | Commands produce events; events replay to rebuild state. Full audit trail. See [Persistence / Event Sourcing](../persistence/overview.md#event-sourcing). |
+| **`DurableStateBehavior`** | `nexus-persistence` | State snapshots without event history. Simpler model when you don't need the audit trail. See [Persistence / Durable State](../persistence/overview.md#durable-state). |
 | **`EntityBehavior`** | `nexus-doctrine-orm` | Treat a Doctrine entity as the actor's state. Mutate the entity normally, return `EntityEffect::persist()` and the runner flushes. Single-writer per `(class, id)` via `EntityRefFactory`. See [EntityBehavior DSL](../doctrine/entity-behavior.md). |
 
 All three:
