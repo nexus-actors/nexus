@@ -14,10 +14,10 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Examples',
+      label: 'Tutorials',
       items: [
-        'examples/overview',
-        'examples/wallet-app',
+        'tutorials/overview',
+        'tutorials/wallet-app',
       ],
     },
     {

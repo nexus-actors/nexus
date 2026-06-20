@@ -32,6 +32,9 @@ const config = {
       {
         redirects: [
           // Subsequent tasks append entries here as they move pages.
+          { from: '/docs/examples', to: '/docs/tutorials/overview' },
+          { from: '/docs/examples/overview', to: '/docs/tutorials/overview' },
+          { from: '/docs/examples/wallet-app', to: '/docs/tutorials/wallet-app' },
         ],
       },
     ],
