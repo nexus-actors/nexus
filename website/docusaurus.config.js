@@ -8,7 +8,7 @@ const config = {
   tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
   favicon: 'img/favicon.ico',
 
-  url: 'https://nexusactors.com',
+  url: 'https://docs.nexusactors.com',
   baseUrl: '/',
 
   organizationName: 'nexus-actors',
@@ -27,6 +27,14 @@ const config = {
 
   themes: ['@docusaurus/theme-mermaid'],
   plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          // Subsequent tasks append entries here as they move pages.
+        ],
+      },
+    ],
     function preferVscodeLsTypesEsm() {
       return {
         name: 'prefer-vscode-ls-types-esm',
