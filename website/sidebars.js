@@ -22,16 +22,23 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Guides',
+      items: [
+        'guides/overview',
+        'guides/message-design',
+        'guides/ask-vs-tell',
+        'guides/single-writer-aggregates',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Best Practices',
       items: [
         'best-practices/overview',
         'best-practices/when-to-use-actors',
-        'best-practices/single-writer-aggregates',
         'best-practices/pooled-connections',
         'best-practices/supervision',
         'best-practices/passivation',
-        'best-practices/ask-vs-tell',
-        'best-practices/message-design',
         'best-practices/scaling',
         'best-practices/observability',
         'best-practices/testing',

@@ -15,12 +15,12 @@ decision you're stuck on if you've used the framework before.
 | Page | The question it answers |
 |---|---|
 | [When to use actors](./when-to-use-actors.md) | *Should I model this as an actor or as a stateless request handler?* |
-| [Single-writer aggregates](./single-writer-aggregates.md) | *How do I serialise writes against one entity without locking the DB row?* |
+| [Single-writer aggregates](../guides/single-writer-aggregates.md) | *How do I serialise writes against one entity without locking the DB row?* |
 | [Pooled connections behind actors](./pooled-connections.md) | *I have more actors than DB connections — how does that not deadlock?* |
 | [Supervision and let-it-crash](./supervision.md) | *How do I handle failures without scattering try/catch everywhere?* |
 | [Passivation and memory](./passivation.md) | *What stops a million long-tail actors eating my RAM?* |
-| [Ask vs tell](./ask-vs-tell.md) | *When does the handler need to wait for a reply?* |
-| [Message design](./message-design.md) | *What makes a good actor message, and what's a trap?* |
+| [Ask vs tell](../guides/ask-vs-tell.md) | *When does the handler need to wait for a reply?* |
+| [Message design](../guides/message-design.md) | *What makes a good actor message, and what's a trap?* |
 | [Scaling out](./scaling.md) | *How do I go from one process to many threads, then many machines?* |
 | [Observability](./observability.md) | *What do I actually want to log/meter for an actor system?* |
 | [Testing actors](./testing.md) | *How do I write tests that aren't flaky and aren't 200ms each?* |
