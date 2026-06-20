@@ -10,6 +10,11 @@ use Override;
 
 /**
  * @psalm-api
+ *
+ * Default stash buffer implementation.
+ *
+ * @internal Implementation detail of {@see ActorContext::stash()}. Not for direct use.
+ *
  * @template T of object
  * @implements StashBuffer<T>
  */

@@ -14,6 +14,8 @@ use Override;
  * Deferred behavior factory. The factory is called once when the actor starts,
  * receiving the ActorContext, and returns the actual runtime Behavior.
  *
+ * @internal Implementation detail of {@see Behavior::setup()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

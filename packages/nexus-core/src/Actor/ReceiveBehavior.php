@@ -14,6 +14,8 @@ use Override;
  * Stateless message-handling behavior. The handler receives a context and a message
  * and returns the next Behavior.
  *
+ * @internal Implementation detail of {@see Behavior::receive()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

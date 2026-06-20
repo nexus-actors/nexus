@@ -43,6 +43,8 @@ use function assert;
  *
  * Internal engine of an actor. Manages behavior, state machine, children, stash, and supervision.
  *
+ * @internal Implementation detail of {@see ActorSystem::spawn()}. Not for direct use.
+ *
  * @template T of object
  * @implements ActorContext<T>
  */
