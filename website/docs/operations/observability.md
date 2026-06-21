@@ -1,22 +1,22 @@
 ---
-sidebar_position: 11
+sidebar_position: 3
 title: Observability
+related:
+  - operations/deployment
+  - operations/performance-tuning
+  - packages/logger
+  - http/overview
 ---
 
 # Observability
 
-The HTTP layer ships with the same observability primitives the rest of
-Nexus uses: PSR-3 logging, PSR-14 event dispatch, and PSR-20 clock. This
-page focuses on logging — what to log, how to add per-request context via
-MDC, and how to do it without slowing down hot paths.
+The HTTP layer uses PSR-3 logging, PSR-14 event dispatch, and PSR-20 clock throughout. This page covers what the framework logs, how to add per-request context via MDC, how to keep logging off the hot path, and how to wire PSR-14 events for external observability tools.
 
-## What the Framework Logs
+## What the framework logs
 
-When you configure a `LoggerInterface` on the application via
-`$app->withLogger($logger)`, the framework emits debug/info-level events
-at well-defined points:
+When you configure a `LoggerInterface` via `$app->withLogger($logger)`, the framework emits events at well-defined points:
 
-| Event | Level | Where |
+| Event | Level | Source |
 |---|---|---|
 | `worker start` / `thread start` | `info` | Adapter |
 | `request received` | `debug` | `RouterMiddleware` |
@@ -28,14 +28,26 @@ at well-defined points:
 | `WebSocket open` / `message` / `close` | `debug` | `WebSocketDispatcher` |
 | `WebSocket channel actor spawn` | `debug` | `ChannelActorRegistry` |
 
-Most of these are debug-level — silent in production unless you bump
-`minLevel(Level::Debug)`.
+Most events are `debug`-level — silent in production unless you set `minLevel(Level::Debug)`.
 
-## Logging in Handlers
+## Logging in handlers
 
 Inject a `LoggerInterface` like any other service:
 
-```php
+```php title="src/Http/Handlers/CreateOrderHandler.php"
+<?php
+
+declare(strict_types=1);
+
+use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Duration;
+use Monadial\Nexus\Http\Attribute\FromActor;
+use Monadial\Nexus\Http\Attribute\FromBody;
+use Monadial\Nexus\Http\Attribute\FromService;
+use Monadial\Nexus\Http\Response\JsonResponse;
+use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
+use Psr\Log\LoggerInterface;
+
 final class CreateOrderHandler
 {
     public function __construct(
@@ -43,20 +55,15 @@ final class CreateOrderHandler
         #[FromService(LoggerInterface::class)] private readonly LoggerInterface $log,
     ) {}
 
-    public function __invoke(ServerRequestInterface $req, #[FromBody] CreateOrderDto $dto): ResponseInterface
-    {
-        $this->log->info('placing order', ['sku' => $dto->sku, 'qty' => $dto->quantity]);
-
-        try {
-            $orderId = $this->orders->ask(
-                static fn(ActorRef $r) => new Place($dto, $r),
-                Duration::seconds(2),
-            );
-        } catch (AskTimeoutException $e) {
-            $this->log->warning('order placement timed out', ['sku' => $dto->sku]);
-            throw $e;
-        }
-
+    public function __invoke(
+        ServerRequestInterface $req,
+        #[FromBody] CreateOrderDto $dto,
+    ): ResponseInterface {
+        $this->log->info('placing order', ['sku' => $dto->sku]);
+        $orderId = $this->orders->ask(
+            static fn (ActorRef $r) => new Place($dto, $r),
+            Duration::seconds(2),
+        );
         $this->log->info('order placed', ['id' => $orderId]);
 
         return JsonResponse::ok(['id' => $orderId])->withStatus(201);
@@ -64,24 +71,18 @@ final class CreateOrderHandler
 }
 ```
 
-For the actor-backed PSR-3 logger that runs formatting and I/O off the
-request path, see [nexus-logger](../packages/logger.md).
+## MDC (mapped diagnostic context)
 
-## MDC (Mapped Diagnostic Context)
+MDC is the ambient metadata bucket that every log record picks up automatically — no need to thread it through every log call. Two tiers:
 
-MDC is the ambient metadata bucket every record automatically picks up —
-no need to thread it through every log call. Two tiers:
+- **`Mdc::putStatic(key, value)`** — Thread-wide. Survives across coroutines. Set once at thread boot.
+- **`Mdc::put(key, value)`** — Coroutine-scoped (Swoole) or fiber-scoped (Fiber). Resets between requests automatically.
 
-- **`Mdc::putStatic(key, value)`** — thread-wide. Survives across
-  coroutines. Set once at thread boot.
-- **`Mdc::put(key, value)`** — coroutine-scoped (Swoole) or
-  fiber-scoped (Fiber). Reset between requests.
+### Per-thread static context
 
-### Per-Thread Static Context
+Set at boot; attached to every record from that thread:
 
-Set at boot, attached to every record from that thread:
-
-```php
+```php title="src/bootstrap.php"
 SwooleThreadServer::run($config, function (ActorSystem $system, WorkerNode $node) {
     Mdc::putStatic('host', gethostname() ?: 'unknown');
     Mdc::putStatic('threadId', $node->workerId());
@@ -91,25 +92,27 @@ SwooleThreadServer::run($config, function (ActorSystem $system, WorkerNode $node
 });
 ```
 
-Every log line from this thread now carries `host`, `threadId`,
-`service` in its `extra` bucket.
+### Per-request coroutine context
 
-### Per-Request Coroutine Context
+Set per request inside a middleware:
 
-Set per-request inside a middleware:
+```php title="src/Http/Middleware/RequestContextMiddleware.php"
+<?php
 
-```php
+declare(strict_types=1);
+
+use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
+use Psr\Http\Server\{MiddlewareInterface, RequestHandlerInterface};
+
 final class RequestContextMiddleware implements MiddlewareInterface
 {
-    public function process(ServerRequestInterface $req, RequestHandlerInterface $next): ResponseInterface
-    {
+    public function process(
+        ServerRequestInterface $req,
+        RequestHandlerInterface $next,
+    ): ResponseInterface {
         Mdc::put('requestId', $req->getHeaderLine('X-Request-Id') ?: bin2hex(random_bytes(8)));
-        Mdc::put('method',    $req->getMethod());
-        Mdc::put('path',      $req->getUri()->getPath());
-
-        if ($principal = $req->getAttribute('principal')) {
-            Mdc::put('userId', $principal->id());
-        }
+        Mdc::put('method', $req->getMethod());
+        Mdc::put('path', $req->getUri()->getPath());
 
         return $next->handle($req);
     }
@@ -118,53 +121,48 @@ final class RequestContextMiddleware implements MiddlewareInterface
 
 Register globally:
 
-```php
+```php title="src/bootstrap.php"
 $app->middleware(RequestContextMiddleware::class);
 ```
 
-Now every log call from that point on — whether from middleware, the
-handler, or actors invoked by `ask` — picks up the request context
-without the developer touching it.
+Every log call from that point — whether from middleware, the handler, or actors invoked via `ask()` — picks up the request context without the developer touching it.
 
-### MDC Output
-
-MDC lands in `Record.extra`, separately from the per-call `context`
-argument. With the native `LineFormatter`:
-
-```
-[2026-06-14T13:50:01.234Z] orders-api.INFO: placing order {"sku":"ABC","host":"web-3","threadId":2,"requestId":"a1b2c3d4"}
-```
-
-The `extra` block (`host`, `threadId`, `requestId`) is MDC; the `sku`
-came from the handler's `['sku' => $dto->sku]` call.
-
-## Access Logging
+## Access logging
 
 A standard pattern — log every request as a structured line:
 
-```php
+```php title="src/Http/Middleware/AccessLogMiddleware.php"
+<?php
+
+declare(strict_types=1);
+
+use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
+use Psr\Http\Server\{MiddlewareInterface, RequestHandlerInterface};
+use Psr\Log\LoggerInterface;
+
 final class AccessLogMiddleware implements MiddlewareInterface
 {
     public function __construct(private readonly LoggerInterface $log) {}
 
-    public function process(ServerRequestInterface $req, RequestHandlerInterface $next): ResponseInterface
-    {
+    public function process(
+        ServerRequestInterface $req,
+        RequestHandlerInterface $next,
+    ): ResponseInterface {
         $start = hrtime(true);
 
         try {
             $response = $next->handle($req);
             $status = $response->getStatusCode();
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             $status = 500;
             throw $e;
         } finally {
-            $elapsedMs = (hrtime(true) - $start) / 1_000_000;
-
+            $ms = (hrtime(true) - $start) / 1_000_000;
             $this->log->info('{method} {path} {status} ({ms}ms)', [
                 'method' => $req->getMethod(),
                 'path'   => $req->getUri()->getPath(),
                 'status' => $status,
-                'ms'     => round($elapsedMs, 2),
+                'ms'     => round($ms, 2),
             ]);
         }
 
@@ -173,23 +171,17 @@ final class AccessLogMiddleware implements MiddlewareInterface
 }
 ```
 
-Pair with `RequestContextMiddleware` so the access log line carries the
-same `requestId` as every other line from that request — full
-correlation, no extra effort.
+Pair with `RequestContextMiddleware` so the access log line carries the same `requestId` as every other line from that request.
 
-## Async Logging
+## Async logging
 
-Calling `$log->info(...)` blocks until the formatting and write
-complete. On a hot request path, this matters. Nexus has two layers of
-escape:
+Calling `$log->info(...)` blocks until the formatting and write complete. On a hot request path, this matters. Two escape paths:
 
-### Actor-Backed Logger
+### Actor-backed logger
 
-The `nexus-actors/logger` package wraps the handlers in a `LogActor`
-turn — `$log->info(...)` returns as soon as the record is enqueued, and
-formatting + I/O happen on the actor's mailbox.
+The `nexus-logger` package wraps handlers in a `LogActor` turn — `$log->info(...)` returns as soon as the record is enqueued; formatting and I/O happen on the actor's mailbox:
 
-```php
+```php title="src/bootstrap.php"
 use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\Formatter\LineFormatter;
 use Monadial\Nexus\Logger\{Level, NexusLogger};
@@ -200,24 +192,17 @@ $logger = NexusLogger::create($system, 'app')
     ->build();
 ```
 
-See [nexus-logger#architecture](../packages/logger.md#architecture) for
-the full picture.
+See [nexus-logger architecture](../packages/logger.md#architecture) for the full picture.
 
-### `Thread\Queue` Sink (Thread Mode Only)
+### Thread\Queue sink (thread mode only)
 
-For multi-thread servers, push formatted lines onto a shared
-`Swoole\Thread\Queue` that a dedicated writer thread drains:
+For multi-thread servers, push formatted lines onto a shared `Swoole\Thread\Queue` that a dedicated writer thread drains:
 
-```php
+```php title="src/bootstrap.php"
 use Monadial\Nexus\Logger\Swoole\ThreadQueueHandler;
-use Swoole\Thread;
-use Swoole\Thread\{Atomic, Queue};
+use Swoole\Thread\Queue;
 
 $logQueue = new Queue();
-$shutdown = new Atomic(0);
-
-// Spawn the writer thread alongside the server.
-$writer = new Thread(__DIR__ . '/logger-writer.php', $logQueue, '/var/log/app.log', $shutdown);
 
 SwooleThreadServer::run(
     SwooleThreadConfig::bind('0.0.0.0', 8080)
@@ -228,29 +213,18 @@ SwooleThreadServer::run(
             ->handler(new ThreadQueueHandler($logQueue, new LineFormatter()))
             ->build();
 
-        return WsApplication::create($system)
-            ->withLogger($logger)
-            // …
-            ->compile();
+        return WsApplication::create($system)->withLogger($logger)->compile();
     },
 );
 ```
 
-One writer thread, one file descriptor, no locks. The writer-thread
-script is at `examples/logger-writer.php`.
+One writer thread, one file descriptor, no locks. This pattern brings logging overhead to approximately 3% RPS at sustained load (vs approximately 7% with synchronous handlers in the same configuration).
 
-This pattern brings logging overhead down to ~3% RPS at sustained load
-(vs ~7% with synchronous Monolog handlers in the same configuration).
-See [Performance in the logger doc](../packages/logger.md#performance)
-for the full benchmark.
+## Capturing the call site
 
-## Capturing the Call Site
+For debug and error logs, `CallerInfoProcessor` walks the backtrace at log time and stamps `class`, `function`, `file`, and `line` into `Record.extra`:
 
-For debug and error logs you usually want to know **where** the log call
-came from. The `CallerInfoProcessor` walks the backtrace at log-time and
-stamps `class`, `function`, `file`, `line` into `Record.extra`:
-
-```php
+```php title="src/bootstrap.php"
 use Monadial\Nexus\Logger\Processor\CallerInfoProcessor;
 
 $logger = NexusLogger::create($system, 'app')
@@ -259,20 +233,11 @@ $logger = NexusLogger::create($system, 'app')
     ->build();
 ```
 
-`onlyFor` restricts the backtrace walk to the listed levels. Hot
-info-level traffic skips it entirely — `debug_backtrace()` is the most
-expensive thing in the pipeline, and almost always unnecessary for
-routine info logs.
+`onlyFor()` restricts the backtrace walk to the listed levels. Info-level traffic skips it — `debug_backtrace()` is the most expensive step in the pipeline and is unnecessary for routine info logs.
 
-The captured frame is the actual `$logger->...()` call site, not the
-PSR-3 adapter frame — see [the package
-docs](../packages/logger.md#callerinfoprocessor) for the resolution
-logic.
+## PSR-14 event dispatch
 
-## Event Dispatch
-
-The router optionally dispatches PSR-14 events for integration with
-external observability tools (OpenTelemetry, custom metrics):
+The router dispatches PSR-14 events for integration with OpenTelemetry, custom metrics, or external observability tools:
 
 | Event class | Fired when |
 |---|---|
@@ -281,32 +246,10 @@ external observability tools (OpenTelemetry, custom metrics):
 | `WebSocketOpened` | After upgrade succeeds |
 | `WebSocketClosed` | After close frame is sent |
 
-Wire a PSR-14 dispatcher via the `HttpApp::create` constructor (see
-[nexus-http](../packages/http.md)) and add your subscribers there.
+Wire a PSR-14 dispatcher via the `HttpApp::create` constructor (see [nexus-http](../packages/http.md)) and add your listeners there.
 
-## Composition
+## See also
 
-```
-HTTP request
-    │
-    ├─→ RequestContextMiddleware (Mdc::put requestId, method, path)
-    │
-    ├─→ AccessLogMiddleware (stamps start time, logs on exit)
-    │
-    ├─→ Handler::__invoke()
-    │     │
-    │     ├─→ $log->info(...) — picks up MDC, runs processors, tells LogActor
-    │     │
-    │     └─→ $actor->ask(...) — log lines inside the actor still see MDC
-    │                            (via coroutine context propagation)
-    │
-    ▼
-LogActor turn (off the request path)
-    │
-    ├─→ Handler::handle($record) — formats and writes
-    │
-    └─→ ThreadQueueHandler → Swoole\Thread\Queue → writer thread → file
-```
-
-Next: [Production](./deployment.md) for caching, OPcache, and
-deployment-time concerns.
+- [Deployment](./deployment.md) — production configuration and pre-flight checklist
+- [Performance tuning](./performance-tuning.md) — measuring and reducing per-request overhead
+- [nexus-logger package](../packages/logger.md) — `NexusLogger`, handlers, formatters, and processors
