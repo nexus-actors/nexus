@@ -22,8 +22,8 @@ install: ## Composer install
 update: ## Composer install
 	$(DC) composer update
 
-test: ## Run all tests
-	$(DC) vendor/bin/phpunit
+test: ## Run all tests safe on the php container (Swoole suites: make test-swoole; Doctrine fiber: make test-doctrine)
+	$(DC) vendor/bin/phpunit --testsuite=unit,integration-doctrine-entity-behavior,integration-fiber,integration-http,integration-step,integration-serialization,integration-persistence,psalm
 
 test-unit: ## Unit tests only
 	$(DC) vendor/bin/phpunit --testsuite=unit
