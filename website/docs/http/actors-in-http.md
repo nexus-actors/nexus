@@ -1,21 +1,41 @@
 ---
 sidebar_position: 9
 title: Actors in HTTP
+related:
+  - http/handlers
+  - http/websockets
+  - core-concepts/ask-pattern
+  - scaling/overview
 ---
 
 # Actors in HTTP
 
-The whole point of Nexus HTTP is to put actors next to your routes
-without the usual ceremony. This page covers the integration patterns:
-where actors come from, how they're injected, how to await replies, and
-how to bridge the synchronous request/response shape onto the
-asynchronous actor model.
+Nexus HTTP is designed to put actors next to your routes without extra ceremony. This page covers the integration patterns: where actors come from, how they are injected, how to await replies, and how to bridge the request/response shape onto the asynchronous actor model.
 
-## Registering Actors
+## Actor modes
 
-Two scopes:
+Four modes determine an actor's scope relative to the HTTP server:
 
-```php
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "lineColor": "#6b7280"}}}%%
+flowchart TD
+    Q{{"Who owns the state?"}}
+    Q -->|"One actor for all requests\nin this worker"| S["singleton\n$app->actor('name', $props)"]
+    Q -->|"One actor per HTTP request,\nstopped after response"| PR["perRequest\n$app->perRequestActor('name', $props)"]
+    Q -->|"One actor shared across\nall workers in the pool"| PS["poolSingleton\n$node->lookupSingleton('name')"]
+    Q -->|"One actor per WebSocket\nconnection"| WS["wsConnection\nConstructed per upgrade"]
+
+    S  --> |"Examples"| SE["connection pool,\ndeduplication map,\nhot cache"]
+    PR --> |"Examples"| PE["audit buffer,\nunit of work,\nrequest-scoped log"]
+    PS --> |"Examples"| PSE["cross-thread shared state,\nchannel actor registry"]
+    WS --> |"Examples"| WSE["per-user chat session,\nstreaming subscription"]
+```
+
+_Figure 1: Actor mode selection tree — pick the scope that matches the state lifetime._
+
+## Registering actors
+
+```php title="server.php"
 // Singleton — one instance per worker (or thread)
 $app->actor('orders', Props::fromFactory(fn() => new OrderActor($store)));
 
@@ -23,22 +43,13 @@ $app->actor('orders', Props::fromFactory(fn() => new OrderActor($store)));
 $app->perRequestActor('audit', Props::fromFactory(fn() => new AuditBufferActor()));
 ```
 
-Singletons are spawned at boot, ready to serve requests immediately.
-Per-request actors are spawned on first injection inside a request, and
-stopped after the response is written.
-
-The choice is about state lifetime:
-
-- **Singleton** — actor state shared across requests (an open
-  connection pool, a deduplication map, a hot cache).
-- **Per-request** — actor state scoped to a single HTTP turn (an audit
-  trail, a unit-of-work transaction, request-scoped query log).
+Singletons are spawned at boot, ready to serve requests immediately. Per-request actors are spawned on first injection inside a request and stopped after the response is written.
 
 ## Injection
 
 Inject the `ActorRef` directly into your handler:
 
-```php
+```php title="src/Http/Handler/ShowOrderHandler.php"
 final class ShowOrderHandler
 {
     public function __construct(
@@ -49,49 +60,39 @@ final class ShowOrderHandler
     {
         $id = (string) $req->getAttribute('id');
         $this->orders->tell(new IncrementViewCount($id));
-
         // …
     }
 }
 ```
 
-`#[FromActor('name')]` matches a registered actor name. The framework
-resolves it at request time:
+`#[FromActor('name')]` matches a registered actor name. The framework resolves it at request time:
 
 - **Singleton** → the cached `ActorRef`, allocated once at boot.
-- **Per-request** → a freshly spawned actor; auto-stopped via
-  `PerRequestActorScope::dispose()` in the router's `finally` block.
+- **Per-request** → a freshly spawned actor; auto-stopped via `PerRequestActorScope::dispose()` in the router's `finally` block.
 
-The two are interchangeable from the handler's perspective — the type is
-just `ActorRef` either way.
+The two are interchangeable from the handler's perspective — the type is `ActorRef` either way.
 
-## Tell vs Ask
-
-Two send patterns, with different semantics:
+## Tell vs ask
 
 ### Tell — fire-and-forget
 
-```php
+```php title="src/Http/Handler/PlaceOrderHandler.php"
 $this->orders->tell(new PlaceOrder($dto));
 return Response::created();
 ```
 
-The handler returns immediately. The message lands in the actor's
-mailbox; the actor processes it on its next turn. There is **no reply**
-and **no error path** — exceptions inside the actor are caught by
-supervision, not by the handler.
+The handler returns immediately. The message lands in the actor's mailbox; the actor processes it on its next turn. There is no reply and no error path — exceptions inside the actor are caught by supervision, not by the handler.
 
 Use `tell` for:
 
-- Write commands where the response is just "accepted, processing"
-- Event publishing (subscribers process asynchronously)
-- Audit / instrumentation messages
-- Anything where the actor is the source of truth and the HTTP response
-  shouldn't wait
+- Write commands where the response is "accepted, processing".
+- Event publishing (subscribers process asynchronously).
+- Audit and instrumentation messages.
+- Anything where the actor is the source of truth and the HTTP response should not wait.
 
 ### Ask — request-response with timeout
 
-```php
+```php title="src/Http/Handler/ShowOrderHandler.php"
 $order = $this->orders
     ->ask(new GetOrder($id), Duration::seconds(2))
     ->await();
@@ -99,37 +100,27 @@ $order = $this->orders
 return JsonResponse::ok($order->toArray());
 ```
 
-`ask()` returns a `Future` immediately; `await()` **suspends the
-fiber/coroutine** until the actor sends a reply or the timeout expires.
-Other requests on the same thread keep running — this isn't a
-system-thread block, it's a cooperative await.
-
-The framework attaches an ephemeral reply ref to the envelope as the
-sender. The actor reads it via `$ctx->sender()->tell($reply)` and the
-framework resumes the waiting fiber with the typed result.
-
-### Choosing Between Them
+`ask()` returns a `Future` immediately; `await()` suspends the fiber or coroutine until the actor sends a reply or the timeout expires. Other requests on the same thread keep running — this is cooperative suspension, not a system-thread block.
 
 | Path | Tell or ask |
 |---|---|
 | Reads where the actor holds the data | `ask` |
 | Reads where the actor is a cache and a miss should fall through | `ask`, with a fallback in the timeout handler |
-| Writes where the client must wait for persistence to confirm | `ask` (handler returns `201`/`202` after reply) |
-| Writes where the client doesn't need confirmation | `tell` (handler returns `202` immediately) |
+| Writes where the client must wait for persistence to confirm | `ask` (return `201`/`202` after reply) |
+| Writes where the client does not need confirmation | `tell` (return `202` immediately) |
 | Fire-and-forget side effects (audit, metrics) | `tell` |
 
-## Handling Ask Timeouts
+## Handling ask timeouts
 
-`ask` raises `AskTimeoutException` if no reply arrives. Map it to a
-gateway timeout in your error mapper:
+`ask` raises `AskTimeoutException` if no reply arrives within the deadline. Map it globally:
 
-```php
+```php title="server.php"
 $app->onException(AskTimeoutException::class, static fn() => Response::gatewayTimeout());
 ```
 
-Or catch it locally if you have a fallback:
+Or catch it locally when you have a fallback:
 
-```php
+```php title="src/Http/Handler/CachedOrderHandler.php"
 try {
     $cached = $this->cache->ask(new Get($key), Duration::millis(50))->await();
     return JsonResponse::ok($cached->value);
@@ -140,15 +131,13 @@ try {
 }
 ```
 
-Pick the timeout per call. There's no global default — be explicit.
+Pick the timeout per call. There is no global default.
 
-## Future-Returning Handlers
+## Future-returning handlers
 
-The router supports handlers that return `Future<ResponseInterface>`
-directly. The dispatcher awaits the future before serialising; the
-handler doesn't have to block on `await`:
+The router supports handlers that return `Future<ResponseInterface>` directly. The dispatcher awaits the future before serialising; the handler does not block on `await`:
 
-```php
+```php title="src/Http/Handler/ShowOrderHandler.php"
 use Monadial\Nexus\Runtime\Async\Future;
 
 public function __invoke(ServerRequestInterface $req): Future
@@ -161,15 +150,11 @@ public function __invoke(ServerRequestInterface $req): Future
 }
 ```
 
-`ask()` already returns a `Future` — `map()` chains the transformation
-without ever blocking. This is useful when you want to compose multiple
-async steps via `Future::map` / `Future::flatMap` without nested
-`try`/`catch`. The router awaits whatever you return: `ResponseInterface`,
-`Future`, or a `Future` that resolves to a `ResponseInterface`.
+### Combining futures
 
-### Combining Futures
+For true fan-out, where multiple actors can work in parallel:
 
-```php
+```php title="src/Http/Handler/UserDashboardHandler.php"
 public function __invoke(ServerRequestInterface $req): Future
 {
     $userId = (string) $req->getAttribute('id');
@@ -184,32 +169,23 @@ public function __invoke(ServerRequestInterface $req): Future
 }
 ```
 
-`Future::all` resolves when every future resolves. If any of them rejects,
-the resulting future rejects with the first error — caught by the
-exception middleware like any other thrown exception.
-
-### When to Pick await() vs Future-chaining
+`Future::all` resolves when every future resolves. If any rejects, the resulting future rejects with the first error — caught by the exception middleware like any other thrown exception.
 
 | Style | Pick when |
 |---|---|
-| `$ref->ask(...)->await()` | Simple, single-actor reads; you want try/catch semantics |
-| `$ref->ask(...)->map(...)` | Composing 2+ async steps; you want the chain to read top-to-bottom |
-| `Future::all([...])` | True fan-out where multiple actors can work in parallel |
+| `$ref->ask(...)->await()` | Single-actor reads; you want `try`/`catch` semantics |
+| `$ref->ask(...)->map(...)` | Composing two or more async steps; you want the chain to read top-to-bottom |
+| `Future::all([...])` | True fan-out where multiple actors work in parallel |
 
-The performance is identical — `await()` is just a synchronous unwrap
-of the same `Future` `map()` chains on. The choice is about readability.
-
-## Per-Request State
+## Per-request state
 
 Per-request actors give you per-turn workspace without globals:
 
-```php
-$app->perRequestActor('uow', Props::fromFactory(fn() => new UnitOfWorkActor()));
-
+```php title="src/Http/Handler/CreateOrderHandler.php"
 final class CreateOrderHandler
 {
     public function __construct(
-        #[FromActor('uow')] private readonly ActorRef $uow,
+        #[FromActor('uow')]    private readonly ActorRef $uow,
         #[FromActor('orders')] private readonly ActorRef $orders,
     ) {}
 
@@ -224,20 +200,13 @@ final class CreateOrderHandler
 }
 ```
 
-The `uow` actor is spawned at the start of the request and stopped after
-the response — `PostStop` runs cleanly, so you can drop in-flight state
-to a log there.
+The `uow` actor is spawned at the start of the request and stopped after the response — `PostStop` runs cleanly, so you can flush in-flight state to a log there. If the handler throws, the per-request actor is still stopped; the router's `finally` block guarantees disposal regardless of outcome.
 
-If the handler throws, the per-request actor is **still stopped**. The
-router's `finally` block guarantees disposal regardless of outcome.
+## Per-request scope reuse
 
-## Per-Request Scope Reuse
+Multiple handlers and middleware on the same request all see the same per-request actor instance. The framework keys them by request, not by injection point:
 
-Multiple handlers and middleware on the same request all see the **same**
-per-request actor instance. The framework keys them by request, not by
-injection point:
-
-```php
+```php title="server.php"
 $app->perRequestActor('audit', Props::fromFactory(fn() => new AuditBufferActor()));
 $app->middleware(AccessLogMiddleware::class);   // also injects 'audit'
 
@@ -245,80 +214,23 @@ $app->middleware(AccessLogMiddleware::class);   // also injects 'audit'
 // for one request. Different requests get different instances.
 ```
 
-This is what makes per-request actors useful for cross-cutting state —
-the middleware can record context, the handler can add business events,
-and `PostStop` flushes the merged buffer.
+This is what makes per-request actors useful for cross-cutting state — middleware records context, the handler adds business events, and `PostStop` flushes the merged buffer.
 
-## Crossing Worker Boundaries
+## Crossing worker boundaries
 
-For multi-thread deployments, `tell` and `ask` work seamlessly across
-threads via the worker pool:
+For multi-thread deployments, `tell` and `ask` work seamlessly across threads via the worker pool:
 
-```php
+```php title="server.php"
 $ordersRef = $node->lookupSingleton('orders');   // shared singleton on thread N
 $ordersRef->tell(new PlaceOrder($dto));
 ```
 
-The message is delivered to whichever thread owns the actor instance,
-via `Swoole\Thread\Queue` — no serialization. See
-[Scaling](../scaling/overview.md) for the pool-singleton pattern.
+The message is delivered to whichever thread owns the actor instance via `Swoole\Thread\Queue` — no serialisation. See [Scaling](../scaling/overview.md) for the pool-singleton pattern.
 
-In worker-mode Swoole, every worker is isolated — actors are per-worker
-and there's no cross-worker dispatch. Use thread mode if you need shared
-state.
+In worker-mode Swoole, every worker is isolated — actors are per-worker and there is no cross-worker dispatch. Use thread mode when you need shared state.
 
-## Bridging HTTP to Existing Actors
+## See also
 
-If you already have an actor system running, expose it via HTTP:
-
-```php
-SwooleThreadServer::run($config, function ($system, $node) use ($existingOrderRef) {
-    return HttpApplication::create($system)
-        ->actor('orders', Props::fromBehavior(/* wrap ref */))
-        ->get('/orders/{id}', ShowOrderHandler::class)
-        ->compile();
-});
-```
-
-For the lifetime of the worker, the HTTP route holds the actor ref and
-talks to it like any other handler. There's no extra wiring — the
-abstraction is already correct.
-
-## Composition
-
-```
-HTTP request
-    │
-    ▼
-ExceptionHandlerMiddleware
-    │
-    ▼
-Global / group / per-route middleware
-    │
-    ▼
-RouterMiddleware
-    │
-    ├── matches route → resolves handler
-    │   │
-    │   ├── handler injects ActorRef (#[FromActor])
-    │   ├── handler injects DTO (#[FromBody])
-    │   └── handler injects service (#[FromService])
-    │
-    ▼
-Handler::__invoke()
-    │
-    ├── $actor->tell(...)              → fire-and-forget
-    ├── $actor->ask(...)->await()      → suspend until reply
-    ├── $actor->ask(...)->map(...)     → compose Futures
-    │
-    ▼
-return ResponseInterface | Future
-    │
-    ▼
-Per-request actor scope disposed (if any)
-    │
-    ▼
-Response written, exceptions mapped
-```
-
-See [Servers](./servers.md) for the deployment story.
+- [Handlers](./handlers.md) — `#[FromActor]` and the parameter resolver pipeline.
+- [Servers](./servers.md) — worker mode vs thread mode and the `WorkerNode` API.
+- [Ask pattern](../core-concepts/ask-pattern.md) — the underlying `Future` and reply mechanics.

@@ -1,28 +1,28 @@
 ---
 sidebar_position: 8
 title: WebSockets
+related:
+  - http/actors-in-http
+  - http/servers
+  - http/handlers
+  - packages/http-ws
 ---
 
 # WebSockets
 
-Nexus adds WebSocket routes to the HTTP application via the
-[`nexus-http-ws`](../packages/http-ws.md) package. Two flavours of route:
+The [`nexus-http-ws`](../packages/http-ws.md) package adds WebSocket routes to the HTTP application. Two flavours of route are available:
 
-- **`ws()`** — per-connection `WebSocketHandler` class. One instance per
-  upgraded connection. Use for echo, per-user state, command-style
-  protocols.
-- **`channel()`** — actor-backed broadcast room. Many connections share
-  one `WebSocketChannelActor`. Use for chat rooms, pub/sub, collaborative
-  editors. **Thread mode only.**
-
-The same `WsApplication` builder declares both.
+- **`ws()`** — per-connection `WebSocketHandler` class. One instance per upgraded connection. Use for echo, per-user state, and command-style protocols.
+- **`channel()`** — actor-backed broadcast room. Many connections share one `WebSocketChannelActor`. Use for chat rooms, pub/sub, and collaborative editors. Thread mode only.
 
 ## Setup
 
-Switch from `HttpApplication` to `WsApplication`, enable WebSocket on the
-server config:
+Switch from `HttpApplication` to `WsApplication` and enable WebSocket on the server config:
 
-```php
+```php title="server.php"
+use Monadial\Nexus\Http\Server\Swoole\Threads\Server\{SwooleThreadConfig, SwooleThreadServer};
+use Monadial\Nexus\Http\Ws\{CompiledApplication, WsApplication};
+
 SwooleThreadServer::run(
     SwooleThreadConfig::bind('0.0.0.0', 8080)
         ->threads(4)
@@ -36,15 +36,13 @@ SwooleThreadServer::run(
 );
 ```
 
-`enableWebSocket(true)` swaps the underlying Swoole server from
-`Swoole\Http\Server` to `Swoole\WebSocket\Server`, which adds the upgrade
-handshake support.
+`enableWebSocket(true)` swaps the underlying Swoole server from `Swoole\Http\Server` to `Swoole\WebSocket\Server`, which adds the upgrade handshake support.
 
-## Per-Connection Handlers
+## Per-connection handlers
 
 Extend `WebSocketHandler` and override three lifecycle methods:
 
-```php
+```php title="src/Http/Handler/EchoHandler.php"
 use Monadial\Nexus\Http\Ws\WebSocket\Attribute\FromContext;
 use Monadial\Nexus\Http\Ws\WebSocket\{WebSocketContext, WebSocketFrame, WebSocketHandler};
 
@@ -72,91 +70,49 @@ final class EchoHandler extends WebSocketHandler
         // cleanup
     }
 }
+```
 
+```php title="server.php"
 $app->ws('/ws/echo', EchoHandler::class);
 ```
 
-One `EchoHandler` instance is created per connection at upgrade time.
-State on `$this` is per-connection — no locking needed.
+One `EchoHandler` instance is created per connection at upgrade time. State on `$this` is per-connection — no locking needed.
 
 ### Lifecycle
 
-```
-upgrade request    → WsApplication::ws() route matched
-                  → handler constructed (#[FromContext] / #[FromActor] / #[FromService] resolved)
-                  → onOpen() called
-        ┌──────────────────────────────────────────────┐
-        ▼                                              │ frame arrives
-  onMessage(frame)  ←─ loop ──┐                        │
-        ▼                     │                        │
-  $ctx->send(...) optional ───┘                        │
-        ▼                                              │
-  client / server disconnect → onClose($code)
-```
+`onOpen()` and `onClose()` fire exactly once per connection. `onMessage()` fires zero or more times. Throwing from any of them closes the connection with `1011` (server error) and logs the exception.
 
-`onOpen()` and `onClose()` always fire exactly once per connection.
-`onMessage()` fires zero or more times. Throwing from any of them closes
-the connection with `1011` (server error) and is logged.
-
-## WebSocketContext
+## `WebSocketContext`
 
 Per-connection handle. Inject via `#[FromContext]`:
 
-```php
-$ctx->id();           // int — connection fd, unique within this thread
-$ctx->request();      // ServerRequestInterface — the original upgrade request
-$ctx->send($text);    // send a TEXT frame
-$ctx->sendBinary($data); // send a BINARY frame
-$ctx->sendPing();     // send a control PING (keep-alive)
-$ctx->close($code, $reason);   // close with WebSocket close code
-$ctx->isAlive();      // bool — still connected
+```php title="src/Http/Handler/ChatHandler.php"
+$ctx->id();                            // int — connection fd, unique within this thread
+$ctx->request();                       // ServerRequestInterface — the original upgrade request
+$ctx->send($text);                     // send a TEXT frame
+$ctx->sendBinary($data);               // send a BINARY frame
+$ctx->sendPing();                      // send a control PING
+$ctx->close($code, $reason);          // close with WebSocket close code
+$ctx->isAlive();                       // bool — still connected
 ```
-
-### Path Parameters
 
 WebSocket routes accept path parameters identical to HTTP routes:
 
-```php
+```php title="src/Http/Handler/ChatHandler.php"
 $app->ws('/ws/chat/{room}', ChatHandler::class);
 
-final class ChatHandler extends WebSocketHandler
-{
-    public function __construct(
-        #[FromContext] private readonly WebSocketContext $ctx,
-    ) {}
-
-    #[\Override]
-    public function onOpen(): void
-    {
-        $room = (string) $this->ctx->request()->getAttribute('room');
-        $this->ctx->send("joined room {$room}");
-    }
-}
+// Inside onOpen():
+$room = (string) $this->ctx->request()->getAttribute('room');
 ```
 
-The upgrade request is preserved on the context, so query strings,
-headers, and routed attributes are all available.
-
-## WebSocketFrame
+## `WebSocketFrame`
 
 Immutable frame value object:
 
-```php
-final readonly class WebSocketFrame
-{
-    public function __construct(
-        public int $kind,    // 1 = TEXT, 2 = BINARY
-        public string $text, // raw payload bytes
-    ) {}
-}
-```
-
-Branch on `$frame->kind` if you handle both:
-
-```php
+```php title="src/Http/Handler/BinaryHandler.php"
 public function onMessage(WebSocketFrame $frame): void
 {
-    if ($frame->kind === 2) {
+    if ($frame->kind === 2) {          // 1 = TEXT, 2 = BINARY
         $this->processBinary($frame->text);
         return;
     }
@@ -165,13 +121,12 @@ public function onMessage(WebSocketFrame $frame): void
 }
 ```
 
-## Channel-Backed Routes (Broadcast)
+## Channel-backed routes (broadcast)
 
-For broadcast / fan-out scenarios — chat rooms, presence, live updates —
-route to an actor instead of a per-connection handler:
+For broadcast and fan-out scenarios — chat rooms, presence, live updates — route to an actor instead of a per-connection handler:
 
-```php
-use Monadial\Nexus\Http\Ws\WebSocket\WebSocketChannelActor;
+```php title="src/Http/Actor/ChatRoomActor.php"
+use Monadial\Nexus\Http\Ws\WebSocket\{WebSocketChannelActor, WebSocketContext, WebSocketFrame};
 
 final class ChatRoomActor extends WebSocketChannelActor
 {
@@ -193,36 +148,21 @@ final class ChatRoomActor extends WebSocketChannelActor
         $this->broadcast("user {$ctx->id()} left");
     }
 }
+```
 
+```php title="server.php"
 $app->channel('/ws/chat/{room}', ChatRoomActor::class, key: 'room');
 ```
 
-The `key` parameter selects which path attribute partitions the actor:
-each `{room}` value gets its own actor instance with its own connection
-set. Calling `$this->broadcast()` from inside the actor sends the message
-to every open connection in that partition — across all threads.
+The `key` parameter selects which path attribute partitions the actor — each `{room}` value gets its own actor instance with its own connection set. `$this->broadcast()` sends to every open connection in that partition, across all threads.
 
-### Why Channel Actors Are Thread-Mode Only
+:::caution Thread mode only
+`channel()` routes require a shared `Swoole\Thread\Map` for the channel registry. Worker-mode Swoole has no equivalent shared memory store, so `channel()` routes throw at compile time. Use plain `ws()` routes with per-connection handlers in worker mode.
+:::
 
-Connection ownership is per-thread, but the actor's state needs to outlive
-any one thread (so connections on thread 3 can broadcast through an
-actor whose mailbox lives on thread 7). The channel registry is backed by
-a shared `Swoole\Thread\Map`. Worker-mode Swoole has no equivalent shared
-memory store, so `channel()` routes throw at compile time.
+For targeted sends to one user:
 
-For broadcast without thread mode, you can build a similar pattern by hand
-using a message broker (Redis pub/sub, NATS, …). The actor model just
-makes the in-process case trivial.
-
-### `broadcast()` Semantics
-
-`$this->broadcast($message)` enqueues the send on every connection in the
-partition. Connections that have died since the actor last saw them are
-silently skipped (the connection table reaps them on `onClose`).
-
-For targeted sends (one user, not everyone):
-
-```php
+```php title="src/Http/Actor/ChatRoomActor.php"
 public function onMessage(WebSocketContext $ctx, WebSocketFrame $frame): void
 {
     if (str_starts_with($frame->text, '/whisper ')) {
@@ -235,11 +175,11 @@ public function onMessage(WebSocketContext $ctx, WebSocketFrame $frame): void
 }
 ```
 
-## Dependency Injection in WebSocket Handlers
+## Dependency injection in WebSocket handlers
 
 The same attributes used for HTTP handlers work here:
 
-```php
+```php title="src/Http/Handler/ChatHandler.php"
 final class ChatHandler extends WebSocketHandler
 {
     public function __construct(
@@ -250,13 +190,11 @@ final class ChatHandler extends WebSocketHandler
 }
 ```
 
-`#[FromContext]` is WebSocket-specific; `#[FromActor]` and `#[FromService]`
-behave identically to HTTP. `#[FromBody]` doesn't apply — WebSocket frames
-arrive on `onMessage()` as `WebSocketFrame` objects.
+`#[FromContext]` is WebSocket-specific. `#[FromActor]` and `#[FromService]` behave identically to HTTP. `#[FromBody]` does not apply — WebSocket frames arrive on `onMessage()` as `WebSocketFrame` objects.
 
-## Close Codes
+## Close codes
 
-Use standard WebSocket close codes for `$ctx->close($code)`:
+Use standard WebSocket close codes with `$ctx->close($code)`:
 
 | Code | Meaning |
 |---|---|
@@ -264,20 +202,16 @@ Use standard WebSocket close codes for `$ctx->close($code)`:
 | `1001` | Going away (server shutdown) |
 | `1002` | Protocol error |
 | `1003` | Unsupported data |
-| `1008` | Policy violation (auth fail, bad room, …) |
+| `1008` | Policy violation (auth fail, bad room) |
 | `1009` | Message too large |
 | `1011` | Internal server error |
 | `4000+` | Application-defined |
 
-`onClose($code)` receives the same code on the receiving side, regardless
-of which peer initiated the close.
+## Sending from outside `onMessage()`
 
-## Sending From Anywhere
+A handler can hold its `WebSocketContext` and call `send()` from outside `onMessage()` — for instance, in response to an external event delivered by an actor:
 
-A handler can hold its `WebSocketContext` and call `send()` from outside
-`onMessage()` — for instance, in response to an external event:
-
-```php
+```php title="src/Http/Handler/NotificationHandler.php"
 final class NotificationHandler extends WebSocketHandler
 {
     public function __construct(
@@ -300,36 +234,10 @@ final class NotificationHandler extends WebSocketHandler
 }
 ```
 
-The actor invokes `$handler->notify()` (via a separate channel) when
-there's something to push. Always check `isAlive()` before sending — the
-client may have disconnected between events.
+Always check `isAlive()` before sending — the client may have disconnected between events.
 
-## Composition
+## See also
 
-```
-WsApplication
-  ├── ->ws($path, HandlerClass)        → per-connection
-  └── ->channel($path, ActorClass, key) → actor-backed broadcast
-                    │
-                    ▼
-            CompiledWsApplication
-                    │
-                    ▼
-          SwooleThreadServer / SwooleWorkerServer
-                    │
-                    ▼
-          Swoole\WebSocket\Server
-                    │
-            ┌───────┴───────┐
-            ▼               ▼
-       onUpgrade        onMessage
-            │               │
-            ▼               ▼
-     handler->onOpen   handler->onMessage(frame)
-                            │
-                            ▼
-                     handler->onClose($code)
-```
-
-Next: [Actors in HTTP](./actors-in-http.md) for the bridging pattern, or
-back to [Servers](./servers.md) to pick the right runner.
+- [Actors in HTTP](./actors-in-http.md) — the actor integration patterns behind channel routes.
+- [Servers](./servers.md) — thread mode prerequisites for `channel()` routes.
+- [Auth](./auth.md) — protecting WebSocket upgrades with `#[RequiresAuth]`.

@@ -1,36 +1,44 @@
 ---
 sidebar_position: 10
 title: Servers
+related:
+  - http/overview
+  - http/actors-in-http
+  - http/websockets
+  - packages/http-server-swoole-threads
 ---
 
 # Servers
 
-Two Swoole adapters serve the same `CompiledApplication`. The choice
-between them is about runtime constraints, not features.
+Two Swoole adapters serve the same `CompiledApplication`. The choice between them is about runtime constraints, not features.
 
 |   | Worker mode | Thread mode |
 |---|---|---|
 | **Package** | `nexus-actors/http-server-swoole` | `nexus-actors/http-server-swoole-threads` |
-| **PHP build** | Any | **ZTS required** |
-| **Swoole** | 5+ | **6.0+ with `--enable-swoole-thread`** |
+| **PHP build** | Any | ZTS required |
+| **Swoole** | 5+ | 6.0+ with `--enable-swoole-thread` |
 | **Concurrency primitive** | Worker processes | Worker threads (one process) |
-| **Per-worker isolation** | OS-process isolation | Memory-isolated PHP threads |
 | **Cross-worker shared state** | No (use Redis / DB) | Yes (`Swoole\Thread\Map`, `Swoole\Thread\Queue`) |
-| **Channel-backed WebSocket actors** | ✗ | ✓ |
-| **Lock-free async logging** | ✗ | ✓ via `Thread\Queue` |
-| **Hot reload via `maxRequest`** | ✓ | ✓ |
+| **Channel-backed WebSocket actors** | No | Yes |
+| **Lock-free async logging** | No | Yes via `Thread\Queue` |
 | **Deployment complexity** | Lower (any PHP build) | Higher (ZTS Docker image) |
 
-If you're not sure: **start with worker mode**. Switch to thread mode when
-you hit one of: channel-backed WebSocket routes, in-process shared state,
-or async logging via `Thread\Queue`.
+Start with worker mode. Switch to thread mode when you need channel-backed WebSocket routes, in-process shared state, or async logging via `Thread\Queue`.
 
-## Worker Mode
+## Worker mode
 
 The standard Swoole shape: master + reactors + N worker processes.
 
-```php
+```php title="server.php"
+<?php
+
+declare(strict_types=1);
+
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Server\Swoole\Server\{SwooleWorkerConfig, SwooleWorkerServer};
+use Monadial\Nexus\Http\Ws\{CompiledApplication, HttpApplication};
+use Monadial\Nexus\Runtime\Duration;
 
 SwooleWorkerServer::run(
     SwooleWorkerConfig::bind('0.0.0.0', 8080)
@@ -46,40 +54,35 @@ SwooleWorkerServer::run(
 );
 ```
 
-The factory runs once per worker process, on `WorkerStart`. Each worker
-gets its own `ActorSystem`, its own DI container, its own cached
-compiled application. No shared state.
+The factory runs once per worker process, on `WorkerStart`. Each worker gets its own `ActorSystem`, its own DI container, and its own cached compiled application. No shared state.
 
-### When to Use Worker Mode
+### When to use worker mode
 
-- You don't have a ZTS PHP build (most stock distros, including PHP-FPM
-  images).
-- Your handlers don't need cross-worker shared state — every worker is
-  identical and idempotent.
-- You scale horizontally (multiple containers, each with N workers) more
-  than vertically.
-- You want OS-level isolation between workers (memory leak in one
-  worker can't poison another).
+- You don't have a ZTS PHP build.
+- Your handlers don't need cross-worker shared state.
+- You scale horizontally (multiple containers, each with N workers) more than vertically.
+- You want OS-level isolation between workers.
 
-### Worker-Mode Limitations
+### Worker-mode limitations
 
-- **No channel-backed WebSocket routes.** Channel actors need shared
-  memory across the pool; workers don't share memory. Use plain `ws()`
-  routes with per-connection handlers.
-- **No `Thread\Queue` async logging.** Each worker logs independently;
-  the file handle is per-process. Use `ConsoleHandler` or
-  `FileHandler` (with `flock`) — slower under load.
+- **No channel-backed WebSocket routes.** Channel actors need shared memory across the pool; workers don't share memory. Use plain `ws()` routes with per-connection handlers.
+- **No `Thread\Queue` async logging.** Each worker logs independently. Use `ConsoleHandler` or `FileHandler` with `flock`.
 
-See the [package reference](../packages/http-server-swoole.md) for the
-full config surface.
+## Thread mode
 
-## Thread Mode
+Swoole 6's `SWOOLE_THREAD` runtime: one process, N worker threads sharing memory via `Swoole\Thread\Map` and `Swoole\Thread\Queue`.
 
-Swoole 6's `SWOOLE_THREAD` runtime: one process, N worker threads sharing
-memory via `Swoole\Thread\Map` and `Swoole\Thread\Queue`.
+```php title="server.php"
+<?php
 
-```php
+declare(strict_types=1);
+
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Server\Swoole\Threads\Server\{SwooleThreadConfig, SwooleThreadServer};
+use Monadial\Nexus\Http\Ws\{CompiledApplication, WsApplication};
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\WorkerPool\WorkerNode;
 
 SwooleThreadServer::run(
     SwooleThreadConfig::bind('0.0.0.0', 8080)
@@ -95,24 +98,18 @@ SwooleThreadServer::run(
 );
 ```
 
-The factory receives both an `ActorSystem` and a `WorkerNode`. The node
-identifies the thread in the pool — use `$node->workerId()` for logging,
-sharding, consistent-hash partitioning.
+The factory receives both an `ActorSystem` and a `WorkerNode`. Use `$node->workerId()` for logging, sharding, and consistent-hash partitioning.
 
-### When to Use Thread Mode
+### When to use thread mode
 
-- You need channel-backed WebSocket routes (chat, presence, live updates
-  with broadcast).
-- You want lock-free async logging via `Thread\Queue` (see
-  [Observability](../operations/observability.md#async-logging)).
-- You have hot in-memory state that must be shared across the pool
-  (in-process cache, leader election table, …).
-- You're running Swoole 6 anyway.
+- You need channel-backed WebSocket routes (chat, presence, live updates with broadcast).
+- You want lock-free async logging via `Thread\Queue`.
+- You have hot in-memory state that must be shared across the pool.
+- You are running Swoole 6 anyway.
 
-### Thread-Mode Prerequisites
+### Thread-mode prerequisites
 
 ```dockerfile
-# Excerpt from docker/Dockerfile
 FROM php:8.5-cli AS php-swoole
 
 RUN docker-php-source extract \
@@ -130,12 +127,9 @@ php -r 'echo PHP_ZTS ? "ZTS\n" : "NTS — thread mode NOT supported\n";'
 php --ri swoole | grep -i thread
 ```
 
-The repo's `docker/Dockerfile` `php-swoole` target ships both.
+## Configuration reference
 
-## Configuration Reference
-
-Both adapters share the same shape; only the concurrency primitive
-differs.
+Both adapters share the same shape; only the concurrency primitive differs.
 
 ### Common
 
@@ -148,7 +142,7 @@ differs.
 | `installSignalHandlers(bool)` | `true` | Handle `SIGTERM` / `SIGINT` |
 | `logger(LoggerInterface)` | none | Runner lifecycle PSR-3 logger |
 
-### Worker-Mode Only
+### Worker-mode only
 
 | Setter | Default | Purpose |
 |---|---|---|
@@ -158,47 +152,27 @@ differs.
 | `dispatchMode(int)` | `2` (fixed by fd) | Swoole dispatch strategy |
 | `logFile(path)` | none | Swoole's own server log |
 
-### Thread-Mode Only
+### Thread-mode only
 
 | Setter | Default | Purpose |
 |---|---|---|
 | `threads(n)` | `1` | Number of worker threads |
 | `withLogQueue(Queue)` | none | Shared queue for async logging |
 
-## Bootstrap Logger
-
-Runner lifecycle logs fire **before** your per-worker `ActorSystem`
-exists, so the runner itself needs a synchronous PSR-3 logger:
-
-```php
-$bootstrap = new MyStdErrLogger();   // anything PSR-3 — Monolog, custom, …
-
-SwooleThreadConfig::bind('0.0.0.0', 8080)
-    ->logger($bootstrap)
-    // …
-```
-
-For the application's request logger, build a `NexusLogger` inside the
-factory — see [Observability](../operations/observability.md).
-
-## Graceful Shutdown
+## Graceful shutdown
 
 Both adapters handle `SIGTERM` / `SIGINT` identically:
 
 1. Master stops accepting new connections.
 2. Workers/threads drain in-flight requests up to `shutdownTimeout`.
-3. Each `ActorSystem::shutdown()` runs with the same budget, delivering
-   `PostStop` to every actor.
+3. Each `ActorSystem::shutdown()` runs with the same budget, delivering `PostStop` to every actor.
 4. Process exits cleanly.
 
-Set `installSignalHandlers(false)` if you're running under a supervisor
-(systemd, s6, …) that owns signal handling.
+Set `installSignalHandlers(false)` if you are running under a supervisor (systemd, s6) that owns signal handling.
 
-### Drain Budget
+### Drain budget for Kubernetes
 
-`shutdownTimeout(Duration::seconds(10))` is generous. For Kubernetes
-deployments, match it to your pod's `terminationGracePeriodSeconds` minus
-a small buffer for the OS-level kill:
+Match `shutdownTimeout` to your pod's `terminationGracePeriodSeconds` minus a small buffer:
 
 ```yaml
 # kubernetes/deployment.yaml
@@ -206,25 +180,18 @@ spec:
   terminationGracePeriodSeconds: 15
 ```
 
-```php
-// server.php
+```php title="server.php"
 SwooleThreadConfig::bind('0.0.0.0', 8080)
     ->shutdownTimeout(Duration::seconds(12));   // 15s pod budget - 3s safety
 ```
 
-If draining genuinely takes longer than the budget (long-poll, big file
-upload), set the budget to match. There's no penalty for being patient;
-the OS will SIGKILL after the pod grace period regardless.
+## Deployment patterns
 
-## Deployment Patterns
+### Behind a load balancer
 
-### Behind a Load Balancer
+Run N containers, each with the same worker or thread count. Health-check `GET /health`. The load balancer evicts unhealthy instances; Kubernetes restarts them.
 
-Run N containers, each with the same worker/thread count. Health-check
-`GET /health`. The load balancer evicts unhealthy instances; Kubernetes
-restarts them.
-
-```php
+```php title="server.php"
 $app->get('/health', static function () use ($system) {
     if (!$system->isHealthy()) {
         return Response::serviceUnavailable();
@@ -234,45 +201,14 @@ $app->get('/health', static function () use ($system) {
 });
 ```
 
-### Hot Reload
+### Hot reload
 
-`maxRequest(n)` recycles a worker (process or thread) after N requests,
-re-running the factory. Useful for:
+`maxRequest(n)` recycles a worker after N requests, re-running the factory. Useful for bounding memory growth and picking up new code combined with OPcache invalidation.
 
-- Picking up new code without a process restart (combined with OPcache
-  invalidation).
-- Bounding memory growth — workers that leak get cycled out.
+For zero-downtime full code reloads, use a process manager or a blue/green container deployment.
 
-For zero-downtime full code reloads, use a process manager (e.g.
-`SwooleReloader`) or run a blue/green container deployment.
+## See also
 
-### Sticky Sessions
-
-WebSocket connections are inherently sticky — once the upgrade succeeds,
-the connection stays on whichever worker/thread accepted it. For HTTP,
-worker-mode Swoole defaults to round-robin dispatch (`dispatchMode(2)`,
-fixed by fd) — same client tends to hit the same worker for the
-connection's lifetime, but not across reconnects.
-
-If your handlers depend on cross-request stickiness for the same client
-(typically a smell), put a session store in front of the actor layer
-rather than relying on worker affinity.
-
-## Composition
-
-```
-                ┌─ CompiledApplication
-                │  (immutable, runtime-agnostic)
-                │
-                ├──→ SwooleWorkerServer::run
-                │      master + N worker processes
-                │      each runs an ActorSystem
-                │
-                └──→ SwooleThreadServer::run
-                       master + N worker threads (one process)
-                       shared Swoole\Thread\Map / Thread\Queue
-                       each thread runs an ActorSystem + WorkerNode
-```
-
-Next: [Observability](../operations/observability.md) to wire logging across both
-modes, or back to [Overview](./overview.md) for the high-level picture.
+- [Overview](./overview.md) — the high-level stack picture.
+- [WebSockets](./websockets.md) — `channel()` routes and thread-mode requirements.
+- [Operations: Observability](../operations/observability.md) — async logging via `Thread\Queue`.

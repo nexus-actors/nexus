@@ -1,20 +1,22 @@
 ---
 sidebar_position: 3
 title: Routing
+related:
+  - http/handlers
+  - http/middleware
+  - http/overview
+  - packages/http
 ---
 
 # Routing
 
-The Nexus router is a `FastRoute`-class trie with PSR-7 attribute binding
-and per-route middleware. Routes are registered through the builder, then
-frozen into an immutable `CompiledApplication` at boot. There is no
-runtime route mutation.
+The Nexus router is a trie keyed on path segments with PSR-7 attribute binding and per-route middleware. Routes are registered through the builder, then frozen into an immutable `CompiledApplication` at boot. There is no runtime route mutation.
 
-## HTTP Verbs
+## HTTP verbs
 
 One method per HTTP verb:
 
-```php
+```php title="server.php"
 $app->get('/users', $handler);
 $app->post('/users', $handler);
 $app->put('/users/{id}', $handler);
@@ -22,14 +24,13 @@ $app->patch('/users/{id}', $handler);
 $app->delete('/users/{id}', $handler);
 ```
 
-Each returns a `RouteBuilder` for per-route configuration (middleware,
-name).
+Each returns a `RouteBuilder` for per-route configuration (middleware, name).
 
-## Path Parameters
+## Path parameters
 
-Wrap parameter names in braces:
+Wrap parameter names in braces. The router extracts each matched value as a PSR-7 request attribute:
 
-```php
+```php title="server.php"
 $app->get('/orders/{id}', static function (ServerRequestInterface $req) {
     $id = (string) $req->getAttribute('id');
     return JsonResponse::ok(['id' => $id]);
@@ -38,33 +39,31 @@ $app->get('/orders/{id}', static function (ServerRequestInterface $req) {
 
 Multiple parameters are extracted into separate request attributes:
 
-```php
+```php title="server.php"
 $app->get('/projects/{org}/tasks/{taskId}', static function (ServerRequestInterface $req) {
-    $org = (string) $req->getAttribute('org');
+    $org    = (string) $req->getAttribute('org');
     $taskId = (string) $req->getAttribute('taskId');
     // …
 });
 ```
 
-Parameters match a single path segment (anything except `/`). The matched
-value is always a string; cast or validate inside the handler.
+Parameters match a single path segment (anything except `/`). The matched value is always a string; cast or validate inside the handler.
 
-## Named Routes
+## Named routes
 
-Tag a route so other code (URL generation, link headers, tests) can
-reference it without rebuilding the path:
+Tag a route so other code (URL generation, link headers, tests) can reference it without rebuilding the path:
 
-```php
+```php title="server.php"
 $app->get('/orders/{id}', ShowOrderHandler::class)->name('orders.show');
 ```
 
 Names must be unique per application. Lookup is constant-time.
 
-## Route Groups
+## Route groups
 
 Share a path prefix and a middleware stack across a block of routes:
 
-```php
+```php title="server.php"
 $app->group('/api/v1', static function ($group) {
     $group->get('/orders', OrderListHandler::class);
     $group->post('/orders', OrderCreateHandler::class);
@@ -72,10 +71,9 @@ $app->group('/api/v1', static function ($group) {
 })->middleware(ApiKeyMiddleware::class);
 ```
 
-The group's middleware runs **after** the global pipeline and **before**
-each route's own middleware. Groups can nest:
+The group's middleware runs after the global pipeline and before each route's own middleware. Groups nest:
 
-```php
+```php title="server.php"
 $app->group('/api/v1', static function ($g) {
     $g->group('/admin', static function ($admin) {
         $admin->get('/users', AdminUserListHandler::class);
@@ -87,18 +85,17 @@ $app->group('/api/v1', static function ($g) {
 
 Nested groups inherit the parent prefix and middleware.
 
-## Closure vs Class Handlers
+## Closure vs class handlers
 
 Closures are convenient for tiny routes:
 
-```php
+```php title="server.php"
 $app->get('/health', static fn() => Response::ok());
 ```
 
-Classes are the production default. Two flavours:
+Classes are the production default. The recommended shape is one invokable class per endpoint:
 
-```php
-// Invokable class
+```php title="src/Http/Handler/HealthHandler.php"
 final class HealthHandler
 {
     public function __invoke(): ResponseInterface
@@ -106,25 +103,25 @@ final class HealthHandler
         return Response::ok();
     }
 }
+```
 
+```php title="server.php"
 $app->get('/health', HealthHandler::class);
 ```
 
-```php
-// Per-route method (uncommon — usually one class per endpoint)
+The `[Class, 'method']` form is available when one controller class serves multiple routes, but one class per endpoint is easier to test and inject:
+
+```php title="server.php"
 $app->get('/orders', [OrderController::class, 'index']);
 ```
 
-The framework prefers the invokable shape (`__invoke()`) — one class per
-endpoint, single responsibility, easy to test. See [Handlers](./handlers.md)
-for constructor injection.
+See [Handlers](./handlers.md) for constructor injection.
 
-## Route Discovery from Attributes
+## Route discovery from attributes
 
-For larger applications, declare routes on the handler class itself and
-point the discoverer at a directory:
+For larger applications, declare routes on the handler class and point the discoverer at a directory:
 
-```php title="src/Http/Handlers/ShowOrderHandler.php"
+```php title="src/Http/Handler/ShowOrderHandler.php"
 use Monadial\Nexus\Http\Routing\Attribute\Route;
 
 #[Route('GET', '/orders/{id}', name: 'orders.show')]
@@ -138,13 +135,12 @@ final class ShowOrderHandler
 ```
 
 ```php title="server.php"
-$app->discover(__DIR__ . '/src/Http/Handlers');
+$app->discover(__DIR__ . '/src/Http/Handler');
 ```
 
-The discoverer scans the directory for classes carrying `#[Route]`. Each
-class becomes one route. Per-route middleware:
+The discoverer scans the directory for classes carrying `#[Route]`. Each class becomes one route. Per-route middleware:
 
-```php
+```php title="src/Http/Handler/CreateOrderHandler.php"
 #[Route(
     method: 'POST',
     path: '/orders',
@@ -154,11 +150,9 @@ class becomes one route. Per-route middleware:
 final class CreateOrderHandler { /* … */ }
 ```
 
-### Multi-method routes
-
 A single class can serve multiple verbs:
 
-```php
+```php title="src/Http/Handler/ShowOrderHandler.php"
 #[Route('GET', '/orders/{id}')]
 #[Route('HEAD', '/orders/{id}')]
 final class ShowOrderHandler { /* … */ }
@@ -168,76 +162,48 @@ final class ShowOrderHandler { /* … */ }
 
 | Application size | Recommendation |
 |---|---|
-| < 20 routes | Inline `->get/post(...)` calls |
+| Fewer than 20 routes | Inline `->get/post(...)` calls |
 | 20+ routes, single team | Either; pick by preference |
-| Domain-driven design, many bounded contexts | Discovery (route lives next to handler) |
+| Domain-driven, many bounded contexts | Discovery (route lives next to handler) |
 
-Mixing is fine — explicit `->get(...)` calls and `->discover(...)`
-coexist in the same application.
+Mixing is fine — explicit `->get(...)` calls and `->discover(...)` coexist in the same application.
 
-## Route Caching
+## Route caching
 
-Discovery scans files and parses attributes. For production, cache the
-compiled route table to any PSR-16 store:
+Discovery scans files and parses attributes on every boot. Cache the compiled route table to any PSR-16 store for production:
 
-```php
+```php title="server.php"
 use Psr\SimpleCache\CacheInterface;
 
 $app->withRouteCache($psr16Cache, key: 'app-routes-v1')
-    ->discover(__DIR__ . '/src/Http/Handlers')
+    ->discover(__DIR__ . '/src/Http/Handler')
     ->compile();
 ```
 
-On a cache hit, the discoverer is skipped entirely. Bump the cache key
-when you deploy new code; the framework treats the key as opaque.
+On a cache hit, the discoverer is skipped entirely. Bump the cache key when you deploy new code; the framework treats the key as opaque.
 
-For deployments without a shared cache, use an in-memory PSR-16 implementation
-plus OPcache — the route table is rebuilt once per worker on first boot
-and held in memory for the worker's lifetime.
+## Dispatcher internals
 
-## Dispatcher Internals
+The dispatcher is a trie keyed on path segments, with parameter slots matching any single segment. Lookup is O(path length), not O(routes).
 
-The dispatcher is a trie keyed on path segments, with parameter slots
-matching any single segment. Lookup is O(path length), not O(routes).
+When two routes overlap, the most specific wins:
 
-If you register two routes that overlap, the most specific wins:
-
-```php
-$app->get('/users/me', MyProfileHandler::class);          // wins for /users/me
-$app->get('/users/{id}', ShowUserHandler::class);         // wins for /users/42
+```php title="server.php"
+$app->get('/users/me', MyProfileHandler::class);      // wins for /users/me
+$app->get('/users/{id}', ShowUserHandler::class);     // wins for /users/42
 ```
 
 Literal segments beat parameter slots at the same level.
 
 ## 404 and 405
 
-- **`404 Not Found`** — no route matched. The default handler returns
-  `Response::notFound()`. Override via:
-  ```php
-  $app->onException(NotFoundException::class, static fn() => /* custom */);
-  ```
-- **`405 Method Not Allowed`** — a route matched the path but not the
-  verb. The default handler returns `405` with an `Allow` header listing
-  the supported verbs.
+- **`404 Not Found`** — no route matched. The default handler returns `Response::notFound()`. Override via `$app->onException(NotFoundException::class, ...)`.
+- **`405 Method Not Allowed`** — a route matched the path but not the verb. The default handler returns `405` with an `Allow` header listing supported verbs.
 
-Both flow through the standard exception-handler middleware, so route
-matchers behave like any other handler: middleware sees them, error
-mappers can intercept them.
+Both flow through the standard exception handler middleware, so route matchers behave like any other handler: middleware sees them, error mappers can intercept them.
 
-## Composition
+## See also
 
-```
-HttpApplication ─┐                                     ┌─→ RouteCollection
-                 ├─ get / post / group / discover ─────┤
-WsApplication  ──┘                                     └─→ Dispatcher (trie)
-                          ▲                                     │
-                          │                                     ▼
-                     ->compile()                       PSR-15 RouterMiddleware
-                          │
-                          ▼
-                  CompiledApplication
-```
-
-See [Handlers](./handlers.md) next for how handlers are constructed and
-injected with dependencies, or [Middleware](./middleware.md) for the
-pipeline that wraps every route.
+- [Handlers](./handlers.md) — how handlers are constructed and injected with dependencies.
+- [Middleware](./middleware.md) — the pipeline that wraps every route.
+- [Error Handling](./error-handling.md) — customising 404 and 405 responses.
