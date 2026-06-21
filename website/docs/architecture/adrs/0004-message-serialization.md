@@ -1,6 +1,10 @@
 ---
 title: "ADR 0004: Valinor-Based Message Serialization"
 sidebar_position: 4
+related:
+  - architecture/adrs/0005-multi-process-clustering
+  - architecture/adrs/0008-worker-pool-cluster-separation
+  - architecture/design-philosophy
 ---
 
 # ADR 0004: Valinor-Based Message Serialization
@@ -11,7 +15,7 @@ Accepted
 
 ## Context
 
-When actors communicate across process boundaries (clustering), messages must be serialized. PHP's native `serialize()` is fast but tightly coupled to class structure — any refactoring breaks deserialization. JSON is human-readable but lacks type information. We need a serialization layer that:
+When actors communicate across process boundaries (clustering), messages must be serialized. PHP's native `serialize()` is fast but tightly coupled to class structure — any refactoring breaks deserialization. JSON is human-readable but lacks type information. A serialization layer is needed that:
 
 1. Supports evolving message schemas (rename fields, add defaults).
 2. Preserves type safety during deserialization.

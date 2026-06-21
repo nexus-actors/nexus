@@ -1,6 +1,11 @@
 ---
 title: "ADR 0001: Actor Model Architecture for PHP"
 sidebar_position: 1
+related:
+  - architecture/design-philosophy
+  - core-concepts/actors
+  - core-concepts/supervision
+  - architecture/adrs/0002-immutable-behavior-api
 ---
 
 # ADR 0001: Actor Model Architecture for PHP
@@ -19,7 +24,7 @@ PHP 8.5 introduces features (`readonly class`, pipe operator, `#[NoDiscard]`) th
 
 Build a full actor system with:
 
-- **Actor hierarchy**: Every actor has a parent. The root is the ActorSystem guardian.
+- **Actor hierarchy**: Every actor has a parent. The root is the `ActorSystem` guardian.
 - **Message-driven**: Actors communicate exclusively via immutable messages through typed `ActorRef<T>`.
 - **Location transparency**: `ActorRef` abstracts whether the actor is local or remote.
 - **Supervision**: Parent actors define strategies for child failures (restart, stop, escalate).

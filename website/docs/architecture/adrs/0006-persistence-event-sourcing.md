@@ -1,6 +1,10 @@
 ---
 title: "ADR 0006: Persistence via Event Sourcing and Durable State"
 sidebar_position: 6
+related:
+  - architecture/adrs/0001-actor-model-architecture
+  - architecture/adrs/0002-immutable-behavior-api
+  - core-concepts/actors
 ---
 
 # ADR 0006: Persistence via Event Sourcing and Durable State
@@ -22,7 +26,7 @@ Both patterns are valuable for different use cases. The persistence layer must i
 
 Implement persistence as a behavior wrapper layer:
 
-- **`PersistenceEngine`**: Wraps any `Behavior<T>` to add event sourcing. Handles recovery (load snapshot → replay events), event persistence, and snapshot management. Uses `Behavior::setup()` for recovery and `Behavior::withState()` for command processing.
+- **`PersistenceEngine`**: Wraps any `Behavior<T>` to add event sourcing. Handles recovery (load snapshot → replay events), event persistence, and snapshot management.
 - **`Effect`** type: Command handlers return effects instead of behaviors. `Effect::persist(events)` to persist, `Effect::none()` to skip, with `thenReply()` and `thenRun()` chaining.
 - **`DurableStateEngine`**: Simpler variant that persists current state. `DurableEffect::persist($state)`.
 - **Two API styles**: Functional (`EventSourcedBehavior::create()`) and class-based (`AbstractEventSourcedActor`).
@@ -30,6 +34,7 @@ Implement persistence as a behavior wrapper layer:
 - **Pluggable stores**: `EventStore`, `SnapshotStore`, `DurableStateStore` interfaces with in-memory, DBAL, and Doctrine ORM implementations.
 
 Three packages:
+
 - `nexus-persistence`: Core interfaces, in-memory stores, engines, behaviors.
 - `nexus-persistence-dbal`: Doctrine DBAL adapter (raw SQL, lightweight).
 - `nexus-persistence-doctrine`: Doctrine ORM adapter (entity-based, full ORM integration).
@@ -41,4 +46,4 @@ Three packages:
 - Event sourcing provides a complete audit trail of all state changes.
 - Snapshot + event replay balances recovery speed with storage efficiency.
 - The `Effect` type makes persistence explicit in the type system.
-- DBAL adapter is ~3x faster than ORM for high-throughput scenarios.
+- The DBAL adapter is ~3x faster than the ORM adapter for high-throughput scenarios.

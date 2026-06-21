@@ -1,6 +1,10 @@
 ---
 title: "ADR 0005: Multi-Process Clustering via Swoole IPC"
 sidebar_position: 5
+related:
+  - architecture/adrs/0008-worker-pool-cluster-separation
+  - architecture/adrs/0004-message-serialization
+  - scaling/overview
 ---
 
 # ADR 0005: Multi-Process Clustering via Swoole IPC
@@ -9,10 +13,7 @@ sidebar_position: 5
 
 Superseded by [ADR 0008](0008-worker-pool-cluster-separation.md)
 
-> This ADR describes the original multi-process clustering design using `Process\Pool`
-> and Unix socket IPC (`UnixSocketTransport`, `SwooleTableDirectory`). The architecture
-> was replaced by a Swoole thread-based worker pool in ADR 0008. The content is preserved
-> for historical context.
+> This ADR describes the original multi-process clustering design using `Process\Pool` and Unix socket IPC (`UnixSocketTransport`, `SwooleTableDirectory`). The architecture was replaced by a Swoole thread-based worker pool in ADR 0008. The content is preserved for historical context.
 
 ## Context
 
@@ -34,6 +35,7 @@ Implement multi-process clustering using Swoole's IPC primitives:
 - **`ClusterBootstrap`**: Orchestrates startup — creates process pool, initializes transport and directory, runs the actor system on each worker.
 
 The cluster layer is split into two packages:
+
 - `nexus-cluster`: Pure PHP interfaces and abstractions (no Swoole dependency).
 - `nexus-cluster-swoole`: Swoole-specific implementations.
 
@@ -41,6 +43,6 @@ The cluster layer is split into two packages:
 
 - Actors are automatically distributed across workers via consistent hashing.
 - Adding/removing workers rebalances with minimal disruption.
-- Cross-process messaging adds serialization overhead (~50μs per message).
+- Cross-process messaging adds serialization overhead (~50 µs per message).
 - The cluster package abstractions allow future transport implementations (TCP, shared memory).
 - Location transparency means existing actor code works unchanged in a cluster.
