@@ -11,6 +11,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
  * @psalm-api
  *
  * No-op event dispatcher for when no external dispatcher is provided.
+ *
+ * @internal Internal default used by {@see ActorSystem} when no dispatcher is provided. Not for direct use.
  */
 final class NullDispatcher implements EventDispatcherInterface
 {

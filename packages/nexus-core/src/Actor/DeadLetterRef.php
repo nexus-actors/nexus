@@ -19,6 +19,8 @@ use Override;
  * ask() immediately throws AskTimeoutException.
  * isAlive() always returns false.
  *
+ * @internal Implementation detail of {@see ActorSystem::deadLetters()}. Not for direct use.
+ *
  * @implements ActorRef<object>
  */
 final class DeadLetterRef implements ActorRef

@@ -13,18 +13,38 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
 /**
+ * Immutable, ready-to-serve PSR-15 request handler produced by {@see HttpApp::compile()}.
+ *
+ * `CompiledHttpApp` is the result of freezing an {@see HttpApp} DSL. It holds
+ * the fully assembled middleware pipeline (exception handler → global middleware →
+ * router) compiled once at boot time. The {@see handle()} method invokes that
+ * chain directly with no per-request stack allocation.
+ *
+ * Server adapters (Swoole HTTP server, Fiber-based development server, etc.) receive
+ * a `CompiledHttpApp` and call {@see handle()} for every incoming request. Application
+ * code should never need to construct or call this class directly.
+ *
+ * PSR-14 lifecycle events are emitted when an `EventDispatcherInterface` is
+ * wired during {@see HttpApp::create()}:
+ * - {@see RequestStarted}   — emitted before the middleware chain is invoked.
+ * - {@see RequestCompleted} — emitted after the response is produced, carrying elapsed nanoseconds.
+ *
+ * Example — handing the compiled app to a server adapter:
+ * ```php
+ * $compiled = HttpApp::create($system)->get('/ping', PingHandler::class)->compile();
+ *
+ * // Swoole HTTP server adapter:
+ * $server->on('request', static function ($req, $res) use ($compiled): void {
+ *     $response = $compiled->handle(PsrFactory::fromSwoole($req));
+ *     // write $response back to $res …
+ * });
+ * ```
+ *
+ * @see HttpApp           The DSL that produces CompiledHttpApp via compile()
+ * @see RequestStarted    PSR-14 event emitted at request start
+ * @see RequestCompleted  PSR-14 event emitted after response is produced
+ *
  * @psalm-api
- *
- * Immutable, ready-to-serve HTTP app. Produced by HttpApp::compile().
- * Implements PSR-15 RequestHandlerInterface — server adapters consume this.
- *
- * The internal handler chain (exception mw → globals → router) is compiled
- * once during construction; handle() invokes it directly with no per-request
- * stack assembly.
- *
- * PSR-14 events RequestStarted and RequestCompleted are emitted around the
- * compiled handler when an EventDispatcher is wired. The null-check fast
- * path makes the cost when no dispatcher is supplied a single identity check.
  */
 final readonly class CompiledHttpApp implements RequestHandlerInterface
 {
@@ -33,6 +53,16 @@ final readonly class CompiledHttpApp implements RequestHandlerInterface
         private ?EventDispatcherInterface $events,
     ) {}
 
+    /**
+     * Dispatch the request through the compiled middleware pipeline.
+     *
+     * Emits {@see RequestStarted} and {@see RequestCompleted} PSR-14 events
+     * when an `EventDispatcherInterface` was supplied at build time. When no
+     * dispatcher is present the overhead is a single `null` identity check.
+     *
+     * @param ServerRequestInterface $request The incoming PSR-7 server request.
+     * @return ResponseInterface              The produced HTTP response.
+     */
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface
     {

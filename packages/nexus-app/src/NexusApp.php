@@ -11,16 +11,31 @@ use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Psr\Log\LoggerInterface;
 
 /**
+ * Fluent bootstrap entry point for Nexus actor applications.
+ *
+ * `NexusApp` is the top-level application kernel. It collects actor definitions
+ * and optional lifecycle callbacks, then spawns them all and starts the runtime
+ * event loop with a single `run()` call. For more control — for example, to wire
+ * OS signal handling before the loop starts — use `start()` instead, which returns
+ * the configured {@see ActorSystem} without blocking.
+ *
+ * All actor registration methods return `$this`, enabling a fluent builder style:
+ * ```php
+ * NexusApp::create('shop')
+ *     ->actor('orders', Props::fromBehavior($orderBehavior))
+ *     ->actor('payments', Props::fromFactory(fn() => new PaymentActor()))
+ *     ->onStart(function (ActorSystem $system): void {
+ *         // send a warm-up message after all actors are spawned
+ *         $system->deadLetters();
+ *     })
+ *     ->run(new FiberRuntime());
+ * ```
+ *
+ * @see ActorSystem  Underlying system created by start() / run()
+ * @see Props        Actor spawn configuration passed to actor()
+ * @see Runtime      Concurrency backend (FiberRuntime, SwooleRuntime, StepRuntime)
+ *
  * @psalm-api
- *
- * Application kernel for Nexus actor applications.
- *
- * Register actors, configure the runtime, and run:
- *
- *     NexusApp::create('my-app')
- *         ->actor('orders', Props::fromBehavior($orderBehavior))
- *         ->actor('payments', Props::fromFactory(fn() => new PaymentActor()))
- *         ->run(new SwooleRuntime());
  */
 final class NexusApp
 {
@@ -32,11 +47,20 @@ final class NexusApp
 
     private function __construct(private readonly string $appName) {}
 
+    /**
+     * Create a new NexusApp with the given application name.
+     *
+     * The name is passed through to {@see ActorSystem::create()} and appears in
+     * log output and actor paths.
+     */
     public static function create(string $name): self
     {
         return new self($name);
     }
 
+    /**
+     * Returns the application name supplied to {@see create()}.
+     */
     public function name(): string
     {
         return $this->appName;

@@ -27,14 +27,36 @@ use Monadial\Nexus\WorkerPool\Worker\WorkerAskState;
 use Monadial\Nexus\WorkerPool\Worker\WorkerReplyRef;
 
 /**
- * @psalm-api
- *
  * Per-worker coordinator within a local worker pool.
  *
- * Owns the ActorSystem, routes messages via the hash ring, and handles
- * incoming transport envelopes. Each worker thread runs exactly one WorkerNode.
- * No serializer is involved — envelopes are passed directly between threads
- * via Thread\Queue (which handles object copying internally).
+ * Each worker thread in a `WorkerPoolApp` owns exactly one `WorkerNode`. The node
+ * holds the thread-local {@see ActorSystem}, consults the {@see ConsistentHashRing}
+ * to decide which worker owns a given actor name, and routes cross-worker messages
+ * via the {@see WorkerTransport} without serialization (Swoole's `Thread\Queue`
+ * copies objects between threads internally).
+ *
+ * Typical usage is indirect — you implement {@see WorkerStartHandler} and call
+ * `$node->spawn()` inside `onWorkerStart()` to register the actors that live on
+ * this worker. The framework then wires message routing automatically.
+ *
+ * Example — registering actors in a worker start handler:
+ * ```php
+ * final class MyWorkerStart implements WorkerStartHandler
+ * {
+ *     public function onWorkerStart(WorkerNode $node): void
+ *     {
+ *         $node->spawn(Props::fromBehavior($orderBehavior), 'orders');
+ *         $node->spawn(Props::fromBehavior($paymentBehavior), 'payments');
+ *         $node->start(); // begin listening for inbound transport envelopes
+ *     }
+ * }
+ * ```
+ *
+ * @see ConsistentHashRing   Maps actor names to worker IDs via CRC32 hash ring
+ * @see WorkerTransport      Transport interface for cross-worker envelope delivery
+ * @see WorkerActorRef       ActorRef implementation that routes via the transport
+ *
+ * @psalm-api
  */
 final class WorkerNode
 {
@@ -187,7 +209,22 @@ final class WorkerNode
     }
 
     /**
+     * Send a request-response ask to an actor on a remote worker and return a Future.
+     *
+     * Transmits a `WorkerAskRequest` envelope to the target worker, registers a
+     * timeout that rejects the future on expiry, and schedules automatic retries
+     * (up to {@see ASK_RETRY_MAX_ATTEMPTS}) until the target worker acknowledges
+     * receipt. The future resolves when the target actor replies; it fails with
+     * {@see AskTimeoutException} if the timeout elapses before a reply arrives.
+     *
+     * This method is called internally by {@see WorkerActorRef::ask()} and is
+     * exposed publicly so that custom transport adapters can invoke it directly.
+     *
      * @template R of object
+     * @param ActorPath $targetPath   Path of the actor to ask.
+     * @param int       $targetWorker Worker ID that owns the target actor.
+     * @param object    $message      The request message to send (not serialized).
+     * @param Duration  $timeout      Maximum time to wait for a reply.
      * @return Future<R>
      */
     public function askRemote(ActorPath $targetPath, int $targetWorker, object $message, Duration $timeout): Future

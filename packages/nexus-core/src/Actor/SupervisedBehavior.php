@@ -15,6 +15,8 @@ use Override;
  * Wrapper behavior that installs a custom SupervisionStrategy for its inner behavior.
  * Exceptions thrown by the inner behavior's handler are decided by this strategy first.
  *
+ * @internal Implementation detail of {@see Behavior}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

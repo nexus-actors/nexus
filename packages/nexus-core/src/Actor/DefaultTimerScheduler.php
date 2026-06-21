@@ -9,7 +9,13 @@ use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * Default timer scheduler implementation.
+ *
+ * @internal Implementation detail of {@see ActorContext::scheduleOnce()}. Not for direct use.
+ */
 final class DefaultTimerScheduler implements TimerScheduler
 {
     /** @var array<string, Cancellable> */

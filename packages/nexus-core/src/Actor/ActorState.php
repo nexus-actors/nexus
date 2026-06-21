@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * Internal lifecycle state machine for actors.
+ *
+ * @internal Implementation detail of {@see ActorSystem::spawn()}. Not for direct use.
+ */
 enum ActorState: string
 {
     case New = 'new';

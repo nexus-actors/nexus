@@ -12,6 +12,36 @@ use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Psr\Container\ContainerInterface;
 
 /**
+ * Immutable spawn configuration for an actor.
+ *
+ * Props bundles the behavior factory with optional mailbox capacity and
+ * supervision strategy overrides. You pass a Props value to ActorSystem::spawn()
+ * or ActorContext::spawn() to create a new actor. The static factory methods
+ * (fromBehavior, fromFactory, fromStatefulFactory, fromContainer) cover the
+ * four actor definition styles supported by Nexus.
+ *
+ * Example:
+ * ```php
+ * // Closure-based
+ * $props = Props::fromBehavior(Behavior::receive(fn($ctx, $msg) => Behavior::same()));
+ *
+ * // Class-based (fresh instance per spawn)
+ * $props = Props::fromFactory(fn() => new OrderActor($repository));
+ *
+ * // Class-based from PSR-11 container
+ * $props = Props::fromContainer($container, PaymentActor::class);
+ *
+ * // Override mailbox capacity and supervision strategy
+ * $props = Props::fromBehavior($behavior)
+ *     ->withMailbox(MailboxConfig::bounded(100, OverflowStrategy::DropNewest))
+ *     ->withSupervision(SupervisionStrategy::oneForOne(maxRetries: 3));
+ * ```
+ *
+ * @see Behavior for the behavior factory methods
+ * @see ActorSystem::spawn() for spawning top-level actors
+ * @see ActorContext::spawn() for spawning child actors
+ * @see MailboxConfig for mailbox capacity options
+ *
  * @psalm-api
  *
  * @template T of object
@@ -28,6 +58,12 @@ final readonly class Props
     ) {}
 
     /**
+     * Create Props from a pre-built Behavior instance.
+     *
+     * This is the simplest factory — use it when you already have a Behavior
+     * value (e.g. from Behavior::receive() or Behavior::setup()) and do not
+     * need to change mailbox or supervision defaults.
+     *
      * @template U of object
      * @param Behavior<U> $behavior
      * @return Props<U>
@@ -145,6 +181,11 @@ final readonly class Props
     }
 
     /**
+     * Return a new Props with the given mailbox configuration.
+     *
+     * The default is an unbounded mailbox. Use MailboxConfig::bounded() when
+     * you need back-pressure or message-drop semantics.
+     *
      * @return Props<T>
      */
     public function withMailbox(MailboxConfig $config): self
@@ -153,6 +194,11 @@ final readonly class Props
     }
 
     /**
+     * Return a new Props with the given supervision strategy.
+     *
+     * Overrides the default one-for-one restart strategy. Use this to configure
+     * exponential backoff or all-for-one restarts on a specific actor.
+     *
      * @return Props<T>
      */
     public function withSupervision(SupervisionStrategy $strategy): self

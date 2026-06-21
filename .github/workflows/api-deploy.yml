@@ -1,0 +1,102 @@
+# V1 Deploy Caveat
+# ────────────────────────────────────────────────────────────────────────────
+# The phpdoc-templates-plugin (plan-4a Task 11 Option B) is not yet published
+# to github.com/nexus-actors/phpdoc-templates-plugin. Until it is, the build
+# and deploy steps below are commented out.
+#
+# For V1 API deployments, use local `make docs-api` followed by manual push
+# to Cloudflare Pages.
+#
+# Re-enable all commented steps once the plugin is published to GitHub.
+# ────────────────────────────────────────────────────────────────────────────
+
+name: api.nexusactors.com — phpDocumentor deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/**/src/**'
+      - 'phpdoc.dist.xml'
+      - '.github/workflows/api-deploy.yml'
+  pull_request:
+    paths:
+      - 'packages/**/src/**'
+      - 'phpdoc.dist.xml'
+      - '.github/workflows/api-deploy.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: api-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Nexus
+        uses: actions/checkout@v4
+
+      # TODO: Uncomment once phpdoc-templates-plugin is published to GitHub
+      # - name: Checkout phpdoc-templates-plugin
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: nexus-actors/phpdoc-templates-plugin
+      #     path: .ci/phpdoc-templates-plugin
+      #     ref: main
+
+      # TODO: Uncomment once phpdoc-templates-plugin is published to GitHub
+      # - uses: docker/setup-buildx-action@v3
+      #
+      # - name: Build phpdoc-templates-plugin image
+      #   uses: docker/build-push-action@v6
+      #   with:
+      #     context: .ci/phpdoc-templates-plugin
+      #     tags: phpdoc-templates-plugin:ci
+      #     load: true
+      #     cache-from: type=gha,scope=phpdoc-plugin
+      #     cache-to: type=gha,mode=max,scope=phpdoc-plugin
+      #
+      # - name: Install plugin composer deps
+      #   run: |
+      #     docker run --rm -v ${{ github.workspace }}/.ci/phpdoc-templates-plugin:/app \
+      #       phpdoc-templates-plugin:ci composer install --no-interaction
+      #
+      # - name: Run phpDocumentor against Nexus
+      #   run: |
+      #     docker run --rm \
+      #       -v ${{ github.workspace }}:/nexus \
+      #       -v ${{ github.workspace }}/.ci/phpdoc-templates-plugin:/plugin \
+      #       -w /nexus \
+      #       phpdoc-templates-plugin:ci \
+      #       /plugin/vendor/bin/phpdoc --config=phpdoc.dist.xml --force
+      #
+      # - name: Verify output
+      #   run: |
+      #     test -f build/api-nexus/index.html
+      #     test -f build/api-nexus/api-classes.json
+      #     test -f build/api-nexus/classes/Monadial-Nexus-Core-Actor-ActorRef.html
+      #
+      # - name: Deploy to Cloudflare Pages
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      #   uses: cloudflare/pages-action@v1
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     projectName: nexus-actors-api
+      #     directory: build/api-nexus
+      #     branch: main
+      #
+      # - name: Comment PR with preview URL
+      #   if: github.event_name == 'pull_request'
+      #   uses: cloudflare/pages-action@v1
+      #   with:
+      #     apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      #     accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      #     projectName: nexus-actors-api
+      #     directory: build/api-nexus
+      #     branch: pr-${{ github.event.number }}
+
+      # Placeholder: workflow file structure validated, ready to enable
+      - name: Workflow validation
+        run: echo "API deployment workflow (v1) prepared; build/deploy steps awaiting phpdoc-templates-plugin publication"

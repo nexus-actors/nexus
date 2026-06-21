@@ -23,12 +23,26 @@ use Psr\Log\NullLogger;
 use Symfony\Component\Uid\Ulid;
 
 /**
+ * The entry point for spawning actors and driving the actor system event loop.
+ *
+ * An ActorSystem is the top-level container for your actor hierarchy. You
+ * typically create one per process, configure it with a Runtime (FiberRuntime,
+ * SwooleRuntime, or StepRuntime), and use it to spawn the root actors of your
+ * supervision tree. Call run() to block until the system is shut down.
+ *
+ * Example:
+ * ```php
+ * $system = ActorSystem::create('my-app', new FiberRuntime());
+ * $ref    = $system->spawn(Props::fromBehavior($greeter), 'greeter');
+ * $ref->tell(new Greet('world'));
+ * $system->run();
+ * ```
+ *
+ * @see Props for actor spawn configuration
+ * @see Runtime for runtime backend selection
+ * @see Behavior for actor behavior definitions
+ *
  * @psalm-api
- *
- * Entry point for the actor hierarchy.
- *
- * Manages the lifecycle of all actors in the system, provides a dead-letter
- * endpoint, and delegates scheduling/concurrency to the injected Runtime.
  */
 final class ActorSystem
 {
@@ -65,7 +79,16 @@ final class ActorSystem
     }
 
     /**
-     * Factory method to create a new ActorSystem.
+     * Create a new ActorSystem with the given name and runtime.
+     *
+     * The system name is used as a namespace prefix in actor paths (e.g. /user/greeter).
+     * Optional dependencies default to a wall-clock, a NullLogger, and a no-op dispatcher.
+     *
+     * @param string $name A short identifier for this system; appears in actor paths and logs.
+     * @param Runtime $runtime The concurrency backend (FiberRuntime, SwooleRuntime, StepRuntime).
+     * @param ClockInterface|null $clock PSR-20 clock; defaults to wall-clock DateTimeImmutable.
+     * @param LoggerInterface|null $logger PSR-3 logger; defaults to NullLogger.
+     * @param EventDispatcherInterface|null $eventDispatcher PSR-14 dispatcher; defaults to no-op.
      */
     public static function create(
         string $name,
@@ -96,13 +119,19 @@ final class ActorSystem
     }
 
     /**
-     * Spawn a named actor under the /user guardian.
+     * Spawn a named actor under the /user guardian and return its reference.
+     *
+     * The actor is started immediately; its PreStart signal fires before this
+     * method returns. If an actor with the same name already exists and is still
+     * alive, ActorNameExistsException is thrown. A previously stopped actor with
+     * the same name is silently replaced.
      *
      * @template T of object
-     * @param Props<T> $props
+     * @param Props<T> $props Spawn configuration (behavior, mailbox, supervision).
+     * @param string $name Unique name within the /user guardian; used in the actor path.
      * @return ActorRef<T>
-     * @throws ActorInitializationException
-     * @throws ActorNameExistsException
+     * @throws ActorInitializationException if the behavior's setup phase throws.
+     * @throws ActorNameExistsException if a live actor with this name already exists.
      */
     public function spawn(Props $props, string $name): ActorRef
     {
@@ -122,12 +151,17 @@ final class ActorSystem
     }
 
     /**
-     * Spawn an anonymous actor under the /user guardian with an auto-generated name.
+     * Spawn an anonymous actor with an auto-generated name under the /user guardian.
+     *
+     * The generated name has the form auto-N where N is a monotonically increasing
+     * counter. Use this when the actor's logical identity does not matter (e.g. a
+     * fire-and-forget worker). Prefer spawn() when you need to look up the actor
+     * later via a stable name.
      *
      * @template T of object
-     * @param Props<T> $props
+     * @param Props<T> $props Spawn configuration (behavior, mailbox, supervision).
      * @return ActorRef<T>
-     * @throws ActorInitializationException
+     * @throws ActorInitializationException if the behavior's setup phase throws.
      */
     public function spawnAnonymous(Props $props): ActorRef
     {
@@ -140,9 +174,13 @@ final class ActorSystem
     }
 
     /**
-     * Stop an actor by sending it a PoisonPill.
+     * Gracefully stop an actor by sending it a PoisonPill.
      *
-     * @param ActorRef<object> $ref
+     * The actor processes all messages already in its mailbox before honouring
+     * the PoisonPill, then delivers PostStop and stops its children. This method
+     * returns immediately; the stop happens asynchronously.
+     *
+     * @param ActorRef<object> $ref The actor to stop.
      */
     public function stop(ActorRef $ref): void
     {
@@ -201,7 +239,11 @@ final class ActorSystem
     }
 
     /**
-     * Start the runtime event loop.
+     * Start the runtime event loop and block until the system shuts down.
+     *
+     * This is the main blocking call that drives actor message processing.
+     * Use scheduleOnce() or a root actor to trigger shutdown() when the
+     * application has finished its work.
      */
     public function run(): void
     {

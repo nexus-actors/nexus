@@ -14,6 +14,8 @@ use Override;
  * Sentinel behavior returned from handlers to indicate the message was not handled.
  * The message is routed to dead letters.
  *
+ * @internal Implementation detail of {@see Behavior::unhandled()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

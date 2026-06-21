@@ -11,10 +11,36 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Symfony\Component\Uid\Ulid;
 
 /**
- * Immutable builder for creating durable-state Behaviors.
+ * Fluent builder for durable-state actor behaviors.
  *
- * Provides a fluent API to configure persistence options before
- * converting to a Behavior via toBehavior().
+ * Durable state is the simpler persistence model: the actor's full current
+ * state is stored as a single snapshot on every `DurableEffect::persist()`
+ * call, with no event history retained. This trades auditability for lower
+ * storage overhead and faster recovery (no event replay — just load the latest
+ * snapshot and you're ready).
+ *
+ * On actor startup the `DurableStateEngine` loads the latest persisted state
+ * from the `DurableStateStore` and delivers it as the initial state before any
+ * user command arrives.
+ *
+ * Example:
+ * ```php
+ * $behavior = DurableStateBehavior::create(
+ *     PersistenceId::of('UserProfile', $userId),
+ *     new UserProfile(),
+ *     static fn (ActorContext $ctx, object $cmd, UserProfile $state): DurableEffect => match (true) {
+ *         $cmd instanceof UpdateEmail  => DurableEffect::persist($state->withEmail($cmd->email)),
+ *         $cmd instanceof GetProfile   => DurableEffect::reply($ctx->sender(), $state),
+ *         default => DurableEffect::none(),
+ *     },
+ * )
+ *     ->withStateStore($stateStore)
+ *     ->toBehavior();
+ * ```
+ *
+ * @see DurableEffect for the command-handler return type
+ * @see PersistenceId for actor identity
+ * @see EventSourcedBehavior for the event-sourced alternative with full history
  *
  * @template S of object  The state type
  *
@@ -45,11 +71,18 @@ final class DurableStateBehavior
         return new self($persistenceId, $emptyState, $commandHandler);
     }
 
+    /** Set the state store used to load and persist full state snapshots. */
     public function withStateStore(DurableStateStore $store): self
     {
         return clone($this, ['stateStore' => $store]);
     }
 
+    /**
+     * Override the writer ID stamped on persisted state envelopes.
+     *
+     * Defaults to a freshly generated ULID. Override for deterministic tests
+     * or data-migration scenarios.
+     */
     public function withWriterId(Ulid $writerId): self
     {
         return clone($this, ['writerId' => $writerId]);
