@@ -1,167 +1,38 @@
 ---
 sidebar_position: 4
 title: nexus-serialization
+related:
+  - packages/core
+  - packages/persistence
+  - packages/worker-pool
 ---
 
 # nexus-serialization
 
-Message serialization and deserialization for Nexus. Provides two serializer
-implementations and a type registry for mapping between class names and
-wire-format identifiers.
+Message serialization and deserialization for Nexus: two serializer implementations, an envelope serializer, and a type registry for stable wire-format identifiers.
 
-**Composer:** `nexus-actors/serialization`
+## What's in this package
 
-**Namespace:** `Monadial\Nexus\Serialization\`
+- `MessageSerializer` interface — `serialize(object): string` / `deserialize(string, string $type): object`
+- `EnvelopeSerializer` interface — serializes/deserializes complete `Envelope` instances including sender path, target path, and metadata
+- `PhpNativeSerializer` — fastest option; uses PHP `serialize`/`unserialize`; not interoperable across different deployments
+- `ValinorMessageSerializer` — JSON encoding with Valinor type-safe deserialization; interoperable; requires a `TypeRegistry`
+- `DefaultEnvelopeSerializer` — wraps any `MessageSerializer`; envelope structure is JSON, inner message delegates to the wrapped serializer
+- `TypeRegistry` — bidirectional mapping between class names and stable wire-format type identifiers; populated manually or via `#[MessageType]`
+- `#[MessageType('order.placed')]` — attribute for declaring a stable type name on a message class
 
-<details>
-<summary>View class diagram</summary>
+## Install
 
-```mermaid
-classDiagram
-    class MessageSerializer {
-        <<interface>>
-        +serialize(object) string
-        +deserialize(string, string) object
-    }
-
-    class EnvelopeSerializer {
-        <<interface>>
-        +serialize(Envelope) string
-        +deserialize(string) Envelope
-    }
-
-    PhpNativeSerializer ..|> MessageSerializer
-    ValinorMessageSerializer ..|> MessageSerializer
-    DefaultEnvelopeSerializer ..|> EnvelopeSerializer
-    DefaultEnvelopeSerializer --> MessageSerializer
-    DefaultEnvelopeSerializer --> TypeRegistry
+```bash
+composer require nexus-actors/serialization
 ```
 
-</details>
+## Quick example
 
-## Interfaces
-
-### MessageSerializer
-
-```php
-interface MessageSerializer
-{
-    public function serialize(object $message): string;
-
-    public function deserialize(string $data, string $type): object;
-}
-```
-
-Serializes message objects to strings and deserializes them back. The `$type`
-parameter in `deserialize()` identifies which class to reconstruct. Both
-methods are annotated with `#[NoDiscard]`.
-
-### EnvelopeSerializer
-
-```php
-interface EnvelopeSerializer
-{
-    public function serialize(Envelope $envelope): string;
-
-    public function deserialize(string $data): Envelope;
-}
-```
-
-Serializes and deserializes complete `Envelope` instances, including sender
-path, target path, and metadata.
-
-## Serializer implementations
-
-### PhpNativeSerializer
-
-Uses PHP's built-in `serialize()` and `unserialize()` functions. Fast and
-efficient for same-process or same-deployment scenarios where both sides share
-the same class definitions.
-
-```php
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
-
-$serializer = new PhpNativeSerializer();
-$data = $serializer->serialize($message);
-$message = $serializer->deserialize($data, MyMessage::class);
-```
-
-Characteristics:
-
-- Fastest serialization option -- delegates directly to PHP internals.
-- Output is PHP-specific and not interoperable with other languages.
-- Requires identical class definitions on both serialization and
-  deserialization sides.
-- Does not require a `TypeRegistry`.
-
-### ValinorMessageSerializer
-
-Uses JSON encoding for serialization and [Valinor](https://valinor.cuyz.io/)
-for type-safe deserialization. Produces structured, human-readable JSON output
-that is compatible with external systems.
-
-```php
-use Monadial\Nexus\Serialization\ValinorMessageSerializer;
-use Monadial\Nexus\Serialization\TypeRegistry;
-
-$registry = new TypeRegistry();
-$registry->register(MyMessage::class, 'my-message');
-
-$serializer = new ValinorMessageSerializer($registry);
-$data = $serializer->serialize($message);       // JSON string
-$message = $serializer->deserialize($data, 'my-message');
-```
-
-Characteristics:
-
-- JSON output is interoperable and human-readable.
-- Valinor provides strict type reconstruction with validation.
-- Requires a `TypeRegistry` with registered type mappings.
-- Accepts an optional `MapperBuilder` for customizing Valinor's behavior.
-
-### DefaultEnvelopeSerializer
-
-Wraps a `MessageSerializer` to handle full `Envelope` serialization. The
-envelope structure (sender path, target path, metadata, message type) is
-encoded as JSON, with the inner message delegated to the wrapped serializer.
-
-```php
-use Monadial\Nexus\Serialization\DefaultEnvelopeSerializer;
-
-$envelopeSerializer = new DefaultEnvelopeSerializer($messageSerializer);
-$data = $envelopeSerializer->serialize($envelope);
-$envelope = $envelopeSerializer->deserialize($data);
-```
-
-## TypeRegistry
-
-Bidirectional mapping between message class names and their wire-format type
-identifiers. Used by `ValinorMessageSerializer` to resolve types during
-serialization and deserialization.
-
-```php
-use Monadial\Nexus\Serialization\TypeRegistry;
-
-$registry = new TypeRegistry();
-
-// Manual registration
-$registry->register(OrderPlaced::class, 'order.placed');
-
-// Automatic registration from #[MessageType] attribute
-$registry->registerFromAttribute(OrderPlaced::class);
-
-// Lookups
-$registry->nameForClass(OrderPlaced::class);  // Option<string>
-$registry->classForName('order.placed');       // Option<string>
-```
-
-## MessageType
-
-PHP attribute for declaring a stable type name on a message class. Used by
-`TypeRegistry::registerFromAttribute()`.
-
-```php
+```php title="src/Serialization/Setup.php"
 use Monadial\Nexus\Serialization\MessageType;
+use Monadial\Nexus\Serialization\TypeRegistry;
+use Monadial\Nexus\Serialization\ValinorMessageSerializer;
 
 #[MessageType('order.placed')]
 final readonly class OrderPlaced
@@ -171,14 +42,18 @@ final readonly class OrderPlaced
         public float $total,
     ) {}
 }
+
+$registry = new TypeRegistry();
+$registry->registerFromAttribute(OrderPlaced::class);
+
+$serializer = new ValinorMessageSerializer($registry);
+$wire = $serializer->serialize(new OrderPlaced('ord-1', 99.99));
+$msg  = $serializer->deserialize($wire, 'order.placed');
 ```
 
-## Exceptions
+Use `PhpNativeSerializer` when both sender and receiver share the same codebase. Use `ValinorMessageSerializer` when messages cross process or language boundaries.
 
-All serialization exceptions live in `Monadial\Nexus\Serialization\Exception\`:
+## See also
 
-| Class | Description |
-|---|---|
-| `SerializationException` | Base exception for serialization errors. |
-| `MessageSerializationException` | Thrown when serializing a message fails. |
-| `MessageDeserializationException` | Thrown when deserializing a message fails. |
+- [nexus-persistence](./persistence.md) — event stores accept a custom `MessageSerializer`
+- [nexus-worker-pool](./worker-pool.md) — `WorkerActorRef::tell()` messages should carry `#[MessageType]` for forward compatibility
