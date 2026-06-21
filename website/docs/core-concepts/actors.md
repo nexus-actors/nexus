@@ -1,17 +1,52 @@
 ---
 sidebar_position: 1
 title: "Actors"
+related:
+  - core-concepts/behaviors
+  - core-concepts/lifecycle
+  - core-concepts/props
+  - core-concepts/supervision
 ---
 
 # Actors
 
-Actors are the fundamental unit of computation in Nexus. Each actor encapsulates state, processes messages sequentially from its mailbox, and communicates with other actors exclusively through asynchronous message passing. This page covers the core types that make up the actor model: references, contexts, the actor system, paths, class-based actors, and dead letters.
+An actor is a lightweight concurrent entity that encapsulates state, processes messages one at a time from its mailbox, and communicates exclusively through asynchronous message passing. This page covers the definition patterns, core types, and the message-flow model that connects them.
+
+## Choosing an actor definition style
+
+- **Use `Behavior::receive()`** when your actor is stateless or manages state via closures — the common case for simple actors.
+- **Use `Behavior::withState()`** when your actor needs per-message state without mutable class properties — the preferred form for explicit state management.
+- **Use `Behavior::setup()`** when your actor needs initialization work before it starts processing messages — spawning children, starting timers, or acquiring resources.
+- **Use `Props::fromFactory()` with a class** when your actor benefits from dependency injection, named methods, or lifecycle hooks (`onPreStart`, `onPostStop`).
+
+## Message flow
+
+When you call `tell()`, the message travels from sender through the `ActorRef` into the mailbox, where `ActorCell` dequeues it and dispatches to the current behavior. The behavior returns the next behavior, and the cell moves to the next message.
+
+```mermaid
+%%{init: {"theme": "base"}}%%
+sequenceDiagram
+    participant Sender
+    participant ActorRef
+    participant Mailbox
+    participant ActorCell
+    participant Behavior
+
+    Sender->>ActorRef: tell(message)
+    ActorRef->>Mailbox: enqueue(Envelope)
+    Mailbox->>ActorCell: dequeue → Envelope
+    ActorCell->>Behavior: handle(ctx, message)
+    Behavior-->>ActorCell: next Behavior
+    ActorCell->>Mailbox: dequeue next
+```
+
+_Figure 1: The `tell()` path from caller through `ActorRef` into the mailbox, dispatched by `ActorCell` to the current `Behavior`._
 
 ## ActorRef
 
-`ActorRef<T>` is the interface through which actors are interacted with. Internal actor state is never accessed directly -- messages are sent through the reference.
+`ActorRef<T>` is the only way to interact with an actor. You never access actor state directly — all communication passes through the reference.
 
-```php
+```php title="src/Actor/ActorRef.php"
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Runtime\Duration;
@@ -24,11 +59,11 @@ interface ActorRef
 
     /**
      * @template R of object
-     * @param callable(ActorRef<R>): T $messageFactory
-     * @return R
+     * @param T $message
+     * @return Future<R>
      * @throws AskTimeoutException
      */
-    public function ask(callable $messageFactory, Duration $timeout): object;
+    public function ask(object $message, Duration $timeout): object;
 
     public function path(): ActorPath;
 
@@ -36,127 +71,15 @@ interface ActorRef
 }
 ```
 
-### tell -- fire-and-forget messaging
-
-`tell()` sends a message to the actor without waiting for a response. The message is enqueued in the actor's mailbox and processed asynchronously.
-
-```php
-readonly class Greet
-{
-    public function __construct(public string $name) {}
-}
-
-$greeter->tell(new Greet('Alice'));
-```
-
-### ask -- request-response
-
-`ask()` sends a message and returns a `Future` that resolves when the actor replies. Call `->await()` (with the same timeout enforced) to materialise the result. The message must carry a reply destination (`ActorRef $replyTo` or a `FutureSlot`) — see [Ask pattern](./ask-pattern.md) for the supported reply mechanisms.
-
-```php
-readonly class GetCount
-{
-    public function __construct(public ActorRef $replyTo) {}
-}
-
-readonly class CountResult
-{
-    public function __construct(public int $count) {}
-}
-
-/** @var CountResult $result */
-$result = $counter
-    ->ask(new GetCount($replyTo), Duration::seconds(5))
-    ->await();
-
-echo $result->count; // 42
-```
-
-If the actor does not respond within the timeout, the `Future`'s `await()` throws `AskTimeoutException`.
-
-### path and isAlive
-
-```php
-echo $ref->path();     // "/user/orders/order-123"
-echo $ref->isAlive();  // true
-```
+`tell()` enqueues the message and returns immediately. `ask()` returns a `Future` — call `->await()` to block the current fiber until the reply arrives or the timeout expires. See [Ask pattern](./ask-pattern.md) for the full request-reply model.
 
 ## ActorContext
 
-`ActorContext<T>` is available inside message handlers and provides the actor's view of the world: its own reference, its parent, the ability to spawn children, manage watches, schedule messages, and more.
-
-```php
-use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Core\Actor\ActorPath;
-use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Runtime\Runtime\Cancellable;
-use Psr\Log\LoggerInterface;
-
-/** @template T of object */
-interface ActorContext
-{
-    /** @return ActorRef<T> */
-    public function self(): ActorRef;
-
-    /** @return ?ActorRef<object> */
-    public function parent(): ?ActorRef;
-
-    public function path(): ActorPath;
-
-    /**
-     * @template C of object
-     * @param Props<C> $props
-     * @return ActorRef<C>
-     */
-    public function spawn(Props $props, string $name): ActorRef;
-
-    /** @param ActorRef<object> $child */
-    public function stop(ActorRef $child): void;
-
-    /** @return ?ActorRef<object> */
-    public function child(string $name): ?ActorRef;
-
-    /** @return array<string, ActorRef<object>> */
-    public function children(): array;
-
-    /** @param ActorRef<object> $target */
-    public function watch(ActorRef $target): void;
-
-    /** @param ActorRef<object> $target */
-    public function unwatch(ActorRef $target): void;
-
-    public function reply(object $message): void;
-
-    /** @param T $message */
-    public function scheduleOnce(Duration $delay, object $message): Cancellable;
-
-    /** @param T $message */
-    public function scheduleRepeatedly(
-        Duration $initialDelay,
-        Duration $interval,
-        object $message,
-    ): Cancellable;
-
-    public function stash(): void;
-
-    public function unstashAll(): void;
-
-    public function setReceiveTimeout(?Duration $timeout): void;
-
-    public function log(): LoggerInterface;
-
-    /** @return ?ActorRef<object> */
-    public function sender(): ?ActorRef;
-}
-```
+`ActorContext<T>` is available inside every message handler. It gives the actor its own reference, its parent, and the ability to spawn children, watch other actors, schedule messages, and stash work for later.
 
 ### Spawning children
 
-Actors form a hierarchy. Any actor can spawn children, creating a supervised tree.
-
-```php
+```php title="src/Actor/ParentActor.php"
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 
@@ -180,11 +103,13 @@ $behavior = Behavior::receive(
 );
 ```
 
+`spawn()` requires a unique name within the parent. Passing a name that already belongs to a living child throws `ActorNameExistsException`. Use `spawnAnonymous()` when the name does not matter.
+
 ### Watching actors
 
-`watch()` registers the current actor to receive a `Terminated` signal when the target actor stops.
+`watch()` registers the current actor to receive a `Terminated` signal when the target stops.
 
-```php
+```php title="src/Actor/WatchingActor.php"
 use Monadial\Nexus\Core\Lifecycle\Terminated;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 
@@ -206,13 +131,11 @@ $behavior = Behavior::setup(function (ActorContext $ctx): Behavior {
 });
 ```
 
-Use `unwatch()` to stop observing an actor's lifecycle.
-
 ### Scheduling messages
 
-Schedule a message to be delivered to `self()` after a delay, or repeatedly at an interval.
+`scheduleOnce()` delivers a message to `self()` after a delay. `scheduleRepeatedly()` fires on an interval. Both return a `Cancellable`.
 
-```php
+```php title="src/Actor/TickingActor.php"
 readonly class Tick {}
 
 $behavior = Behavior::setup(function (ActorContext $ctx): Behavior {
@@ -228,18 +151,11 @@ $behavior = Behavior::setup(function (ActorContext $ctx): Behavior {
 });
 ```
 
-The returned `Cancellable` stops the scheduled task.
-
-```php
-$cancellable->cancel();
-$cancellable->isCancelled(); // true
-```
-
 ### Stashing messages
 
-When an actor is not ready to process certain messages (e.g., waiting for initialization), it can stash them and replay later.
+When an actor cannot handle a message in its current state, stash it and replay later.
 
-```php
+```php title="src/Actor/InitActor.php"
 readonly class Initialize
 {
     public function __construct(public string $config) {}
@@ -260,7 +176,6 @@ $behavior = Behavior::receive(
             );
         }
 
-        // Not yet initialized -- stash Work messages for later
         $ctx->stash();
 
         return Behavior::same();
@@ -268,119 +183,11 @@ $behavior = Behavior::receive(
 );
 ```
 
-### Accessing the sender
-
-`sender()` returns the `ActorRef` of the actor that sent the current message, if available.
-
-```php
-use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\ActorContext;
-
-$behavior = Behavior::receive(
-    static function (ActorContext $ctx, object $msg): Behavior {
-        $sender = $ctx->sender();
-
-        if ($sender !== null) {
-            $sender->tell(new Ack());
-        }
-
-        return Behavior::same();
-    },
-);
-```
-
-### Replying to the sender
-
-`reply()` sends a message back to the actor that sent the current envelope. It propagates the
-`correlationId` from the current envelope, linking the reply to the original request.
-
-```php
-use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\ActorContext;
-
-$behavior = Behavior::receive(
-    static function (ActorContext $ctx, object $msg): Behavior {
-        if ($msg instanceof GetCount) {
-            $ctx->reply(new CountResult($count));
-        }
-
-        return Behavior::same();
-    },
-);
-```
-
-### Envelope tracing and reply()
-
-`$ctx->reply($message)` propagates the current envelope's `correlationId` to the outgoing
-message, linking the reply to the original request chain. Calling `$target->tell($message)`
-directly starts a new trace root with no correlation to the current request chain.
-
-To preserve trace context when sending messages forward (not replies), use
-`Envelope::causedBy($currentEnvelope, $message)` manually when constructing the envelope.
-
 ## ActorSystem
 
-`ActorSystem` is the entry point for the entire actor hierarchy. It manages the lifecycle of all top-level actors, provides a dead-letter endpoint, and delegates scheduling and concurrency to the injected `Runtime`.
+`ActorSystem` is the root of the actor hierarchy. It manages top-level actors, owns the dead-letter endpoint, and delegates scheduling to the injected `Runtime`.
 
-```php
-use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Runtime\Runtime\Runtime;
-
-$system = ActorSystem::create(
-    name: 'my-app',
-    runtime: $runtime,
-    clock: $clock,           // optional, PSR-20 ClockInterface
-    logger: $logger,         // optional, PSR-3 LoggerInterface
-    eventDispatcher: $dispatcher, // optional, PSR-14 EventDispatcherInterface
-);
-```
-
-### Spawning top-level actors
-
-```php
-$ref = $system->spawn($props, 'orders');
-echo $ref->path(); // "/user/orders"
-
-$anonRef = $system->spawnAnonymous($props);
-echo $anonRef->path(); // "/user/auto-0"
-```
-
-`spawn()` requires a unique name -- spawning a second actor with the same name throws `ActorNameExistsException`. `spawnAnonymous()` generates a unique name automatically.
-
-### Running and shutting down
-
-```php
-// Schedule a graceful shutdown after 500ms
-$runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
-    $system->shutdown(Duration::seconds(10));
-});
-
-// Start the runtime event loop (blocks until shutdown)
-$system->run();
-```
-
-`run()` blocks until the runtime has no more work to do. `shutdown()` sends a `PoisonPill` to all top-level actors, waits for their mailboxes to drain, then signals the runtime to stop.
-
-### Stopping individual actors
-
-```php
-$system->stop($ref);
-```
-
-This sends a `PoisonPill` to the actor, which triggers a graceful stop after processing any messages ahead of it in the mailbox.
-
-### Dead letters
-
-```php
-$deadLetters = $system->deadLetters();
-```
-
-Returns the `DeadLetterRef` -- see the [DeadLetterRef](#deadletterref) section below.
-
-### Full example
-
-```php
-use Monadial\Nexus\Core\Actor\ActorContext;
+```php title="src/Bootstrap/main.php"
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -411,53 +218,40 @@ $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): 
 $system->run();
 ```
 
+`run()` blocks until the runtime has no more work. `shutdown()` sends `PoisonPill` to all top-level actors, waits for their mailboxes to drain, then stops the runtime.
+
 ## ActorPath
 
-`ActorPath` is an immutable, fully-qualified address within the actor hierarchy. Paths look like `/user/orders/order-123` and follow a strict naming pattern: segments may contain letters, digits, underscores, hyphens, and dots.
+`ActorPath` is the fully-qualified, immutable address of an actor in the hierarchy. Paths look like `/user/orders/order-123`.
 
-```php
+```php title="src/Actor/PathExample.php"
 use Monadial\Nexus\Core\Actor\ActorPath;
 
-// Parse from a string
-$path = ActorPath::fromString('/user/orders');
+$root   = ActorPath::root();               // "/"
+$user   = $root->child('user');            // "/user"
+$orders = $user->child('orders');          // "/user/orders"
+$order  = $orders->child('order-123');     // "/user/orders/order-123"
 
-// Build paths incrementally
-$root = ActorPath::root();                  // "/"
-$user = $root->child('user');               // "/user"
-$orders = $user->child('orders');           // "/user/orders"
-$order = $orders->child('order-123');       // "/user/orders/order-123"
+$order->name();                            // "order-123"
+$order->depth();                           // 3
+$order->isDescendantOf($user);             // true
 
-// Navigate the hierarchy
-echo $order->name();                        // "order-123"
-echo $order->parent();                      // "/user/orders"
-echo $order->depth();                       // 3
-echo ActorPath::root()->depth();            // 0
-
-// Hierarchy checks
-$order->isChildOf($orders);                 // true
-$order->isChildOf($user);                   // false
-$order->isDescendantOf($user);              // true
-
-// Value equality
 $a = ActorPath::fromString('/user/orders');
 $b = ActorPath::fromString('/user/orders');
 $a->equals($b);                            // true
-
-// String conversion (implements Stringable)
-echo $order;                                // "/user/orders/order-123"
 ```
 
-The root path (`/`) returns `null` from `parent()` and `'/'` from `name()`.
+Segment names may contain letters, digits, underscores, hyphens, and dots. Anything else throws `InvalidActorPathException` at construction time.
 
 ## Class-based actors
 
-While Nexus encourages functional behaviors (closures), it also supports class-based actors for complex actors that benefit from structured code, dependency injection, or lifecycle hooks.
+When an actor needs dependency injection, named methods, or lifecycle hooks, use a class-based definition.
 
 ### ActorHandler
 
-`ActorHandler<T>` is the minimal interface for class-based actors. Implement a single `handle()` method that receives the context and message, and returns a `Behavior`.
+`ActorHandler<T>` is the minimal interface: implement `handle()` and return a `Behavior`.
 
-```php
+```php title="src/Actor/OrderActor.php"
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -467,53 +261,27 @@ readonly class PlaceOrder
     public function __construct(public string $orderId, public float $amount) {}
 }
 
-readonly class CancelOrder
-{
-    public function __construct(public string $orderId) {}
-}
-
-/** @implements ActorHandler<PlaceOrder|CancelOrder> */
+/** @implements ActorHandler<PlaceOrder> */
 final class OrderActor implements ActorHandler
 {
     public function handle(ActorContext $ctx, object $message): Behavior
     {
-        return match (true) {
-            $message instanceof PlaceOrder => $this->place($ctx, $message),
-            $message instanceof CancelOrder => $this->cancel($ctx, $message),
-            default => Behavior::unhandled(),
-        };
-    }
-
-    private function place(ActorContext $ctx, PlaceOrder $msg): Behavior
-    {
-        $ctx->log()->info("Placing order {$msg->orderId} for \${$msg->amount}");
-
-        return Behavior::same();
-    }
-
-    private function cancel(ActorContext $ctx, CancelOrder $msg): Behavior
-    {
-        $ctx->log()->info("Cancelling order {$msg->orderId}");
+        if ($message instanceof PlaceOrder) {
+            $ctx->log()->info("Placing order {$message->orderId}");
+        }
 
         return Behavior::same();
     }
 }
-```
 
-Spawn it with `Props::fromFactory()`:
-
-```php
-$ref = $system->spawn(
-    Props::fromFactory(fn () => new OrderActor()),
-    'order-processor',
-);
+$ref = $system->spawn(Props::fromFactory(fn () => new OrderActor()), 'order-processor');
 ```
 
 ### AbstractActor
 
-`AbstractActor` extends `ActorHandler` with optional lifecycle hooks: `onPreStart()` and `onPostStop()`. Override them to run initialization or cleanup logic.
+`AbstractActor` adds optional lifecycle hooks. Override `onPreStart()` and `onPostStop()` for initialization and cleanup.
 
-```php
+```php title="src/Actor/WorkerActor.php"
 use Monadial\Nexus\Core\Actor\AbstractActor;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -545,20 +313,13 @@ final class WorkerActor extends AbstractActor
         $ctx->log()->info('Worker stopped');
     }
 }
-
-$ref = $system->spawn(
-    Props::fromFactory(fn () => new WorkerActor()),
-    'worker',
-);
 ```
-
-When spawned via `Props::fromFactory()`, lifecycle hooks are wired automatically: `onPreStart()` is called during actor initialization, and `onPostStop()` is called when the actor receives a `PostStop` signal.
 
 ### StatefulActorHandler
 
-`StatefulActorHandler<T, S>` is designed for actors that manage explicit state. Instead of closing over mutable variables, an `initialState()` is provided and the current state is passed to each `handle()` call. State updates are returned via `BehaviorWithState`.
+`StatefulActorHandler<T, S>` threads state through each call as an explicit argument. No mutable class properties needed.
 
-```php
+```php title="src/Actor/CartActor.php"
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
@@ -568,20 +329,7 @@ readonly class AddItem
     public function __construct(public string $item) {}
 }
 
-readonly class GetItems
-{
-    public function __construct(public ActorRef $replyTo) {}
-}
-
-readonly class ItemList
-{
-    /** @param list<string> $items */
-    public function __construct(public array $items) {}
-}
-
-/**
- * @implements StatefulActorHandler<AddItem|GetItems, list<string>>
- */
+/** @implements StatefulActorHandler<AddItem, list<string>> */
 final class CartActor implements StatefulActorHandler
 {
     /** @return list<string> */
@@ -592,53 +340,50 @@ final class CartActor implements StatefulActorHandler
 
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
-        return match (true) {
-            $message instanceof AddItem => BehaviorWithState::next(
-                [...$state, $message->item],
-            ),
-            $message instanceof GetItems => $this->getItems($message, $state),
-            default => BehaviorWithState::same(),
-        };
-    }
-
-    /** @param list<string> $state */
-    private function getItems(GetItems $msg, array $state): BehaviorWithState
-    {
-        $msg->replyTo->tell(new ItemList($state));
+        if ($message instanceof AddItem) {
+            return BehaviorWithState::next([...$state, $message->item]);
+        }
 
         return BehaviorWithState::same();
     }
 }
 
-$ref = $system->spawn(
-    Props::fromStatefulFactory(fn () => new CartActor()),
-    'cart',
-);
+$ref = $system->spawn(Props::fromStatefulFactory(fn () => new CartActor()), 'cart');
 ```
 
 ## DeadLetterRef
 
-`DeadLetterRef` is a special `ActorRef` implementation that captures messages sent to actors that are no longer alive or to invalid references. It serves as the system's catch-all for undeliverable messages.
+`DeadLetterRef` is the catch-all for messages that cannot be delivered. It implements `ActorRef` but never forwards messages to a live actor.
 
-```php
-use Monadial\Nexus\Core\Actor\DeadLetterRef;
-
+```php title="src/Actor/DeadLetterExample.php"
 $deadLetters = $system->deadLetters();
 
-// isAlive() always returns false
-$deadLetters->isAlive(); // false
+$deadLetters->isAlive();  // false
+$deadLetters->tell(new SomeMessage());  // captured, not delivered
 
-// tell() captures the message instead of delivering it
-$deadLetters->tell(new SomeMessage());
+// Inspect captured messages in tests
+$captured = $deadLetters->captured();  // list<object>
 
-// ask() always throws AskTimeoutException
-$deadLetters->ask($factory, Duration::seconds(1)); // throws AskTimeoutException
-
-// Retrieve captured messages (useful for testing and debugging)
-$captured = $deadLetters->captured(); // list<object>
-
-// Path is always /system/deadLetters
 echo $deadLetters->path(); // "/system/deadLetters"
 ```
 
-Messages that cannot be delivered -- for example, because the target actor has stopped -- are routed to dead letters. Inspecting `captured()` in tests verifies that no messages were lost unexpectedly.
+Any `ask()` to `DeadLetterRef` immediately throws `AskTimeoutException`. Use `captured()` in tests to verify that no messages were silently lost.
+
+## Failure modes
+
+Runtime problems with actors surface from a small set of root causes. The table below covers the most common ones.
+
+| Symptom | Cause | Recovery |
+|---|---|---|
+| `ActorNameExistsException` thrown during `spawn()` | A living child with the same name already exists under this parent | Use a unique name, call `spawnAnonymous()`, or stop the existing child first |
+| `ActorInitializationException` thrown on startup | `Behavior::setup()` factory threw before returning the initial behavior | Fix the factory; exceptions during setup are not retried by default — the actor transitions to `Stopped` |
+| `InvalidActorStateTransition` thrown | An internal lifecycle operation was applied to an actor in an incompatible state (e.g., starting an already-running actor) | This signals a framework or integration bug; do not catch it — investigate the spawn or shutdown sequence |
+| `AskTimeoutException` thrown on `ask()` to `DeadLetterRef` | `ask()` was called on a reference whose actor had already stopped | Check `isAlive()` before calling `ask()`; handle the exception at the call site |
+| Messages routed to dead letters unexpectedly | Actor stopped between `tell()` and message processing, or the actor returned `Behavior::unhandled()` | Inspect `$system->deadLetters()->captured()` in tests; review the actor's message protocol coverage |
+
+## Next steps
+
+- [Behaviors](./behaviors.md) — how to define and compose actor behaviors
+- [Lifecycle](./lifecycle.md) — the state machine every actor follows
+- [Props](./props.md) — configuring mailboxes and supervision at spawn time
+- [Supervision](./supervision.md) — how parent actors respond to child failures
