@@ -1,95 +1,58 @@
 ---
-sidebar_position: 3
-title: Single-writer aggregates
+sidebar_position: 4
+title: How to guarantee single-writer aggregates
+related:
+  - core-concepts/actors
+  - persistence/overview
+  - guides/message-design
+  - scaling/overview
 ---
 
-# Single-writer aggregates
+# How to guarantee single-writer aggregates
 
-> *"How do I make sure two simultaneous deposits to the same wallet
-> don't fight each other?"*
+When multiple concurrent requests target the same aggregate — a wallet, an order, a user account — you need to guarantee that only one write happens at a time.
 
-You give each aggregate a single in-process actor. The mailbox
-serialises every write for that id. No row locks, no `version` columns
-to retry, no compensation logic for lost updates.
+## Solution
 
-## The rule
+Give each aggregate a single actor. The mailbox serialises every write for that identity. No row locks, no version columns to retry, no compensation logic for lost updates.
 
-> **One actor per aggregate identity, system-wide. The actor is the
-> only thing that ever writes that aggregate.**
-
-If you can hold to that rule, every concurrency problem on that
-aggregate evaporates. Two concurrent HTTP requests for the same
-wallet enqueue into the same mailbox; the actor processes them one at
-a time; the second one sees the state the first one left behind.
-
-## The mechanism
-
-`EntityRefFactory::of($id)` enforces single-writer for you.
-
-```php
+```php title="src/Http/Handler/LedgerRecordHandler.php"
 $ledgers = LedgerActor::factory($system, $ormConfig, $connParams);
 
-// First call: spawns a new LedgerActor for owner 'alice'.
+// First call for 'alice': spawns a LedgerActor.
 // Subsequent calls: return the cached ref.
-// Even from different HTTP handlers, the same id → same actor.
+// Both tell()s land in the same mailbox in arrival order.
 $ledgers->of('alice')->tell(new RecordLedger(LedgerKind::Deposit, 12345));
 $ledgers->of('alice')->tell(new RecordLedger(LedgerKind::Withdraw,  500));
 ```
 
-Both `tell()`s land in the same mailbox in the order the worker thread
-saw them. The actor processes them in that order. The
-running-total invariants on `WalletLedger` hold without a single
-`SELECT … FOR UPDATE`.
+`EntityRefFactory::of($id)` enforces single-writer: the same identity always resolves to the same actor ref, regardless of which HTTP handler calls it. The actor processes messages one at a time. Running-total invariants hold without a `SELECT … FOR UPDATE`.
 
-## What about across threads / machines?
+## How it works
 
-This is the question that catches people out. "Single-writer" means
-within one `ActorSystem`. If you run four worker threads, each with its
-own `ActorSystem`, then alice's wallet has FOUR potential writers —
-one per thread.
+The actor's mailbox is a bounded FIFO queue. Every `tell()` enqueues an `Envelope`; the actor dequeues and processes one message at a time. Concurrent calls from different HTTP handlers land in the mailbox in the order the worker thread saw them. The second caller's write sees the state left by the first.
 
-Two answers:
+## Variations
 
-**1. Make Postgres the source of truth.** The wallet-app does this:
-every `LedgerActor` writes to the same Postgres row, and Postgres'
-unique constraints + optimistic versioning catch the cross-thread
-conflict. The actor still serialises within a thread; conflicts only
-ever happen across threads, and the `WriterConflictException` /
-`OptimisticLockException` paths in [Single-writer
-persistence](../persistence/overview.md#single-writer-guarantee)
-take it from there.
+### Multi-thread deployments: route by identity
 
-**2. Route the same id to the same thread.** The
-[Worker Pool](../scaling/overview.md) does exactly this with a
-consistent hash ring. Owner id `alice` hashes to thread 2, owner id
-`bob` hashes to thread 0 — and *every* request for alice lands on
-thread 2 because both the HTTP router and the worker-to-worker
-transport use the same ring. Now there is genuinely only one writer
-per id across the cluster.
+Single-writer within one `ActorSystem` is automatic. Across multiple worker threads, each with its own `ActorSystem`, the same aggregate has a potential writer per thread.
 
-The wallet-app uses (1) because it boots a per-thread `ActorSystem`
-and lets Postgres mediate; production deployments where the hot path
-is *write* should use (2) so the actor stays in front of Postgres.
+The [worker pool](../scaling/overview.md) solves this with a consistent hash ring: owner id `alice` hashes to thread 2, owner id `bob` hashes to thread 0, and every request for `alice` lands on thread 2 because both the HTTP router and the worker-to-worker transport use the same ring. Only one writer exists per identity across the entire pool.
 
-## The two persistence shapes
+### Multi-thread deployments: let the database arbitrate
 
-Nexus gives you two ways to back a single-writer aggregate:
+When you cannot route by identity (mixed workloads, legacy routing), let the database enforce the invariant. Every `LedgerActor` writes to the same Postgres row; Postgres unique constraints and optimistic versioning catch cross-thread conflicts. The actor still serialises within a thread. Conflicts surface as `WriterConflictException` or `OptimisticLockException` at the persistence layer.
 
-### Event-sourced
+Use routing when the hot path is write-heavy and you want to eliminate cross-thread conflicts entirely. Use database arbitration when routing is impractical and you can tolerate the occasional retry.
 
-State is rebuilt from an append-only log. The wallet-app's
-`WalletActor` (`POST /wallet/deposit`) uses this — every command emits
-a `MoneyDeposited` / `MoneyWithdrawn` event, the actor's
-`eventHandler` folds them into a fresh `WalletState`.
+### Choosing a persistence shape
 
-Use this when:
-- The audit trail is part of the product (financial transactions,
-  legal traceability).
-- You may add projections later (reporting, search, denormalised
-  reads).
-- Events are smaller than state and there are many of them.
+Two persistence models back single-writer aggregates. Pick one per entity and do not mix them.
 
-```php
+**Event-sourced** — state is rebuilt from an append-only event log. Use this when the audit trail is part of the product (financial transactions, legal traceability), when you need multiple projections, or when events are smaller than state and there are many of them:
+
+```php title="src/Actor/WalletActor.php"
 EventSourcedBehavior::create(
     persistenceId: PersistenceId::of('Wallet', $ownerId),
     emptyState: new WalletState(balance: Money::zero()),
@@ -101,20 +64,9 @@ EventSourcedBehavior::create(
 ->toBehavior();
 ```
 
-### Durable state (EntityBehavior)
+**Durable state** — state is the database row. Use this when you are modelling an existing Doctrine entity, the current state is what matters and you do not need history, or other read paths already use the ORM:
 
-State is the database row. The wallet-app's `LedgerActor`
-(`POST /wallet/ledger/record`) uses this — `WalletLedger` IS the
-state, and `flush()` writes whatever the command handler mutated.
-
-Use this when:
-- You're modelling something that already exists as a Doctrine
-  entity.
-- The current state is what you care about; you don't need the
-  history.
-- Other read paths use the ORM and you want a single source of truth.
-
-```php
+```php title="src/Actor/LedgerActor.php"
 EntityRefFactory::for(new ActorSystemSpawner($system), WalletLedger::class)
     ->using(new DefaultEntityManagerFactory($ormConfig))
     ->withConnectionLifecycle($pool->take(...), $pool->release(...))
@@ -124,34 +76,26 @@ EntityRefFactory::for(new ActorSystemSpawner($system), WalletLedger::class)
     ->build();
 ```
 
-Don't mix the two for the same aggregate. Pick one per entity.
+### Sealing the command protocol
 
-## What about commands the aggregate doesn't recognise?
+Pair single-writer with a sealed command interface to make wrong-actor sends a compile-time error:
 
-Sealed command marker. The wallet-app defines:
-
-```php
+```php title="src/Domain/LedgerCommand.php"
 interface LedgerCommand {}
-final readonly class RecordLedger implements LedgerCommand { … }
+final readonly class RecordLedger implements LedgerCommand { /* ... */ }
+final readonly class CorrectEntry  implements LedgerCommand { /* ... */ }
 ```
 
-…and the actor's handler types against `LedgerCommand`, not `object`.
-Sending a `Deposit` (which the WalletActor handles, but the
-LedgerActor doesn't) is now a compile-time error. Adding a new
-`LedgerCommand` without a `match` arm is also a compile-time error
-(no `default` branch). The protocol is closed.
+The handler types against `LedgerCommand`, not `object`. Sending a `Deposit` (which `WalletActor` handles) to `LedgerActor` is now a static error. Adding a new `LedgerCommand` without a matching handler arm is also a static error — no `default` branch in the `match` means Psalm catches the gap.
 
-```php
-private static function commandHandler(): Closure
-{
-    return static fn(
-        ActorContext $ctx,
-        LedgerCommand $cmd,
-        WalletLedger $ledger,
-    ): EntityEffect => match (true) {
-        $cmd instanceof RecordLedger => self::applyAndPersist($ledger, $cmd),
-    };
-}
-```
+## Caveats
 
-Use this pattern for every aggregate that has more than one command.
+- Single-writer guarantees are scoped to one `ActorSystem`. Distributing across threads or machines requires explicit routing or database-level conflict detection.
+- Passivation and restart both reconstruct actor state from the backing store. Ensure the persistence layer is configured before the actor handles its first message.
+- Do not spawn multiple actors for the same aggregate id. `EntityRefFactory::of($id)` prevents this by caching the ref; if you bypass the factory you own the invariant.
+
+## Related
+
+- [Persistence overview](../persistence/overview.md)
+- [Scaling overview](../scaling/overview.md)
+- [Message design](message-design.md)
