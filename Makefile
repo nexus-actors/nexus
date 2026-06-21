@@ -89,4 +89,7 @@ profile-hotpath: ## Profile hotpath breakdown with SPX (then run make spx-ui)
 spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?SPX_KEY=nexus&SPX_UI_URI=/)
 	docker compose exec php-swoole php -S 0.0.0.0:8889 docker/spx-ui.php
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-cluster test-doctrine test-persistence test-http test-http-swoole psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui
+docs-verify: ## Verify ```php snippets in website/docs/ via bin/verify-doc-snippets
+	@docker compose exec -T php bin/verify-doc-snippets
+
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-cluster test-doctrine test-persistence test-http test-http-swoole psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify

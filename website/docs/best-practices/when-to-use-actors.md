@@ -86,9 +86,9 @@ Once you've decided "yes, this needs an actor," the follow-up
 questions are downstream:
 
 - **Where does the state live between messages?** → [Single-writer
-  aggregates](./single-writer-aggregates.md)
+  aggregates](../guides/single-writer-aggregates.md)
 - **What happens when the actor crashes?** → [Supervision and
   let-it-crash](./supervision.md)
 - **What happens when the actor goes idle?** → [Passivation and
   memory](./passivation.md)
-- **Do callers wait for an answer?** → [Ask vs tell](./ask-vs-tell.md)
+- **Do callers wait for an answer?** → [Ask vs tell](../guides/ask-vs-tell.md)

@@ -357,4 +357,4 @@ uniformly-fast `/hello/load` benchmark:
 - [PHP JIT documentation](https://www.php.net/manual/en/opcache.configuration.php) —
   `opcache.jit` mode reference
 - The wider Nexus
-  [Servers](./servers.md) page covers worker-mode vs thread-mode tradeoffs.
+  [Servers](../http/servers.md) page covers worker-mode vs thread-mode tradeoffs.

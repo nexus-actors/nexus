@@ -164,7 +164,7 @@ static function (ActorSystem $system, WorkerNode $node): CompiledApplication {
 }
 ```
 
-See [Observability](./observability.md) for MDC, async logging via
+See [Observability](../operations/observability.md) for MDC, async logging via
 `Swoole\Thread\Queue`, and call-site capture.
 
 ## Next Steps

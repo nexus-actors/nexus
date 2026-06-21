@@ -1,40 +1,24 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   docsSidebar: [
-    'intro',
+    'welcome',
     {
       type: 'category',
       label: 'Getting Started',
+      collapsed: false,
       items: [
         'getting-started/installation',
         'getting-started/quick-start',
-        'getting-started/persistent-actors',
         'getting-started/concepts',
+        'getting-started/persistent-actors',
       ],
     },
     {
       type: 'category',
-      label: 'Examples',
+      label: 'Tutorials',
       items: [
-        'examples/overview',
-        'examples/wallet-app',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Best Practices',
-      items: [
-        'best-practices/overview',
-        'best-practices/when-to-use-actors',
-        'best-practices/single-writer-aggregates',
-        'best-practices/pooled-connections',
-        'best-practices/supervision',
-        'best-practices/passivation',
-        'best-practices/ask-vs-tell',
-        'best-practices/message-design',
-        'best-practices/scaling',
-        'best-practices/observability',
-        'best-practices/testing',
+        'tutorials/overview',
+        'tutorials/wallet-app',
       ],
     },
     {
@@ -49,8 +33,18 @@ const sidebars = {
         'core-concepts/mailboxes',
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
-        'core-concepts/persistence',
         'core-concepts/passivation',
+        // 'core-concepts/dead-letters', — deferred to sub-spec 3
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Guides',
+      items: [
+        'guides/overview',
+        'guides/message-design',
+        'guides/ask-vs-tell',
+        'guides/single-writer-aggregates',
       ],
     },
     {
@@ -59,20 +53,10 @@ const sidebars = {
       items: [
         'runtimes/overview',
         'runtimes/bootstrap',
-        'runtimes/runtime-standalone',
-        'runtimes/runtime-without-actors',
+        'runtimes/standalone',
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Scaling',
-      items: [
-        'scaling/overview',
-        'scaling/configuration',
-        'scaling/bootstrap',
       ],
     },
     {
@@ -90,9 +74,13 @@ const sidebars = {
         'http/websockets',
         'http/actors-in-http',
         'http/servers',
-        'http/observability',
-        'http/production',
-        'http/performance',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Persistence',
+      items: [
+        'persistence/overview',
       ],
     },
     {
@@ -108,30 +96,116 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Packages',
+      label: 'Scaling & Clustering',
       items: [
-        'packages/core',
-        'packages/runtime',
-        'packages/runtime-fiber',
-        'packages/runtime-swoole',
-        'packages/runtime-step',
-        'packages/cluster',
-        'packages/worker-pool',
-        'packages/worker-pool-swoole',
-        'packages/serialization',
-        'packages/logger',
-        'packages/http',
-        'packages/http-ws',
-        'packages/http-auth',
-        'packages/http-server-swoole',
-        'packages/http-server-swoole-threads',
-        'packages/persistence',
-        'packages/persistence-dbal',
-        'packages/persistence-doctrine',
-        'packages/doctrine-dbal',
-        'packages/doctrine-orm',
-        'packages/app',
-        'packages/psalm',
+        'scaling/overview',
+        'scaling/configuration',
+        'scaling/bootstrap',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Operations',
+      items: [
+        'operations/overview',
+        'operations/deployment',
+        {
+          type: 'category',
+          label: 'Deployment',
+          items: [
+            'operations/deployment/docker',
+            'operations/deployment/systemd',
+            'operations/deployment/kubernetes',
+          ],
+        },
+        'operations/observability',
+        'operations/performance-tuning',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Best Practices',
+      items: [
+        'best-practices/overview',
+        'best-practices/when-to-use-actors',
+        'best-practices/supervision',
+        'best-practices/observability',
+        'best-practices/scaling',
+        'best-practices/passivation',
+        'best-practices/pooled-connections',
+        'best-practices/testing',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Packages',
+      collapsed: true,
+      items: [
+        {
+          type: 'category',
+          label: 'Foundation',
+          items: [
+            'packages/core',
+            'packages/runtime',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Runtimes',
+          items: [
+            'packages/runtime-fiber',
+            'packages/runtime-swoole',
+            'packages/runtime-step',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'HTTP',
+          items: [
+            'packages/http',
+            'packages/http-ws',
+            'packages/http-auth',
+            // 'packages/http-toolkit', — deferred to sub-spec 3
+            'packages/http-server-swoole',
+            'packages/http-server-swoole-threads',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Persistence',
+          items: [
+            'packages/persistence',
+            'packages/persistence-dbal',
+            'packages/persistence-doctrine',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Doctrine',
+          items: [
+            'packages/doctrine-dbal',
+            'packages/doctrine-orm',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Scaling',
+          items: [
+            'packages/cluster',
+            'packages/worker-pool',
+            'packages/worker-pool-swoole',
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Tooling',
+          items: [
+            'packages/app',
+            'packages/logger',
+            'packages/serialization',
+            'packages/psalm',
+          ],
+        },
       ],
     },
     {
@@ -140,7 +214,35 @@ const sidebars = {
       items: [
         'architecture/design-philosophy',
         'architecture/internals',
-        'architecture/performance',
+        {
+          type: 'category',
+          label: 'ADRs',
+          collapsed: true,
+          items: [
+            'architecture/adrs/actor-model-architecture',
+            'architecture/adrs/immutable-behavior-api',
+            'architecture/adrs/dual-runtime-strategy',
+            'architecture/adrs/message-serialization',
+            'architecture/adrs/multi-process-clustering',
+            'architecture/adrs/persistence-event-sourcing',
+            'architecture/adrs/remote-ask-protocol',
+            'architecture/adrs/worker-pool-cluster-separation',
+          ],
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Upgrade & Changelog',
+      items: [
+        'upgrade/overview',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'FAQ & Glossary',
+      items: [
+        'faq/overview',
       ],
     },
     {

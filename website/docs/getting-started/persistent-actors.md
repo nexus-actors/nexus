@@ -327,6 +327,6 @@ state directly and loads it on recovery.
 
 ## Next steps
 
-- [Persistence in depth](/docs/core-concepts/persistence) -- effects, snapshots, retention policies, storage backends.
+- [Persistence in depth](/docs/persistence/overview) -- effects, snapshots, retention policies, storage backends.
 - [Supervision](/docs/core-concepts/supervision) -- automatic restart on failure (works with persistent actors too).
 - [Key Concepts](./concepts.md) -- the actor model fundamentals.

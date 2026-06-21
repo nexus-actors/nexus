@@ -8,7 +8,7 @@ const config = {
   tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
   favicon: 'img/favicon.ico',
 
-  url: 'https://nexusactors.com',
+  url: 'https://docs.nexusactors.com',
   baseUrl: '/',
 
   organizationName: 'nexus-actors',
@@ -27,6 +27,28 @@ const config = {
 
   themes: ['@docusaurus/theme-mermaid'],
   plugins: [
+    [
+      '@docusaurus/plugin-client-redirects',
+      {
+        redirects: [
+          // Subsequent tasks append entries here as they move pages.
+          { from: '/docs/examples', to: '/docs/tutorials/overview' },
+          { from: '/docs/examples/overview', to: '/docs/tutorials/overview' },
+          { from: '/docs/examples/wallet-app', to: '/docs/tutorials/wallet-app' },
+          { from: '/docs/best-practices/message-design', to: '/docs/guides/message-design' },
+          { from: '/docs/best-practices/ask-vs-tell', to: '/docs/guides/ask-vs-tell' },
+          { from: '/docs/best-practices/single-writer-aggregates', to: '/docs/guides/single-writer-aggregates' },
+          { from: '/docs/core-concepts/persistence', to: '/docs/persistence/overview' },
+          { from: '/docs/http/observability', to: '/docs/operations/observability' },
+          { from: '/docs/http/production', to: '/docs/operations/deployment' },
+          { from: '/docs/http/performance', to: '/docs/operations/performance-tuning' },
+          { from: '/docs/architecture/performance', to: '/docs/operations/performance-tuning' },
+          { from: '/docs/runtimes/runtime-without-actors', to: '/docs/runtimes/standalone' },
+          { from: '/docs/runtimes/runtime-standalone', to: '/docs/runtimes/standalone' },
+          { from: '/docs/intro', to: '/docs/welcome' },
+        ],
+      },
+    ],
     function preferVscodeLsTypesEsm() {
       return {
         name: 'prefer-vscode-ls-types-esm',

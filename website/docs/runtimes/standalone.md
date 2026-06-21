@@ -1,9 +1,9 @@
 ---
 sidebar_position: 4
-title: Runtime Without Actors
+title: Standalone Runtime (Without Actors)
 ---
 
-# Runtime Without Actors
+# Standalone Runtime (Without Actors)
 
 You can use Nexus runtime implementations directly, without creating an
 `ActorSystem`.
@@ -17,11 +17,18 @@ actor lifecycle/supervision/message protocols yet.
 - orchestrating retries/timeouts in infrastructure modules
 - deterministic test orchestration with manual time control
 - shared library code that should not depend on `nexus-core`
+- building framework adapters around callback/timer APIs
+- orchestrating background workflows without actor hierarchy
+- sharing `Duration` + `Future` abstractions across packages
+- writing deterministic tests with `StepRuntime` and `VirtualClock`
 
 ## Install
 
 ```bash
+# Runtime contracts + Future primitives
 composer require nexus-actors/runtime
+
+# Optional deterministic runtime implementation for tests
 composer require --dev nexus-actors/runtime-step
 ```
 
@@ -75,6 +82,14 @@ try {
     // map/log/retry
 }
 ```
+
+## Runtime Contract
+
+Concrete runtime packages (`runtime-fiber`, `runtime-swoole`, `runtime-step`)
+implement `Monadial\Nexus\Runtime\Runtime\Runtime`.
+
+Use this when your code should accept runtime implementations without coupling
+to actor APIs.
 
 ## Why Start Runtime-Only
 

@@ -104,7 +104,7 @@ sharding, consistent-hash partitioning.
 - You need channel-backed WebSocket routes (chat, presence, live updates
   with broadcast).
 - You want lock-free async logging via `Thread\Queue` (see
-  [Observability](./observability.md#async-logging)).
+  [Observability](../operations/observability.md#async-logging)).
 - You have hot in-memory state that must be shared across the pool
   (in-process cache, leader election table, …).
 - You're running Swoole 6 anyway.
@@ -179,7 +179,7 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
 ```
 
 For the application's request logger, build a `NexusLogger` inside the
-factory — see [Observability](./observability.md).
+factory — see [Observability](../operations/observability.md).
 
 ## Graceful Shutdown
 
@@ -274,5 +274,5 @@ rather than relying on worker affinity.
                        each thread runs an ActorSystem + WorkerNode
 ```
 
-Next: [Observability](./observability.md) to wire logging across both
+Next: [Observability](../operations/observability.md) to wire logging across both
 modes, or back to [Overview](./overview.md) for the high-level picture.
