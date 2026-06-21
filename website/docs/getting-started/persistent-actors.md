@@ -1,40 +1,30 @@
 ---
 sidebar_position: 3
 title: "Quick Start: Persistent Actors"
+related:
+  - getting-started/quick-start
+  - persistence/overview
+  - core-concepts/supervision
 ---
 
 # Quick Start: Persistent Actors
 
-The [basic quick start](./quick-start.md) showed a counter actor that loses its
-state when the process stops. This tutorial makes the counter **persistent** --
-it survives restarts by storing events in a database.
-
-We'll build the same counter, but this time every increment is recorded as an
-event. When the actor restarts, it replays those events to recover its state
-automatically.
+This tutorial builds on the [basic quick start](./quick-start.md) by making the counter actor persistent — it survives restarts by storing events in a database. Every increment is recorded as an event, and when the actor restarts it replays those events to recover its state automatically.
 
 ## Step 1: Define commands and events
 
-Persistent actors distinguish between **commands** (what the outside world asks
-for) and **events** (what actually happened). Commands are input; events are
-facts.
+Persistent actors distinguish between commands (what the outside world asks for) and events (what actually happened). Commands are input; events are facts:
 
-```php
+```php title="src/Messages/Messages.php"
 <?php
 declare(strict_types=1);
 
 namespace App\Messages;
 
-use Monadial\Nexus\Core\Actor\ActorRef;
-
 // Commands — requests from the outside world
 final readonly class Increment {}
 
-final readonly class GetCount
-{
-    /** @param ActorRef<object> $replyTo */
-    public function __construct(public ActorRef $replyTo) {}
-}
+final readonly class GetCount {}
 
 // Events — immutable facts that are persisted
 final readonly class Incremented {}
@@ -46,15 +36,13 @@ final readonly class CountReply
 }
 ```
 
-The `Increment` command causes an `Incremented` event. The event is what gets
-stored. The command is discarded after processing.
+The `Increment` command causes an `Incremented` event. The event is what gets stored. The command is discarded after processing.
 
 ## Step 2: Define the state
 
-State is a plain readonly class. It is rebuilt from events on every recovery --
-never stored directly (that's the event sourcing model).
+State is a plain `readonly class`. It is rebuilt from events on every recovery — never stored directly:
 
-```php
+```php title="src/CounterState.php"
 <?php
 declare(strict_types=1);
 
@@ -68,15 +56,12 @@ final readonly class CounterState
 
 ## Step 3: Create the event-sourced behavior
 
-An `EventSourcedBehavior` has two handlers:
+`EventSourcedBehavior` has two handlers:
 
-- **Command handler** -- receives the current state and a command, returns an
-  `Effect` describing what events to persist.
-- **Event handler** -- receives the current state and an event, returns the new
-  state. This runs both when persisting new events and when replaying on
-  recovery.
+- **Command handler** — receives the current state and a command, returns an `Effect` describing what events to persist.
+- **Event handler** — receives the current state and an event, returns the new state. This runs both when persisting new events and when replaying on recovery.
 
-```php
+```php title="src/CounterBehavior.php"
 <?php
 declare(strict_types=1);
 
@@ -87,35 +72,30 @@ use App\Messages\GetCount;
 use App\Messages\Increment;
 use App\Messages\Incremented;
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
-use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
+use Monadial\Nexus\Persistence\EventSourced\Effect;
+use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 $behavior = EventSourcedBehavior::create(
     persistenceId: PersistenceId::of('counter', 'counter-1'),
     emptyState: new CounterState(),
-
-    // Command handler: what should happen?
     commandHandler: static function (
         object $state,
         ActorContext $ctx,
         object $command,
     ): Effect {
         if ($command instanceof Increment) {
-            // Persist an event — state will update via the event handler
             return Effect::persist(new Incremented());
         }
-
         if ($command instanceof GetCount) {
-            // Read-only query — reply without persisting anything
-            return Effect::reply($command->replyTo, new CountReply($state->count));
+            $ctx->reply(new CountReply($state->count));
+
+            return Effect::none();
         }
 
         return Effect::none();
     },
-
-    // Event handler: apply the fact to state
     eventHandler: static function (object $state, object $event): object {
         if ($event instanceof Incremented) {
             return new CounterState($state->count + 1);
@@ -131,13 +111,13 @@ $behavior = EventSourcedBehavior::create(
 Key differences from the basic counter:
 
 - State changes go through events, not direct mutation.
-- `Effect::persist()` saves the event, then the event handler updates state.
-- `Effect::reply()` responds to queries without touching the event log.
-- The event handler is pure -- no side effects, no I/O.
+- `Effect::persist()` saves the event; the event handler then updates state.
+- The actor replies to `GetCount` via `$ctx->reply()`, so callers can use `ask()`.
+- The event handler is pure — no side effects, no I/O.
 
 ## Step 4: Run it
 
-```php
+```php title="src/main.php"
 <?php
 declare(strict_types=1);
 
@@ -149,121 +129,99 @@ use App\Messages\Increment;
 use App\Messages\Incremented;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
-use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
+use Monadial\Nexus\Persistence\EventSourced\Effect;
+use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php';
 
-$eventStore = new InMemoryEventStore();
-
-// 1. Create actor system
 $runtime = new FiberRuntime();
 $system = ActorSystem::create('persistent-demo', $runtime);
 
-// 2. Define the persistent counter behavior
 $behavior = EventSourcedBehavior::create(
     persistenceId: PersistenceId::of('counter', 'counter-1'),
     emptyState: new CounterState(),
-    commandHandler: static function (
-        object $state,
-        ActorContext $ctx,
-        object $command,
-    ): Effect {
+    commandHandler: static function (object $state, ActorContext $ctx, object $command): Effect {
         if ($command instanceof Increment) {
             return Effect::persist(new Incremented());
         }
         if ($command instanceof GetCount) {
-            return Effect::reply($command->replyTo, new CountReply($state->count));
+            $ctx->reply(new CountReply($state->count));
+
+            return Effect::none();
         }
+
         return Effect::none();
     },
     eventHandler: static function (object $state, object $event): object {
         if ($event instanceof Incremented) {
             return new CounterState($state->count + 1);
         }
+
         return $state;
     },
 )
-->withEventStore($eventStore)
+->withEventStore(new InMemoryEventStore())
 ->toBehavior();
 
-// 3. Spawn and send messages
 $counterRef = $system->spawn(Props::fromBehavior($behavior), 'counter');
 
 for ($i = 0; $i < 5; $i++) {
     $counterRef->tell(new Increment());
 }
 
-// 4. Probe actor to capture the reply
-/** @var list<object> $captured */
-$captured = [];
-$probeRef = $system->spawn(Props::fromBehavior(
-    Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$captured): Behavior {
-        $captured[] = $msg;
-        return Behavior::same();
-    }),
-), 'probe');
+$runtime->spawn(static function () use ($counterRef, $system): void {
+    /** @var CountReply $reply */
+    $reply = $counterRef->ask(new GetCount(), Duration::seconds(5))->await();
+    echo 'Count: ' . $reply->count . PHP_EOL; // Count: 5
 
-$counterRef->tell(new GetCount($probeRef));
-
-// 5. Shut down and check
-$runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
     $system->shutdown(Duration::seconds(1));
 });
 
 $system->run();
-
-assert($captured[0] instanceof CountReply);
-echo 'Count: ' . $captured[0]->count . PHP_EOL; // Count: 5
 ```
 
-This looks similar to the basic counter -- the difference is what happens when
-the actor crashes or restarts. With persistence, the counter recovers its state
-automatically.
+The important difference is not visible in this output — it is what happens when the process restarts. With persistence, the counter recovers to `5` automatically without any external intervention.
 
-## What recovery looks like
+## How recovery works
 
-When a persistent actor starts, it replays its event log before accepting new
-commands:
+When a persistent actor starts, it replays its event log before accepting new commands:
 
-1. **Load events** -- the event store returns all events for
-   `PersistenceId::of('counter', 'counter-1')`.
-2. **Replay** -- each event passes through the event handler, rebuilding the
-   state step by step: `0 → 1 → 2 → 3 → 4 → 5`.
-3. **Ready** -- the actor starts processing new commands with `count = 5`.
+1. **Load events** — the event store returns all events for `PersistenceId::of('counter', 'counter-1')`.
+2. **Replay** — each event passes through the event handler, rebuilding state step by step: `0 → 1 → 2 → 3 → 4 → 5`.
+3. **Ready** — the actor starts processing new commands with `count = 5`.
 
-Commands that arrive during recovery are automatically stashed and replayed
-once recovery completes. Senders do not need to know whether the actor has
-finished recovering.
+Commands that arrive during recovery are automatically stashed and processed once recovery completes. Callers do not need to know whether the actor has finished recovering.
 
-## Using a real database
+## Use a real database
 
 Replace `InMemoryEventStore` with a DBAL or Doctrine store for production:
 
-```php
+```php title="src/bootstrap.php"
+<?php
+declare(strict_types=1);
+
+use Doctrine\DBAL\DriverManager;
 use Monadial\Nexus\Persistence\Dbal\DbalEventStore;
 
-// Doctrine DBAL connection
 $connection = DriverManager::getConnection($params);
-
 $eventStore = new DbalEventStore($connection, $serializer);
 ```
 
 The actor code stays exactly the same. Only the store changes.
 
-## Adding snapshots
+## Add snapshots
 
-For actors with long event histories, replay can be slow. Snapshots save the
-full state periodically so recovery only needs to replay events after the
-snapshot:
+For actors with long event histories, replay can be slow. Snapshots save the full state periodically so recovery only needs to replay events after the snapshot:
 
-```php
+```php title="src/CounterBehavior.php"
+<?php
+declare(strict_types=1);
+
 use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
 
 $behavior = EventSourcedBehavior::create(/* ... */)
@@ -273,17 +231,25 @@ $behavior = EventSourcedBehavior::create(/* ... */)
     ->toBehavior();
 ```
 
-Now recovery loads the latest snapshot and replays only the events that
-occurred after it -- instead of replaying the entire history.
+Recovery then loads the latest snapshot and replays only the events that occurred after it.
 
 ## Durable State alternative
 
-If you don't need an event history -- just the latest state -- use
-`DurableStateBehavior` instead:
+If you do not need an event history — only the latest state — use `DurableStateBehavior` instead:
 
-```php
-use Monadial\Nexus\Persistence\State\DurableStateBehavior;
+```php title="src/DurableCounterBehavior.php"
+<?php
+declare(strict_types=1);
+
+namespace App;
+
+use App\Messages\CountReply;
+use App\Messages\GetCount;
+use App\Messages\Increment;
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableEffect;
+use Monadial\Nexus\Persistence\State\DurableStateBehavior;
 use Monadial\Nexus\Persistence\State\InMemoryDurableStateStore;
 
 $behavior = DurableStateBehavior::create(
@@ -295,16 +261,14 @@ $behavior = DurableStateBehavior::create(
         object $command,
     ): DurableEffect {
         if ($command instanceof Increment) {
-            return DurableEffect::persist(
-                new CounterState($state->count + 1),
-            );
+            return DurableEffect::persist(new CounterState($state->count + 1));
         }
         if ($command instanceof GetCount) {
-            return DurableEffect::reply(
-                $command->replyTo,
-                new CountReply($state->count),
-            );
+            $ctx->reply(new CountReply($state->count));
+
+            return DurableEffect::none();
         }
+
         return DurableEffect::none();
     },
 )
@@ -312,8 +276,7 @@ $behavior = DurableStateBehavior::create(
 ->toBehavior();
 ```
 
-Simpler: no events, no event handler, no replay. The store saves the current
-state directly and loads it on recovery.
+No events, no event handler, no replay. The store saves the current state directly and loads it on recovery.
 
 ## Comparison
 
@@ -327,6 +290,6 @@ state directly and loads it on recovery.
 
 ## Next steps
 
-- [Persistence in depth](/docs/persistence/overview) -- effects, snapshots, retention policies, storage backends.
-- [Supervision](/docs/core-concepts/supervision) -- automatic restart on failure (works with persistent actors too).
-- [Key Concepts](./concepts.md) -- the actor model fundamentals.
+- [Persistence in depth](../persistence/overview.md) — effects, snapshots, retention policies, and storage backends.
+- [Supervision](../core-concepts/supervision.md) — automatic restart on failure (works with persistent actors too).
+- [Key Concepts](./concepts.md) — the actor model fundamentals.
