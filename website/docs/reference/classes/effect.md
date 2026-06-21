@@ -2,7 +2,7 @@
 title: Effect
 sidebar_position: 11
 related:
-  - core-concepts/persistence
+  - persistence/overview
   - reference/classes/event-sourced-behavior
   - reference/classes/persistence-id
   - reference/classes/behavior
@@ -61,7 +61,7 @@ static fn (ActorContext $ctx, object $cmd, LedgerState $state): Effect => match 
 
 ## See also
 
-- [Persistence concept](../../core-concepts/persistence) — event sourcing model, recovery pipeline, and snapshot strategies
+- [Persistence concept](../../persistence/overview) — event sourcing model, recovery pipeline, and snapshot strategies
 - [EventSourcedBehavior](event-sourced-behavior) — the fluent builder that wires up command and event handlers
 - [PersistenceId](persistence-id) — the stable identity used as the primary key in the event store
 - [Behavior](behavior) — the actor behavior model that persistence builds on

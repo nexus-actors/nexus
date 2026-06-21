@@ -2,7 +2,7 @@
 title: EventStore
 sidebar_position: 12
 related:
-  - core-concepts/persistence
+  - persistence/overview
   - reference/classes/event-sourced-behavior
   - reference/classes/persistence-id
 ---
@@ -82,6 +82,6 @@ final class RedisEventStore implements EventStore
 
 ## See also
 
-- [Persistence concept](../../core-concepts/persistence) — event sourcing model, snapshot strategies, and retention policies
+- [Persistence concept](../../persistence/overview) — event sourcing model, snapshot strategies, and retention policies
 - [EventSourcedBehavior](event-sourced-behavior) — the builder that accepts an `EventStore` instance via `withEventStore()`
 - [PersistenceId](persistence-id) — the stable identity used as the primary key in the store
