@@ -1,0 +1,67 @@
+# .github/workflows/axe-a11y.yml
+# WCAG 2.1 AA accessibility check using @axe-core/cli.
+# Runs on push/PR touching website/ or nexus-brand/.
+# Serves the built Docusaurus site via http-server and audits 7 representative pages.
+name: a11y — WCAG 2.1 AA
+
+on:
+  push:
+    branches: [main, docs/v1-launch]
+    paths:
+      - 'website/**'
+      - 'nexus-brand/**'
+      - '.github/workflows/axe-a11y.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'nexus-brand/**'
+  workflow_dispatch:
+
+concurrency:
+  group: a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  axe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install deps
+        working-directory: website
+        run: npm ci
+
+      - name: Build site
+        working-directory: website
+        run: npm run build
+
+      - name: Install axe-core CLI + http-server
+        run: npm install -g @axe-core/cli http-server
+
+      - name: Serve built site
+        run: http-server website/build -p 3000 --silent &
+
+      - name: Wait for server
+        run: until curl -sf http://localhost:3000/ -o /dev/null; do sleep 1; done
+
+      - name: Run axe on representative pages
+        run: |
+          PAGES=(
+            "http://localhost:3000/"
+            "http://localhost:3000/docs/welcome"
+            "http://localhost:3000/docs/getting-started/installation"
+            "http://localhost:3000/docs/core-concepts/actors"
+            "http://localhost:3000/docs/persistence/overview"
+            "http://localhost:3000/docs/operations/overview"
+            "http://localhost:3000/docs/reference/overview"
+          )
+          for p in "${PAGES[@]}"; do
+            echo "=== axe: $p ==="
+            axe "$p" --tags wcag2aa --exit
+          done

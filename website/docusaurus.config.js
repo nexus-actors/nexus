@@ -3,10 +3,15 @@ const path = require('path');
 const { themes } = require('prism-react-renderer');
 
 /** @type {import('@docusaurus/types').Config} */
-const config = {
+const config = async () => {
+  // Load ESM remark plugins (unist-util-visit v5 is ESM-only)
+  const glossaryAutoLink = await require('./src/plugins/glossary-auto-link')();
+  const classNameAutoLink = await require('./src/plugins/class-name-auto-link')();
+
+  return {
   title: 'Nexus — Actor System for PHP',
   tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   url: 'https://docs.nexusactors.com',
   baseUrl: '/',
@@ -25,8 +30,23 @@ const config = {
     },
   },
 
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: true,
+        docsRouteBasePath: '/docs',
+        indexBlog: false,
+        highlightSearchTermsOnTargetPage: true,
+        explicitSearchResultPath: true,
+        searchBarShortcut: true,
+        searchBarShortcutHint: true,
+      },
+    ],
+  ],
   plugins: [
+    require.resolve('./src/plugins/og-images.js'),
     [
       '@docusaurus/plugin-client-redirects',
       {
@@ -137,6 +157,10 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/nexus-actors/nexus/tree/main/website/',
+          remarkPlugins: [
+            glossaryAutoLink,   // Task 8: auto-link glossary terms
+            classNameAutoLink,  // Task 9: auto-link PHP class names to api.nexusactors.com
+          ],
         },
         blog: false,
         theme: {
@@ -159,7 +183,7 @@ const config = {
         defaultMode: 'dark',
         respectPrefersColorScheme: true,
       },
-      image: 'img/og-image.png',
+      image: 'img/og-default.svg',
       metadata: [
         { name: 'keywords', content: 'actor model, PHP, concurrency, supervision trees, event sourcing, Akka, Erlang OTP, Swoole, PHP Fibers, typed actors, PHP framework' },
         { name: 'author', content: 'Monadial' },
@@ -173,7 +197,7 @@ const config = {
       navbar: {
         title: 'Nexus',
         logo: {
-          alt: 'Nexus Logo',
+          alt: 'Nexus',
           src: 'img/logo.svg',
           width: 48,
           height: 48,
@@ -235,10 +259,11 @@ const config = {
       },
       prism: {
         theme: themes.github,
-        darkTheme: themes.dracula,
-        additionalLanguages: ['php'],
+        darkTheme: themes.oneDark,
+        additionalLanguages: ['php', 'bash', 'yaml', 'json'],
       },
     }),
+  };
 };
 
 module.exports = config;

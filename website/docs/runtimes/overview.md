@@ -1,6 +1,7 @@
 ---
 sidebar_position: 1
 title: Runtime Overview
+runtimes: ['fiber', 'swoole', 'step']
 related:
   - runtimes/fiber
   - runtimes/swoole
@@ -20,24 +21,32 @@ The `Runtime` interface decouples actor code from the underlying concurrency mec
 
 ## The design
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 Every runtime implementation satisfies the same `Runtime` interface. Actor code — behaviors, props definitions, supervision strategies — never references a specific runtime class. The runtime is injected once, at the composition root:
 
-```php title="src/bootstrap.php"
-use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+<Tabs groupId="runtime">
+  <TabItem value="fiber" label="Fiber">
+    ```php title="src/bootstrap.php"
+    use Monadial\Nexus\Core\Actor\ActorSystem;
+    use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
-$system = ActorSystem::create('my-system', new FiberRuntime());
-```
+    $system = ActorSystem::create('my-system', new FiberRuntime());
+    ```
+  </TabItem>
+  <TabItem value="swoole" label="Swoole">
+    ```php title="src/bootstrap.php"
+    use Monadial\Nexus\Core\Actor\ActorSystem;
+    use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
+    use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 
-Switching to Swoole in production requires changing only this one line:
+    $system = ActorSystem::create('my-system', new SwooleRuntime(new SwooleConfig()));
+    ```
+  </TabItem>
+</Tabs>
 
-```php title="src/bootstrap-prod.php"
-use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
-use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
-
-$system = ActorSystem::create('my-system', new SwooleRuntime(new SwooleConfig()));
-```
+Selecting "Swoole" here persists that choice across every `groupId="runtime"` tab block site-wide — you won't have to re-select your runtime on each page.
 
 The `Runtime` interface exposes eleven methods organized into three groups:
 

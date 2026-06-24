@@ -1,3 +1,19 @@
+@import '../../../nexus-brand/tokens.css';
+
+/* Override Docusaurus theme variables with Nexus brand tokens */
+:root {
+  --ifm-color-primary: var(--nexus-primary);
+  --ifm-color-primary-dark: var(--nexus-primary-dark);
+  --ifm-font-family-base: var(--nexus-font-sans);
+  --ifm-font-family-monospace: var(--nexus-font-mono);
+}
+
+[data-theme='dark'] {
+  --ifm-background-color: var(--nexus-bg);
+  --ifm-color-content: var(--nexus-text);
+}
+
+/* Legacy light-mode overrides — keep for backward compat */
 :root {
   --ifm-color-primary: #10B981;
   --ifm-color-primary-dark: #059669;
