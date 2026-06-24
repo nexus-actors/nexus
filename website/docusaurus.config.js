@@ -46,6 +46,7 @@ const config = async () => {
     ],
   ],
   plugins: [
+    require.resolve('./src/plugins/og-images.js'),
     [
       '@docusaurus/plugin-client-redirects',
       {
