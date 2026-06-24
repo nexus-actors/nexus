@@ -359,6 +359,35 @@ $data = file_get_contents('https://example.com/api');
 
 The `verify:lint-only` marker prevents Psalm from failing the snippet while still validating syntax.
 
+### 4.X Runtime-specific examples
+
+Where the same example differs between Fiber and Swoole, wrap in synced Tabs with `groupId="runtime"`. Selecting a runtime tab on any page persists that choice site-wide.
+
+```mdx
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs groupId="runtime">
+  <TabItem value="fiber" label="Fiber">
+    ```php title="src/bootstrap.php"
+    use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+    $system = ActorSystem::create('app', new FiberRuntime());
+    ```
+  </TabItem>
+  <TabItem value="swoole" label="Swoole">
+    ```php title="src/bootstrap.php"
+    use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
+    $system = ActorSystem::create('app', new SwooleRuntime(new SwooleConfig()));
+    ```
+  </TabItem>
+</Tabs>
+```
+
+**Rules:**
+- Always use `groupId="runtime"` (exact string) so all runtime tabs sync together.
+- Always include both `fiber` and `swoole` tab items. Add `step` only when the test runtime example is meaningfully different.
+- Keep each tab's snippet self-contained (full imports shown).
+
 ---
 
 ## 5. Linking conventions
