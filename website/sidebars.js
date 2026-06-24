@@ -37,7 +37,9 @@ const sidebars = {
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
         'core-concepts/passivation',
-        // 'core-concepts/dead-letters', — deferred to sub-spec 3
+        'core-concepts/envelopes',
+        'core-concepts/dead-letters',
+        'core-concepts/futures',
       ],
     },
     {
