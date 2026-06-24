@@ -193,7 +193,7 @@ const sidebars = {
             'packages/http',
             'packages/http-ws',
             'packages/http-auth',
-            // 'packages/http-toolkit', — deferred to sub-spec 3
+            'packages/http-toolkit',
             'packages/http-server-swoole',
             'packages/http-server-swoole-threads',
           ],
@@ -232,6 +232,7 @@ const sidebars = {
             'packages/logger',
             'packages/serialization',
             'packages/psalm',
+            'packages/nexus',
           ],
         },
       ],
@@ -319,6 +320,7 @@ const sidebars = {
       label: 'Upgrade & Changelog',
       items: [
         'upgrade/overview',
+        'upgrade/upgrade',
       ],
     },
     {
@@ -326,6 +328,7 @@ const sidebars = {
       label: 'FAQ & Glossary',
       items: [
         'faq/overview',
+        'faq/glossary',
       ],
     },
     {
@@ -334,6 +337,13 @@ const sidebars = {
       items: [
         'contributing/development',
         'contributing/roadmap',
+        'contributing/your-first-pr',
+        'contributing/release-process',
+        'contributing/splitsh',
+        'contributing/security',
+        'contributing/adding-a-runtime',
+        'contributing/adding-a-param-resolver',
+        'contributing/adding-a-package',
       ],
     },
   ],
