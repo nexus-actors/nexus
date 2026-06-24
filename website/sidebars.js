@@ -142,6 +142,12 @@ const sidebars = {
         },
         'operations/observability',
         'operations/performance-tuning',
+        'operations/metrics',
+        'operations/graceful-shutdown',
+        'operations/sysctls',
+        'operations/troubleshooting',
+        'operations/runbook',
+        'operations/zts-php-setup',
       ],
     },
     {

@@ -218,6 +218,7 @@ Look at all five numbers, not just RPS:
 ## See also
 
 - [Swoole server settings reference](https://wiki.swoole.com/en/#/server/setting) — authoritative reference for `withSwooleSetting()` options
+- [Kernel tuning (sysctls & ulimits)](./sysctls.md) — full reference for all four sysctls and ulimit settings
 - [Deployment](./deployment.md) — OPcache, health checks, and pre-flight checklist
 - [HTTP servers](../http/servers.md) — worker mode vs thread mode tradeoffs
 - [Scaling overview](../scaling/overview.md) — multi-core worker pool architecture
