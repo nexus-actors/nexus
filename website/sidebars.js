@@ -11,6 +11,9 @@ const sidebars = {
         'getting-started/quick-start',
         'getting-started/concepts',
         'getting-started/persistent-actors',
+        'getting-started/module-selector',
+        'getting-started/local-dev-without-docker',
+        'getting-started/common-mistakes',
       ],
     },
     {
