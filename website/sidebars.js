@@ -92,6 +92,12 @@ const sidebars = {
       label: 'Persistence',
       items: [
         'persistence/overview',
+        'persistence/event-sourcing',
+        'persistence/durable-state',
+        'persistence/snapshots',
+        'persistence/single-writer',
+        'persistence/stores',
+        'persistence/testing',
       ],
     },
     {
@@ -103,6 +109,10 @@ const sidebars = {
         'doctrine/entity-manager-pool',
         'doctrine/http-integration',
         'doctrine/entity-behavior',
+        // batch 6 pages wired below after creation
+        // 'doctrine/migrations',
+        // 'doctrine/second-level-cache',
+        // 'doctrine/fixtures',
       ],
     },
     {
@@ -112,6 +122,9 @@ const sidebars = {
         'scaling/overview',
         'scaling/configuration',
         'scaling/bootstrap',
+        // batch 7 pages wired below after creation
+        // 'scaling/choosing-thread-count',
+        // 'scaling/cross-worker-ask',
       ],
     },
     {
