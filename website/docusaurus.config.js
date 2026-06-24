@@ -6,7 +6,7 @@ const { themes } = require('prism-react-renderer');
 const config = {
   title: 'Nexus — Actor System for PHP',
   tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/favicon.svg',
 
   url: 'https://docs.nexusactors.com',
   baseUrl: '/',
@@ -159,7 +159,7 @@ const config = {
         defaultMode: 'dark',
         respectPrefersColorScheme: true,
       },
-      image: 'img/og-image.png',
+      image: 'img/og-default.svg',
       metadata: [
         { name: 'keywords', content: 'actor model, PHP, concurrency, supervision trees, event sourcing, Akka, Erlang OTP, Swoole, PHP Fibers, typed actors, PHP framework' },
         { name: 'author', content: 'Monadial' },
@@ -173,7 +173,7 @@ const config = {
       navbar: {
         title: 'Nexus',
         logo: {
-          alt: 'Nexus Logo',
+          alt: 'Nexus',
           src: 'img/logo.svg',
           width: 48,
           height: 48,
@@ -235,8 +235,8 @@ const config = {
       },
       prism: {
         theme: themes.github,
-        darkTheme: themes.dracula,
-        additionalLanguages: ['php'],
+        darkTheme: themes.oneDark,
+        additionalLanguages: ['php', 'bash', 'yaml', 'json'],
       },
     }),
 };
