@@ -109,10 +109,9 @@ const sidebars = {
         'doctrine/entity-manager-pool',
         'doctrine/http-integration',
         'doctrine/entity-behavior',
-        // batch 6 pages wired below after creation
-        // 'doctrine/migrations',
-        // 'doctrine/second-level-cache',
-        // 'doctrine/fixtures',
+        'doctrine/migrations',
+        'doctrine/second-level-cache',
+        'doctrine/fixtures',
       ],
     },
     {
