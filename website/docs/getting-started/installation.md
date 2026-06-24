@@ -95,6 +95,66 @@ make build && make up && make install
 | `make test` | Run all tests |
 | `make psalm` | Run Psalm static analysis |
 
+## Smoke test
+
+Run this script after installation to confirm the actor system, Fiber runtime, and message delivery all work end-to-end. If it prints `OK`, your install is healthy.
+
+<!-- verify:skip: requires a running actor system -->
+```php title="smoke.php" verify:skip
+<?php
+
+declare(strict_types=1);
+
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+
+require 'vendor/autoload.php';
+
+readonly class Increment {}
+readonly class GetCount { public function __construct(public object $replyTo) {} }
+
+$captured = null;
+$runtime  = new FiberRuntime();
+$system   = ActorSystem::create('smoke', $runtime);
+
+$counter = $system->spawn(
+    Props::fromBehavior(Behavior::withState(
+        0,
+        static function ($ctx, object $msg, int $n) use (&$captured): BehaviorWithState {
+            if ($msg instanceof Increment) {
+                return BehaviorWithState::next($n + 1);
+            }
+            if ($msg instanceof GetCount) {
+                $captured = $n;
+            }
+            return BehaviorWithState::same();
+        },
+    )),
+    'counter',
+);
+
+$counter->tell(new Increment());
+$counter->tell(new Increment());
+$counter->tell(new Increment());
+$counter->tell(new GetCount($system->deadLetters()));
+$runtime->scheduleOnce(Duration::millis(200), fn () => $system->shutdown(Duration::seconds(1)));
+$system->run();
+
+echo $captured === 3 ? 'OK' : 'FAIL: expected 3, got ' . $captured;
+echo PHP_EOL;
+```
+
+Run the smoke test:
+
+```bash
+php smoke.php
+# OK
+```
+
 ## Next steps
 
 - [Quick Start](./quick-start.md) — build your first actor.

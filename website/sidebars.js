@@ -11,6 +11,9 @@ const sidebars = {
         'getting-started/quick-start',
         'getting-started/concepts',
         'getting-started/persistent-actors',
+        'getting-started/module-selector',
+        'getting-started/local-dev-without-docker',
+        'getting-started/common-mistakes',
       ],
     },
     {
@@ -34,7 +37,9 @@ const sidebars = {
         'core-concepts/lifecycle',
         'core-concepts/ask-pattern',
         'core-concepts/passivation',
-        // 'core-concepts/dead-letters', — deferred to sub-spec 3
+        'core-concepts/envelopes',
+        'core-concepts/dead-letters',
+        'core-concepts/futures',
       ],
     },
     {
@@ -45,6 +50,11 @@ const sidebars = {
         'guides/message-design',
         'guides/ask-vs-tell',
         'guides/single-writer-aggregates',
+        'guides/routing-patterns',
+        'guides/fan-out',
+        'guides/rate-limiting-actor',
+        'guides/saga',
+        'guides/standalone-integration',
       ],
     },
     {
@@ -57,6 +67,7 @@ const sidebars = {
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',
+        'runtimes/xdebug',
       ],
     },
     {
@@ -81,6 +92,12 @@ const sidebars = {
       label: 'Persistence',
       items: [
         'persistence/overview',
+        'persistence/event-sourcing',
+        'persistence/durable-state',
+        'persistence/snapshots',
+        'persistence/single-writer',
+        'persistence/stores',
+        'persistence/testing',
       ],
     },
     {
@@ -92,6 +109,9 @@ const sidebars = {
         'doctrine/entity-manager-pool',
         'doctrine/http-integration',
         'doctrine/entity-behavior',
+        'doctrine/migrations',
+        'doctrine/second-level-cache',
+        'doctrine/fixtures',
       ],
     },
     {
@@ -101,6 +121,8 @@ const sidebars = {
         'scaling/overview',
         'scaling/configuration',
         'scaling/bootstrap',
+        'scaling/choosing-thread-count',
+        'scaling/cross-worker-ask',
       ],
     },
     {
@@ -120,6 +142,12 @@ const sidebars = {
         },
         'operations/observability',
         'operations/performance-tuning',
+        'operations/metrics',
+        'operations/graceful-shutdown',
+        'operations/sysctls',
+        'operations/troubleshooting',
+        'operations/runbook',
+        'operations/zts-php-setup',
       ],
     },
     {
@@ -165,7 +193,7 @@ const sidebars = {
             'packages/http',
             'packages/http-ws',
             'packages/http-auth',
-            // 'packages/http-toolkit', — deferred to sub-spec 3
+            'packages/http-toolkit',
             'packages/http-server-swoole',
             'packages/http-server-swoole-threads',
           ],
@@ -204,6 +232,7 @@ const sidebars = {
             'packages/logger',
             'packages/serialization',
             'packages/psalm',
+            'packages/nexus',
           ],
         },
       ],
@@ -246,6 +275,20 @@ const sidebars = {
             'reference/classes/nexus-app',
           ],
         },
+        {
+          type: 'category',
+          label: 'Catalogs',
+          collapsed: false,
+          items: [
+            'reference/config',
+            'reference/system-messages',
+            'reference/lifecycle-signals',
+            'reference/exceptions',
+            'reference/attributes',
+            'reference/psalm-rules',
+            'reference/gotchas',
+          ],
+        },
         'reference/internals-appendix',
       ],
     },
@@ -277,6 +320,7 @@ const sidebars = {
       label: 'Upgrade & Changelog',
       items: [
         'upgrade/overview',
+        'upgrade/upgrade',
       ],
     },
     {
@@ -284,6 +328,7 @@ const sidebars = {
       label: 'FAQ & Glossary',
       items: [
         'faq/overview',
+        'faq/glossary',
       ],
     },
     {
@@ -292,6 +337,13 @@ const sidebars = {
       items: [
         'contributing/development',
         'contributing/roadmap',
+        'contributing/your-first-pr',
+        'contributing/release-process',
+        'contributing/splitsh',
+        'contributing/security',
+        'contributing/adding-a-runtime',
+        'contributing/adding-a-param-resolver',
+        'contributing/adding-a-package',
       ],
     },
   ],
