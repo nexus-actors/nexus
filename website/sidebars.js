@@ -48,6 +48,11 @@ const sidebars = {
         'guides/message-design',
         'guides/ask-vs-tell',
         'guides/single-writer-aggregates',
+        'guides/routing-patterns',
+        'guides/fan-out',
+        'guides/rate-limiting-actor',
+        'guides/saga',
+        'guides/standalone-integration',
       ],
     },
     {
@@ -60,6 +65,7 @@ const sidebars = {
         'runtimes/fiber',
         'runtimes/swoole',
         'runtimes/step',
+        'runtimes/xdebug',
       ],
     },
     {
