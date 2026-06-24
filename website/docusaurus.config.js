@@ -3,7 +3,12 @@ const path = require('path');
 const { themes } = require('prism-react-renderer');
 
 /** @type {import('@docusaurus/types').Config} */
-const config = {
+const config = async () => {
+  // Load ESM remark plugins (unist-util-visit v5 is ESM-only)
+  const glossaryAutoLink = await require('./src/plugins/glossary-auto-link')();
+  const classNameAutoLink = await require('./src/plugins/class-name-auto-link')();
+
+  return {
   title: 'Nexus — Actor System for PHP',
   tagline: 'Type-safe actors, supervision trees, event sourcing, and pluggable runtimes for PHP 8.5+',
   favicon: 'img/favicon.svg',
@@ -151,6 +156,10 @@ const config = {
         docs: {
           sidebarPath: './sidebars.js',
           editUrl: 'https://github.com/nexus-actors/nexus/tree/main/website/',
+          remarkPlugins: [
+            glossaryAutoLink,   // Task 8: auto-link glossary terms
+            classNameAutoLink,  // Task 9: auto-link PHP class names to api.nexusactors.com
+          ],
         },
         blog: false,
         theme: {
@@ -253,6 +262,7 @@ const config = {
         additionalLanguages: ['php', 'bash', 'yaml', 'json'],
       },
     }),
+  };
 };
 
 module.exports = config;
