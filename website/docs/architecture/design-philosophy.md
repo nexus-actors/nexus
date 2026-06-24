@@ -1,30 +1,28 @@
 ---
 sidebar_position: 1
 title: Design Philosophy
+related:
+  - architecture/internals
+  - core-concepts/nexus-thesis
+  - core-concepts/actors
+  - core-concepts/supervision
 ---
 
 # Design Philosophy
 
-Nexus is built on a set of deliberate design decisions that shape every aspect
-of the library. This page explains the reasoning behind each.
+Nexus is built on deliberate design decisions that shape every part of the library. This page explains the reasoning behind each one.
 
 ## Why the actor model for PHP
 
-The actor model is not new. Erlang/OTP has proven its viability for building
-fault-tolerant, concurrent systems over decades. Akka brought the same patterns
-to the JVM. Nexus brings them to PHP.
+The actor model is not new. Erlang/OTP has proven its viability for fault-tolerant, concurrent systems over decades. Akka brought the same patterns to the JVM. Nexus brings them to PHP.
 
-PHP's traditional request-response model already resembles actor semantics in
-several ways: each request is isolated, processes a message (the HTTP request),
-and produces a response. Nexus formalizes this pattern, extending it to
-long-running processes, background workers, and event-driven architectures where
-PHP is increasingly used.
+PHP's traditional request-response model already resembles actor semantics: each request is isolated, processes a message (the HTTP request), and produces a response. Nexus formalizes this pattern and extends it to long-running processes, background workers, and event-driven architectures where PHP is increasingly used.
 
 The actor model gives PHP developers:
 
-- **Isolation** -- Each actor processes messages sequentially, eliminating shared-state concurrency bugs.
-- **Hierarchy** -- Parent-child relationships provide a natural structure for organizing concurrent work.
-- **Fault tolerance** -- Supervision trees handle failures systematically instead of relying on ad-hoc try/catch blocks.
+- **Isolation** — Each actor processes messages sequentially, eliminating shared-state concurrency bugs.
+- **Hierarchy** — Parent-child relationships provide a natural structure for organizing concurrent work.
+- **Fault tolerance** — Supervision trees handle failures systematically instead of relying on ad-hoc try/catch blocks.
 
 ## Immutability first
 
@@ -32,38 +30,27 @@ All core value objects in Nexus are `readonly` classes:
 
 - `Behavior` is immutable. Swapping behavior means returning a new instance, never mutating the current one.
 - `BehaviorWithState` is immutable. State transitions produce new values.
-- `Props`, `MailboxConfig`, `Envelope`, `Duration`, `SwooleConfig`, and `SupervisionStrategy` are all `final readonly`.
+- `Props`, `MailboxConfig`, `Envelope`, `Duration`, and `SupervisionStrategy` are all `final readonly`.
 - `ActorPath` is immutable. Child paths are created by returning new instances.
 
-Immutability eliminates an entire category of bugs related to shared mutable
-state, which is critical in a concurrent system where multiple actors may
-reference the same configuration or path objects.
+Immutability eliminates an entire category of bugs related to shared mutable state — critical in a concurrent system where multiple actors may reference the same configuration or path objects.
 
-Where values are conditionally present, Nexus uses PHP's native nullable types
-(`?ActorRef`, `?SupervisionStrategy`) enforced by Psalm's strict nullability analysis.
-Explicit null-checks at call sites are preferred over monadic wrappers — the type
-system ensures callers handle the absent case without additional abstraction overhead.
+Where values are conditionally present, Nexus uses PHP's native nullable types (`?ActorRef`, `?SupervisionStrategy`) enforced by Psalm's strict nullability analysis. Explicit null-checks at call sites are preferred over monadic wrappers — the type system ensures callers handle the absent case without additional abstraction overhead.
 
 ## Type safety via generics
 
-Nexus targets Psalm Level 1 -- the strictest analysis level. The entire public
-API is annotated with `@template` generics:
+Nexus targets Psalm Level 1 — the strictest analysis level. The entire public API is annotated with `@template` generics:
 
 - `ActorRef<T>` ensures that `tell()` only accepts messages of type `T`.
 - `Behavior<T>` links handler closures to the actor's message protocol.
 - `Props<T>` carries the message type through spawning.
 - `ActorContext<T>` scopes the context to the actor's own message type.
 
-This means that sending the wrong message type to an actor is caught at
-analysis time, not at runtime. The `nexus-psalm` plugin enables these checks
-in consuming projects.
+Sending the wrong message type to an actor is caught at analysis time, not at runtime. The `nexus-psalm` plugin enables these checks in consuming projects.
 
 ## Runtime pluggability
 
-The `nexus-core` package contains zero references to Fibers or Swoole. All
-concurrency is abstracted behind the `Runtime` interface. Actor behaviors,
-Props, supervision strategies, and mailbox configurations are completely
-portable between runtimes.
+The `nexus-core` package contains zero references to Fibers or Swoole. All concurrency is abstracted behind the `Runtime` interface. Actor behaviors, props, supervision strategies, and mailbox configurations are completely portable between runtimes.
 
 This has practical benefits:
 
@@ -75,76 +62,68 @@ This has practical benefits:
 
 Actor configuration uses a builder pattern with immutable transformations:
 
-```php
+```php title="src/Boot/ActorSetup.php"
 $props = Props::fromBehavior($behavior)
     ->withMailbox(MailboxConfig::bounded(100, OverflowStrategy::DropOldest))
     ->withSupervision(SupervisionStrategy::oneForOne(maxRetries: 5));
 ```
 
-Pipe-friendly functions are provided for use with PHP's pipe operator:
-
-```php
-use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
-use function Monadial\Nexus\Core\Actor\Functions\withSupervision;
-```
-
-Each `with*` method returns a new instance, so configurations can be safely
-shared and extended without mutation.
+Each `with*` method returns a new instance. Configurations can be safely shared and extended without mutation.
 
 ## Supervision over exception handling
 
-Nexus follows the "let it crash" philosophy from Erlang/OTP. Instead of
-wrapping every operation in try/catch blocks, actors define supervision
-strategies that declare what should happen when a child fails:
+Nexus follows the "let it crash" philosophy from Erlang/OTP. Instead of wrapping every operation in try/catch blocks, actors define supervision strategies that declare what should happen when a child fails:
 
-- **Restart** -- Recreate the failed actor with fresh state.
-- **Stop** -- Permanently stop the failed actor.
-- **Resume** -- Ignore the failure and continue processing.
-- **Escalate** -- Propagate the failure to the parent's supervisor.
+- **Restart** — Recreate the failed actor with fresh state.
+- **Stop** — Permanently stop the failed actor.
+- **Resume** — Ignore the failure and continue processing.
+- **Escalate** — Propagate the failure to the parent's supervisor.
 
 Three strategy types are available:
 
-- `SupervisionStrategy::oneForOne()` -- Only the failed child is acted upon.
-- `SupervisionStrategy::allForOne()` -- All children are acted upon when one fails.
-- `SupervisionStrategy::exponentialBackoff()` -- Restarts with increasing delays.
+- `SupervisionStrategy::oneForOne()` — Only the failed child is acted upon.
+- `SupervisionStrategy::allForOne()` — All children are acted upon when one fails.
+- `SupervisionStrategy::exponentialBackoff()` — Restarts with increasing delays.
 
-This approach separates error handling policy from business logic, making both
-easier to reason about and test independently.
+This separates error handling policy from business logic, making both easier to reason about and test independently.
 
 ## Location transparency
 
-The `ActorRef<T>` interface is the same whether the actor is local (in the same
-process), in another worker process, or on a remote machine. Code that sends
-messages uses `$ref->tell($message)` without knowing the actor's physical
-location.
+The `ActorRef<T>` interface is the same whether the actor is local (in the same process), in another worker thread, or on a remote machine. Code that sends messages calls `$ref->tell($message)` without knowing the actor's physical location.
 
 Nexus provides three `ActorRef` implementations:
 
-- **`LocalActorRef`** -- In-process messaging via the actor's mailbox.
-- **`WorkerActorRef`** -- Cross-thread within a worker pool via `ThreadQueueTransport`. No serializer; objects pass via `Thread\Queue` internal copy.
-- **`DeadLetterRef`** -- Null-object endpoint for stopped or unknown actors.
+- `LocalActorRef` — In-process messaging via the actor's mailbox.
+- `WorkerActorRef` — Cross-thread within a worker pool via `ThreadQueueTransport`. No serializer; objects pass via `Thread\Queue` internal copy.
+- `DeadLetterRef` — Null-object endpoint for stopped or unknown actors.
 
-All three implement the same `ActorRef<T>` interface. Actor code that calls
-`$ref->tell($message)` works identically regardless of which implementation
-backs the reference.
+All three implement the same `ActorRef<T>` interface. Actor code that calls `$ref->tell($message)` works identically regardless of which implementation backs the reference.
 
 ## Package architecture
 
-Nexus is a monorepo of focused packages with strict dependency boundaries
-enforced by Deptrac:
-
-Every dependency is an allowed edge enforced by Deptrac. Core depends on nothing -- all other
-packages build on top of it. Dependency violations are caught in CI.
+Nexus is a monorepo of focused packages with strict dependency boundaries enforced by Deptrac. Core depends on nothing — all other packages build on top of it. Dependency violations are caught in CI.
 
 ## PSR compatibility
 
 Nexus integrates with standard PHP interfaces rather than inventing its own:
 
-- **PSR-11 (Container)** -- `Props::fromContainer()` resolves actor instances from any PSR-11 container.
-- **PSR-3 (Logging)** -- `ActorContext::log()` returns a `Psr\Log\LoggerInterface`. The `ActorSystem` accepts an optional logger at creation.
-- **PSR-14 (Event Dispatcher)** -- `ActorSystem::create()` accepts an optional `EventDispatcherInterface` for system-level events.
-- **PSR-20 (Clock)** -- `ActorSystem::create()` accepts an optional `ClockInterface` for testable time.
+- **PSR-11 (Container)** — `Props::fromContainer()` resolves actor instances from any PSR-11 container.
+- **PSR-3 (Logging)** — `ActorContext::log()` returns a `Psr\Log\LoggerInterface`. The `ActorSystem` accepts an optional logger at creation.
+- **PSR-14 (Event Dispatcher)** — `ActorSystem::create()` accepts an optional `EventDispatcherInterface` for system-level events.
+- **PSR-20 (Clock)** — `ActorSystem::create()` accepts an optional `ClockInterface` for testable time.
 
-This means Nexus works with Monolog, Symfony's event dispatcher, any PSR-11
-container (Laravel, Symfony, PHP-DI), and any PSR-20 clock implementation
-without additional adapters.
+This means Nexus works with Monolog, Symfony's event dispatcher, any PSR-11 container (Laravel, Symfony, PHP-DI), and any PSR-20 clock implementation without additional adapters.
+
+## Tradeoffs
+
+Adopting the actor model means committing to its constraints:
+
+- **No shared mutable state.** All state is private to the actor. Cross-actor coordination happens through messages, which adds latency compared to direct memory access.
+- **Sequential mailbox processing.** An actor processes one message at a time. High message volumes require either a pool of actors or a worker pool for parallelism.
+- **Explicit message protocols.** Every interaction is a typed message. This is more verbose than a method call but makes the communication contract auditable by Psalm and visible in code.
+
+## See also
+
+- [Internals](./internals.md) — how `ActorCell` implements the behavior state machine.
+- [Nexus Thesis](../core-concepts/nexus-thesis.md) — when the actor model is the right fit for a PHP project.
+- [Supervision](../core-concepts/supervision.md) — how supervision strategies are configured and applied.

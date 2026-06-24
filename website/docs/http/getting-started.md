@@ -1,14 +1,20 @@
 ---
 sidebar_position: 2
 title: Getting Started
+related:
+  - http/overview
+  - http/routing
+  - http/handlers
+  - http/servers
 ---
 
 # Getting Started
 
-A minimal Nexus HTTP server. Boots Swoole on `0.0.0.0:8080`, serves three
-routes, shuts down cleanly on `Ctrl+C`.
+This tutorial walks through booting a minimal Nexus HTTP server. By the end you will have a running Swoole server with three routes, actor injection wired up, and a PSR-3 logger attached.
 
-## Install
+## Step 1: Install
+
+Add the three packages you need — primitives, the builder DSL, and a server adapter. Pick `http-server-swoole-threads` for thread mode (Swoole 6 + ZTS) or `http-server-swoole` for the more portable worker mode. The builder DSL is identical for both.
 
 ```bash
 composer require nexus-actors/http \
@@ -16,11 +22,9 @@ composer require nexus-actors/http \
                  nexus-actors/http-server-swoole-threads
 ```
 
-You need only one server adapter — pick `http-server-swoole-threads` for
-thread mode (Swoole 6 + ZTS), or `http-server-swoole` for the more
-portable worker mode. The DSL is identical.
+## Step 2: Write the server entry point
 
-## Hello World
+The server file is the only PHP that knows about Swoole. Your handlers and actors are runtime-agnostic.
 
 ```php title="server.php"
 <?php
@@ -57,13 +61,13 @@ SwooleThreadServer::run(
 );
 ```
 
-Run it:
+## Step 3: Run it
 
 ```bash
 docker compose exec php-swoole php server.php
 ```
 
-Probe it:
+Probe the routes:
 
 ```bash
 curl http://127.0.0.1:8080/                 # {"name":"hello","thread":0}
@@ -71,51 +75,20 @@ curl http://127.0.0.1:8080/health           # (empty 200)
 curl http://127.0.0.1:8080/hello/tomas      # {"greeting":"Hello, tomas!"}
 ```
 
-That's a complete production-shaped server: 8-thread shared-nothing
-ActorSystem-per-thread, graceful shutdown on `SIGTERM`/`SIGINT`, PSR-15
-pipeline, attribute-driven routing.
+## Step 4: Add a class handler
 
-## What Just Happened
+Closures work for tiny routes. For handlers that need dependencies, use an invokable class.
 
-```
-SwooleThreadServer::run(config, factory)
-  │
-  ├─ Master thread binds 0.0.0.0:8080 and accepts connections.
-  │
-  ├─ For each of N worker threads:
-  │     1. Boot an ActorSystem.
-  │     2. Call your factory(system, node) → CompiledApplication.
-  │     3. Cache the compiled app for the thread's lifetime.
-  │
-  ├─ For each incoming request:
-  │     - Swoole hands the request to a worker thread (dispatch by fd).
-  │     - The thread runs the cached CompiledApplication's PSR-15 pipeline.
-  │     - The response is written back on the same connection.
-  │
-  └─ On SIGTERM/SIGINT:
-        - Stop accepting new connections.
-        - Drain in-flight requests up to shutdownTimeout.
-        - Shut down each thread's ActorSystem.
-        - Exit cleanly.
-```
+```php title="src/Http/Handler/ShowOrderHandler.php"
+<?php
 
-Three things to notice:
+declare(strict_types=1);
 
-1. **The factory runs once per thread, not per request.** Heavy bootstrap
-   (DI container assembly, route discovery, actor spawning) is paid
-   exactly once, at thread start.
-2. **Each thread owns its `ActorSystem`.** No shared state in your route
-   handlers means no locks, no race conditions on application state.
-3. **The compiled application is immutable.** After `->compile()`, the
-   route table is frozen. This is what makes route caching safe and
-   request dispatch fast.
+namespace App\Http\Handler;
 
-## Adding a Class Handler
+use Monadial\Nexus\Http\Response\JsonResponse;
+use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 
-Closures are the quickest path for tiny apps, but most production handlers
-are classes:
-
-```php
 final class ShowOrderHandler
 {
     public function __invoke(ServerRequestInterface $req): ResponseInterface
@@ -124,15 +97,17 @@ final class ShowOrderHandler
         return JsonResponse::ok(['id' => $id, 'status' => 'open']);
     }
 }
+```
 
+Register it on a route:
+
+```php title="server.php"
 $app->get('/orders/{id}', ShowOrderHandler::class);
 ```
 
-Class handlers are resolved through your PSR-11 container (if set) or
-instantiated with no-args by default. See [Handlers](./handlers.md) for
-constructor injection.
+Class handlers are resolved through your PSR-11 container (if configured) or constructed with no arguments. See [Handlers](./handlers.md) for constructor injection with `#[FromActor]` and `#[FromService]`.
 
-## Adding Logging
+## Step 5: Attach a logger
 
 The actor-backed PSR-3 logger lives in `nexus-actors/logger`:
 
@@ -142,7 +117,7 @@ composer require nexus-actors/logger
 
 Wire it inside the factory:
 
-```php
+```php title="server.php"
 use Monadial\Nexus\Logger\Formatter\LineFormatter;
 use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\{Level, NexusLogger};
@@ -164,14 +139,15 @@ static function (ActorSystem $system, WorkerNode $node): CompiledApplication {
 }
 ```
 
-See [Observability](../operations/observability.md) for MDC, async logging via
-`Swoole\Thread\Queue`, and call-site capture.
+## What we built
 
-## Next Steps
+- A two-thread Swoole server bound to `0.0.0.0:8080` with graceful shutdown.
+- Three routes: a JSON root, an empty health check, and a path-parameter greeting.
+- An invokable class handler with no dependencies.
+- A per-thread PSR-3 logger backed by an actor.
 
-You now have a server. The rest of this section covers what to put in it:
+## Next steps
 
 - [Routing](./routing.md) — verbs, path parameters, groups, attribute-discovered routes.
-- [Handlers](./handlers.md) — closure vs class, PSR-11 injection, request-scoped actors.
-- [WebSockets](./websockets.md) — `ws()` routes, broadcast actors.
+- [Handlers](./handlers.md) — closure vs class, actor injection, per-request scopes.
 - [Servers](./servers.md) — when to pick worker mode vs thread mode.

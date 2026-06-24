@@ -1,20 +1,43 @@
 ---
-sidebar_position: 3
+sidebar_position: 4
 title: Swoole Runtime
+related:
+  - runtimes/overview
+  - runtimes/fiber
+  - scaling/overview
+  - runtimes/bootstrap
 ---
 
 # Swoole Runtime
 
-`SwooleRuntime` uses Swoole 5.0+ coroutines for concurrent actor execution. It
-provides true async I/O, native channel-backed mailboxes, and support for
-high-concurrency workloads.
+`SwooleRuntime` implements the `Runtime` interface using Swoole 5.0+ coroutines, providing true async I/O, native channel-backed mailboxes, and the concurrency headroom needed for production workloads.
+
+## The design
+
+The runtime wraps Swoole's `Co\run()` block. Calls to `spawn()` and the scheduling methods made before `run()` are queued internally. When `run()` is called:
+
+1. Coroutine hooking is configured if `enableCoroutineHook` is `true`.
+2. `Co\run()` is entered.
+3. Pending timers are registered.
+4. Pending spawns are started as Swoole coroutines via `Coroutine::create()`.
+5. `Co\run()` blocks until all coroutines and timers complete.
+
+Calls to `spawn()` or timer methods made while already inside `Co\run()` execute immediately — no queuing needed.
+
+**`SwooleMailbox`** is backed by a `Swoole\Coroutine\Channel`. `enqueue()` pushes an `Envelope` onto the channel; overflow is handled by the configured `OverflowStrategy`. `dequeueBlocking()` calls `$channel->pop($timeoutSeconds)`, which suspends the coroutine until a message arrives or the timeout expires. `close()` drains remaining messages into an internal `SplQueue` before closing the channel, so no messages are lost.
+
+**Timers** use Swoole's native timer API. `scheduleOnce()` calls `Swoole\Timer::after($ms, $callback)`. `scheduleRepeatedly()` uses `Timer::after()` for the initial delay, then `Timer::tick()` for the recurring interval. Both return a `SwooleCancellable` that calls `Timer::clear()` on cancellation. Timers scheduled before `run()` return a `DeferredCancellable` that prevents the timer from being created if cancelled before `run()` processes the pending queue.
+
+**Coroutine hooking** — when `enableCoroutineHook` is `true` (the default), the runtime sets `SWOOLE_HOOK_ALL` before entering `Co\run()`. This transparently converts blocking I/O calls (MySQL, Redis, PDO, file I/O, HTTP clients) into non-blocking coroutine operations. Actors performing I/O automatically yield to other coroutines while waiting.
+
+**`yield()`** resolves to `Coroutine::sleep(0)` rather than `Coroutine::yield()`. This matters for drain loops: the suspending coroutine resumes on the next scheduler tick, giving actor message loops time to observe a closed mailbox and exit cleanly.
 
 ## Setup
 
-```php
+```php title="src/bootstrap-swoole.php"
 use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
+use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 
 $runtime = new SwooleRuntime(new SwooleConfig(
     defaultMailboxCapacity: 1000,
@@ -23,147 +46,55 @@ $runtime = new SwooleRuntime(new SwooleConfig(
 ));
 
 $system = ActorSystem::create('my-system', $runtime);
+$system->run();
 ```
 
-## SwooleConfig
+## Configuration
 
-`SwooleConfig` is a `final readonly class` with three parameters, all with
-sensible defaults:
-
-```php
-final readonly class SwooleConfig
-{
-    public function __construct(
-        public int $defaultMailboxCapacity = 1000,
-        public bool $enableCoroutineHook = true,
-        public int $maxCoroutines = 100_000,
-    ) {}
-}
-```
+`SwooleConfig` is a `final readonly class` with three parameters, all with sensible defaults:
 
 | Parameter | Default | Description |
 |---|---|---|
-| `defaultMailboxCapacity` | `1000` | Default channel capacity for mailboxes. |
-| `enableCoroutineHook` | `true` | When true, sets `SWOOLE_HOOK_ALL` to enable coroutine hooking for async I/O. |
-| `maxCoroutines` | `100_000` | Maximum number of concurrent coroutines. |
+| `defaultMailboxCapacity` | `1000` | Default channel capacity for bounded mailboxes. |
+| `enableCoroutineHook` | `true` | Sets `SWOOLE_HOOK_ALL` for transparent async I/O conversion. |
+| `maxCoroutines` | `100_000` | Maximum concurrent coroutines. |
 
-Each parameter has a `with*` method for immutable modification:
+Each parameter has a `with*` builder method for immutable modification:
 
-```php
-$config = new SwooleConfig();
-$config = $config->withMaxCoroutines(50_000);
-$config = $config->withEnableCoroutineHook(false);
-$config = $config->withDefaultMailboxCapacity(5000);
+```php title="src/config.php"
+$config = (new SwooleConfig())
+    ->withMaxCoroutines(50_000)
+    ->withDefaultMailboxCapacity(5000)
+    ->withEnableCoroutineHook(false);
 ```
 
-## Architecture
+## Graceful shutdown in thread mode
 
-### SwooleRuntime
+`SwooleThreadServer` (in `nexus-http-server-swoole-threads`) installs a `BeforeShutdown` listener so SIGTERM/SIGINT triggers a deterministic teardown:
 
-The runtime wraps Swoole's `Co\run()` block. Calls to `spawn()` and
-`scheduleOnce()`/`scheduleRepeatedly()` made before `run()` are queued
-internally. When `run()` is called:
-
-1. Coroutine hooking is configured if `enableCoroutineHook` is true.
-2. `Co\run()` is entered.
-3. All pending timers are executed.
-4. All pending spawns are started as Swoole coroutines via `Coroutine::create()`.
-5. `Co\run()` blocks until all coroutines and timers complete.
-
-If `spawn()` or timer methods are called while already inside `Co\run()`, they
-execute immediately.
-
-### SwooleMailbox
-
-`SwooleMailbox` is backed by a `Swoole\Coroutine\Channel`. Messages are pushed
-and popped through the channel, with Swoole handling coroutine suspension and
-resumption natively.
-
-Key behaviors:
-
-- **`enqueue()`** pushes an `Envelope` onto the channel. Overflow is handled
-  according to the configured `OverflowStrategy`.
-- **`dequeueBlocking()`** calls `$channel->pop($timeoutSeconds)`, which
-  suspends the coroutine until a message is available or the timeout expires.
-- **`close()`** drains remaining messages from the channel into an internal
-  `SplQueue` backup before closing the channel, ensuring no messages are lost.
-
-### Timers
-
-Timers use Swoole's native timer API:
-
-- **`scheduleOnce()`** calls `Swoole\Timer::after($ms, $callback)`.
-- **`scheduleRepeatedly()`** uses `Timer::after()` for the initial delay, then
-  `Timer::tick()` for the recurring interval.
-
-Both return a `SwooleCancellable` that wraps the timer ID and calls
-`Timer::clear()` on cancellation.
-
-For timers scheduled before `run()`, a `DeferredCancellable` is returned. It
-holds a shared boolean reference that prevents the timer from being created
-when `run()` processes pending actions.
-
-### Coroutine hooking
-
-When `enableCoroutineHook` is `true` (the default), the runtime sets
-`SWOOLE_HOOK_ALL` before entering `Co\run()`. This transparently converts
-blocking I/O operations (MySQL, Redis, PDO, file I/O, HTTP clients) into
-non-blocking coroutine operations. Actors performing I/O automatically yield
-to other coroutines while waiting.
-
-## Use cases
-
-The Swoole runtime is designed for:
-
-- **Production deployments** -- True async I/O and efficient coroutine
-  scheduling for high-throughput services.
-- **High concurrency** -- Supports 100K+ concurrent connections with minimal
-  memory overhead per coroutine.
-- **CPU-bound workloads** -- Combined with Swoole's process pool, work can be
-  distributed across multiple CPU cores.
-- **Real-time applications** -- WebSocket servers, chat systems, and live
-  dashboards benefit from Swoole's event-driven architecture.
-- **Multi-worker scaling** -- The Swoole runtime powers the worker pool, where
-  multiple worker threads coordinate via `Thread\Queue` (one inbox per worker)
-  and a shared `Thread\Map` actor directory. See
-  [Scaling Overview](../scaling/overview.md).
-
-## Graceful shutdown (thread mode)
-
-`SwooleThreadServer` (in `nexus-http-server-swoole-threads`) installs a
-`BeforeShutdown` listener on the underlying server so SIGTERM/SIGINT
-triggers a deterministic teardown:
-
-1. SIGTERM reaches the main thread. Swoole invokes the `BeforeShutdown`
-   event.
+1. SIGTERM reaches the main thread. Swoole invokes the `BeforeShutdown` event.
 2. The listener flips a shared `Swoole\Thread\Atomic` flag.
-3. Each worker thread runs a watchdog coroutine spawned during
-   `WorkerStart`. The watchdog polls the atomic every 50 ms, so it
-   reacts well within Swoole's worker-exit window.
-4. When the flag flips, the watchdog calls
-   `ThreadQueueTransport::stop()` (which exits the receive loop on its
-   next backoff tick) and then `ActorSystem::shutdown(timeout)` (which
-   broadcasts `PoisonPill`, drains under deadline, and force-closes any
-   survivors).
-5. Worker threads exit cooperatively before Swoole's reactor-exit
-   timeout, so neither the "all coroutines asleep — deadlock" nor the
-   `Worker_reactor_try_to_exit() ERRNO 9101` warnings ever appear.
+3. Each worker thread runs a watchdog coroutine spawned during `WorkerStart`. The watchdog polls the atomic every 50 ms.
+4. When the flag flips, the watchdog calls `ThreadQueueTransport::stop()` (exiting the receive loop on its next backoff tick) and then `ActorSystem::shutdown(timeout)` (broadcasting `PoisonPill`, draining under deadline, and force-closing survivors).
+5. Worker threads exit cooperatively before Swoole's reactor-exit timeout.
 
-This wiring is necessary because Swoole's per-worker `WorkerStop` event
-fires *after* the reactor exit timeout in thread mode — too late to
-close mailboxes before the deadlock detector flags blocked coroutines.
+This wiring is necessary because Swoole's per-worker `WorkerStop` event fires after the reactor exit timeout in thread mode — too late to close mailboxes before the deadlock detector flags blocked coroutines.
 
-`SwooleRuntime::yield()` resolves to `Coroutine::sleep(0)` (not
-`Coroutine::yield()`, which is a generator-style suspend that requires
-explicit `Coroutine::resume($cid)`). This makes drain-loops behave
-cooperatively: the suspending coroutine resumes on the next scheduler
-tick, giving actor message loops time to observe their closed mailbox
-and exit.
+## Tradeoffs
 
-## Limitations
+Swoole provides true async I/O: blocking PHP calls become non-blocking through coroutine hooking, so actor handlers that query a database or make HTTP requests no longer stall other actors. The coroutine scheduler is preemptive at I/O boundaries, which means the single-threaded blocking problem of `FiberRuntime` does not apply to I/O-heavy workloads.
 
-- Requires the Swoole PHP extension (5.0+).
-- Not all PHP libraries are coroutine-aware. Libraries that use blocking I/O
-  without going through hooked functions will block the coroutine scheduler.
-- Debugging coroutine-based code can be more complex than debugging fiber-based
-  code.
+The cost is a required extension. Not all PHP libraries are coroutine-aware — code that uses blocking I/O without going through hooked functions will still block the scheduler. Debugging coroutine-based code is also more involved than debugging fibers.
+
+## When to reach for it
+
+- Deploying a service with high-concurrency requirements (thousands of concurrent actors or connections).
+- Building WebSocket servers, chat systems, or live dashboards that benefit from Swoole's event-driven architecture.
+- Running CPU-bound workloads distributed across multiple CPU cores via the [worker pool](../scaling/overview.md).
+- Any production workload where async I/O throughput is a requirement.
+
+## See also
+
+- [Fiber Runtime](./fiber.md) — cooperative scheduling without Swoole, for development and CI
+- [Scaling Overview](../scaling/overview.md) — multi-worker pools powered by Swoole threads
+- [Runtime Overview](./overview.md) — choosing between all three runtimes

@@ -1,11 +1,16 @@
 ---
 sidebar_position: 3
 title: "Props"
+related:
+  - core-concepts/actors
+  - core-concepts/behaviors
+  - core-concepts/mailboxes
+  - core-concepts/supervision
 ---
 
 # Props
 
-`Props<T>` is a `final readonly class` that holds the configuration needed to spawn an actor. It combines a `Behavior`, a `MailboxConfig`, and an optional `SupervisionStrategy` into a single immutable value. You never instantiate `Props` directly -- instead, use one of the static factory methods and chain builder methods as needed.
+`Props<T>` is a `final readonly class` that holds everything needed to spawn an actor: a `Behavior`, a `MailboxConfig`, and an optional `SupervisionStrategy`. You never instantiate `Props` directly — use one of the static factory methods and chain builder methods as needed.
 
 ## Factory methods
 
@@ -13,7 +18,7 @@ title: "Props"
 
 The most common way to create `Props`. Pass a `Behavior` directly.
 
-```php
+```php title="src/Actor/PingerProps.php"
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -35,26 +40,13 @@ $props = Props::fromBehavior($behavior);
 $ref = $system->spawn($props, 'pinger');
 ```
 
-Defaults:
-- Mailbox: unbounded (`MailboxConfig::unbounded()`)
-- Supervision: none (the system applies `SupervisionStrategy::oneForOne()` as a default)
-
-Signature:
-
-```php
-/**
- * @template U of object
- * @param Behavior<U> $behavior
- * @return Props<U>
- */
-public static function fromBehavior(Behavior $behavior): self;
-```
+Defaults: unbounded mailbox (`MailboxConfig::unbounded()`), system default supervision (`SupervisionStrategy::oneForOne()`).
 
 ### Props::fromFactory
 
 Creates `Props` from a callable that returns an `ActorHandler` instance. A fresh instance is created per spawn inside `Behavior::setup`. If the returned instance extends `AbstractActor`, lifecycle hooks (`onPreStart`, `onPostStop`) are wired automatically.
 
-```php
+```php title="src/Actor/WorkerProps.php"
 use Monadial\Nexus\Core\Actor\AbstractActor;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -78,7 +70,7 @@ final class WorkerActor extends AbstractActor
     public function handle(ActorContext $ctx, object $message): Behavior
     {
         if ($message instanceof ProcessJob) {
-            $ctx->log()->info("Worker {$this->workerId} processing: {$message->payload}");
+            $ctx->log()->info("Processing: {$message->payload}");
         }
 
         return Behavior::same();
@@ -91,52 +83,28 @@ final class WorkerActor extends AbstractActor
 }
 
 $props = Props::fromFactory(fn () => new WorkerActor('w-001'));
-$ref = $system->spawn($props, 'worker');
-```
-
-Signature:
-
-```php
-/**
- * @template U of object
- * @param callable(): ActorHandler<U> $factory
- * @return Props<U>
- */
-public static function fromFactory(callable $factory): self;
 ```
 
 ### Props::fromContainer
 
 Creates `Props` from a PSR-11 dependency injection container. A fresh actor instance is resolved via `$container->get($actorClass)` on each spawn. This is the recommended approach for actors with complex dependencies.
 
-```php
+```php title="src/Actor/ContainerProps.php"
 use Monadial\Nexus\Core\Actor\Props;
 use Psr\Container\ContainerInterface;
 
-// Assuming your DI container is configured to produce OrderActor instances:
 /** @var ContainerInterface $container */
 $props = Props::fromContainer($container, OrderActor::class);
 $ref = $system->spawn($props, 'order-processor');
 ```
 
-Under the hood, this delegates to `Props::fromFactory()`, so lifecycle hooks on `AbstractActor` subclasses work the same way.
-
-Signature:
-
-```php
-/**
- * @template U of object
- * @param class-string<ActorHandler<U>> $actorClass
- * @return Props<U>
- */
-public static function fromContainer(ContainerInterface $container, string $actorClass): self;
-```
+Delegates to `Props::fromFactory()` internally, so lifecycle hooks on `AbstractActor` subclasses work the same way.
 
 ### Props::fromStatefulFactory
 
 Creates `Props` for a `StatefulActorHandler`. The factory produces a fresh handler instance per spawn, and the actor's state is managed via `Behavior::withState` internally.
 
-```php
+```php title="src/Actor/AccountProps.php"
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
@@ -155,89 +123,52 @@ readonly class Withdraw
 /** @implements StatefulActorHandler<Deposit|Withdraw, int> */
 final class AccountActor implements StatefulActorHandler
 {
-    public function __construct(private readonly string $accountId) {}
-
     public function initialState(): int
     {
-        return 0; // starting balance
+        return 0;
     }
 
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
         return match (true) {
-            $message instanceof Deposit => BehaviorWithState::next($state + $message->amount),
+            $message instanceof Deposit  => BehaviorWithState::next($state + $message->amount),
             $message instanceof Withdraw => BehaviorWithState::next($state - $message->amount),
             default => BehaviorWithState::same(),
         };
     }
 }
 
-$props = Props::fromStatefulFactory(fn () => new AccountActor('acc-42'));
+$props = Props::fromStatefulFactory(fn () => new AccountActor());
 $ref = $system->spawn($props, 'account-42');
-```
-
-Signature:
-
-```php
-/**
- * @template U of object
- * @template S
- * @param callable(): StatefulActorHandler<U, S> $factory
- * @return Props<U>
- */
-public static function fromStatefulFactory(callable $factory): self;
 ```
 
 ## Builder methods
 
-`Props` is immutable. Each builder method returns a new `Props` instance with the specified configuration applied, leaving the original unchanged.
+`Props` is immutable. Each builder method returns a new `Props` instance with the configuration applied, leaving the original unchanged.
 
 ### withMailbox
 
-Configure the actor's mailbox. By default, actors use an unbounded mailbox. Use `MailboxConfig::bounded()` to set a capacity limit and overflow strategy.
+Configure the actor's mailbox capacity and overflow strategy.
 
-```php
+```php title="src/Actor/BoundedProps.php"
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 
 $props = Props::fromBehavior($behavior)
-    ->withMailbox(MailboxConfig::bounded(1000));
-
-// With a specific overflow strategy
-$props = Props::fromBehavior($behavior)
     ->withMailbox(MailboxConfig::bounded(500, OverflowStrategy::DropOldest));
 ```
 
-Available overflow strategies:
-
-| Strategy | Description |
-|---|---|
-| `OverflowStrategy::ThrowException` | Throw `MailboxOverflowException` (default) |
-| `OverflowStrategy::DropNewest` | Discard the newest message being enqueued |
-| `OverflowStrategy::DropOldest` | Discard the oldest message in the mailbox |
-| `OverflowStrategy::Backpressure` | Block the sender until space is available |
+See [Mailboxes](./mailboxes.md) for all overflow strategies and their tradeoffs.
 
 ### withSupervision
 
 Set the supervision strategy that governs how the actor handles child failures.
 
-```php
+```php title="src/Actor/SupervisedProps.php"
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Supervision\Directive;
 use Monadial\Nexus\Runtime\Duration;
 
-// One-for-one: only the failed child is restarted
-$props = Props::fromBehavior($behavior)
-    ->withSupervision(SupervisionStrategy::oneForOne(maxRetries: 5));
-
-// All-for-one: all children are restarted when one fails
-$props = Props::fromBehavior($behavior)
-    ->withSupervision(SupervisionStrategy::allForOne(
-        maxRetries: 3,
-        window: Duration::seconds(60),
-    ));
-
-// Exponential backoff: restarts with increasing delays
 $props = Props::fromBehavior($behavior)
     ->withSupervision(SupervisionStrategy::exponentialBackoff(
         initialBackoff: Duration::millis(100),
@@ -245,24 +176,11 @@ $props = Props::fromBehavior($behavior)
         maxRetries: 5,
         multiplier: 2.0,
     ));
-
-// Custom decider: choose a directive based on the exception type
-$props = Props::fromBehavior($behavior)
-    ->withSupervision(SupervisionStrategy::oneForOne(
-        maxRetries: 3,
-        decider: fn (\Throwable $e) => match (true) {
-            $e instanceof \InvalidArgumentException => Directive::Resume,
-            $e instanceof \RuntimeException => Directive::Restart,
-            default => Directive::Escalate,
-        },
-    ));
 ```
 
 ### Chaining builder methods
 
-Builder methods can be chained fluently:
-
-```php
+```php title="src/Actor/FullyConfiguredProps.php"
 $props = Props::fromFactory(fn () => new WorkerActor())
     ->withMailbox(MailboxConfig::bounded(500))
     ->withSupervision(SupervisionStrategy::exponentialBackoff(
@@ -273,13 +191,9 @@ $props = Props::fromFactory(fn () => new WorkerActor())
 
 ## Pipe operator support (PHP 8.5+)
 
-Nexus ships pipe-friendly functions in the `Monadial\Nexus\Core\Actor\Functions` namespace. These return closures compatible with the PHP 8.5 pipe operator (`|>`), enabling a left-to-right composition style from behavior to fully-configured Props.
+Nexus ships pipe-friendly functions in the `Monadial\Nexus\Core\Actor\Functions` namespace, compatible with the PHP 8.5 pipe operator (`|>`).
 
-```php
-use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
-use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
-use Monadial\Nexus\Runtime\Duration;
-
+```php title="src/Actor/PipeProps.php"
 use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
 use function Monadial\Nexus\Core\Actor\Functions\withSupervision;
 
@@ -292,20 +206,8 @@ $props = $behavior
     ));
 ```
 
-The pipe functions are thin wrappers:
+## See also
 
-```php
-// withMailbox returns a Closure(Props): Props
-function withMailbox(MailboxConfig $config): Closure
-{
-    return static fn (Props $props): Props => $props->withMailbox($config);
-}
-
-// withSupervision returns a Closure(Props): Props
-function withSupervision(SupervisionStrategy $strategy): Closure
-{
-    return static fn (Props $props): Props => $props->withSupervision($strategy);
-}
-```
-
-This style reads naturally as a pipeline: take a behavior, wrap it in Props, configure the mailbox, then configure supervision.
+- [Behaviors](./behaviors.md) — defining the behavior that `Props` wraps
+- [Mailboxes](./mailboxes.md) — `MailboxConfig` and overflow strategies
+- [Supervision](./supervision.md) — `SupervisionStrategy` and directives

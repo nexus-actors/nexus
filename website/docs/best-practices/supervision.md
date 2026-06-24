@@ -1,23 +1,22 @@
 ---
 sidebar_position: 5
 title: Supervision and let-it-crash
+related:
+  - core-concepts/supervision
+  - best-practices/when-to-use-actors
+  - best-practices/passivation
+  - core-concepts/lifecycle
 ---
 
 # Supervision and let-it-crash
 
-> *"Why do Erlang and Akka people talk about crashing like it's a
-> design choice?"*
-
-Because if you can isolate the blast radius of a failure to one
-actor, and you can guarantee a clean restart, then you don't need to
-write the defensive code that's normally interleaved with your
-business logic. The supervisor does it once, declaratively.
+If you can isolate a failure to one actor and guarantee a clean restart, you don't need the defensive code that's normally interleaved with your business logic — the supervisor does it once, declaratively.
 
 ## The instinct to fight
 
-Most PHP developers' instinct is:
+Most PHP developers reach for this inside an actor handler:
 
-```php
+```php title="src/Actor/BadHandler.php" verify:lint-only
 try {
     $this->doTheWork($command);
 } catch (Throwable $e) {
@@ -26,38 +25,32 @@ try {
 }
 ```
 
-Inside an actor, that's the wrong shape. The catch-all hides the
-failure from supervision, lets corrupt state survive ("we caught it!
-keep going!"), and forces every handler to reinvent the recovery
-policy.
+That catch-all hides the failure from supervision, lets corrupt state survive, and forces every handler to reinvent the recovery policy. The supervisor never gets a chance to act.
 
-The right shape is:
+## The right shape
 
-```php
+```php title="src/Actor/LedgerActor.php"
 public function handle(ActorContext $ctx, object $message): Behavior
 {
-    // No try/catch. Let it crash.
     return match (true) {
-        $message instanceof Deposit => $this->doDeposit($message),
-        // …
+        $message instanceof Deposit  => $this->doDeposit($message),
+        $message instanceof Withdraw => $this->doWithdraw($message),
+        default                      => Behavior::unhandled(),
     };
 }
 ```
 
-…and a parent-level supervision strategy that says "restart on
-`TransientError`, escalate on `FatalError`".
+No `try/catch`. Let it crash. Declare the recovery policy on the `Props` when you spawn:
 
-## The strategies
-
-```php
+```php title="src/Bootstrap/ActorBootstrap.php"
 $strategy = SupervisionStrategy::exponentialBackoff(
     initialBackoff: Duration::millis(100),
     maxBackoff:     Duration::seconds(30),
     maxRetries:     5,
     multiplier:     2.0,
     decider: static fn(Throwable $e): Directive => match (true) {
-        $e instanceof TransientError    => Directive::Restart,
-        $e instanceof DomainViolation   => Directive::Stop,
+        $e instanceof TransientError     => Directive::Restart,
+        $e instanceof DomainViolation    => Directive::Stop,
         $e instanceof InfrastructureGone => Directive::Escalate,
         default                          => Directive::Restart,
     },
@@ -66,88 +59,58 @@ $strategy = SupervisionStrategy::exponentialBackoff(
 $props = Props::fromBehavior($behavior)->withSupervision($strategy);
 ```
 
-Three first-class strategies; the same `decider` closure pattern in
-each:
+## The three strategies
 
-- **`oneForOne`** — restart only the failed child. Use this for
-  independent children (per-owner aggregates).
-- **`allForOne`** — restart every sibling. Use this when children
-  share state and one corrupt child means the others can't be
-  trusted (a coordinator + workers pattern).
-- **`exponentialBackoff`** — restart with growing delay between
-  attempts. Use this when the failure is likely transient
-  (network blip, database flap).
+- **`oneForOne`** — restart only the failed child. Use for independent children (per-owner aggregates).
+- **`allForOne`** — restart every sibling. Use when children share state and one corrupt child means the others can't be trusted (coordinator + workers pattern).
+- **`exponentialBackoff`** — restart with growing delay between attempts. Use when the failure is likely transient (network blip, database flap).
 
-The `decider` is yours. Match on exception type and return:
+## Directives
 
 | Directive | Meaning |
 |---|---|
-| `Restart` | Reset the actor, replay PreStart, keep the mailbox |
-| `Stop`    | Stop permanently; messages go to dead letters |
-| `Resume`  | Pretend the message never happened; keep state |
+| `Restart` | Reset the actor, replay `PreStart`, keep the mailbox |
+| `Stop` | Stop permanently; messages go to dead letters |
+| `Resume` | Drop the offending message; keep state |
 | `Escalate` | Re-throw to the supervisor's supervisor |
 
-## When to catch
+Prefer `Restart` over `Resume` by default. `Resume` keeps the actor's state intact — use it only when you're certain the failure is in the message, not the actor's accumulated state.
 
-There are legitimate places to `catch`:
+## When to catch exceptions
 
-1. **At the system boundary** — turning a Doctrine exception into a
-   domain `DepositRejected`. That's not error handling, it's
-   translation. The actor still returns a typed result; the
-   supervisor never sees the exception.
-2. **For idempotency** — catching `UniqueConstraintViolationException`
-   on a retry and treating it as success. The constraint already says
-   "you've done this," so the catch is a domain decision.
-3. **In tests** — `expectException()` is fine; the supervisor doesn't
-   run in unit tests anyway.
+There are legitimate places to `catch` inside an actor handler:
 
-You should NOT catch:
+1. **At the system boundary** — translating a Doctrine exception into a domain `DepositRejected`. That's not error handling; it's translation. The supervisor never sees the exception.
+2. **For idempotency** — catching `UniqueConstraintViolationException` on a retry and treating it as success. The constraint already says the work was done.
+3. **In tests** — `expectException()` is fine; the supervisor doesn't run in unit tests anyway.
 
-- **Anything you re-throw immediately.** That's not handling, that's
-  noise. Let it propagate.
-- **`Throwable`.** If you're catching `Throwable`, ask whether you're
-  fighting the supervisor.
-- **Exceptions for control flow.** If `MailboxClosedException` is part
-  of your business logic, your design needs another look.
+Do not catch:
 
-## Restart vs Resume
-
-`Restart` resets the actor: state goes back to initial, PreStart
-fires again, the mailbox keeps its tail. Use this when the actor's
-state might be corrupt after a failure (most of the time).
-
-`Resume` keeps the actor's state and just drops the offending message.
-Use this when the failure is in the message, not the actor — bad input
-that the actor couldn't handle but shouldn't make it forget its
-balance.
-
-A good default for `Restart` is "the exception class doesn't say
-anything about state corruption" — i.e. probably-fine-but-be-safe.
+- Anything you re-throw immediately. That's noise, not handling.
+- `Throwable` as a blanket. If you're catching `Throwable`, you're fighting the supervisor.
+- Exceptions for control flow. If `MailboxClosedException` is part of your business logic, the design needs revisiting.
 
 ## The supervisor decides, not the actor
 
-The actor's handler should not contain restart logic. That's the
-supervisor's job. If your handler is reasoning about "have I crashed
-3 times yet?", you've internalised what the strategy already does
-for you.
+The actor's handler should not contain restart logic. If your handler is reasoning about "have I crashed three times yet?", you've internalised what `SupervisionStrategy` already does for you.
 
-The actor's handler should:
-- transform message + state → new state + side effects,
-- decide what to reply, if anything,
-- throw on anything it can't handle.
+The actor's handler has one job: transform message + state into new state + side effects, decide what to reply, and throw on anything it can't handle. Retry budgets, backoff timing, and escalation paths are declared once on the `Props` when you spawn.
 
-That's it. Retry budgets, backoff timing, escalation paths — all
-declared once, on the `Props`, when you spawn.
+## Mapping crashes to HTTP responses
 
-## What about my HTTP request?
+The HTTP request that triggered the crash still sees an error. The supervisor restarts the actor for the *next* message, not the failed one. Map exceptions to HTTP status codes at the application boundary:
 
-The HTTP request that triggered the crash still sees an error. The
-supervisor restarts the actor for the *next* message, not the failed
-one. Map your exceptions to HTTP status codes via
-`$app->onException(MyException::class, fn() => Response::badRequest())`
-and the requester gets a sensible response while the actor recovers
-for the next attempt.
+```php title="src/Bootstrap/AppBootstrap.php"
+$app->onException(
+    DomainViolation::class,
+    static fn(DomainViolation $e) => Response::badRequest($e->getMessage()),
+);
+```
 
-If the request can wait, design the protocol around `ask` returning a
-typed result (`OK | Rejected`) rather than throwing — the rejection
-is a normal value, supervision is for the *unexpected* failures.
+The requester gets a sensible response while the actor recovers for the next attempt. If the request can wait, design the protocol around `ask` returning a typed result (`OK | Rejected`) rather than throwing — the rejection is a normal value; supervision is for the *unexpected* failures.
+
+## Next steps
+
+- [Supervision](../core-concepts/supervision.md) — how `oneForOne`, `allForOne`, and `exponentialBackoff` work under the hood
+- [Lifecycle](../core-concepts/lifecycle.md) — `PreStart`, `PostStop`, and the actor state machine that supervision operates on
+- [When to use actors](./when-to-use-actors.md) — deciding whether an actor is the right tool for the failure boundary you need

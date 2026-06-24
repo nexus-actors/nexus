@@ -1,38 +1,26 @@
 ---
 sidebar_position: 5
 title: EntityBehavior DSL
+related:
+  - doctrine/overview
+  - doctrine/entity-manager-pool
+  - persistence/overview
+  - core-concepts/actors
 ---
 
 # EntityBehavior DSL
 
-`EntityBehavior` turns a Doctrine entity into the state of an aggregate
-actor — no event sourcing required. The entity loads from the DB on
-`PreStart`, processes commands, and persists when the command handler
-returns `EntityEffect::persist()`.
-
-If you've used `DurableStateBehavior` from the persistence layer, this is
-the same shape — just with `EntityManagerInterface::flush()` doing the
-work instead of a state store.
+`EntityBehavior` turns a Doctrine entity into the state of an aggregate actor — no event sourcing required. The entity loads from the database on `PreStart`, processes commands serially, and persists when the command handler returns `EntityEffect::persist()`.
 
 ## Why it exists
 
-Doctrine entities are natural aggregates: they encapsulate invariants
-("an Order can't accept line items after it's paid"), have a clear
-identity, and Doctrine already provides the persistence machinery. The
-problem is concurrency: two requests modifying the same order interleave,
-and optimistic locking forces clients to retry.
+Doctrine entities are natural aggregates: they encapsulate invariants, have a clear identity, and Doctrine provides the persistence machinery. The problem is concurrency — two requests modifying the same entity interleave, and optimistic locking forces clients to retry.
 
-`EntityBehavior` solves this by making the actor the single writer:
-exactly one actor exists per `(entityClass, id)`, messages are processed
-serially, and the entity is the actor's state. Optimistic locking still
-exists as a defense against external writers, but inside the actor system
-it's not the primary concurrency control.
+`EntityBehavior` solves this by making the actor the single writer. Exactly one actor exists per `(entityClass, id)`, messages are processed serially, and the entity is the actor's state. Optimistic locking remains as a defense against external writers, but inside the actor system it is not the primary concurrency control.
 
 ## Quick start
 
-```php
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
+```php title="src/Actors/OrderBehavior.php"
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehavior;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
@@ -53,7 +41,7 @@ $behavior = EntityBehavior::create(
 )
     ->withEntityManagerFactory(new DefaultEntityManagerFactory($ormConfig))
     ->withReplayPolicy(new CreateIfMissing(static fn($id): Order => new Order($id)))
-    ->withDirectConnection(['driver' => 'pdo_mysql', 'url' => '…'])
+    ->withDirectConnection(['driver' => 'pdo_mysql', 'url' => '...'])
     ->toBehavior();
 
 $ref = $system->spawn(Props::fromBehavior($behavior), 'order-' . $orderId);
@@ -62,43 +50,39 @@ $ref->tell(new AddLineItem('SKU-42', 2, $replyTo));
 
 ## `EntityEffect`
 
-The return type of your command handler. Tells the runner what to do
-after the handler returns.
+The return type of your command handler. Tells the runner what to do after the handler returns.
 
 ### Terminal effects
 
 | Effect | Behavior |
 |---|---|
-| `EntityEffect::same()` | No DB op. UoW untouched. State stays. |
-| `EntityEffect::persist()` | `$em->flush()`. UoW commits whatever you mutated. |
-| `EntityEffect::remove()` | `$em->remove($entity); $em->flush()`; actor stops. |
+| `EntityEffect::same()` | No database operation. UoW untouched. State stays. |
+| `EntityEffect::persist()` | `$em->flush()`. UoW commits whatever you mutated on the entity. |
+| `EntityEffect::remove()` | `$em->remove($entity); $em->flush()`. Actor stops. |
 | `EntityEffect::stop()` | Actor stops. **No flush** — pending changes discarded. |
 | `EntityEffect::stash()` | Stash current message via `$ctx->stash()` for later unstash. |
 
-### `reply()`
+### Reply effects
 
-Send a synchronous reply (composable with any kind):
+Send a reply composable with any terminal effect:
 
-```php
+```php title="src/Actors/OrderBehavior.php"
 $cmd instanceof GetTotal => EntityEffect::reply($cmd->replyTo, new Total($order->total()))
 ```
 
-This fires **before** the flush — useful when the reply doesn't depend on
-the post-write state.
+Replies fire **before** the flush — useful when the reply does not depend on the post-write state.
 
-### `thenRun(Closure $hook)` and `thenReply(ActorRef $to, Closure $build)`
+### `thenRun` and `thenReply`
 
-Post-flush hooks. Fire after `$em->flush()` so the entity has its
-post-write state (generated IDs, bumped version columns, etc.):
+Post-flush hooks fire after `$em->flush()` so the entity has its post-write state (generated IDs, bumped version columns):
 
-```php
+```php title="src/Actors/OrderBehavior.php"
 EntityEffect::persist()
     ->thenRun(fn(Order $o) => $logger->info('persisted', ['id' => $o->getId()]))
     ->thenReply($cmd->replyTo, fn(Order $o) => new LineAdded(id: $o->getId(), total: $o->total()))
 ```
 
-Hooks are skipped for `stop()` (no flush, entity may be inconsistent) but
-fire for `remove()` (flush did happen).
+Hooks are skipped for `stop()` (no flush, entity may be inconsistent) but fire for `remove()` (flush did happen).
 
 ## `EntityReplayPolicy`
 
@@ -106,40 +90,100 @@ How the runner loads the entity on `PreStart`.
 
 | Policy | Behavior |
 |---|---|
-| `FailIfMissing` (default) | `$em->find()` → throws `EntityNotFoundException` if absent → `ActorInitializationException` propagates from `spawn()`. |
+| `FailIfMissing` (default) | `$em->find()` — throws `EntityNotFoundException` if absent → `ActorInitializationException` propagates from `spawn()`. |
 | `CreateIfMissing(fn(mixed $id): T $factory)` | `$em->find()`, fall back to `$factory($id)` + `$em->persist($entity)` on miss. |
 | `OnDemand` | Skip load on start; runner uses `$em->find()` on the first command instead. |
 
-### Choosing
+Choosing between them:
 
-- **`FailIfMissing`** for aggregates created by an explicit command somewhere else (e.g. `CreateOrder` use case). You don't want to silently create an Order when a stale message references a deleted one.
-- **`CreateIfMissing`** for "spawn on first access" — user sessions, shopping carts, per-entity counters.
-- **`OnDemand`** for very-many-rarely-used entities — spawning an actor is cheap; loading rows is expensive. The DB row must already exist by the time the first command arrives.
+- **`FailIfMissing`** — for aggregates created by an explicit command elsewhere (e.g. a `CreateOrder` use case). Prevents silently creating an Order when a stale message references a deleted one.
+- **`CreateIfMissing`** — for "spawn on first access": user sessions, shopping carts, per-entity counters.
+- **`OnDemand`** — for very-many-rarely-used entities where spawning is cheap but loading rows is expensive. The database row must already exist when the first command arrives.
+
+## `EntityRefFactory` lifecycle
+
+`EntityRefFactory` enforces single-writer per `(entityClass, id)`. It caches actor refs and handles respawn transparently when a passivated actor dies.
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "primaryBorderColor": "#4338ca", "lineColor": "#6366f1", "secondaryColor": "#f0f0ff", "tertiaryColor": "#fff"}}}%%
+sequenceDiagram
+    participant C as Caller
+    participant F as EntityRefFactory
+    participant S as ActorSystem
+    participant R as EntityBehaviorRunner
+    participant DB as Database
+
+    C->>F: of($id)
+    alt cache hit and ref alive
+        F-->>C: cached ActorRef
+    else cache miss or dead ref
+        F->>S: spawn(Props, "Order--{$id}")
+        S->>R: PreStart signal
+        R->>DB: em.find(Order, $id)
+        alt FailIfMissing + row absent
+            DB-->>R: null
+            R-->>S: ActorInitializationException
+        else CreateIfMissing + row absent
+            DB-->>R: null
+            R->>DB: em.persist(new Order($id))
+            R-->>S: ready
+        else row found
+            DB-->>R: Order entity
+            R-->>S: ready
+        end
+        S-->>F: ActorRef
+        F->>F: cache ref
+        F-->>C: ActorRef
+    end
+    C->>R: tell(command)
+```
+
+_Figure 1: `EntityRefFactory.of($id)` returns a cached ref on a cache hit. On a miss or dead ref, it spawns a new actor, which runs the `EntityReplayPolicy` on `PreStart` before becoming ready._
+
+## Passivation sequence
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "primaryBorderColor": "#4338ca", "lineColor": "#6366f1", "secondaryColor": "#f0f0ff", "tertiaryColor": "#fff"}}}%%
+sequenceDiagram
+    participant T as Timer
+    participant R as EntityBehaviorRunner
+    participant S as ActorSystem
+    participant F as EntityRefFactory
+    participant C as Caller
+
+    T->>R: ReceiveTimeout signal\n(no message for 120s)
+    R->>R: return Behavior::stopped()
+    R->>R: PostStop — close EM + connection
+    R->>S: actor terminated
+    S->>F: Terminated(ref) notification
+    F->>F: prune dead ref from cache
+
+    Note over C,F: next message arrives
+    C->>F: of($id)
+    F->>S: spawn fresh actor
+    S->>R: PreStart — reload entity from DB
+    R-->>F: new ActorRef
+    F-->>C: new ActorRef
+    C->>R: tell(command) — transparent to caller
+```
+
+_Figure 2: After `withReceiveTimeout` elapses, the runner self-terminates, releasing its EM and connection. The factory prunes the dead ref automatically. The next `of($id)` call triggers a transparent respawn._
 
 ## Two connection modes
 
-Each `EntityBehavior` actor gets a **dedicated** `EntityManager` constructed
-from `EntityManagerFactory` — never a pooled one. The reason is identity:
-swapping EMs mid-lifecycle would lose UoW tracking for the entity the actor
-holds. The connection is what you choose:
+Each `EntityBehavior` actor gets a **dedicated** `EntityManager` constructed from `EntityManagerFactory` — never a pooled one. Swapping EMs mid-lifecycle would lose UoW tracking. The connection is what you choose:
 
-**Dedicated mode (default — `withConnectionSource`):** the runner owns the
-connection and calls `close()` on `PostStop`. Use this for fresh
-`DriverManager::getConnection()` calls.
+**Dedicated mode** — the runner owns the connection and calls `close()` on `PostStop`:
 
-```php
+```php title="src/Actors/OrderBehavior.php"
 $behavior
     ->withConnectionSource(static fn(): Connection => DriverManager::getConnection($params))
     ->toBehavior();
 ```
 
-**Pool-backed mode (`withConnectionLifecycle`):** the runner borrows from
-your `ConnectionPool` and releases the slot on `PostStop` instead of
-closing the connection. The slot is returned to the pool when the actor
-passivates, so an app with N idle entity actors doesn't pin N pool slots
-forever.
+**Pool-backed mode** — the runner borrows from your `ConnectionPool` and returns the slot on `PostStop`:
 
-```php
+```php title="src/Actors/OrderBehavior.php"
 $behavior
     ->withConnectionLifecycle(
         acquire: static fn() => $connPool->take(),
@@ -148,45 +192,32 @@ $behavior
     ->toBehavior();
 ```
 
-The runner closes the EM first in both cases (so any open transaction
-rolls back), then dispatches the connection lifecycle hook.
-
-**Capacity is still a real cost.** An app with 10k *live* entity actors
-needs 10k connections — either dedicated or pinned in the pool. Mitigations:
-
-- **Passivation**: configure `ReceiveTimeout`; on the signal return
-  `Behavior::stopped()`. Idle actors release their connection.
-- **Bounded active count**: route all `EntityBehavior` traffic through a
-  router actor that maintains a fixed-size LRU of spawned aggregates,
-  stopping the LRU-evicted one when adding a new one.
+With pool-backed mode, a passivated actor returns its connection slot to the pool, so idle entity actors do not pin slots forever.
 
 ## Passivation
 
-`EntityBehavior` actors hold their EM and Connection for their whole lifetime.
-For hot entities that's fine; for the long tail it's expensive. Opt into
-idle-passivation via `withReceiveTimeout`:
+`EntityBehavior` actors hold their EM and connection for their whole lifetime. For hot entities that is fine; for the long tail it is expensive. Opt into idle-passivation via `withReceiveTimeout`:
 
-```php
+```php title="src/Actors/OrderBehavior.php"
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehavior;
 use Monadial\Nexus\Runtime\Duration;
 
 $behavior = EntityBehavior::create(Order::class, $id, $handler)
     ->withEntityManagerFactory($emFactory)
     ->withConnectionSource($connSource)
-    ->withReceiveTimeout(Duration::seconds(120))   // passivate after 2 min idle
+    ->withReceiveTimeout(Duration::seconds(120))
     ->toBehavior();
 ```
 
-After 120s without messages, the actor self-terminates. The runner's `PostStop`
-handler closes the EM and Connection automatically -- no manual cleanup needed.
-The next call to `EntityRefFactory::of($id)` notices the cached ref is dead,
-spawns a fresh actor, reloads the entity from DB via the replay policy, and
-processes the incoming message -- transparent to the caller.
+After 120 seconds without messages, the actor self-terminates. The runner's `PostStop` handler closes the EM and connection automatically. The next `EntityRefFactory::of($id)` call notices the cached ref is dead, spawns a fresh actor, reloads the entity from the database, and processes the incoming message — transparent to the caller.
 
-`EntityRefFactoryBuilder` has a matching `withReceiveTimeout(Duration)` that
-forwards the timeout to every spawned actor:
+:::caution In-flight messages during passivation go to dead letters
+Messages sent to a terminating actor are dropped to dead letters. For most write paths this is acceptable — clients retry. For high-stakes commands, use `ask()` so the per-message timeout surfaces the failure rather than dropping it silently.
+:::
 
-```php
+`EntityRefFactoryBuilder` has a matching `withReceiveTimeout(Duration)` that forwards the timeout to every spawned actor:
+
+```php title="src/Actors/OrderBehavior.php"
 use Monadial\Nexus\Core\Duration;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
@@ -194,38 +225,16 @@ use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 $factory = EntityRefFactory::for(new ActorSystemSpawner($system), Order::class)
     ->using($emFactory)
     ->withConnectionSource($connSource)
-    ->withReceiveTimeout(Duration::seconds(120))    // applied to every spawned actor
+    ->withReceiveTimeout(Duration::seconds(120))
     ->handle($commandHandler)
     ->build();
 ```
 
-### Cost trade-off
-
-- **Pinned connection vs cold-start latency.** Without passivation, every active
-  aggregate pins a connection. With passivation, only *concurrently-active*
-  aggregates have connections -- but the first message after passivation pays a
-  connection-open + EM-build + entity-load cost (typically tens of milliseconds
-  against Postgres+TLS).
-- **In-flight messages during the passivation → rehydration gap go to dead
-  letters.** For most write paths this is acceptable -- clients retry. For
-  high-stakes commands, send via `ask()` so the per-message timeout surfaces the
-  failure rather than silently dropping it.
-
-### Caveats
-
-- **Use a generous timeout in production.** Sub-second timeouts amplify the
-  rehydration cost relative to the work done per message. 60s--10min is the
-  sensible range for most aggregates.
-- **`EntityRefFactory` caches across the whole `ActorSystem`.** If two factories
-  are constructed against the same system pointing at the same entity class,
-  they'll race on actor names. Use one factory per `(system, entityClass)`.
-
 ## `EntityRefFactory`
 
-Spawn-once-and-cache by entity id. Enforces single-writer
-per `(entityClass, id)` within an `ActorSystem`.
+Spawn-once-and-cache by entity id. Enforces single-writer per `(entityClass, id)` within an `ActorSystem`.
 
-```php
+```php title="src/Actors/OrderFactory.php"
 use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 
@@ -241,49 +250,30 @@ $factory->of(42)->tell(new AddLineItem(...));
 $factory->of(42)->ask(fn($r) => new GetTotal($r), Duration::seconds(2));
 ```
 
-Derived actor names use `--` as separator: `App.Order--42`. The pattern is
-deterministic and stable; combined with the actor system's
-`ActorNameExistsException` on duplicate spawns, you get a real
-single-writer guarantee.
+Derived actor names use `--` as separator: `App.Order--42`. The pattern is deterministic and stable — combined with the actor system's `ActorNameExistsException` on duplicate spawns, you get a real single-writer guarantee.
 
-Under `nexus-worker-pool-swoole`, `(Order--42)` routes through the
-`ConsistentHashRing` to a specific worker thread, so single-writer holds
-cluster-wide too.
-
-### `ActorSystemSpawner`
-
-Thin adapter that wraps an `ActorSystem` as an `ActorSpawner`. Needed
-because `ActorSystem` is `final` and doesn't directly implement the
-interface — the indirection makes `EntityRefFactory` unit-testable.
+Under `nexus-worker-pool-swoole`, `Order--42` routes through the `ConsistentHashRing` to a specific worker thread, so single-writer holds cluster-wide.
 
 ## `EntityConflictException`
 
-Wraps Doctrine's `OptimisticLockException`. The runner catches the lock
-exception during `$em->flush()` and rethrows as `EntityConflictException`
-with the entity class + id pre-populated.
+Wraps Doctrine's `OptimisticLockException`. The runner catches the lock exception during `$em->flush()` and rethrows as `EntityConflictException` with the entity class and id pre-populated.
 
-Default supervision behavior: restart with reload. On restart the runner
-opens a fresh EM, calls the replay policy again, and reprocesses the
-stashed-or-discarded message. Configure your supervision strategy at
-`Props::withSupervision(...)` for different retry/backoff semantics.
-
-## Failure modes
-
-| Scenario | Behavior |
-|---|---|
-| Entity not found + `FailIfMissing` | `ActorInitializationException` from `spawn()` — fail-fast. |
-| DB unavailable on PreStart | `ActorInitializationException` — wrap with `exponentialBackoff` supervision. |
-| Connection lost mid-message | Handler throws → message goes to dead letters → supervision triggers restart. |
-| Optimistic-lock conflict | `EntityConflictException` → restart with reload (default). |
-| EM closes after flush failure | Actor restart mandatory — Doctrine forces this regardless of supervision directive. |
+Default supervision behavior: restart with reload. On restart the runner opens a fresh EM, calls the replay policy again, and reprocesses the message. Configure your supervision strategy at `Props::withSupervision(...)` for different retry or backoff semantics.
 
 ## Worked example
 
-A counter aggregate. Schema is created out-of-band; the actor loads its
-state on start, adds when told, persists, and shuts down with the
-verified DB value.
+A counter aggregate — schema created out-of-band, actor loads state on start, persists on each `Add`:
 
-```php
+```php title="src/Actors/CounterBehavior.php"
+use Doctrine\ORM\Mapping\Column;
+use Doctrine\ORM\Mapping\Entity;
+use Doctrine\ORM\Mapping\Id;
+use Doctrine\ORM\Mapping\Table;
+use Monadial\Nexus\Doctrine\Orm\Behavior\EntityBehavior;
+use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
+use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
+use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
+
 #[Entity]
 #[Table(name: 'counters')]
 final class Counter
@@ -304,37 +294,37 @@ $behavior = EntityBehavior::create(
     entityClass: Counter::class,
     id: 'c-1',
     commandHandler: static fn($ctx, object $msg, Counter $c): EntityEffect =>
-        match (true) {
-            $msg instanceof Add => $c->tryAdd($msg->delta)
-                ? EntityEffect::persist()
-                : EntityEffect::same(),
-            default => EntityEffect::same(),
-        },
+        $msg instanceof Add && $c->tryAdd($msg->delta)
+            ? EntityEffect::persist()
+            : EntityEffect::same(),
 )
     ->withEntityManagerFactory(new DefaultEntityManagerFactory($ormConfig))
     ->withReplayPolicy(new CreateIfMissing(fn(string $id): Counter => new Counter($id)))
     ->withConnectionSource(fn(): Connection => DriverManager::getConnection($connParams))
     ->toBehavior();
-
-$ref = $system->spawn(Props::fromBehavior($behavior), 'counter-1');
-$ref->tell(new Add(3));
-$ref->tell(new Add(7));
-
-// after shutdown, verify in DB: counter c-1 has value=10
 ```
-
-This is the actual happy-path integration test the package ships with —
-copy and adapt.
 
 ## Psalm hooks
 
 Two Psalm rules in `nexus-psalm` keep this safe at type-check time:
 
-- **`EntityBehaviorReturnTypeProvider`** — infers
-  `EntityBehaviorBuilder<T, C>` from `EntityBehavior::create($entityClass, $id, $closure)`
-  so your command handler's closure params type-check.
-- **`MissingTransactionalDeclarationRule`** — flags `#[Transactional]`
-  handlers that don't declare a `Connection` or `EntityManagerInterface`
-  parameter.
+- **`EntityBehaviorReturnTypeProvider`** — infers `EntityBehaviorBuilder<T, C>` from `EntityBehavior::create($entityClass, $id, $closure)` so your command handler's closure params type-check.
+- **`MissingTransactionalDeclarationRule`** — flags `#[Transactional]` handlers that do not declare a `Connection` or `EntityManagerInterface` parameter.
 
 See [`nexus-psalm`](../packages/psalm.md) for the full hook list.
+
+## Failure modes
+
+| Scenario | Behavior |
+|---|---|
+| Entity not found + `FailIfMissing` | `ActorInitializationException` from `spawn()` — fail-fast. |
+| Database unavailable on `PreStart` | `ActorInitializationException` — wrap with `exponentialBackoff` supervision. |
+| Connection lost mid-message | Handler throws → message goes to dead letters → supervision triggers restart. |
+| Optimistic-lock conflict | `EntityConflictException` → restart with reload (default). |
+| EM closes after flush failure | Actor restart mandatory — Doctrine closes the EM on flush failure regardless of supervision directive. |
+
+## See also
+
+- [Doctrine Overview](./overview.md) — choosing between pool injection and `EntityBehavior`
+- [EntityManager Pool](./entity-manager-pool.md) — pooled EM for HTTP handlers
+- [Persistence Overview](../persistence/overview.md) — event-sourced and durable-state alternatives

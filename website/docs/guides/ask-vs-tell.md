@@ -1,43 +1,23 @@
 ---
-sidebar_position: 7
-title: Ask vs tell
+sidebar_position: 2
+title: How to choose between ask and tell
+related:
+  - core-concepts/ask-pattern
+  - core-concepts/actors
+  - core-concepts/behaviors
+  - guides/message-design
 ---
 
-# Ask vs tell
+# How to choose between ask and tell
 
-> *"How do I know whether to wait for the reply or just fire and
-> forget?"*
+When your actor sends a message to another actor, you must decide whether to wait for the reply or continue immediately.
 
-The mechanical question is "does the caller need to see the result
-before continuing?" The honest version is "is the caller's
-correctness contingent on the actor having processed this message?"
+## Solution
 
-## The rule
+The rule is: **`tell()` by default. `ask()` only when the caller's response depends on the answer.**
 
-> **`tell()` by default. `ask()` only when the caller's response
-> depends on the answer.**
-
-`tell()` is fire-and-forget. The message lands in the mailbox; the
-caller doesn't wait. It's how you'd write a queue producer.
-
-`ask()` returns a `Future<R>`. Calling `->await()` blocks the
-calling fiber/coroutine until either the actor replies or the
-timeout fires. It's how you'd write a synchronous RPC.
-
-Both have a role; the question is *which*.
-
-## Use `tell` when
-
-- The work happens asynchronously and the HTTP response doesn't carry
-  its outcome. (Background side effects, event publication, audit.)
-- The caller has nothing useful to do with the response. (`LedgerActor`
-  receives `RecordLedger` from the HTTP handler — the handler returns
-  the *request* it accepted, not the resulting database row.)
-- The actor's job is a side effect and the protocol is one-way.
-
-Example — the wallet-app's `LedgerRecordHandler`:
-
-```php
+```php title="src/Http/Handler/LedgerRecordHandler.php"
+// tell() — fire-and-forget; the HTTP handler returns immediately
 $this->ledgerFactory->of($principal->id())
     ->tell(new RecordLedger($body->kind, $body->amountCents));
 
@@ -48,21 +28,8 @@ return JsonResponse::ok(new LedgerRecordResponse(
 ));
 ```
 
-The handler returns `status: recorded` without waiting for the actor
-to flush. The actor's mailbox + supervision guarantee the work
-happens; the user gets a fast acceptance.
-
-## Use `ask` when
-
-- The HTTP response includes data computed by the actor (current
-  balance after a deposit, generated id, business validation).
-- The caller's next decision depends on the reply (rejection vs
-  acceptance, conflict detection).
-- The protocol is request-response by design.
-
-Example — the wallet-app's `DepositHandler`:
-
-```php
+```php title="src/Http/Handler/DepositHandler.php"
+// ask() — the HTTP response IS the actor's reply
 $reply = $walletRef->ref
     ->ask(new Deposit(new Money($body->amountCents)), Duration::seconds(2))
     ->await();
@@ -76,87 +43,81 @@ return JsonResponse::ok(new WalletOperationResponse(
 ));
 ```
 
-The HTTP response IS the actor's reply; there's no other way to get
-it.
+## How it works
 
-## Don't `ask` from inside another actor's handler
+`tell()` enqueues the message and returns immediately — the caller has no access to the result. `ask()` returns a `Future<R>`; calling `->await()` suspends the calling fiber or coroutine until the actor replies or the timeout fires.
 
-This is the trap that catches people coming from threaded systems.
+Use `tell()` when the work happens asynchronously and the caller has nothing to do with the result: background side effects, event publication, audit writes. Use `ask()` when the caller's next action depends on the answer — current balance after a deposit, business validation, generated identifiers.
 
-```php
-// BAD — inside an actor's handler.
+## Variations
+
+### Blocking inside an actor handler
+
+Calling `ask()->await()` inside an actor's message handler suspends that actor's fiber. The actor cannot process other messages while it waits. If the call chain is deep and the pool has fewer coroutine slots than chain length, you deadlock.
+
+:::caution Don't block inside a handler
+```php title="src/Actor/OrderActor.php" verify:lint-only
 public function handle(ActorContext $ctx, object $msg): Behavior
 {
     if ($msg instanceof ProcessOrder) {
-        $payment = $this->paymentService->ask(new Charge(/* … */), Duration::seconds(5))
-                         ->await();   // ← actor stuck here
-        // …
+        // actor's fiber is stuck here — cannot process other messages
+        $payment = $this->paymentService
+            ->ask(new Charge(/* ... */), Duration::seconds(5))
+            ->await();
     }
 }
 ```
+:::
 
-The actor's coroutine/fiber is suspended waiting on the reply. The
-actor can't process other messages. If the chain depth is N and the
-pool has fewer than N coroutine slots, you deadlock.
+The correct approach is to `tell()` and return, then handle the reply as a normal message:
 
-The fix is to `tell` and continue, then handle the reply as a
-*future* message:
-
-```php
+```php title="src/Actor/OrderActor.php"
 public function handle(ActorContext $ctx, object $msg): Behavior
 {
     return match (true) {
-        $msg instanceof ProcessOrder => $this->beginPayment($ctx, $msg),
-        $msg instanceof PaymentDone  => $this->finishOrder($ctx, $msg),
+        $msg instanceof ProcessOrder  => $this->beginPayment($ctx, $msg),
+        $msg instanceof PaymentDone   => $this->finishOrder($ctx, $msg),
         $msg instanceof PaymentFailed => $this->rejectOrder($ctx, $msg),
+        default                       => Behavior::unhandled(),
     };
 }
 
 private function beginPayment(ActorContext $ctx, ProcessOrder $msg): Behavior
 {
-    $this->paymentService->tell(new Charge(/* … */, replyTo: $ctx->self()));
-    return Behavior::same();   // actor returns to the mailbox
+    $this->paymentService->tell(new Charge(replyTo: $ctx->self()));
+    return Behavior::same();
 }
 ```
 
-The actor processes other orders while payment processes asynchronously;
-the reply (`PaymentDone` or `PaymentFailed`) arrives as a normal
-message and the state machine handles it.
+The actor processes other orders while the payment runs asynchronously. The reply arrives as a normal message and the state machine handles it. This is the stateful workflow pattern — the correct shape for any multi-step actor process.
 
-This is the **stateful workflow** pattern. Almost every multi-step
-actor process should be shaped this way.
+### Parallel asks with `Future::all`
 
-## When you DO need to wait inside an actor
+When an actor genuinely needs results from multiple independent services before it can reply, gather them without blocking:
 
-Sometimes the actor genuinely can't do anything without the reply.
-Two escape hatches:
-
-**1. `Future::all` for parallel work.** Multiple `ask` to independent
-services, joined non-blockingly:
-
-```php
+```php title="src/Actor/ProfileActor.php"
 return Future::all([
     'user'   => $this->users->ask(new GetUser($id), Duration::seconds(1)),
     'orders' => $this->orders->ask(new ListByUser($id), Duration::seconds(1)),
-])->map(static fn(array $parts) => new ProfileResponse(/* … */));
+])->map(static fn(array $parts) => new ProfileResponse(
+    user: $parts['user'],
+    orders: $parts['orders'],
+));
 ```
 
-The handler returns a `Future<ProfileResponse>`. The framework awaits
-it; other messages on the same coroutine pool make progress in the
-meantime.
+The handler returns the `Future` directly. The framework awaits it; other messages on the same coroutine pool make progress in the meantime.
 
-**2. `Behavior::receive` with stash + unstash.** Buffer incoming
-messages while you wait for the reply, then drain them when ready:
+### Buffering with stash while waiting
 
-```php
-private function beginPayment(ActorContext $ctx, ProcessOrder $msg): Behavior
+When the actor must pause processing of other messages until a reply arrives, use `stash()` to buffer them and `unstashAll()` to drain when ready:
+
+```php title="src/Actor/PaymentActor.php"
+private function awaitingPayment(ActorContext $ctx): Behavior
 {
-    $this->paymentService->tell(new Charge(/* … */, $ctx->self()));
-
-    return Behavior::receive(static function ($ctx, $msg) use ($order): Behavior {
+    return Behavior::receive(static function ($ctx, $msg) use (&$ready): Behavior {
         if ($msg instanceof PaymentDone || $msg instanceof PaymentFailed) {
             $ctx->unstashAll();
-            return $this->ready;
+            return $ready;
         }
 
         $ctx->stash();
@@ -165,21 +126,16 @@ private function beginPayment(ActorContext $ctx, ProcessOrder $msg): Behavior
 }
 ```
 
-The actor accepts the payment-result message immediately; other
-messages stash until the actor returns to normal behaviour. Order is
-preserved.
+Other messages stash in arrival order and replay when the actor returns to its normal behavior.
 
-## Timeouts are not optional
+## Caveats
 
-`ask` requires a `Duration` timeout. Pick deliberately.
+- `ask()` requires a `Duration` timeout. A useful default is p99 expected reply time × 3. Too short causes false `AskTimeoutException` failures under load; too long ties up coroutine slots waiting for dead actors.
+- If you want "wait forever," you do not want `ask()`. Use `tell()` with a reply message and let the caller's lifecycle (HTTP request timeout, supervision) bound the wait.
+- `ask()` from the HTTP boundary is fine. `ask()` from inside another actor's handler is almost always a design smell.
 
-- Too short → false `AskTimeoutException` under load
-- Too long → callers tie up coroutine slots waiting for already-dead
-  actors
+## Related
 
-A useful default: **p99 expected reply time × 3**. Round up for
-networked transports; round down for in-process actors.
-
-If you'd genuinely prefer "wait forever", you don't want `ask`. Use
-`tell` + a callback message, and let the caller's lifecycle (HTTP
-request timeout, supervisor) bound the wait.
+- [Ask pattern](../core-concepts/ask-pattern.md)
+- [Behaviors](../core-concepts/behaviors.md)
+- [Message design](message-design.md)

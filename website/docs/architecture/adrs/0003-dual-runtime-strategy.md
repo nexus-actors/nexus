@@ -1,6 +1,11 @@
 ---
 title: "ADR 0003: Dual Runtime Strategy — Fiber and Swoole"
 sidebar_position: 3
+related:
+  - runtimes/fiber
+  - runtimes/swoole
+  - architecture/adrs/0001-actor-model-architecture
+  - architecture/adrs/0008-worker-pool-cluster-separation
 ---
 
 # ADR 0003: Dual Runtime Strategy — Fiber and Swoole
@@ -25,7 +30,7 @@ Support both runtimes behind a shared `Runtime` interface:
 - **`Runtime`** interface defines: `run()`, `spawn()`, `createMailbox()`, `scheduleOnce()`, `scheduleRepeatedly()`, `cancel()`.
 - **`FiberRuntime`**: Actors run as PHP Fibers. Mailboxes use `SplQueue`. Timers are cooperative. Ideal for development, testing, and CI.
 - **`SwooleRuntime`**: Actors run as Swoole coroutines. Mailboxes use `Swoole\Coroutine\Channel`. Timers use Swoole's native timer. Ideal for production.
-- **`StepRuntime`**: Deterministic runtime for testing. Messages are processed one at a time via explicit `tick()` calls. VirtualClock for time control.
+- **`StepRuntime`**: Deterministic runtime for testing. Messages are processed one at a time via explicit `tick()` calls. `VirtualClock` for time control.
 
 Actor code is completely runtime-agnostic. The same `Behavior<T>` runs on any runtime.
 
@@ -33,7 +38,7 @@ Actor code is completely runtime-agnostic. The same `Behavior<T>` runs on any ru
 
 - `Props`, `Behavior`, and `ActorRef` have no runtime dependency.
 - Runtime selection happens at `ActorSystem::create()` time.
-- `Mailbox` interface abstracts the message queue implementation.
+- The `Mailbox` interface abstracts the message queue implementation.
 - Performance characteristics differ: Swoole handles real concurrency, Fiber is single-threaded.
-- Step runtime enables deterministic, reproducible test scenarios.
-- Each runtime is a separate package: `nexus-runtime-fiber`, `nexus-runtime-swoole`, `nexus-runtime-step`.
+- The Step runtime enables deterministic, reproducible test scenarios.
+- Each runtime ships as a separate package: `nexus-runtime-fiber`, `nexus-runtime-swoole`, `nexus-runtime-step`.

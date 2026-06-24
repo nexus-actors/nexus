@@ -1,22 +1,22 @@
 ---
 sidebar_position: 7
 title: Error Handling
+related:
+  - http/handlers
+  - http/middleware
+  - http/actors-in-http
+  - packages/http
 ---
 
 # Error Handling
 
-Errors in Nexus HTTP follow a single flow: handlers throw, middleware
-catches, mappers translate, the response is written. There is no parallel
-error channel.
+Errors in Nexus HTTP follow a single flow: handlers throw, middleware catches, mappers translate, the response is written. There is no parallel error channel.
 
-## The Default Behaviour
+## Default behaviour
 
-If you don't configure anything, an unhandled exception in a handler
-becomes a `500 Internal Server Error` with a generic message. The full
-exception is logged via the configured PSR-3 logger (if any), but never
-exposed on the wire.
+An unhandled exception in a handler becomes a `500 Internal Server Error` with a generic message. The full exception is logged via the configured PSR-3 logger but never exposed on the wire.
 
-```php
+```php title="server.php"
 $app->get('/boom', static function () {
     throw new RuntimeException('something broke');
 });
@@ -24,13 +24,11 @@ $app->get('/boom', static function () {
 // → log: "Unhandled exception in handler" with stack trace
 ```
 
-That's safe by default. Now refine.
-
 ## ErrorMode
 
 Two modes control how unmapped exceptions are serialised:
 
-```php
+```php title="server.php"
 use Monadial\Nexus\Http\App\ErrorMode;
 
 $app->errorMode(ErrorMode::Production);   // default
@@ -39,19 +37,16 @@ $app->errorMode(ErrorMode::Development);
 
 | Mode | Body of an unmapped exception |
 |---|---|
-| `ErrorMode::Production` | `{"error":"Internal Server Error"}` (sanitized) |
-| `ErrorMode::Development` | Full message + class + stack trace as JSON |
+| `ErrorMode::Production` | `{"error":"Internal Server Error"}` (sanitised) |
+| `ErrorMode::Development` | Full message, class, and stack trace as JSON |
 
-**Production** is the default. Pick **Development** for local
-development — but never in production deploys; stack traces leak
-internal structure to attackers.
+`ErrorMode::Production` is the default. Set `ErrorMode::Development` for local development — never in production deploys; stack traces leak internal structure.
 
-## Mapping Domain Exceptions
+## Mapping domain exceptions
 
-The interesting work happens in `onException()`. Register a mapper from
-exception class to response:
+Register a mapper from exception class to response with `onException()`:
 
-```php
+```php title="server.php"
 $app->onException(OrderNotFoundException::class, static function (OrderNotFoundException $e) {
     return Response::notFound($e->getMessage());
 });
@@ -65,45 +60,23 @@ $app->onException(RateLimitedException::class, static function (RateLimitedExcep
 });
 ```
 
-Mappers are looked up by exact class first, then by ancestor (parent
-class, interface) in reverse declaration order. The first match wins;
-remaining mappers are not consulted.
+Mappers are looked up by exact class first, then by ancestor in reverse declaration order. The first match wins.
 
-## Mapper Resolution Order
+Map a base class once and let subclasses inherit:
 
-```
-catch (Throwable $e) {
-    foreach (registered_mappers as $class => $mapper) {
-        if ($e instanceof $class) {
-            return $mapper($e);   // first match wins
-        }
-    }
-    // Fall through:
-    if (ErrorMode::Development) {
-        return JsonResponse with full details;
-    } else {
-        log $e;
-        return Response::internalServerError();
-    }
-}
-```
-
-So you can map a base class once and let subclasses inherit:
-
-```php
+```php title="server.php"
 $app->onException(DomainException::class, static fn(DomainException $e) =>
     JsonResponse::ok(['error' => $e->getMessage()])->withStatus(400));
 ```
 
-Every subclass of `DomainException` hits this mapper unless a more
-specific one is registered first.
+Every subclass of `DomainException` hits this mapper unless a more specific one is registered first.
 
-## Mapping Built-in Exceptions
+## Mapping built-in exceptions
 
-The framework throws three exceptions you might want to customise:
+The framework throws three exceptions you can customise:
 
-```php
-use Monadial\Nexus\Http\Exception\{NotFoundException, MethodNotAllowedException, HandlerNotFoundException};
+```php title="server.php"
+use Monadial\Nexus\Http\Exception\{HandlerNotFoundException, MethodNotAllowedException, NotFoundException};
 
 $app->onException(NotFoundException::class, static fn() => JsonResponse::ok([
     'error' => 'route not found',
@@ -120,26 +93,11 @@ $app->onException(MethodNotAllowedException::class, static fn(MethodNotAllowedEx
 | `MethodNotAllowedException` | `405 Method Not Allowed` with `Allow` header |
 | `HandlerNotFoundException` | `500 Internal Server Error` (configuration bug) |
 
-## Mapping Validation Errors
+## Mapping validation errors
 
-A common pattern — collect field errors into a structured payload:
+Collect field errors into a structured payload:
 
-```php
-final class ValidationException extends RuntimeException
-{
-    public function __construct(public readonly array $errors)
-    {
-        parent::__construct('validation failed');
-    }
-}
-
-$app->onException(ValidationException::class, static fn(ValidationException $e) =>
-    JsonResponse::ok([
-        'error'  => 'validation',
-        'fields' => $e->errors,
-    ])->withStatus(422));
-
-// In the handler:
+```php title="src/Http/Handler/CreateOrderHandler.php"
 public function __invoke(ServerRequestInterface $req, #[FromBody] CreateOrderDto $dto): ResponseInterface
 {
     $errors = $this->validator->validate($dto);
@@ -151,14 +109,21 @@ public function __invoke(ServerRequestInterface $req, #[FromBody] CreateOrderDto
 }
 ```
 
-Handler stays focused on the happy path; serialisation is centralised.
+```php title="server.php"
+$app->onException(ValidationException::class, static fn(ValidationException $e) =>
+    JsonResponse::ok([
+        'error'  => 'validation',
+        'fields' => $e->errors,
+    ])->withStatus(422));
+```
 
-## Mapping Actor Errors
+The handler stays focused on the happy path; serialisation is centralised in the mapper.
 
-`AskTimeoutException` from a slow actor reply, `WriterConflictException`
-from event-sourced persistence — translate them like any other:
+## Mapping actor errors
 
-```php
+`AskTimeoutException` from a slow actor reply and `WriterConflictException` from event-sourced persistence translate like any other exception:
+
+```php title="server.php"
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Persistence\Exception\WriterConflictException;
 
@@ -168,70 +133,36 @@ $app->onException(WriterConflictException::class, static fn() => JsonResponse::o
 ])->withStatus(409));
 ```
 
-This is how you decouple your HTTP layer from your actor layer's failure
-modes — actors don't know what 504 means, and they don't need to.
+This decouples your HTTP layer from your actor layer's failure modes — actors don't know what `504` means, and they don't need to.
 
-## Disabling the Default Handler
+## Disabling the default handler
 
-If you'd rather assemble the exception middleware yourself, drop the
-built-in:
+If you need to assemble the exception middleware yourself:
 
-```php
+```php title="server.php"
 $app->withoutDefaultExceptionHandler()
     ->middleware(MyCustomExceptionMiddleware::class);
 ```
 
-You're now responsible for catching `Throwable` at the top of the
-pipeline. Use this only if you have specific requirements
-(Sentry-flavoured error reports, OpenTelemetry spans tied to exceptions,
-etc.).
+You are now responsible for catching `Throwable` at the top of the pipeline. Use this only for specific requirements (Sentry-flavoured error reports, OpenTelemetry spans tied to exceptions).
 
-## Exceptions vs Error Responses
+## Exceptions vs error responses
 
-Throw exceptions for **abnormal** conditions:
+Throw exceptions for abnormal conditions:
 
 - Resource not found (`OrderNotFoundException`)
 - Validation failure (`ValidationException`)
 - Authorisation failure (`UnauthorizedException`)
 - Upstream timeout (`AskTimeoutException`)
 
-Return early with an explicit response for **normal** outcomes:
+Return an explicit response for normal outcomes:
 
 - Empty result set → `JsonResponse::ok([])`
 - Idempotent retry of an already-completed action → `Response::ok()`
-- Conditional GET with `If-None-Match` matching → `Response::noContent()->withStatus(304)`
+- Conditional GET matching `If-None-Match` → `Response::noContent()->withStatus(304)`
 
-Mixing the two patterns is fine; pick by whether the handler's
-"success" code path produces the response. Anything outside that
-code path is an exception.
+## See also
 
-## Composition
-
-```
-Handler::__invoke() ──→ throws DomainException
-                              │
-                              ▼
-        ExceptionHandlerMiddleware (outermost)
-                              │
-       ┌──────────────────────┴────────────────────────┐
-       │ for each onException mapper (registration order):
-       │   if $e instanceof $registeredClass:
-       │     return $mapper($e)
-       └──────────────────────┬────────────────────────┘
-                              │ fall through
-                              ▼
-                  ErrorMode::Production / Development
-                              │
-                              ▼
-                       ResponseInterface
-                              │
-                              ▼
-                    PSR-15 pipeline tail
-                              │
-                              ▼
-                 Server adapter writes to socket
-```
-
-Up next: [WebSockets](./websockets.md), or jump to
-[Observability](../operations/observability.md) for how to log exceptions with full
-context.
+- [Handlers](./handlers.md) — letting exceptions propagate vs early returns.
+- [Middleware](./middleware.md) — exception translation inside middleware.
+- [Actors in HTTP](./actors-in-http.md) — handling `AskTimeoutException` locally.

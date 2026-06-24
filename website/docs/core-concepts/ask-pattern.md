@@ -1,17 +1,50 @@
 ---
 sidebar_position: 7
 title: Ask Pattern
+related:
+  - core-concepts/actors
+  - core-concepts/behaviors
+  - core-concepts/mailboxes
+  - guides/testing-actors
 ---
 
-# Ask Pattern
+# Ask pattern
 
-The ask pattern lets you send a message to an actor and get a `Future` for the
-reply. It bridges the actor world (asynchronous, message-driven) with code that
-needs a response.
+The ask pattern bridges the actor world — asynchronous and message-driven — with code that needs a response. Call `ask()` on an `ActorRef`, get a `Future`, and block on `await()` when you need the result.
+
+## Request-reply sequence
+
+```mermaid
+%%{init: {"theme": "base"}}%%
+sequenceDiagram
+    participant Caller
+    participant ActorRef
+    participant Mailbox
+    participant TargetActor
+    participant FutureSlot
+
+    Caller->>ActorRef: ask(message, timeout)
+    ActorRef->>FutureSlot: create slot + FutureRef
+    ActorRef->>Mailbox: enqueue(message + FutureRef as sender)
+    Mailbox->>TargetActor: dequeue → handle
+    TargetActor->>FutureSlot: ctx.reply(response) → FutureRef.tell()
+    FutureSlot-->>Caller: Future resolves
+    Caller->>FutureSlot: await() → response
+```
+
+_Figure 1: The ask pattern. `ask()` creates a `FutureSlot` and a single-use `FutureRef`. The target actor replies via `ctx->reply()`, which routes through the `FutureRef` to resolve the slot._
+
+## How it works
+
+1. `ask()` creates a `FutureSlot` (a runtime-specific suspension primitive) and a lightweight `FutureRef` — a single-use `ActorRef` whose `tell()` resolves the slot.
+2. The message is enqueued to the target's mailbox with the `FutureRef` carried as the envelope's sender reference.
+3. The target processes the message and calls `$ctx->reply($response)`, which routes the response back through the `FutureRef`.
+4. `Future::await()` suspends the current fiber or coroutine until the reply arrives or the timeout fires.
+5. If the timeout expires before a reply, `AskTimeoutException` is thrown.
 
 ## Signature
 
-```php
+```php title="src/Actor/ActorRef.php"
 /**
  * @template R of object
  * @param T $message
@@ -22,62 +55,29 @@ needs a response.
 public function ask(object $message, Duration $timeout): Future;
 ```
 
-The method is defined on the `ActorRef` interface. It is marked `#[NoDiscard]`,
-so static analysis tools will warn if you ignore the return value.
-
-## How it works
-
-1. `ask()` creates a `FutureSlot` (runtime-specific suspension primitive) and a
-   lightweight `FutureRef` — a single-use `ActorRef` whose `tell()` resolves the
-   slot.
-2. The message is enqueued to the target actor's mailbox immediately, with the
-   `FutureRef` carried as the envelope's `senderRef`.
-3. The target actor processes the message and calls `$ctx->reply($response)`,
-   which routes the response back through the `FutureRef`.
-4. `Future::await()` suspends the current fiber/coroutine until the reply
-   arrives or the timeout fires.
-5. If the timeout expires before a reply, `AskTimeoutException` is thrown.
-
-```
-  Caller                    Target Actor
-    │                            │
-    │  ask($msg, $timeout)       │
-    │──── Future ◄───────────────│
-    │                            │
-    │  enqueue(msg + FutureRef)  │
-    │───────────────────────────►│
-    │                            │
-    │  $future->await()          │  ctx->reply($response)
-    │  ┊ (fiber suspends)        │──────────────────────►│
-    │  ┊                         │                FutureRef::tell()
-    │  ┊                         │                FutureSlot::resolve()
-    │◄─┊─────────────────────────│                       │
-    │  $response                 │
-```
+The `#[NoDiscard]` attribute causes static analysis to warn if you discard the return value.
 
 ## Usage
 
-```php
+```php title="src/Http/AccountController.php"
 use Monadial\Nexus\Runtime\Duration;
 
-// Request message — no replyTo field needed
 final readonly class GetBalance {}
 
-final readonly class Balance {
+final readonly class Balance
+{
     public function __construct(public float $amount) {}
 }
 
-// Ask the account actor for its balance
 $future = $accountRef->ask(new GetBalance(), Duration::seconds(5));
 $balance = $future->await();
 
-// $balance is a Balance instance
 echo $balance->amount;
 ```
 
-The target actor replies via `$ctx->reply()`:
+The target actor replies via `$ctx->reply()`. No `$replyTo` field is needed on the message — routing is automatic through the envelope's sender reference.
 
-```php
+```php title="src/Actor/AccountActor.php"
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\ActorContext;
 
@@ -85,44 +85,18 @@ $behavior = Behavior::receive(
     static function (ActorContext $ctx, object $msg): Behavior {
         if ($msg instanceof GetBalance) {
             $ctx->reply(new Balance(amount: 42.50));
-
-            return Behavior::same();
         }
 
-        return Behavior::unhandled();
+        return Behavior::same();
     },
 );
 ```
 
-Notice that request messages no longer need a `$replyTo` field. The reply is
-routed automatically through the envelope's sender reference.
-
 ## Future combinators
 
-`Future` supports `map()` and `flatMap()` for transforming results without
-blocking:
+`Future` supports `map()` and `flatMap()` for transforming results without blocking until `await()`.
 
-### map — transform the reply
-
-```php
-$future = $accountRef->ask(new GetBalance(), Duration::seconds(5));
-
-$formatted = $future->map(static function (object $balance): object {
-    assert($balance instanceof Balance);
-
-    return new FormattedBalance(
-        display: number_format($balance->amount, 2) . ' EUR',
-    );
-});
-
-$result = $formatted->await(); // FormattedBalance
-```
-
-`map()` is lazy — the transformation runs only when `await()` is called.
-
-### flatMap — chain a dependent ask
-
-```php
+```php title="src/Service/CurrencyService.php"
 $future = $accountRef
     ->ask(new GetBalance(), Duration::seconds(5))
     ->flatMap(static function (object $balance) use ($exchangeRef): Future {
@@ -134,17 +108,14 @@ $future = $accountRef
         );
     });
 
-$converted = $future->await(); // ConvertedAmount
+$converted = $future->await();
 ```
 
-`flatMap()` is also lazy. The second ask fires only when the first resolves.
+Both `map()` and `flatMap()` are lazy — the transformation runs only when `await()` is called.
 
 ## Timeout handling
 
-If no reply arrives within the specified `Duration`, `await()` throws
-`AskTimeoutException`:
-
-```php
+```php title="src/Service/AccountService.php"
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Runtime\Duration;
 
@@ -153,45 +124,50 @@ try {
         ->ask(new GetBalance(), Duration::seconds(3))
         ->await();
 } catch (AskTimeoutException $e) {
-    // $e->target  -- ActorPath of the actor that did not reply
-    // $e->timeout -- the Duration that elapsed
     $logger->warning("Ask to {$e->target} timed out after {$e->timeout}");
 }
 ```
+
+`AskTimeoutException` exposes the target actor path and the elapsed `Duration`.
 
 ## When to use ask vs tell
 
 | | `tell()` | `ask()` |
 |---|---|---|
 | **Direction** | Fire-and-forget | Request-response |
-| **Blocking** | No | Yes (blocks the calling fiber/coroutine on `await()`) |
+| **Blocking** | No | Yes — blocks the calling fiber on `await()` |
 | **Return** | `void` | `Future<R>` |
-| **Throughput** | Higher | Lower (allocates FutureSlot, suspends fiber) |
-| **Coupling** | Loose — sender does not wait | Tighter — sender depends on timely response |
-| **Error model** | Failures handled by supervision | Failures surface as `AskTimeoutException` |
+| **Throughput** | Higher | Lower — allocates `FutureSlot`, suspends fiber |
+| **Coupling** | Loose | Tighter — sender depends on timely response |
+| **Error model** | Handled by supervision | Surfaces as `AskTimeoutException` |
 
-**Prefer `tell()` for most actor-to-actor communication.** It keeps actors
-decoupled and maximizes throughput. The ask pattern is best reserved for:
+Prefer `tell()` for actor-to-actor communication. Reserve `ask()` for:
 
-- **Edge of the actor system** — when non-actor code (HTTP controllers, CLI
-  commands) needs a result from an actor.
-- **Orchestration** — when a coordinating actor must gather responses from
-  several children before proceeding.
+- **Edge of the actor system** — when non-actor code (HTTP controllers, CLI commands) needs a result.
+- **Orchestration** — when a coordinator must gather replies from several children before proceeding.
 - **Testing** — to assert that an actor produces the expected reply.
-
-When actors need to exchange results with each other, consider using `tell()`
-with `$ctx->reply()` in both directions instead of `ask()`. This avoids
-blocking and keeps the system fully asynchronous.
 
 ## Runtime support
 
-Each runtime provides its own `FutureSlot` implementation:
-
 | Runtime | FutureSlot | Suspension mechanism |
 |---|---|---|
-| **Fiber** | `FiberFutureSlot` | `Fiber::suspend()` / resume on next tick |
-| **Swoole** | `SwooleFutureSlot` | `Swoole\Coroutine\Channel(1)` |
-| **Step** | `StepFutureSlot` | `Fiber::suspend()` (deterministic, test-controlled) |
+| `FiberRuntime` | `FiberFutureSlot` | `Fiber::suspend()` / resume on next tick |
+| `SwooleRuntime` | `SwooleFutureSlot` | `Swoole\Coroutine\Channel(1)` |
+| `StepRuntime` | `StepFutureSlot` | `Fiber::suspend()` (deterministic, test-controlled) |
 
-The `FutureSlot` is created by `Runtime::createFutureSlot()`, which also
-schedules the timeout timer automatically.
+## Failure modes
+
+Ask failures fall into three categories: timeouts, dead targets, and missing reply paths.
+
+| Symptom | Cause | Recovery |
+|---|---|---|
+| `AskTimeoutException` thrown | The target actor did not call `$ctx->reply()` within the timeout | Verify the handler covers the message type and calls `reply()`; increase `Duration` only after diagnosing the actual latency |
+| `AskTimeoutException` thrown immediately | `ask()` was sent to `DeadLetterRef` or a stopped actor | Check `$ref->isAlive()` before calling `ask()`; handle the exception at the call site |
+| `Future` resolves with the wrong type | The handler called `$ctx->reply()` with an unexpected message type | Align the reply type with the `Future<R>` type parameter; use Psalm generics to catch this at analysis time |
+| Reply arrives but `await()` never returns | The calling fiber is not inside the runtime event loop | Call `await()` only from within a fiber managed by the runtime — not from a plain PHP script outside `$system->run()` |
+
+## Next steps
+
+- [Actors](./actors.md) — `ActorRef`, `tell()`, and the message-flow model
+- [Behaviors](./behaviors.md) — `$ctx->reply()` and signal handling
+- [Mailboxes](./mailboxes.md) — how messages are buffered and enqueued

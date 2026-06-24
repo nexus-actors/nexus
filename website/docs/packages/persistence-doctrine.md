@@ -1,86 +1,53 @@
 ---
 sidebar_position: 11
 title: nexus-persistence-doctrine
+related:
+  - packages/persistence
+  - packages/persistence-dbal
+  - persistence/event-sourcing
 ---
 
 # nexus-persistence-doctrine
 
-Doctrine ORM adapter for Nexus persistence -- entity-based stores that use
-`EntityManager` for all database operations. Shares the same table schema as
-`nexus-persistence-dbal`.
+Doctrine ORM adapter for Nexus persistence — entity-based event store, snapshot store, and durable state store sharing the same table schema as `nexus-persistence-dbal`.
 
-**Composer:** `nexus-actors/persistence-doctrine`
+## What's in this package
 
-**Namespace:** `Monadial\Nexus\Persistence\Doctrine\`
+- `DoctrineEventStore` — `EventStore` via `EntityManagerInterface`; throws `ConcurrentModificationException` on duplicate sequence numbers
+- `DoctrineSnapshotStore` — `SnapshotStore` via `EntityManagerInterface`
+- `DoctrineDurableStateStore` — `DurableStateStore` via `EntityManagerInterface`; uses Doctrine `#[ORM\Version]` for optimistic locking
+- ORM entities: `EventEntry`, `SnapshotEntry`, `DurableStateEntry` — mapped to the three persistence tables
 
-<details>
-<summary>View class diagram</summary>
+## Install
 
-```mermaid
-classDiagram
-    class EventStore {
-        <<interface>>
-    }
-    class SnapshotStore {
-        <<interface>>
-    }
-    class DurableStateStore {
-        <<interface>>
-    }
-
-    DoctrineEventStore ..|> EventStore
-    DoctrineSnapshotStore ..|> SnapshotStore
-    DoctrineDurableStateStore ..|> DurableStateStore
+```bash
+composer require nexus-actors/persistence-doctrine
 ```
 
-</details>
+## Quick example
 
-**Dependencies:** `doctrine/orm ^3.0`
-
-## Store classes
-
-| Class | Description |
-|---|---|
-| `DoctrineEventStore` | `EventStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Throws `ConcurrentModificationException` on duplicate sequence numbers. Stores `writer_id` (ULID) per event. |
-| `DoctrineSnapshotStore` | `SnapshotStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Stores `writer_id` (ULID) per snapshot. |
-| `DoctrineDurableStateStore` | `DurableStateStore` implementation using `EntityManagerInterface`. Constructor: `EntityManagerInterface`, `MessageSerializer` (default: `PhpNativeSerializer`). Uses Doctrine's `#[ORM\Version]` for optimistic locking. Stores `writer_id` (ULID). |
-
-## ORM entities
-
-`Monadial\Nexus\Persistence\Doctrine\Entity\`
-
-| Class | Description |
-|---|---|
-| `EventEntry` | ORM entity mapped to `nexus_event_journal`. Properties: `persistenceId`, `sequenceNr`, `eventType`, `eventData`, `metadata`, `writerId`, `timestamp`. |
-| `SnapshotEntry` | ORM entity mapped to `nexus_snapshot_store`. Properties: `persistenceId`, `sequenceNr`, `stateType`, `stateData`, `writerId`, `timestamp`. |
-| `DurableStateEntry` | ORM entity mapped to `nexus_durable_state`. Properties: `persistenceId`, `version` (with `#[ORM\Version]`), `stateType`, `stateData`, `writerId`, `timestamp`. |
-
-## Usage
-
-```php
+```php title="src/Persistence/DoctrineSetup.php"
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\ORMSetup;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineEventStore;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineSnapshotStore;
-use Monadial\Nexus\Persistence\Doctrine\DoctrineDurableStateStore;
 
-$config = ORMSetup::createAttributeMetadataConfiguration(
+$ormConfig = ORMSetup::createAttributeMetadataConfiguration(
     paths: [__DIR__ . '/vendor/nexus-actors/persistence-doctrine/src/Entity'],
     isDevMode: true,
 );
+$conn = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'path' => 'nexus.db']);
+$em   = new EntityManager($conn, $ormConfig);
 
-$connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'path' => 'nexus.db']);
-$em = new EntityManager($connection, $config);
-
-$eventStore = new DoctrineEventStore($em);
+$eventStore    = new DoctrineEventStore($em);
 $snapshotStore = new DoctrineSnapshotStore($em);
-$durableStateStore = new DoctrineDurableStateStore($em);
-
-// With a custom serializer
-use Monadial\Nexus\Serialization\MessageSerializer;
-
-$eventStore = new DoctrineEventStore($em, $customSerializer);
-$durableStateStore = new DoctrineDurableStateStore($em, $customSerializer);
-
 ```
+
+Pass a custom `MessageSerializer` as the second constructor argument to override the default `PhpNativeSerializer`. The schema is identical to `nexus-persistence-dbal`; use `PersistenceSchemaManager` from that package to create the tables.
+
+## See also
+
+- [nexus-persistence](./persistence.md) — `EventSourcedBehavior`, `DurableStateBehavior`, and store interfaces
+- [nexus-persistence-dbal](./persistence-dbal.md) — DBAL alternative using raw parameterized queries
+- [Persistence / overview](../persistence/overview.md) — conceptual guide

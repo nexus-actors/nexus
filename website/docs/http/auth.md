@@ -1,55 +1,51 @@
 ---
 sidebar_position: 8
 title: Authentication & Authorization
+related:
+  - http/handlers
+  - http/middleware
+  - http/overview
+  - packages/http-auth
 ---
 
 # Authentication & Authorization
 
-Auth lives in a separate package — `nexus-actors/http-auth` — because not
-every Nexus HTTP application needs it, and the choices it makes (which
-authenticator, which Principal shape, which policy mechanism) are
-opinionated. Keeping it out of `nexus-http` lets the core HTTP stack stay
-small and lets you swap individual pieces without touching the framework.
+Auth lives in a separate package — `nexus-actors/http-auth` — because not every Nexus HTTP application needs it, and the choices it makes (which authenticator, which `Principal` shape, which policy mechanism) are opinionated. Keeping it separate lets the core HTTP stack stay small and lets you swap individual pieces independently.
 
 The package contributes:
 
-- A small contract surface (`Principal`, `Authenticator`, `Authorizer`,
-  `TokenExtractor`).
+- A contract surface: `Principal`, `Authenticator`, `Authorizer`, `TokenExtractor`.
 - A JWT authenticator built on lcobucci/jwt ^5.
-- Two middleware (`AuthenticationMiddleware`, `AuthorizationMiddleware`).
-- Seven attributes for declarative protection of routes.
+- Two middleware: `AuthenticationMiddleware`, `AuthorizationMiddleware`.
+- Seven attributes for declarative route protection.
 - A `SimplePrincipal` default implementation.
 
-Everything else — extractor choice, Principal shape, policy logic — is
-yours.
+## Bearer + JWT setup
 
-## Hello, JWT
+The minimal end-to-end setup with JWT:
 
-The minimal end-to-end setup:
+```php title="server.php"
+<?php
 
-```php
+declare(strict_types=1);
+
 use Lcobucci\JWT\Configuration;
 use Lcobucci\JWT\Signer\Hmac\Sha256;
 use Lcobucci\JWT\Signer\Key\InMemory;
 use Lcobucci\JWT\Token\Plain;
-use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
-use Monadial\Nexus\Http\Auth\Attribute\RequiresAuth;
+use Monadial\Nexus\Http\Auth\Attribute\{FromPrincipal, RequiresAuth};
 use Monadial\Nexus\Http\Auth\Authenticator\JwtAuthenticator;
-use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
-use Monadial\Nexus\Http\Auth\Middleware\AuthorizationMiddleware;
+use Monadial\Nexus\Http\Auth\Middleware\{AuthenticationMiddleware, AuthorizationMiddleware};
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Ws\HttpApplication;
 
-// 1. Configure JWT (signer + key, validation handled by lcobucci/jwt).
 $jwt = Configuration::forSymmetricSigner(
     new Sha256(),
     InMemory::plainText(getenv('JWT_SECRET')),
 );
 
-// 2. Build the authenticator. The claims-mapper closure decides what
-//    Principal to return for each verified token.
 $auth = new JwtAuthenticator(
     $jwt,
     claimsMapper: static fn(Plain $t) => new SimplePrincipal(
@@ -58,7 +54,24 @@ $auth = new JwtAuthenticator(
     ),
 );
 
-// 3. A handler that requires authentication.
+$app = HttpApplication::create($system)
+    ->middleware(new AuthenticationMiddleware($auth));
+
+$app->get('/me', MeHandler::class)
+    ->middleware(AuthorizationMiddleware::class);
+```
+
+A request to `/me` with `Authorization: Bearer <jwt>` returns the principal payload; without a valid JWT it returns `401`.
+
+## Reading the principal in a handler
+
+`#[FromPrincipal]` injects the current `Principal` from the request attribute that `AuthenticationMiddleware` populates. Use it on the `__invoke()` parameter list, not the constructor — handler instances are constructed once at boot, but the `Principal` is per-request:
+
+```php title="src/Http/Handler/MeHandler.php"
+use Monadial\Nexus\Http\Auth\Attribute\{FromPrincipal, RequiresAuth};
+use Monadial\Nexus\Http\Auth\Principal;
+use Monadial\Nexus\Http\Response\JsonResponse;
+
 #[RequiresAuth]
 final class MeHandler
 {
@@ -70,79 +83,38 @@ final class MeHandler
         ]);
     }
 }
-
-// 4. Wire it up. AuthenticationMiddleware is global, AuthorizationMiddleware
-//    is per-route.
-$app = HttpApplication::create($system)
-    ->middleware(new AuthenticationMiddleware($auth));
-
-$app->get('/me', MeHandler::class)
-    ->middleware(AuthorizationMiddleware::class);
 ```
 
-That's all of it. A request to `/me` with `Authorization: Bearer <jwt>`
-returns the principal payload; without a valid JWT it returns 401.
+If you only need the principal in middleware or without injection, read `$req->getAttribute('principal')` — the same value, untyped.
 
-## Reading the Principal in a handler
-
-`#[FromPrincipal]` injects the current `Principal` from the request
-attribute that `AuthenticationMiddleware` populates. Use it on the
-`__invoke()` parameter list, not the constructor — handler instances are
-constructed once at boot (with their cached attribute metadata), but the
-Principal is per-request:
-
-```php
-final class ShowOrderHandler
-{
-    public function __invoke(
-        ServerRequestInterface $req,
-        #[FromPrincipal] Principal $me,
-    ): JsonResponse {
-        return JsonResponse::ok([
-            'id'    => $req->getAttribute('id'),
-            'owner' => $me->id(),
-        ]);
-    }
-}
-```
-
-If you only need to read the Principal in middleware or in a few places
-without injection, fall back to `$req->getAttribute('principal')` — the
-same value, untyped.
-
-## Adding scope checks
+## Scope checks
 
 OAuth-style scopes are the most common policy. Two attributes:
 
-```php
-use Monadial\Nexus\Http\Auth\Attribute\RequiresAnyScope;
-use Monadial\Nexus\Http\Auth\Attribute\RequiresScope;
+```php title="src/Http/Handler/UpdateOrderHandler.php"
+use Monadial\Nexus\Http\Auth\Attribute\{RequiresAnyScope, RequiresScope};
 
-#[RequiresScope('orders:read', 'orders:write')]    // all-of
-final class UpdateOrderHandler { /* needs BOTH */ }
+#[RequiresScope('orders:read', 'orders:write')]     // all-of: must have BOTH
+final class UpdateOrderHandler { /* … */ }
 
-#[RequiresAnyScope('orders:read', 'orders:admin')] // any-of
-final class ListOrdersHandler { /* needs AT LEAST ONE */ }
+#[RequiresAnyScope('orders:read', 'orders:admin')]  // any-of: must have AT LEAST ONE
+final class ListOrdersHandler { /* … */ }
 ```
 
-The check happens in `AuthorizationMiddleware` after route matching.
-If the Principal is missing the required scopes, you get a `403` whose
-body lists the missing scopes:
+The check happens in `AuthorizationMiddleware` after route matching. Missing scopes return `403` with the missing scope list:
 
 ```json
 { "error": "forbidden", "missing": ["orders:write"] }
 ```
 
-Anonymous requests against a scope-protected route get `401`, not `403`
-— there's no Principal to compare scopes against.
+Anonymous requests against a scope-protected route get `401`, not `403` — there is no `Principal` to compare scopes against.
 
-## Adding role checks
+## Role checks
 
 Roles share the same shape as scopes:
 
-```php
-use Monadial\Nexus\Http\Auth\Attribute\RequiresAnyRole;
-use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
+```php title="src/Http/Handler/AdminDashboardHandler.php"
+use Monadial\Nexus\Http\Auth\Attribute\{RequiresAnyRole, RequiresRole};
 
 #[RequiresRole('admin')]
 final class AdminDashboardHandler { /* must be admin */ }
@@ -151,18 +123,14 @@ final class AdminDashboardHandler { /* must be admin */ }
 final class SupportConsoleHandler { /* admin OR support */ }
 ```
 
-Roles and scopes are independent — a Principal can have any combination.
-The Principal interface declares both because most authentication backends
-distinguish between them: scopes from OAuth, roles from a directory.
+Roles and scopes are independent. The `Principal` interface declares both because most authentication backends distinguish them: scopes from OAuth, roles from a directory.
 
-## Custom policies via #[Authorize]
+## Custom policies via `#[Authorize]`
 
-When scope/role attributes aren't enough — ownership checks, multi-tenant
-isolation, time-of-day rules — implement the `Authorizer` interface:
+When scope and role attributes aren't enough — ownership checks, multi-tenant isolation, time-of-day rules — implement `Authorizer`:
 
-```php
-use Monadial\Nexus\Http\Auth\Authorizer;
-use Monadial\Nexus\Http\Auth\Principal;
+```php title="src/Http/Policy/OwnsOrderPolicy.php"
+use Monadial\Nexus\Http\Auth\{Authorizer, Principal};
 use Psr\Http\Message\ServerRequestInterface;
 
 final class OwnsOrderPolicy implements Authorizer
@@ -183,27 +151,20 @@ final class OwnsOrderPolicy implements Authorizer
 
 Attach it to a handler with `#[Authorize]`:
 
-```php
+```php title="src/Http/Handler/ShowOrderHandler.php"
 use Monadial\Nexus\Http\Auth\Attribute\Authorize;
 
 #[Authorize(OwnsOrderPolicy::class)]
-final class ShowOrderHandler { /* ... */ }
+final class ShowOrderHandler { /* … */ }
 ```
 
-The framework resolves `OwnsOrderPolicy` from the PSR-11 container you
-gave to `$app->withContainer(...)`, calls `authorize()`, and turns
-`false` into a `403` with an empty `missing[]` — policy failures don't
-enumerate a list of missing scopes because the failure isn't about scopes.
+The framework resolves `OwnsOrderPolicy` from the PSR-11 container, calls `authorize()`, and turns `false` into a `403`. Stack policies by listing several `#[Authorize]` attributes; the middleware runs them in order and short-circuits on the first `false`.
 
-Stack policies by listing several `#[Authorize]` attributes; the middleware
-runs them in order and short-circuits on the first `false`.
+## Custom `Principal` implementations
 
-## Custom Principal implementations
+`SimplePrincipal` covers most use cases. Implement `Principal` directly when you want to carry a domain object:
 
-`SimplePrincipal` covers most use cases, but you can implement `Principal`
-directly when you want to carry a domain object:
-
-```php
+```php title="src/Auth/User.php"
 use Monadial\Nexus\Http\Auth\Principal;
 
 final readonly class User implements Principal
@@ -215,33 +176,18 @@ final readonly class User implements Principal
         /** @var list<string> */ public array $scopes,
     ) {}
 
-    public function id(): string     { return $this->id; }
-    public function roles(): array   { return []; }
-    public function scopes(): array  { return $this->scopes; }
-    public function claims(): array  { return ['tenant' => $this->tenantId]; }
+    public function id(): string              { return $this->id; }
+    public function roles(): array            { return []; }
+    public function scopes(): array           { return $this->scopes; }
+    public function claims(): array           { return ['tenant' => $this->tenantId]; }
     public function hasRole(string $r): bool  { return false; }
     public function hasScope(string $s): bool { return in_array($s, $this->scopes, true); }
 }
 ```
 
-Return your type from the claims-mapper:
+Return your type from the claims mapper, then type-hint it in handlers:
 
-```php
-new JwtAuthenticator(
-    $jwt,
-    claimsMapper: static fn(Plain $t) => new User(
-        id: (string) $t->claims()->get('sub'),
-        email: (string) $t->claims()->get('email'),
-        tenantId: (string) $t->claims()->get('tenant'),
-        scopes: explode(' ', (string) $t->claims()->get('scope', '')),
-    ),
-);
-```
-
-Now handlers can type-hint your concrete class on `#[FromPrincipal]`
-parameters:
-
-```php
+```php title="src/Http/Handler/ProfileHandler.php"
 public function __invoke(#[FromPrincipal] User $me): JsonResponse
 {
     return JsonResponse::ok(['email' => $me->email, 'tenant' => $me->tenantId]);
@@ -250,19 +196,13 @@ public function __invoke(#[FromPrincipal] User $me): JsonResponse
 
 ## WebSocket auth
 
-A WebSocket upgrade is an HTTP request, so the same
-`AuthenticationMiddleware` that protects HTTP routes protects the
-upgrade. Decorate the handler with `#[RequiresAuth]` (or scope/role
-attributes) and add `AuthorizationMiddleware` per-route:
+A WebSocket upgrade is an HTTP request, so `AuthenticationMiddleware` protects the upgrade automatically. Decorate the handler with `#[RequiresAuth]` and add `AuthorizationMiddleware` per-route:
 
-```php
-use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
-use Monadial\Nexus\Http\Auth\Attribute\RequiresAuth;
+```php title="src/Http/Handler/PrivateChatHandler.php"
+use Monadial\Nexus\Http\Auth\Attribute\{FromPrincipal, RequiresAuth};
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Ws\WebSocket\Attribute\FromContext;
-use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
-use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
-use Monadial\Nexus\Http\Ws\WebSocket\WebSocketHandler;
+use Monadial\Nexus\Http\Ws\WebSocket\{WebSocketContext, WebSocketFrame, WebSocketHandler};
 
 #[RequiresAuth]
 final class PrivateChatHandler extends WebSocketHandler
@@ -284,64 +224,33 @@ final class PrivateChatHandler extends WebSocketHandler
         $this->ctx->send("{$this->me->id()}: {$frame->text}");
     }
 }
+```
 
+```php title="server.php"
 $app->ws('/ws/private', PrivateChatHandler::class)
     ->middleware(AuthorizationMiddleware::class);
 ```
 
-The Principal is captured at upgrade time and lives for the duration of
-the connection — there is no per-message reauthentication. If you need
-revocation semantics, do them at the application layer (track session
-ids, kill the connection when revoked).
+The `Principal` is captured at upgrade time and lives for the duration of the connection. For revocation semantics, track session IDs at the application layer and close the connection when revoked.
 
-Channel-mode (`$app->channel(...)`) routes work the same way at upgrade
-time, but the actor's `onMessage()` runs in a shared worker context — the
-Principal travels via the `WebSocketContext`'s upgrade request, not in
-constructor args.
+## Why per-route `AuthorizationMiddleware`?
 
-## Why per-route AuthorizationMiddleware?
+`AuthorizationMiddleware` reads class attributes off the matched handler class. It needs the `_resolvedHandlerClass` request attribute that `RouterMiddleware` sets during route matching.
 
-`AuthorizationMiddleware` reads class attributes off the matched handler
-class. To know which handler matched, it needs the
-`_resolvedHandlerClass` request attribute — which `RouterMiddleware` sets
-during route matching.
+In PSR-15, global middleware runs before `RouterMiddleware`. Registering `AuthorizationMiddleware` globally means it fires before the router and sees no resolved handler class — it silently lets every request through. That is the worst possible failure mode for an auth library, so the package enforces the per-route pattern.
 
-In PSR-15, global middleware runs *before* `RouterMiddleware` (the
-router has to live at the bottom of the pipeline so it can dispatch into
-the matched handler last). If you registered `AuthorizationMiddleware`
-globally, it would run before the router and see no
-`_resolvedHandlerClass`, so it would skip every authorization decision —
-silently letting every request through. That's the worst possible
-failure mode for an auth library, so the package enforces the per-route
-pattern by being useless when registered globally.
-
-The pattern is:
-
-```php
+```php title="server.php"
 $app = HttpApplication::create($system)
     ->middleware(new AuthenticationMiddleware($auth));      // global
 
-$app->get('/me',     MeHandler::class)->middleware(AuthorizationMiddleware::class);
+$app->get('/me', MeHandler::class)->middleware(AuthorizationMiddleware::class);
 $app->post('/orders', CreateOrderHandler::class)->middleware(AuthorizationMiddleware::class);
-$app->get('/orders/{id}', ShowOrderHandler::class)->middleware(AuthorizationMiddleware::class);
 ```
 
-If you find yourself writing `->middleware(AuthorizationMiddleware::class)`
-on every route, factor it into a builder helper or wrap the route
-definitions in a small DSL:
+If you find yourself repeating `->middleware(AuthorizationMiddleware::class)` on every route, factor it into a builder helper.
 
-```php
-function protected(HttpApplication $app, string $method, string $path, string $handler): Route
-{
-    return $app->$method($path, $handler)->middleware(AuthorizationMiddleware::class);
-}
+## See also
 
-protected($app, 'get',  '/me', MeHandler::class);
-protected($app, 'post', '/orders', CreateOrderHandler::class);
-```
-
-Either way, the actual enforcement only runs after route matching, where
-the handler class is known and the metadata cache can do its job.
-
-For the full API reference — every attribute, every authenticator,
-every extractor — see [nexus-http-auth](../packages/http-auth.md).
+- [Handlers](./handlers.md) — `#[FromPrincipal]` and the resolver pipeline.
+- [Middleware](./middleware.md) — global vs per-route registration.
+- [`nexus-http-auth`](../packages/http-auth.md) — full attribute, authenticator, and extractor reference.

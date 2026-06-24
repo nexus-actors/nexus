@@ -2,7 +2,7 @@
 title: PersistenceId
 sidebar_position: 8
 related:
-  - core-concepts/persistence
+  - persistence/overview
   - reference/classes/event-sourced-behavior
   - reference/classes/durable-state-behavior
 ---
@@ -50,6 +50,6 @@ $behavior = EventSourcedBehavior::create($id, new OrderState(), $cmdHandler, $ev
 
 ## See also
 
-- [Persistence concept](../../core-concepts/persistence) — event sourcing and durable state overview
+- [Persistence concept](../../persistence/overview) — event sourcing and durable state overview
 - [EventSourcedBehavior](event-sourced-behavior) — uses `PersistenceId` to key the event stream
 - [DurableStateBehavior](durable-state-behavior) — uses `PersistenceId` to key the state snapshot

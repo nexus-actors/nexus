@@ -1,52 +1,57 @@
 ---
-sidebar_position: 4
-title: Standalone Runtime (Without Actors)
+sidebar_position: 5
+title: Standalone Runtime
+related:
+  - runtimes/overview
+  - runtimes/bootstrap
+  - runtimes/step
+  - packages/runtime
 ---
 
-# Standalone Runtime (Without Actors)
+# Standalone Runtime
 
-You can use Nexus runtime implementations directly, without creating an
-`ActorSystem`.
+You can use Nexus runtime implementations directly, without creating an `ActorSystem` — this is useful when your project needs async orchestration primitives but not actor lifecycle management, supervision, or message protocols.
 
-This is useful when your project needs async orchestration primitives, but not
-actor lifecycle/supervision/message protocols yet.
+## The design
 
-## Good Use Cases
+The `nexus-actors/runtime` package contains the `Runtime` interface, `Duration`, `Future`, and `FutureSlot` — everything needed to compose async workflows — with no dependency on `nexus-core`. The concrete runtime packages (`runtime-fiber`, `runtime-swoole`, `runtime-step`) implement `Runtime` and can be used standalone.
 
-- wrapping callback-based APIs into `Future`
-- orchestrating retries/timeouts in infrastructure modules
-- deterministic test orchestration with manual time control
-- shared library code that should not depend on `nexus-core`
-- building framework adapters around callback/timer APIs
-- orchestrating background workflows without actor hierarchy
-- sharing `Duration` + `Future` abstractions across packages
-- writing deterministic tests with `StepRuntime` and `VirtualClock`
+This separation matters when:
+
+- you want to introduce async composition gradually, before committing to the actor model
+- a shared library package needs `Duration` and `Future` abstractions without pulling in actor APIs
+- you are writing deterministic tests using `StepRuntime` and a virtual clock, but the code under test does not spawn actors
+- an infrastructure module needs retry/timeout logic that should not depend on `nexus-core`
 
 ## Install
 
 ```bash
-# Runtime contracts + Future primitives
+# Runtime contracts and Future primitives
 composer require nexus-actors/runtime
 
-# Optional deterministic runtime implementation for tests
+# Optional: deterministic runtime for tests
 composer require --dev nexus-actors/runtime-step
 ```
 
-## Example 1: Deterministic One-Shot Workflow
+## Example 1: Deterministic one-shot workflow
 
-```php
+`StepRuntime` gives you a virtual clock and manual timer execution. Schedule a callback, advance time, and the `Future` resolves synchronously.
+
+```php title="src/Infra/AsyncWorkflow.php"
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 
 $runtime = new StepRuntime();
-// Result placeholder managed by the runtime (resolve/fail + await).
 $resultSlot = $runtime->createFutureSlot();
 $future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::millis(250), static function () use ($resultSlot): void {
-    $resultSlot->resolve((object) ['count' => 21]);
-});
+$runtime->scheduleOnce(
+    Duration::millis(250),
+    static function () use ($resultSlot): void {
+        $resultSlot->resolve((object) ['count' => 21]);
+    },
+);
 
 $runtime->advanceTime(Duration::millis(250));
 
@@ -55,9 +60,11 @@ $result = $future
     ->await();
 ```
 
-## Example 2: Timeout / Failure Mapping
+## Example 2: Timeout and failure mapping
 
-```php
+`FutureSlot::fail()` propagates an exception through the `Future`. Catch it at the call site or let a supervisor handle it.
+
+```php title="src/Infra/QueryClient.php"
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\FutureTimeoutException;
@@ -70,36 +77,35 @@ $runtime = new StepRuntime();
 $resultSlot = $runtime->createFutureSlot();
 $future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::seconds(1), static function () use ($resultSlot): void {
-    $resultSlot->fail(new QueryTimeout('query timed out'));
-});
+$runtime->scheduleOnce(
+    Duration::seconds(1),
+    static function () use ($resultSlot): void {
+        $resultSlot->fail(new QueryTimeout('query timed out'));
+    },
+);
 
 $runtime->advanceTime(Duration::seconds(1));
 
 try {
     $future->await();
 } catch (QueryTimeout $e) {
-    // map/log/retry
+    // log, retry, or propagate
 }
 ```
 
-## Runtime Contract
+## Tradeoffs
 
-Concrete runtime packages (`runtime-fiber`, `runtime-swoole`, `runtime-step`)
-implement `Monadial\Nexus\Runtime\Runtime\Runtime`.
+Running standalone removes the actor supervision tree and message routing overhead, which is appropriate for infrastructure code that manages its own async lifecycle. The tradeoff is that you give up location transparency, death watch, and the structured concurrency guarantees that come with the full actor system. When your orchestration logic grows to the point where you need child actors, passivation, or per-message state machines, add `nexus-core` and migrate.
 
-Use this when your code should accept runtime implementations without coupling
-to actor APIs.
+## When to reach for it
 
-## Why Start Runtime-Only
+- Wrapping callback-based APIs into `Future` for use in other packages.
+- Orchestrating retries and timeouts in an infrastructure module that must stay decoupled from actor APIs.
+- Writing deterministic tests for async code using `StepRuntime` and `VirtualClock`.
+- Building framework adapters around callback or timer APIs before the project is ready for full actor adoption.
 
-- smaller surface area while introducing concurrency gradually
-- deterministic tests before adopting full actor model
-- clean separation between domain logic and runtime mechanics
-- easy migration path: add `nexus-core` later when actors become valuable
+## See also
 
-## Next
-
-- Fast setup: [Bootstrap Runtime](./bootstrap.md)
-- Runtime contracts and implementation matrix: [Runtime Overview](./overview.md)
-- Package surface: [nexus-runtime](../packages/runtime.md)
+- [Bootstrap Runtime](./bootstrap.md) — fast setup for all four installation paths
+- [Runtime Overview](./overview.md) — full `Runtime` interface contract
+- [Step Runtime](./step.md) — `advanceTime()`, `VirtualClock`, and deterministic testing patterns

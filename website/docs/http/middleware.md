@@ -1,32 +1,22 @@
 ---
 sidebar_position: 5
 title: Middleware
+related:
+  - http/routing
+  - http/handlers
+  - http/error-handling
+  - packages/http
 ---
 
 # Middleware
 
-Standard PSR-15. A middleware is anything that implements
-`Psr\Http\Server\MiddlewareInterface`:
-
-```php
-interface MiddlewareInterface
-{
-    public function process(
-        ServerRequestInterface $request,
-        RequestHandlerInterface $handler,
-    ): ResponseInterface;
-}
-```
-
-You receive the request, decide what to do, and either short-circuit with
-your own response or pass control to the next handler via
-`$handler->handle($request)`.
+Standard PSR-15. A middleware is anything that implements `Psr\Http\Server\MiddlewareInterface`, receives the request, and either short-circuits with its own response or passes control to the next handler.
 
 ## Registration
 
 Three scopes, evaluated outermost to innermost:
 
-```php
+```php title="server.php"
 $app->middleware(RequestIdMiddleware::class)              // global
     ->group('/api', static function ($g) {
         $g->middleware(ApiKeyMiddleware::class);          // group
@@ -44,13 +34,11 @@ RequestIdMiddleware
             └─ ListHandler
 ```
 
-Each middleware decides whether to call `$handler->handle($request)`.
-Short-circuiting (returning early without delegating) skips everything
-inside.
+Each middleware decides whether to call `$handler->handle($request)`. Short-circuiting skips everything inside.
 
-## Two Ways to Pass Middleware
+## Two ways to pass middleware
 
-```php
+```php title="server.php"
 // Class-string — resolved from the PSR-11 container at compile time
 $app->middleware(AuthMiddleware::class);
 
@@ -58,15 +46,19 @@ $app->middleware(AuthMiddleware::class);
 $app->middleware(new RateLimitMiddleware($limiter, $bucketSize));
 ```
 
-Class-string registration costs zero per-request — the same instance is
-reused. Use the instance form only when the middleware genuinely needs
-runtime state.
+Class-string registration reuses the same instance for every request. Use the instance form only when the middleware needs runtime-configured state.
 
-## Writing Middleware
+## Writing middleware
 
 A minimal request-ID stamper:
 
-```php
+```php title="src/Http/Middleware/RequestIdMiddleware.php"
+<?php
+
+declare(strict_types=1);
+
+namespace App\Http\Middleware;
+
 use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use Psr\Http\Server\{MiddlewareInterface, RequestHandlerInterface};
 
@@ -79,7 +71,7 @@ final class RequestIdMiddleware implements MiddlewareInterface
         $requestId = $request->getHeaderLine('X-Request-Id')
             ?: bin2hex(random_bytes(8));
 
-        $request = $request->withAttribute('requestId', $requestId);
+        $request  = $request->withAttribute('requestId', $requestId);
         $response = $handler->handle($request);
 
         return $response->withHeader('X-Request-Id', $requestId);
@@ -89,18 +81,15 @@ final class RequestIdMiddleware implements MiddlewareInterface
 
 Three things to notice:
 
-1. **Mutate before** by re-binding `$request = $request->withAttribute(...)`.
-   PSR-7 messages are immutable; the `with*` methods return new instances.
-2. **Pass control** by calling `$handler->handle($request)`. Anything
-   you don't return is dropped.
-3. **Mutate after** by chaining `->withHeader(...)` on the returned
-   response. Same immutability rules apply.
+1. Re-bind `$request = $request->withAttribute(...)` before passing. PSR-7 messages are immutable; `with*` methods return new instances.
+2. Call `$handler->handle($request)` to pass control. Anything you don't return is dropped.
+3. Chain `->withHeader(...)` on the returned response to decorate after the fact.
 
-## Common Patterns
+## Common patterns
 
 ### Authentication
 
-```php
+```php title="src/Http/Middleware/BearerAuthMiddleware.php"
 final class BearerAuthMiddleware implements MiddlewareInterface
 {
     public function __construct(private readonly TokenVerifier $verifier) {}
@@ -126,28 +115,25 @@ final class BearerAuthMiddleware implements MiddlewareInterface
 }
 ```
 
-Downstream handlers read `$req->getAttribute('principal')` to access the
-authenticated identity.
+For JWT-based auth, prefer [`nexus-http-auth`](./auth.md) — it handles token extraction, validation, and `#[FromPrincipal]` injection out of the box.
 
 ### CORS
 
-For any non-trivial CORS handling, install a battle-tested PSR-15
-middleware (e.g. `tuupola/cors-middleware`) and register it globally:
+For any non-trivial CORS handling, install a battle-tested PSR-15 middleware and register it globally:
 
-```php
+```php title="server.php"
 $app->middleware(new \Tuupola\Middleware\CorsMiddleware([
-    'origin'  => ['https://app.example.com'],
-    'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    'headers.allow' => ['Authorization', 'Content-Type'],
+    'origin'         => ['https://app.example.com'],
+    'methods'        => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    'headers.allow'  => ['Authorization', 'Content-Type'],
 ]));
 ```
 
-Any PSR-15 middleware from the wider ecosystem composes cleanly with
-Nexus — there is no Nexus-specific extension point.
+Any PSR-15 middleware from the wider ecosystem composes cleanly with Nexus — there is no Nexus-specific extension point.
 
-### Rate Limiting
+### Rate limiting
 
-```php
+```php title="src/Http/Middleware/RateLimitMiddleware.php"
 final class RateLimitMiddleware implements MiddlewareInterface
 {
     public function __construct(
@@ -157,7 +143,9 @@ final class RateLimitMiddleware implements MiddlewareInterface
 
     public function process(ServerRequestInterface $req, RequestHandlerInterface $next): ResponseInterface
     {
-        $key = $req->getAttribute('principal')?->id() ?? $req->getServerParams()['REMOTE_ADDR'] ?? 'anon';
+        $key = $req->getAttribute('principal')?->id()
+            ?? $req->getServerParams()['REMOTE_ADDR']
+            ?? 'anon';
 
         if (!$this->limiter->take($key, $this->perMinute)) {
             return Response::serviceUnavailable(Duration::seconds(60))
@@ -169,33 +157,31 @@ final class RateLimitMiddleware implements MiddlewareInterface
 }
 ```
 
-For per-route limits, register the middleware on the route, not globally:
+For per-route limits, register on the route rather than globally:
 
-```php
+```php title="server.php"
 $app->post('/orders', CreateOrderHandler::class)
     ->middleware(new RateLimitMiddleware($limiter, perMinute: 10));
 ```
 
 ### Logging
 
-Wrap the entire pipeline to log every request:
-
-```php
+```php title="src/Http/Middleware/AccessLogMiddleware.php"
 final class AccessLogMiddleware implements MiddlewareInterface
 {
     public function __construct(private readonly LoggerInterface $log) {}
 
     public function process(ServerRequestInterface $req, RequestHandlerInterface $next): ResponseInterface
     {
-        $start = hrtime(true);
+        $start    = hrtime(true);
         $response = $next->handle($req);
-        $elapsedMs = (hrtime(true) - $start) / 1_000_000;
+        $elapsed  = (hrtime(true) - $start) / 1_000_000;
 
         $this->log->info('{method} {path} → {status} ({ms}ms)', [
             'method' => $req->getMethod(),
             'path'   => $req->getUri()->getPath(),
             'status' => $response->getStatusCode(),
-            'ms'     => round($elapsedMs, 2),
+            'ms'     => round($elapsed, 2),
         ]);
 
         return $response;
@@ -203,14 +189,11 @@ final class AccessLogMiddleware implements MiddlewareInterface
 }
 ```
 
-Pair with [MDC](../operations/observability.md#mdc) so per-request metadata flows
-into every downstream log line, not just the access log.
+### Exception translation
 
-### Exception Translation Inside Middleware
+You can convert specific exceptions to responses directly in middleware when you need access to the request (correlation IDs, per-tenant routing):
 
-You can convert specific exceptions to responses directly in middleware:
-
-```php
+```php title="src/Http/Middleware/DomainErrorMiddleware.php"
 final class DomainErrorMiddleware implements MiddlewareInterface
 {
     public function process(ServerRequestInterface $req, RequestHandlerInterface $next): ResponseInterface
@@ -224,14 +207,11 @@ final class DomainErrorMiddleware implements MiddlewareInterface
 }
 ```
 
-Most of the time `$app->onException(...)` is cleaner — it centralises the
-mapping in one place. Middleware-level catches make sense when you need
-access to the request (e.g. for correlation IDs or per-tenant routing).
+Most of the time `$app->onException(...)` is cleaner — it centralises the mapping in one place. See [Error Handling](./error-handling.md).
 
-## Built-In Middleware
+## Built-in middleware
 
-`Monadial\Nexus\Http\Middleware\` ships the pieces the framework itself
-uses:
+`Monadial\Nexus\Http\Middleware\` ships the pieces the framework itself uses:
 
 | Class | Role |
 |---|---|
@@ -241,13 +221,9 @@ uses:
 | `MiddlewareResolver` | Resolves class-string middleware via the PSR-11 container. |
 | `ExceptionHandlerMiddleware` | Wraps the entire pipeline with `ErrorMode` and `onException` translation. |
 
-You rarely instantiate these directly — the compiled application wires
-them in the correct order. They're public so you can replace them if you
-need to.
+You rarely instantiate these directly — the compiled application wires them in the correct order. They are public so you can replace them when needed.
 
-## Pipeline Order in Full
-
-Putting all three scopes together:
+## Pipeline order
 
 ```
 ExceptionHandlerMiddleware           ← always outermost (catches everything)
@@ -258,27 +234,10 @@ ExceptionHandlerMiddleware           ← always outermost (catches everything)
           Handler::__invoke()
 ```
 
-The exception handler is outermost so it sees errors from every layer.
-The router is innermost (just before the handler) because routing depends
-on attributes possibly set by upstream middleware.
+The exception handler is outermost so it sees errors from every layer. The router is innermost — just before the handler — because routing depends on attributes possibly set by upstream middleware.
 
-## Composition
+## See also
 
-```
-HttpApplication
-  ├── ->middleware(M)         (global)
-  ├── ->group(...)->middleware(M)   (group-scoped)
-  └── ->get(...)->middleware(M)     (per-route)
-                    │
-                    ▼
-            CompiledApplication
-                    │
-                    ▼
-          PSR-15 MiddlewarePipeline
-                    │
-                    ▼
-               Handler
-```
-
-Next: [Responses](./responses.md), [Error Handling](./error-handling.md),
-and the wider [Actors in HTTP](./actors-in-http.md) story.
+- [Routing](./routing.md) — per-group and per-route middleware.
+- [Error Handling](./error-handling.md) — the `onException` alternative to try/catch in middleware.
+- [Auth](./auth.md) — `AuthenticationMiddleware` and `AuthorizationMiddleware`.

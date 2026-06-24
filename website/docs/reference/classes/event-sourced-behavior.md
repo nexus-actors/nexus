@@ -2,7 +2,7 @@
 title: EventSourcedBehavior
 sidebar_position: 9
 related:
-  - core-concepts/persistence
+  - persistence/overview
   - reference/classes/persistence-id
   - reference/classes/durable-state-behavior
   - reference/classes/behavior
@@ -66,7 +66,7 @@ $behavior = EventSourcedBehavior::create(
 
 ## See also
 
-- [Persistence concept](../../core-concepts/persistence) — event sourcing model, recovery pipeline, and snapshot strategies
+- [Persistence concept](../../persistence/overview) — event sourcing model, recovery pipeline, and snapshot strategies
 - [PersistenceId](persistence-id) — how to construct the stable identity used as the primary key
 - [DurableStateBehavior](durable-state-behavior) — simpler alternative with no event history
 - [Behavior](behavior) — the result type returned by `toBehavior()`

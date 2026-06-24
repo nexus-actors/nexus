@@ -1,6 +1,11 @@
 ---
 title: "ADR 0002: Immutable Behavior-Based Actor API"
 sidebar_position: 2
+related:
+  - core-concepts/behaviors
+  - core-concepts/actors
+  - architecture/adrs/0001-actor-model-architecture
+  - architecture/adrs/0003-dual-runtime-strategy
 ---
 
 # ADR 0002: Immutable Behavior-Based Actor API
@@ -26,8 +31,9 @@ Adopt the immutable behavior model:
 - Special behaviors: `Behavior::stopped()`, `Behavior::unhandled()`, `Behavior::same()`.
 
 Two APIs for defining actors:
+
 1. **Functional**: `Behavior::receive(fn)` with closures — concise, good for simple actors.
-2. **Class-based**: `AbstractActor` with `createBehavior()` — better for complex actors with dependencies.
+2. **Class-based**: `ActorHandler` with `handle()` — better for complex actors with dependencies.
 
 ## Consequences
 
@@ -35,4 +41,4 @@ Two APIs for defining actors:
 - `Behavior::withState($state, $handler)` carries typed state through transitions.
 - Stashing is explicit: `$ctx->stash()` buffers messages, `$ctx->unstashAll()` replays them.
 - Props wraps behavior factories for spawning: `Props::fromBehavior()`, `Props::fromFactory()`.
-- Testing is straightforward: behaviors are pure functions from (context, message) → behavior.
+- Testing is direct: behaviors are functions from (context, message) → behavior.
