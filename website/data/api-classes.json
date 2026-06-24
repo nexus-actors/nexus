@@ -1,0 +1,1418 @@
+[
+    {
+        "fqcn": "\\Monadial\\Nexus\\App\\ActorDefinition",
+        "url": "classes/-Monadial-Nexus-App-ActorDefinition.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\App\\Console\\ActorCommand",
+        "url": "classes/-Monadial-Nexus-App-Console-ActorCommand.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\App\\NexusApp",
+        "url": "classes/-Monadial-Nexus-App-NexusApp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Cluster\\NodeAddress",
+        "url": "classes/-Monadial-Nexus-Cluster-NodeAddress.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Cluster\\NodeHashRing",
+        "url": "classes/-Monadial-Nexus-Cluster-NodeHashRing.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\AbstractActor",
+        "url": "classes/-Monadial-Nexus-Core-Actor-AbstractActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\ActorCell",
+        "url": "classes/-Monadial-Nexus-Core-Actor-ActorCell.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\ActorPath",
+        "url": "classes/-Monadial-Nexus-Core-Actor-ActorPath.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\ActorSystem",
+        "url": "classes/-Monadial-Nexus-Core-Actor-ActorSystem.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\Attribute\\ReplyType",
+        "url": "classes/-Monadial-Nexus-Core-Actor-Attribute-ReplyType.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\Behavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-Behavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\BehaviorWithState",
+        "url": "classes/-Monadial-Nexus-Core-Actor-BehaviorWithState.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\DeadLetterRef",
+        "url": "classes/-Monadial-Nexus-Core-Actor-DeadLetterRef.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\DefaultStashBuffer",
+        "url": "classes/-Monadial-Nexus-Core-Actor-DefaultStashBuffer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\DefaultTimerScheduler",
+        "url": "classes/-Monadial-Nexus-Core-Actor-DefaultTimerScheduler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\EmptyBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-EmptyBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\FutureRef",
+        "url": "classes/-Monadial-Nexus-Core-Actor-FutureRef.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\LocalActorPath",
+        "url": "classes/-Monadial-Nexus-Core-Actor-LocalActorPath.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\LocalActorRef",
+        "url": "classes/-Monadial-Nexus-Core-Actor-LocalActorRef.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\NullDispatcher",
+        "url": "classes/-Monadial-Nexus-Core-Actor-NullDispatcher.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\Props",
+        "url": "classes/-Monadial-Nexus-Core-Actor-Props.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\ReceiveBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-ReceiveBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\RemoteActorPath",
+        "url": "classes/-Monadial-Nexus-Core-Actor-RemoteActorPath.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\SameBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-SameBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\SetupBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-SetupBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\StoppedBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-StoppedBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\SupervisedBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-SupervisedBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\TaskContext",
+        "url": "classes/-Monadial-Nexus-Core-Actor-TaskContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\UnhandledBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-UnhandledBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\UnstashAllBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-UnstashAllBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\WithStashBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-WithStashBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\WithStateBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-WithStateBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Actor\\WithTimersBehavior",
+        "url": "classes/-Monadial-Nexus-Core-Actor-WithTimersBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\ActorException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-ActorException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\ActorInitializationException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-ActorInitializationException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\ActorNameExistsException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-ActorNameExistsException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\AskTimeoutException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-AskTimeoutException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\InvalidActorPathException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-InvalidActorPathException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\InvalidActorStateTransition",
+        "url": "classes/-Monadial-Nexus-Core-Exception-InvalidActorStateTransition.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\InvalidBehaviorException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-InvalidBehaviorException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\MaxRetriesExceededException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-MaxRetriesExceededException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\NexusException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-NexusException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\NexusLogicException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-NexusLogicException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\NoSenderException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-NoSenderException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Exception\\StashOverflowException",
+        "url": "classes/-Monadial-Nexus-Core-Exception-StashOverflowException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\ChildFailed",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-ChildFailed.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\PostRestart",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-PostRestart.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\PostStop",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-PostStop.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\PreRestart",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-PreRestart.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\PreStart",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-PreStart.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\ReceiveTimeout",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-ReceiveTimeout.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Lifecycle\\Terminated",
+        "url": "classes/-Monadial-Nexus-Core-Lifecycle-Terminated.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Mailbox\\Envelope",
+        "url": "classes/-Monadial-Nexus-Core-Mailbox-Envelope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\DeadLetter",
+        "url": "classes/-Monadial-Nexus-Core-Message-DeadLetter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\Kill",
+        "url": "classes/-Monadial-Nexus-Core-Message-Kill.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\PoisonPill",
+        "url": "classes/-Monadial-Nexus-Core-Message-PoisonPill.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\Resume",
+        "url": "classes/-Monadial-Nexus-Core-Message-Resume.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\Suspend",
+        "url": "classes/-Monadial-Nexus-Core-Message-Suspend.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\Unwatch",
+        "url": "classes/-Monadial-Nexus-Core-Message-Unwatch.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Message\\Watch",
+        "url": "classes/-Monadial-Nexus-Core-Message-Watch.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Core\\Supervision\\SupervisionStrategy",
+        "url": "classes/-Monadial-Nexus-Core-Supervision-SupervisionStrategy.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Actor\\ActorPoolBinding",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Actor-ActorPoolBinding.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Bootstrap\\DoctrineBootstrap",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Bootstrap-DoctrineBootstrap.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\DoctrinePool",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-DoctrinePool.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\ConnectionCreated",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-ConnectionCreated.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\ConnectionDestroyed",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-ConnectionDestroyed.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\ConnectionPoisoned",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-ConnectionPoisoned.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\ConnectionReleased",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-ConnectionReleased.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\ConnectionTaken",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-ConnectionTaken.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Event\\PoolExhausted",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Event-PoolExhausted.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Exception\\ConnectionPoisonedException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Exception-ConnectionPoisonedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Exception\\MissingConnectionScopeException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Exception-MissingConnectionScopeException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Exception\\MissingTransactionalDependencyException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Exception-MissingTransactionalDependencyException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Exception\\PoolClosedException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Exception-PoolClosedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Exception\\PoolExhaustedException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Exception-PoolExhaustedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\Attribute\\Transactional",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-Attribute-Transactional.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\ConnectionLease",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-ConnectionLease.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\ConnectionResolver",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-ConnectionResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\ConnectionScopeMiddleware",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-ConnectionScopeMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\DoctrineHttp",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-DoctrineHttp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\PoolExhaustedToServiceUnavailable",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-PoolExhaustedToServiceUnavailable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Http\\TransactionalDecorator",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Http-TransactionalDecorator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\Channel\\FiberChannel",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-Channel-FiberChannel.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\Channel\\SwooleChannel",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-Channel-SwooleChannel.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\ConnectionPool",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-ConnectionPool.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\DriverManagerConnectionFactory",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-DriverManagerConnectionFactory.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\Evictor",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-Evictor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\LeakDetector",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-LeakDetector.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\PoolConfig",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-PoolConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Dbal\\Pool\\PoolStats",
+        "url": "classes/-Monadial-Nexus-Doctrine-Dbal-Pool-PoolStats.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Actor\\OrmActorPoolBinding",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Actor-OrmActorPoolBinding.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\ActorSystemSpawner",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-ActorSystemSpawner.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehavior",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehaviorBuilder",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityBehaviorBuilder.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehaviorRunner",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityBehaviorRunner.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityEffect",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityEffect.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityRefFactory",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityRefFactory.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityRefFactoryBuilder",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-EntityRefFactoryBuilder.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\ReplayPolicy\\CreateIfMissing",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-ReplayPolicy-CreateIfMissing.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\ReplayPolicy\\FailIfMissing",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-ReplayPolicy-FailIfMissing.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\ReplayPolicy\\OnDemand",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Behavior-ReplayPolicy-OnDemand.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\DoctrineEmPool",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-DoctrineEmPool.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Event\\EntityManagerCleared",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Event-EntityManagerCleared.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Event\\EntityManagerCreated",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Event-EntityManagerCreated.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Event\\EntityManagerEvicted",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Event-EntityManagerEvicted.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Exception\\EntityConflictException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Exception-EntityConflictException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Exception\\MissingEntityManagerScopeException",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Exception-MissingEntityManagerScopeException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Http\\DoctrineOrmHttp",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Http-DoctrineOrmHttp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Http\\EntityManagerLease",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Http-EntityManagerLease.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Http\\EntityManagerResolver",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Http-EntityManagerResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Http\\EntityManagerScopeMiddleware",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Http-EntityManagerScopeMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Http\\TransactionalEmDecorator",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Http-TransactionalEmDecorator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Pool\\DefaultEntityManagerFactory",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Pool-DefaultEntityManagerFactory.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Pool\\EmPoolConfig",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Pool-EmPoolConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Pool\\EmPoolStats",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Pool-EmPoolStats.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Pool\\EntityManagerPool",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Pool-EntityManagerPool.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Doctrine\\Orm\\Pool\\PooledEntityManager",
+        "url": "classes/-Monadial-Nexus-Doctrine-Orm-Pool-PooledEntityManager.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Actor\\ActorRegistrationEntry",
+        "url": "classes/-Monadial-Nexus-Http-Actor-ActorRegistrationEntry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Actor\\ActorRegistry",
+        "url": "classes/-Monadial-Nexus-Http-Actor-ActorRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Actor\\PerRequestActorScope",
+        "url": "classes/-Monadial-Nexus-Http-Actor-PerRequestActorScope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Actor\\RequestScopeGuardian",
+        "url": "classes/-Monadial-Nexus-Http-Actor-RequestScopeGuardian.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Actor\\ResolvedActorTable",
+        "url": "classes/-Monadial-Nexus-Http-Actor-ResolvedActorTable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\App\\CompiledHttpApp",
+        "url": "classes/-Monadial-Nexus-Http-App-CompiledHttpApp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\Authorize",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-Authorize.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\FromPrincipal",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-FromPrincipal.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\RequiresAnyRole",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-RequiresAnyRole.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\RequiresAnyScope",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-RequiresAnyScope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\RequiresAuth",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-RequiresAuth.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\RequiresRole",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-RequiresRole.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Attribute\\RequiresScope",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Attribute-RequiresScope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\AuthChallenge",
+        "url": "classes/-Monadial-Nexus-Http-Auth-AuthChallenge.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Authenticator\\ChainAuthenticator",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Authenticator-ChainAuthenticator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Authenticator\\JwtAuthenticator",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Authenticator-JwtAuthenticator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Authenticator\\StaticTokenAuthenticator",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Authenticator-StaticTokenAuthenticator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Exception\\AuthException",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Exception-AuthException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Exception\\AuthMiddlewareNotRegisteredException",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Exception-AuthMiddlewareNotRegisteredException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Exception\\Forbidden",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Exception-Forbidden.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Exception\\InvalidAuthorizerException",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Exception-InvalidAuthorizerException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Exception\\Unauthenticated",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Exception-Unauthenticated.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Extractor\\BearerTokenExtractor",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Extractor-BearerTokenExtractor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Extractor\\CookieTokenExtractor",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Extractor-CookieTokenExtractor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Extractor\\HeaderTokenExtractor",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Extractor-HeaderTokenExtractor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Middleware\\AuthMetadata",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Middleware-AuthMetadata.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Middleware\\AuthenticationMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Middleware-AuthenticationMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Middleware\\AuthorizationMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Middleware-AuthorizationMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Principal\\SimplePrincipal",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Principal-SimplePrincipal.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Auth\\Resolver\\FromPrincipalResolver",
+        "url": "classes/-Monadial-Nexus-Http-Auth-Resolver-FromPrincipalResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Cache\\RouteCachePersister",
+        "url": "classes/-Monadial-Nexus-Http-Cache-RouteCachePersister.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Discovery\\RouteDiscoverer",
+        "url": "classes/-Monadial-Nexus-Http-Discovery-RouteDiscoverer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Dsl\\ActorRegistration",
+        "url": "classes/-Monadial-Nexus-Http-Dsl-ActorRegistration.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Dsl\\HttpApp",
+        "url": "classes/-Monadial-Nexus-Http-Dsl-HttpApp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Dsl\\RouteBuilder",
+        "url": "classes/-Monadial-Nexus-Http-Dsl-RouteBuilder.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Dsl\\RouteGroup",
+        "url": "classes/-Monadial-Nexus-Http-Dsl-RouteGroup.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Event\\RequestCompleted",
+        "url": "classes/-Monadial-Nexus-Http-Event-RequestCompleted.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Event\\RequestStarted",
+        "url": "classes/-Monadial-Nexus-Http-Event-RequestStarted.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Event\\RouteMatched",
+        "url": "classes/-Monadial-Nexus-Http-Event-RouteMatched.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\DefaultMappers",
+        "url": "classes/-Monadial-Nexus-Http-Exception-DefaultMappers.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\DuplicateActorNameException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-DuplicateActorNameException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\DuplicateRouteNameException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-DuplicateRouteNameException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\ExceptionMapperRegistry",
+        "url": "classes/-Monadial-Nexus-Http-Exception-ExceptionMapperRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\GenericHttpException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-GenericHttpException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\HttpException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-HttpException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\MethodNotAllowedException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-MethodNotAllowedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\PerRequestActorInConstructorException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-PerRequestActorInConstructorException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\PerRequestScopeDisposedException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-PerRequestScopeDisposedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\PoolSingletonRequiresSpawnerException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-PoolSingletonRequiresSpawnerException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\RouteNotFoundException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-RouteNotFoundException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Exception\\UnknownActorException",
+        "url": "classes/-Monadial-Nexus-Http-Exception-UnknownActorException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Attribute\\FromActor",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Attribute-FromActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Attribute\\FromBody",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Attribute-FromBody.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Attribute\\FromService",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Attribute-FromService.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\HandlerMetadata",
+        "url": "classes/-Monadial-Nexus-Http-Handler-HandlerMetadata.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\HandlerResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-HandlerResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\ResolvedHandler",
+        "url": "classes/-Monadial-Nexus-Http-Handler-ResolvedHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\ContainerFallbackResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-ContainerFallbackResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\FromActorResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-FromActorResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\FromBodyResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-FromBodyResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\FromServiceResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-FromServiceResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\PathParamResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-PathParamResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\PerRequestScopeResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-PerRequestScopeResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Builtin\\ServerRequestResolver",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Builtin-ServerRequestResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\CompileContext",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-CompileContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\Exception\\UnresolvableParameterException",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-Exception-UnresolvableParameterException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\HttpBootContext",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-HttpBootContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\HttpRequestContext",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-HttpRequestContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\InvocationContext",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-InvocationContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\ParamMetadata",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-ParamMetadata.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\ParamResolverRegistry",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-ParamResolverRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\RequestBoundContext",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-RequestBoundContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Handler\\Resolver\\ResolverServices",
+        "url": "classes/-Monadial-Nexus-Http-Handler-Resolver-ResolverServices.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Middleware\\ExceptionHandlerMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Middleware-ExceptionHandlerMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Middleware\\MiddlewareInvoker",
+        "url": "classes/-Monadial-Nexus-Http-Middleware-MiddlewareInvoker.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Middleware\\MiddlewarePipeline",
+        "url": "classes/-Monadial-Nexus-Http-Middleware-MiddlewarePipeline.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Middleware\\MiddlewareResolver",
+        "url": "classes/-Monadial-Nexus-Http-Middleware-MiddlewareResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Middleware\\RouterMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Middleware-RouterMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Response\\IteratorStream",
+        "url": "classes/-Monadial-Nexus-Http-Response-IteratorStream.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Response\\JsonResponse",
+        "url": "classes/-Monadial-Nexus-Http-Response-JsonResponse.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Response\\Response",
+        "url": "classes/-Monadial-Nexus-Http-Response-Response.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Response\\StreamingResponse",
+        "url": "classes/-Monadial-Nexus-Http-Response-StreamingResponse.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\Attribute\\Route",
+        "url": "classes/-Monadial-Nexus-Http-Routing-Attribute-Route.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\DispatchResult",
+        "url": "classes/-Monadial-Nexus-Http-Routing-DispatchResult.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\Dispatcher",
+        "url": "classes/-Monadial-Nexus-Http-Routing-Dispatcher.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\Route",
+        "url": "classes/-Monadial-Nexus-Http-Routing-Route.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\RouteCollection",
+        "url": "classes/-Monadial-Nexus-Http-Routing-RouteCollection.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Routing\\RouteSummary",
+        "url": "classes/-Monadial-Nexus-Http-Routing-RouteSummary.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Bridge\\ServerRuntime",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Bridge-ServerRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Bridge\\SwooleRequestTranslator",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Bridge-SwooleRequestTranslator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Bridge\\SwooleResponseWriter",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Bridge-SwooleResponseWriter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Bridge\\SwooleServerEventBinder",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Bridge-SwooleServerEventBinder.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Bridge\\SwooleStreamingDetector",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Bridge-SwooleStreamingDetector.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\SwooleConnectionContext",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Server-SwooleConnectionContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\SwooleHttpServerAdapter",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Server-SwooleHttpServerAdapter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\SwooleWorkerConfig",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Server-SwooleWorkerConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\SwooleWorkerServer",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Server-SwooleWorkerServer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\WorkerServerRuntime",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Server-WorkerServerRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Signal\\ShutdownSignalHandler",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Signal-ShutdownSignalHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Actor\\WorkerNodePoolSingletonSpawner",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Threads-Actor-WorkerNodePoolSingletonSpawner.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Server\\SwooleThreadConfig",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Threads-Server-SwooleThreadConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Server\\SwooleThreadServer",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Threads-Server-SwooleThreadServer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Server\\ThreadAwareConnectionContext",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Threads-Server-ThreadAwareConnectionContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Server\\ThreadServerRuntime",
+        "url": "classes/-Monadial-Nexus-Http-Server-Swoole-Threads-Server-ThreadServerRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Health\\HealthCheckHandler",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Health-HealthCheckHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Health\\HealthCheckRegistry",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Health-HealthCheckRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Health\\HealthStatus",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Health-HealthStatus.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Middleware\\AccessLogMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Middleware-AccessLogMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Middleware\\BodySizeLimitMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Middleware-BodySizeLimitMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Middleware\\TraceContextMiddleware",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Middleware-TraceContextMiddleware.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Test\\HttpTestClient",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Test-HttpTestClient.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Toolkit\\Test\\TestResponse",
+        "url": "classes/-Monadial-Nexus-Http-Toolkit-Test-TestResponse.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\CompiledHttpApplication",
+        "url": "classes/-Monadial-Nexus-Http-Ws-CompiledHttpApplication.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\CompiledWsApplication",
+        "url": "classes/-Monadial-Nexus-Http-Ws-CompiledWsApplication.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\EmptyContainer",
+        "url": "classes/-Monadial-Nexus-Http-Ws-EmptyContainer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\HttpApplication",
+        "url": "classes/-Monadial-Nexus-Http-Ws-HttpApplication.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Attribute\\FromContext",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Attribute-FromContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\ChannelActorNameResolver",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-ChannelActorNameResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\ChannelActorRegistry",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-ChannelActorRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Exception\\DuplicateRouteException",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Exception-DuplicateRouteException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Exception\\UnsupportedRouteException",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Exception-UnsupportedRouteException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\HandlerInstantiator",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-HandlerInstantiator.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\InMemoryConnectionTable",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-InMemoryConnectionTable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Message\\ChannelConnectionClosed",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Message-ChannelConnectionClosed.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Message\\ChannelConnectionOpened",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Message-ChannelConnectionOpened.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Message\\ChannelMessageReceived",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Message-ChannelMessageReceived.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Resolver\\FromContextResolver",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Resolver-FromContextResolver.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\Resolver\\WsConnectionContext",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-Resolver-WsConnectionContext.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketChannelActor",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketChannelActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketDispatcher",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketDispatcher.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketFrame",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketFrame.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketHandler",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketRoute",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketRoute.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketRouter",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WebSocket-WebSocketRouter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Http\\Ws\\WsApplication",
+        "url": "classes/-Monadial-Nexus-Http-Ws-WsApplication.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Formatter\\JsonFormatter",
+        "url": "classes/-Monadial-Nexus-Logger-Formatter-JsonFormatter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Formatter\\LineFormatter",
+        "url": "classes/-Monadial-Nexus-Logger-Formatter-LineFormatter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Handler\\ConsoleHandler",
+        "url": "classes/-Monadial-Nexus-Logger-Handler-ConsoleHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Handler\\FileHandler",
+        "url": "classes/-Monadial-Nexus-Logger-Handler-FileHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\LogActor",
+        "url": "classes/-Monadial-Nexus-Logger-LogActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Logger",
+        "url": "classes/-Monadial-Nexus-Logger-Logger.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Mdc",
+        "url": "classes/-Monadial-Nexus-Logger-Mdc.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Monolog\\MonologFormatterAdapter",
+        "url": "classes/-Monadial-Nexus-Logger-Monolog-MonologFormatterAdapter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Monolog\\MonologHandlerAdapter",
+        "url": "classes/-Monadial-Nexus-Logger-Monolog-MonologHandlerAdapter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\NexusLogger",
+        "url": "classes/-Monadial-Nexus-Logger-NexusLogger.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Processor\\CallerInfoProcessor",
+        "url": "classes/-Monadial-Nexus-Logger-Processor-CallerInfoProcessor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Record",
+        "url": "classes/-Monadial-Nexus-Logger-Record.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Logger\\Swoole\\ThreadQueueHandler",
+        "url": "classes/-Monadial-Nexus-Logger-Swoole-ThreadQueueHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Dbal\\DbalDurableStateStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Dbal-DbalDurableStateStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Dbal\\DbalEventStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Dbal-DbalEventStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Dbal\\DbalSnapshotStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Dbal-DbalSnapshotStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Dbal\\Schema\\PersistenceSchemaManager",
+        "url": "classes/-Monadial-Nexus-Persistence-Dbal-Schema-PersistenceSchemaManager.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\DoctrineDurableStateStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-DoctrineDurableStateStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\DoctrineEventStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-DoctrineEventStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\DoctrineSnapshotStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-DoctrineSnapshotStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\Entity\\DurableStateEntry",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-Entity-DurableStateEntry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\Entity\\EventEntry",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-Entity-EventEntry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Doctrine\\Entity\\SnapshotEntry",
+        "url": "classes/-Monadial-Nexus-Persistence-Doctrine-Entity-SnapshotEntry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\AbstractEventSourcedActor",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-AbstractEventSourcedActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\Effect",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-Effect.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\EventSourcedBehavior",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-EventSourcedBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\PersistenceEngine",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-PersistenceEngine.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\RetentionPolicy",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-RetentionPolicy.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\EventSourced\\SnapshotStrategy",
+        "url": "classes/-Monadial-Nexus-Persistence-EventSourced-SnapshotStrategy.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Event\\EventEnvelope",
+        "url": "classes/-Monadial-Nexus-Persistence-Event-EventEnvelope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Event\\InMemoryEventStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Event-InMemoryEventStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Exception\\ConcurrentModificationException",
+        "url": "classes/-Monadial-Nexus-Persistence-Exception-ConcurrentModificationException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Exception\\RecoveryException",
+        "url": "classes/-Monadial-Nexus-Persistence-Exception-RecoveryException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Exception\\WriterConflictException",
+        "url": "classes/-Monadial-Nexus-Persistence-Exception-WriterConflictException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\PersistenceId",
+        "url": "classes/-Monadial-Nexus-Persistence-PersistenceId.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Recovery\\ReplayFilter",
+        "url": "classes/-Monadial-Nexus-Persistence-Recovery-ReplayFilter.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Snapshot\\InMemorySnapshotStore",
+        "url": "classes/-Monadial-Nexus-Persistence-Snapshot-InMemorySnapshotStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\Snapshot\\SnapshotEnvelope",
+        "url": "classes/-Monadial-Nexus-Persistence-Snapshot-SnapshotEnvelope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\AbstractDurableStateActor",
+        "url": "classes/-Monadial-Nexus-Persistence-State-AbstractDurableStateActor.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\DurableEffect",
+        "url": "classes/-Monadial-Nexus-Persistence-State-DurableEffect.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\DurableStateBehavior",
+        "url": "classes/-Monadial-Nexus-Persistence-State-DurableStateBehavior.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\DurableStateEngine",
+        "url": "classes/-Monadial-Nexus-Persistence-State-DurableStateEngine.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\DurableStateEnvelope",
+        "url": "classes/-Monadial-Nexus-Persistence-State-DurableStateEnvelope.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Persistence\\State\\InMemoryDurableStateStore",
+        "url": "classes/-Monadial-Nexus-Persistence-State-InMemoryDurableStateStore.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Async\\Future",
+        "url": "classes/-Monadial-Nexus-Runtime-Async-Future.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Async\\FutureResult",
+        "url": "classes/-Monadial-Nexus-Runtime-Async-FutureResult.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Async\\ImmediateFutureSlot",
+        "url": "classes/-Monadial-Nexus-Runtime-Async-ImmediateFutureSlot.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Async\\LazyFutureSlot",
+        "url": "classes/-Monadial-Nexus-Runtime-Async-LazyFutureSlot.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Duration",
+        "url": "classes/-Monadial-Nexus-Runtime-Duration.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\FutureCancelledException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-FutureCancelledException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\InvalidMailboxConfigException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-InvalidMailboxConfigException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\MailboxClosedException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-MailboxClosedException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\MailboxException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-MailboxException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\MailboxOverflowException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-MailboxOverflowException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Exception\\MailboxTimeoutException",
+        "url": "classes/-Monadial-Nexus-Runtime-Exception-MailboxTimeoutException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\FiberCancellable",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-FiberCancellable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\FiberFutureSlot",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-FiberFutureSlot.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\FiberMailbox",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-FiberMailbox.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\FiberRuntime",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-FiberRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\FiberScheduler",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-FiberScheduler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Fiber\\TimerEntry",
+        "url": "classes/-Monadial-Nexus-Runtime-Fiber-TimerEntry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Mailbox\\MailboxConfig",
+        "url": "classes/-Monadial-Nexus-Runtime-Mailbox-MailboxConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Step\\StepCancellable",
+        "url": "classes/-Monadial-Nexus-Runtime-Step-StepCancellable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Step\\StepFutureSlot",
+        "url": "classes/-Monadial-Nexus-Runtime-Step-StepFutureSlot.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Step\\StepMailbox",
+        "url": "classes/-Monadial-Nexus-Runtime-Step-StepMailbox.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Step\\StepRuntime",
+        "url": "classes/-Monadial-Nexus-Runtime-Step-StepRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Step\\VirtualClock",
+        "url": "classes/-Monadial-Nexus-Runtime-Step-VirtualClock.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\DeferredCancellable",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-DeferredCancellable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\SwooleCancellable",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-SwooleCancellable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\SwooleConfig",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-SwooleConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\SwooleFutureSlot",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-SwooleFutureSlot.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\SwooleMailbox",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-SwooleMailbox.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime",
+        "url": "classes/-Monadial-Nexus-Runtime-Swoole-SwooleRuntime.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\DefaultEnvelopeSerializer",
+        "url": "classes/-Monadial-Nexus-Serialization-DefaultEnvelopeSerializer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\Exception\\MessageDeserializationException",
+        "url": "classes/-Monadial-Nexus-Serialization-Exception-MessageDeserializationException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\Exception\\MessageSerializationException",
+        "url": "classes/-Monadial-Nexus-Serialization-Exception-MessageSerializationException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\Exception\\SerializationException",
+        "url": "classes/-Monadial-Nexus-Serialization-Exception-SerializationException.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\MessageType",
+        "url": "classes/-Monadial-Nexus-Serialization-MessageType.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\PhpNativeSerializer",
+        "url": "classes/-Monadial-Nexus-Serialization-PhpNativeSerializer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\TypeRegistry",
+        "url": "classes/-Monadial-Nexus-Serialization-TypeRegistry.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\ValinorJsonSerializer",
+        "url": "classes/-Monadial-Nexus-Serialization-ValinorJsonSerializer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\Serialization\\ValinorMessageSerializer",
+        "url": "classes/-Monadial-Nexus-Serialization-ValinorMessageSerializer.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\ConsistentHashRing",
+        "url": "classes/-Monadial-Nexus-WorkerPool-ConsistentHashRing.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Directory\\InMemoryWorkerDirectory",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Directory-InMemoryWorkerDirectory.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Protocol\\WorkerAskAck",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Protocol-WorkerAskAck.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Protocol\\WorkerAskCancel",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Protocol-WorkerAskCancel.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Protocol\\WorkerAskCancelled",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Protocol-WorkerAskCancelled.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Protocol\\WorkerAskReply",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Protocol-WorkerAskReply.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Protocol\\WorkerAskRequest",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Protocol-WorkerAskRequest.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\DefaultWorkerStartHandler",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-DefaultWorkerStartHandler.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\Directory\\ThreadMapDirectory",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-Directory-ThreadMapDirectory.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\Transport\\ThreadQueueTransport",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-Transport-ThreadQueueTransport.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\WorkerPool",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-WorkerPool.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\WorkerPoolApp",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-WorkerPoolApp.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\WorkerPoolBootstrap",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-WorkerPoolBootstrap.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\WorkerPoolHandle",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-WorkerPoolHandle.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Swoole\\WorkerRunnable",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Swoole-WorkerRunnable.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Transport\\InMemoryWorkerTransport",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Transport-InMemoryWorkerTransport.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\WorkerActorRef",
+        "url": "classes/-Monadial-Nexus-WorkerPool-WorkerActorRef.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\WorkerNode",
+        "url": "classes/-Monadial-Nexus-WorkerPool-WorkerNode.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\WorkerPoolConfig",
+        "url": "classes/-Monadial-Nexus-WorkerPool-WorkerPoolConfig.html"
+    },
+    {
+        "fqcn": "\\Monadial\\Nexus\\WorkerPool\\Worker\\WorkerReplyRef",
+        "url": "classes/-Monadial-Nexus-WorkerPool-Worker-WorkerReplyRef.html"
+    }
+]
