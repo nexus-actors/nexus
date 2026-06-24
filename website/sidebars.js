@@ -121,9 +121,8 @@ const sidebars = {
         'scaling/overview',
         'scaling/configuration',
         'scaling/bootstrap',
-        // batch 7 pages wired below after creation
-        // 'scaling/choosing-thread-count',
-        // 'scaling/cross-worker-ask',
+        'scaling/choosing-thread-count',
+        'scaling/cross-worker-ask',
       ],
     },
     {
