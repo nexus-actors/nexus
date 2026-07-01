@@ -91,4 +91,14 @@ interface WebSocketContext
      * Returns true if the connection is still open and accepting frames.
      */
     public function isAlive(): bool;
+
+    /**
+     * Return a copy of the context with a different underlying PSR-7 request.
+     *
+     * The dispatcher uses this to attach FastRoute path-param attributes to
+     * the stored request BEFORE the actor sees the context — otherwise a
+     * channel actor could not look up `$conn->request()->getAttribute('id')`
+     * for a route like `/ws/games/{id}`.
+     */
+    public function withRequest(ServerRequestInterface $request): self;
 }

@@ -254,15 +254,22 @@ final class WsApplication implements Application
         return $this;
     }
 
-    /** @param class-string<WebSocketChannelActor> $actorClass */
-    public function channel(string $path, string $actorClass, string $key): self
+    /**
+     * @param class-string<WebSocketChannelActor> $actorClass
+     * @param ?Closure(): WebSocketChannelActor $factory Optional constructor.
+     *        When null the dispatcher zero-arg instantiates the class. Pass
+     *        a factory when the channel actor needs dependencies (e.g. an
+     *        EntityRefFactory or a repository) that DI would otherwise
+     *        supply on an HTTP handler.
+     */
+    public function channel(string $path, string $actorClass, string $key, ?Closure $factory = null): self
     {
         if ($key === '') {
             throw new InvalidArgumentException("WsApplication::channel('{$path}') requires a non-empty key parameter.");
         }
 
         $this->guardDuplicate($path);
-        $this->wsRoutes[] = WebSocketRoute::channel($path, $actorClass, $key);
+        $this->wsRoutes[] = WebSocketRoute::channel($path, $actorClass, $key, $factory);
 
         return $this;
     }

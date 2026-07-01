@@ -101,7 +101,7 @@ composer require nexus-actors/doctrine-orm
 Scale actors across OS threads using Swoole's ZTS thread API. Requires ZTS PHP 8.5 and Swoole 6.0+ compiled with `--enable-swoole-thread`.
 
 :::caution ZTS PHP required
-Standard Homebrew and apt PHP builds are not ZTS. Use the Docker setup — the `php-swoole` service in `docker-compose.yml` ships ZTS PHP 8.5 with Swoole 6.0.
+Standard Homebrew and apt PHP builds are not ZTS. Use the Docker setup — the `php-swoole` service in `compose.yaml` ships ZTS PHP 8.5 with Swoole 6.0.
 :::
 
 ```bash

@@ -320,4 +320,4 @@ $ctx->scheduleOnce(Duration::zero(), static function () use ($ctx, $url): void {
 return Behavior::same();
 ```
 
-**See also:** [Best practices](../best-practices/overview.md), [Reference overview](../reference/overview.md)
+**See also:** [Best practices](../best-practices/overview.md), [Reference overview](../reference/overview.md), [Swoole deadlock-detector false positive](./swoole-deadlock-detector.md) — the periodic `Worker_reactor_try_to_exit()` cycle on idle Swoole workers.

@@ -12,9 +12,13 @@ use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Psr\Http\Message\ServerRequestInterface;
+use Swoole\Coroutine;
 use Swoole\Http\Server as HttpServer;
 use Swoole\WebSocket\Server as WebSocketServer;
 use Throwable;
+
+use const SWOOLE_HOOK_ALL;
+use const SWOOLE_HOOK_STDIO;
 
 /**
  * @psalm-api
@@ -34,11 +38,18 @@ final class SwooleWorkerServer
             ? new WebSocketServer($config->host, $config->port)
             : new HttpServer($config->host, $config->port);
 
+        // Swoole advertises `permessage-deflate` by default. If the Swoole
+        // build lacks zlib (as in our official image), every outbound frame
+        // is silently dropped with `FrameObject::pack(): Unable to compress`.
+        // Turning compression off is the portable default; users who WANT
+        // deflate can rebuild Swoole with zlib and re-enable via their own
+        // settings override.
         $settings = [
             'dispatch_mode' => $config->dispatchMode,
             'max_conn' => $config->maxConn,
             'max_request' => $config->maxRequest,
             'reactor_num' => $config->reactorThreads,
+            'websocket_compression' => false,
             'worker_num' => $config->workers,
         ];
 
@@ -53,11 +64,36 @@ final class SwooleWorkerServer
             static function (HttpServer|WebSocketServer $s, int $workerId) use ($factory, $config, $runtime): void {
                 $config->logger->info('Worker starting', ['workerId' => $workerId]);
 
+                // Install Swoole's coroutine hook AFTER the master fork but BEFORE
+                // any actor-side I/O. Doctrine PDO, sockets, and file operations
+                // inside the actor system must yield cooperatively rather than
+                // block the worker's reactor thread. Without this, a single
+                // blocking PDO call from an actor stalls the entire worker and
+                // Swoole eventually flags a deadlock on the reactor timeout.
+                // Setting it here (per-worker) sidesteps the "event-loop already
+                // created" error that installing on the main thread would cause.
+                // Hook everything EXCEPT stdio. Hooking stdio makes fwrite/echo
+                // yield the coroutine, which reorders log output vs actor work
+                // and confuses debug tracing. All other subsystems (PDO, curl,
+                // sockets, sleep, files) yield cooperatively so a blocking call
+                // in an actor doesn't stall the worker's reactor.
+                Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_STDIO]);
+
                 try {
-                    $system = ActorSystem::create("http-worker-{$workerId}", new SwooleRuntime());
+                    // Passing the config logger to ActorSystem::create means every
+                    // `$ctx->log()` call inside an actor routes to the same sink
+                    // the framework uses. If the user wants a different logger
+                    // per actor system, they can wrap the factory.
+                    $system = ActorSystem::create(
+                        "http-worker-{$workerId}",
+                        new SwooleRuntime(),
+                        logger: $config->logger,
+                    );
                     $app = $factory($system);
                     $runtime->system = $system;
                     $runtime->app = $app;
+
+
                     $config->logger->info('Worker started', [
                         'hasWebSocketRoutes' => $app->hasWebSocketRoutes(),
                         'workerId' => $workerId,

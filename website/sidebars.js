@@ -22,6 +22,7 @@ const sidebars = {
       items: [
         'tutorials/overview',
         'tutorials/wallet-app',
+        'tutorials/tictactoe',
       ],
     },
     {
@@ -83,6 +84,7 @@ const sidebars = {
         'http/responses',
         'http/error-handling',
         'http/websockets',
+        'http/websockets-channel-actors',
         'http/actors-in-http',
         'http/servers',
       ],
@@ -148,6 +150,7 @@ const sidebars = {
         'operations/troubleshooting',
         'operations/runbook',
         'operations/zts-php-setup',
+        'operations/swoole-deadlock-detector',
       ],
     },
     {

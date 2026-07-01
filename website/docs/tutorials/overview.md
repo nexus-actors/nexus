@@ -3,6 +3,7 @@ sidebar_position: 1
 title: Examples Overview
 related:
   - tutorials/wallet-app
+  - tutorials/tictactoe
   - getting-started/quick-start
   - core-concepts/behaviors
   - scaling/overview
@@ -28,16 +29,17 @@ Examples are not tutorials and they are not reference manuals. They are concrete
 | Example | What it shows | Key features |
 |---|---|---|
 | [Wallet app](./wallet-app.md) | Multi-thread Swoole HTTP server, event-sourced wallet aggregates, per-owner Doctrine ledger writer, raw DBAL admin endpoint, graceful shutdown. | Actor-per-owner, EntityBehavior, ConnectionPool, EntityManagerPool, `#[Transactional]`, NexusLogger, single-writer guarantee, idle passivation, supervised restart. |
+| [Tic-tac-toe](./tictactoe.md) | Multiplayer WebSocket game session per game id, React SPA client, lobby over REST, snapshot broadcast to all attached sockets. | EntityBehavior aggregate, WebSocketChannelActor fan-out, sealed command interface, per-id single-writer, passivation on idle, worker-pool sharding. |
 
 ## Reading order
 
-Read examples in the order they appear above. The wallet-app is intentionally the densest — it touches almost every Nexus subsystem — and later examples will assume you have at least skimmed it.
+Read examples in the order they appear above. The wallet-app is intentionally the densest — it touches almost every Nexus subsystem — and later examples will assume you have at least skimmed it. Tic-tac-toe layers WebSocket broadcast on top of the same `EntityBehavior` pattern, so read wallet-app first.
 
 If you are here to copy a pattern, the "Key features" column is the index: pick the example whose features include what you need.
 
 ## Running an example
 
-Every example has its own `docker-compose.yml` and is self-contained:
+Every example has its own `compose.yaml` and is self-contained:
 
 ```bash
 cd examples/<name>
@@ -51,5 +53,6 @@ The Composer dependencies under `examples/<name>` reference the in-repo packages
 ## Next steps
 
 - [Wallet app](./wallet-app.md) — the full multi-subsystem example.
+- [Tic-tac-toe](./tictactoe.md) — WebSocket multiplayer with per-game single-writer.
 - [Quick Start](../getting-started/quick-start.md) — build a counter actor from scratch.
 - [Behaviors](../core-concepts/behaviors.md) — understand the core behavior model the examples rely on.

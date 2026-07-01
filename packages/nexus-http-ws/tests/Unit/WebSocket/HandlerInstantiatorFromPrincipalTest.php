@@ -134,4 +134,10 @@ final class PrincipalCarryingWebSocketContext implements WebSocketContext
     {
         return true;
     }
+
+    #[Override]
+    public function withRequest(ServerRequestInterface $request): WebSocketContext
+    {
+        return new self($this->id, $request);
+    }
 }

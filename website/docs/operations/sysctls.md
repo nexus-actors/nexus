@@ -31,7 +31,7 @@ Raising the two queue depths and enabling `TIME_WAIT` socket reuse eliminates th
 
 ## Docker Compose
 
-```yaml title="docker-compose.yml"
+```yaml title="compose.yaml"
 services:
   php-swoole:
     build:

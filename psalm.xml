@@ -37,6 +37,21 @@
         </ignoreFiles>
     </projectFiles>
 
+    <stubs>
+        <!--
+            Swoole ext is loaded at runtime via reflection when Psalm scans the
+            whole project, but grumphp/pre-commit runs Psalm on individual
+            staged files and can miss `Swoole\WebSocket\Frame` etc. Point at
+            swoole/ide-helper so Psalm resolves those classes deterministically.
+        -->
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Server.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Frame.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/CloseFrame.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Server.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Request.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Response.php" />
+    </stubs>
+
     <plugins>
         <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
     </plugins>

@@ -1,0 +1,72 @@
+# Docker-in-Docker: this compose file is the example app's own runtime.
+# Independent of the parent Nexus monorepo's compose.yaml.
+#
+# Usage:
+#   make up          # start the Swoole-Threads HTTP server on :9080
+#   make logs        # tail server logs
+#
+# Open http://localhost:9080/ in two browser tabs (or share the URL) to
+# play — each tab is a distinct player thanks to a client id stored in
+# localStorage.
+
+services:
+  app:
+    build: .
+    image: nexus-tictactoe:dev
+    container_name: nexus-tictactoe
+    ports:
+      - "9080:8080"
+    sysctls:
+      net.core.somaxconn: 65535
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    environment:
+      TICTACTOE_HTTP_HOST: "0.0.0.0"
+      TICTACTOE_HTTP_PORT: "8080"
+      # Single worker: the WebSocketChannelActor fans out only to sockets
+      # attached to the same worker, so two players on different workers
+      # would never see each other (see HttpConfig for the full note).
+      TICTACTOE_THREADS: "${TICTACTOE_THREADS:-1}"
+      TICTACTOE_DB_DRIVER: "pdo_pgsql"
+      TICTACTOE_DB_HOST: "db"
+      TICTACTOE_DB_PORT: "5432"
+      TICTACTOE_DB_NAME: "tictactoe"
+      TICTACTOE_DB_USER: "tictactoe"
+      TICTACTOE_DB_PASS: "tictactoe"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./composer.json:/app/composer.json
+      - ./vendor:/app/vendor
+      - ./src:/app/src:ro
+      - ./public:/app/public:ro
+      # Path-repository source for nexus-actors/* — see composer.json.
+      - ../../packages:/nexus-packages:ro
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/health') ? 0 : 1);"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+  db:
+    image: postgres:16-alpine
+    container_name: nexus-tictactoe-db
+    environment:
+      POSTGRES_DB: "tictactoe"
+      POSTGRES_USER: "tictactoe"
+      POSTGRES_PASSWORD: "tictactoe"
+    ports:
+      - "5434:5432"
+    volumes:
+      - tictactoe-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tictactoe -d tictactoe"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  tictactoe-db-data:

@@ -29,6 +29,8 @@ final class InMemoryWebSocketContext implements WebSocketContext
 
     private bool $alive = true;
 
+    private ?ServerRequestInterface $requestOverride = null;
+
     public function __construct(private readonly int $id, private readonly string $path = '/') {}
 
     public function id(): int
@@ -38,7 +40,18 @@ final class InMemoryWebSocketContext implements WebSocketContext
 
     public function request(): ServerRequestInterface
     {
-        return new ServerRequest('GET', $this->path);
+        return $this->requestOverride ?? new ServerRequest('GET', $this->path);
+    }
+
+    public function withRequest(ServerRequestInterface $request): WebSocketContext
+    {
+        // Test double: mutate in place so `sentText` remains observable from
+        // the same instance the test constructed. A cloned context would give
+        // the dispatcher-owned copy its own send buffer, making assertions on
+        // the original silently miss the frames.
+        $this->requestOverride = $request;
+
+        return $this;
     }
 
     public function send(string $text): void

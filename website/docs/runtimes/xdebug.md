@@ -20,7 +20,7 @@ The `php-fiber` container starts Xdebug in **trigger** mode by default (`XDEBUG_
 1. Open **Settings → PHP → Debug** and confirm the debug port is `9003`.
 2. Open **Settings → PHP → Servers**, add a server named `nexus-fiber`:
    - Host: `localhost`
-   - Port: `9000` (or whatever your `docker-compose.yml` maps)
+   - Port: `9000` (or whatever your `compose.yaml` maps)
    - Check **Use path mappings** and map the project root to `/var/www/html` (the container's working directory).
 3. Set a breakpoint, then start a **PHP Remote Debug** run configuration with server `nexus-fiber` and IDE key `PHPSTORM`.
 
@@ -98,7 +98,7 @@ docker compose exec php env XDEBUG_MODE=profile XDEBUG_SESSION=1 php examples/sm
 docker compose exec php env XDEBUG_MODE=coverage vendor/bin/phpunit
 ```
 
-The `docker/Dockerfile` `xdebug` stage sets the defaults; Docker Compose can override them with `environment:` entries in `docker-compose.yml` without rebuilding the image.
+The `docker/Dockerfile` `xdebug` stage sets the defaults; Docker Compose can override them with `environment:` entries in `compose.yaml` without rebuilding the image.
 
 ## See also
 

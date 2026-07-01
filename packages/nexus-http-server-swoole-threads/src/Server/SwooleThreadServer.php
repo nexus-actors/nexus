@@ -57,9 +57,13 @@ final class SwooleThreadServer
         // init_arguments.
         $shutdownSignal = new Atomic(0);
 
+        // See SwooleWorkerServer for the `websocket_compression` rationale —
+        // outbound WS frames are silently dropped when Swoole was built
+        // without zlib.
         $server->set([
             ...$config->swooleSettings,
             'max_request' => $config->maxRequest,
+            'websocket_compression' => false,
             'worker_num' => $threads,
             /**
              * Thread\ArrayList stubs constrain offsetSet to ArrayAccess values;

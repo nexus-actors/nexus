@@ -5,7 +5,7 @@ event-sourced actor wallets, served by Swoole in thread mode.
 
 This is **a standalone Composer project** living inside the Nexus monorepo
 under `examples/`. It's self-contained — its own `composer.json`,
-`Dockerfile`, `docker-compose.yml`, `Makefile`, `.github/workflows/ci.yml`,
+`Dockerfile`, `compose.yaml`, `Makefile`, `.github/workflows/ci.yml`,
 PHPUnit suite, and load tester. You can copy the folder out to its own repo
 and `git init` it without changes.
 
@@ -206,7 +206,7 @@ middleware contract is identical.
 examples/nexus-wallet-app/
 ├── composer.json                  # depends on monadial/nexus-* packages
 ├── Dockerfile                     # PHP 8.5 ZTS + Swoole 6.0 thread-mode
-├── docker-compose.yml             # app service + optional perf client
+├── compose.yaml             # app service + optional perf client
 ├── Makefile                       # up/down/test/perf
 ├── .github/workflows/ci.yml       # build → test → smoke deposit→balance
 ├── public/server.php              # Swoole-Threads entry point

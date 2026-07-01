@@ -23,7 +23,7 @@ make shell    # Open a bash shell in the PHP container
 
 ## Docker services
 
-Three services are defined in `docker-compose.yml`:
+Three services are defined in `compose.yaml`:
 
 | Service | Purpose |
 |---|---|

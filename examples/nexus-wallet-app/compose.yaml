@@ -1,5 +1,5 @@
 # Docker-in-Docker: this compose file is the example app's own runtime.
-# Independent of the parent Nexus monorepo's docker-compose.yml.
+# Independent of the parent Nexus monorepo's compose.yaml.
 #
 # Usage:
 #   make up          # start the Swoole-Threads HTTP server on :8080

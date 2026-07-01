@@ -77,7 +77,7 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
             return $this->onClosed($ctx, $conn, $message->code, $state);
         }
 
-        return BehaviorWithState::same();
+        return $this->handleAppMessage($ctx, $message, $state);
     }
 
     /** @return S */
@@ -111,6 +111,20 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
 
             $conn->send($text);
         }
+    }
+
+    /**
+     * Hook for messages that are not lifecycle events — typically replies
+     * from actors this channel commands. Default is a no-op; override to
+     * cache state or broadcast to attached connections.
+     *
+     * @param ActorContext<object> $ctx
+     * @param S $state
+     * @return BehaviorWithState<object, S>
+     */
+    public function handleAppMessage(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
+    {
+        return BehaviorWithState::same();
     }
 
     /**

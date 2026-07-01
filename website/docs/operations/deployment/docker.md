@@ -52,9 +52,9 @@ The worker pool requires ZTS (Zend Thread Safety) PHP and Swoole compiled with `
 
 ## Sysctls and ulimits
 
-For production containers, add TCP sysctls and file descriptor limits to your `docker-compose.yml` or Kubernetes pod spec:
+For production containers, add TCP sysctls and file descriptor limits to your `compose.yaml` or Kubernetes pod spec:
 
-```yaml title="docker-compose.yml"
+```yaml title="compose.yaml"
 php-swoole:
   build:
     target: php-swoole

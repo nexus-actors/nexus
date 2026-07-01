@@ -21,7 +21,7 @@ make up / make down # Start/stop containers
 make shell          # Interactive bash in PHP container
 ```
 
-**Docker services** (`docker-compose.yml`):
+**Docker services** (`compose.yaml`):
 - `php` — Full environment (Xdebug + Swoole) for development
 - `php-fiber` — Fiber-only for unit/integration tests and CI
 - `php-swoole` — Swoole-only for Swoole and worker-pool tests and CI

@@ -63,6 +63,15 @@ final class WebSocketDispatcher
                     'fd' => $ctx->id(),
                     'path' => $path,
                 ]);
+
+                // Attach path params (same rationale as the channel branch).
+                $enriched = $upgrade;
+
+                foreach ($match['params'] as $paramName => $paramValue) {
+                    $enriched = $enriched->withAttribute($paramName, $paramValue);
+                }
+
+                $ctx = $ctx->withRequest($enriched);
                 $handler = $this->instantiator->instantiate($handlerClass, $ctx);
                 $handler->onOpen();
                 $this->table->attachHandler($ctx->id(), $handler, $ctx);
@@ -84,12 +93,27 @@ final class WebSocketDispatcher
                     'path' => $path,
                 ]);
 
+                // Attach FastRoute path params to the stored request so the
+                // channel actor can read `$conn->request()->getAttribute('id')`
+                // for a route like `/ws/games/{id}`. Without this, params
+                // matched here vanish before the actor sees them.
+                $enriched = $upgrade;
+
+                foreach ($match['params'] as $paramName => $paramValue) {
+                    $enriched = $enriched->withAttribute($paramName, $paramValue);
+                }
+
+                $ctx = $ctx->withRequest($enriched);
+
+                $factory = $route->channelFactory;
                 /** @psalm-suppress InvalidArgument, UnsafeInstantiation */
                 $ref = $this->registry->resolveOrSpawn(
                     $name,
-                    Props::fromStatefulFactory(static fn() => new $actorClass()),
+                    Props::fromStatefulFactory(
+                        $factory ?? static fn() => new $actorClass(),
+                    ),
                 );
-                $ref->tell(new ChannelConnectionOpened($ctx->id(), $ctx, $upgrade));
+                $ref->tell(new ChannelConnectionOpened($ctx->id(), $ctx, $enriched));
                 $this->table->attachChannel($ctx->id(), $ref, $name, $ctx);
 
                 return;

@@ -13,8 +13,11 @@ use Psr\Log\NullLogger;
 /**
  * @psalm-api
  *
- * Spawns and caches one channel actor per stable name. Used by
- * WebSocketDispatcher; not part of the user-facing API.
+ * Spawns and caches one channel actor per stable name. Cached refs are
+ * validated against `isAlive()` on every lookup, so a channel actor that
+ * stopped itself (e.g. after the last WS connection closed) is silently
+ * pruned and the next connect spawns a fresh one — no per-game leak.
+ * Used by WebSocketDispatcher; not part of the user-facing API.
  */
 final class ChannelActorRegistry
 {
@@ -30,10 +33,17 @@ final class ChannelActorRegistry
 
     public function resolveOrSpawn(string $name, Props $props): ActorRef
     {
-        if (isset($this->refs[$name])) {
+        $existing = $this->refs[$name] ?? null;
+
+        if ($existing !== null && $existing->isAlive()) {
             $this->logger->debug('ChannelActorRegistry: reusing existing actor', ['name' => $name]);
 
-            return $this->refs[$name];
+            return $existing;
+        }
+
+        if ($existing !== null) {
+            $this->logger->debug('ChannelActorRegistry: pruning stopped actor', ['name' => $name]);
+            unset($this->refs[$name]);
         }
 
         $this->logger->debug('ChannelActorRegistry: spawning new actor', ['name' => $name]);

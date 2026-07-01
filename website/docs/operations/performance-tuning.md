@@ -153,9 +153,9 @@ Preemptive scheduling forces every coroutine to yield every few milliseconds, re
 
 The 1-second `max` latency you see on default Docker is the Linux TCP RTO. Under SYN-queue overflow, the kernel drops connections and the client retries after exactly 1 second.
 
-Fix via `sysctls` in `docker-compose.yml`:
+Fix via `sysctls` in `compose.yaml`:
 
-```yaml title="docker-compose.yml"
+```yaml title="compose.yaml"
 php-swoole:
   build:
     context: .

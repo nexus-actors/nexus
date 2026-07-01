@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     libssl-dev \
     libicu-dev \
+    zlib1g-dev \
     && docker-php-ext-install bcmath intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -71,7 +72,7 @@ RUN cd /tmp \
     && git clone --depth 1 --branch v6.2.1 https://github.com/swoole/swoole-src.git \
     && cd swoole-src \
     && phpize \
-    && ./configure --enable-swoole --enable-swoole-thread \
+    && ./configure --enable-swoole --enable-swoole-thread --enable-swoole-zlib \
     && make -j$(nproc) \
     && make install \
     && rm -rf /tmp/swoole-src

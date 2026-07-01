@@ -29,7 +29,7 @@ final class ThreadAwareConnectionContext implements WebSocketContext
     public function __construct(
         private readonly WebSocketServer $server,
         private readonly int $fd,
-        private readonly ServerRequestInterface $request,
+        private ServerRequestInterface $request,
     ) {}
 
     #[Override]
@@ -42,6 +42,15 @@ final class ThreadAwareConnectionContext implements WebSocketContext
     public function request(): ServerRequestInterface
     {
         return $this->request;
+    }
+
+    #[Override]
+    public function withRequest(ServerRequestInterface $request): WebSocketContext
+    {
+        $clone = clone $this;
+        $clone->request = $request;
+
+        return $clone;
     }
 
     #[Override]
