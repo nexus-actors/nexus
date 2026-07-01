@@ -241,7 +241,63 @@ minimal, explicit surface.
   shutdown + assert captured state). Inject a fake/synchronous transport to keep tests
   deterministic.
 
-## 13. Open questions resolved
+## 13. Documentation & API deliverables
+
+Docs are a first-class part of this work, not an afterthought. The following are required
+alongside the code.
+
+### 13.1 Package README
+
+- `packages/nexus-messenger/README.md` — matches the style of `packages/nexus-cluster/README.md`:
+  one-paragraph purpose, architecture sketch, install line, minimal producer + consumer usage,
+  and a "when to use this" note. Published with the package to Packagist via the split repos.
+
+### 13.2 Docs site — new pages (Docusaurus, `website/docs/`)
+
+- **`packages/messenger.md`** — package reference page with frontmatter (`title: nexus-messenger`,
+  `sidebar_position`, `related:` links to `packages/core`, `packages/serialization`,
+  `packages/cluster`, `guides/messenger-bridge`). Covers the public surface: `MessengerActorRef`,
+  `MessengerGateway`, `ReceiverActor`, `MessageRouter` (+ `MapMessageRouter`, `StampMessageRouter`),
+  `NexusMessengerSerializer`, `LifecycleWatchdog`, and the two host models.
+- **`guides/messenger-bridge.md`** — task-oriented guide: producer (both APIs), consumer wiring,
+  routing (map default), serialization swap, worker-recycling via `LifecycleWatchdog`, and the
+  Nexus-owned vs `messenger:consume`-owned deployment decision. Cross-links the existing
+  `guides/standalone-integration.md`.
+
+### 13.3 Docs site — reference updates (`website/docs/reference/`)
+
+- **`reference/classes/`** — add per-class pages matching the existing 25-page style for the new
+  public API: `messenger-actor-ref.md`, `receiver-actor.md`, `message-router.md`,
+  `lifecycle-watchdog.md`, `nexus-messenger-serializer.md`. (Value-object/config classes like
+  `ReceiverActorConfig` documented inline on the package page rather than their own file.)
+- **`reference/exceptions.md`** — add `UnsupportedOperation` (thrown by `MessengerActorRef::ask()`
+  in v1) if it is a new exception; otherwise note the reuse of the existing type.
+- **`reference/config.md`** — document `ReceiverActorConfig` (poll interval, unroutable policy:
+  reject vs dead-letters) and `LifecycleWatchdog` thresholds (memory / time / message count).
+- **`reference/attributes.md`** — note `#[MessageType]` applicability to `MessengerActorRef::tell()`
+  messages if the Psalm plugin governs them (§4.1, confirm during implementation).
+
+### 13.4 Docs site — cross-links & navigation
+
+- **`website/sidebars.js`** — register `packages/messenger` in the packages group and
+  `guides/messenger-bridge` in the guides group.
+- Update `related:` frontmatter on **`packages/cluster.md`** (StampMessageRouter is the cluster
+  seam), **`packages/serialization.md`** (NexusMessengerSerializer reuse), and
+  **`packages/worker-pool.md`** where a "see also" strengthens discoverability.
+
+### 13.5 In-code API docs
+
+- Every public class/interface gets a Nexus-style docblock (`@psalm-api`, purpose, a short usage
+  example) consistent with `ClusterTransport`, `WorkerTransport`, and `Runtime`.
+- `CLAUDE.md` package list and the `## Architecture` section: add a `nexus-messenger` subsection
+  and a node in the dependency graph so the repo's top-level map stays accurate.
+
+### 13.6 Docs verification
+
+- Docusaurus build must pass (broken-link check): the `deploy-docs.yml` pipeline runs the site
+  build; new pages and every intra-doc link must resolve before merge.
+
+## 14. Open questions resolved
 
 - **`ask()` on `MessengerActorRef`** → deferred; throws `UnsupportedOperation` in v1.
 - **Unroutable inbound message** → `reject()` by default; configurable to `deadLetters()`.
