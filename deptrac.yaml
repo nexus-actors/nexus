@@ -133,6 +133,8 @@ deptrac:
       - Runtime
     Psalm:
       - Core
+      - DoctrineOrm
+      - Runtime
       - Serialization
       - WorkerPool
     Cluster:
@@ -182,6 +184,7 @@ deptrac:
       - HttpWs
       - Runtime
       - RuntimeSwoole
+      - WorkerPool
     HttpServerSwooleThreads:
       - Core
       - Http

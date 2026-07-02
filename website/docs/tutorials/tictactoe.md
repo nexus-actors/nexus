@@ -5,13 +5,13 @@ related:
   - tutorials/wallet-app
   - core-concepts/behaviors
   - http/websockets
-  - doctrine/entity-behavior
+  - persistence/event-sourcing
   - guides/single-writer-aggregates
 ---
 
 # Tic-tac-toe: multiplayer WebSocket game
 
-Two players open the same URL in different browsers and play a game of tic-tac-toe in real time. Behind the scenes each game is a persisted Doctrine aggregate driven by a per-id `EntityBehavior` actor; a per-game `WebSocketChannelActor` fans out state changes to every attached socket. This is the shape of any turn-based online game — replace the 3×3 board with anything you like.
+Two players open the same URL in different browsers and play a game of tic-tac-toe in real time. Behind the scenes each game is an **event-sourced** actor — every command produces events, and the game's state is a fold of the event log — projected into a Doctrine read model for the lobby. A per-game `WebSocketChannelActor` fans out state changes to every attached socket. This is the shape of any turn-based online game — replace the 3×3 board with anything you like.
 
 Source: [`examples/nexus-tictactoe/`](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-tictactoe).
 
@@ -19,8 +19,8 @@ Source: [`examples/nexus-tictactoe/`](https://github.com/nexus-actors/nexus/tree
 
 - A REST **lobby** — `GET /api/games` lists open games, `POST /api/games` mints one.
 - A persistent **WebSocket channel** — `/ws/games/{id}` — that the two players (and any spectators) attach to.
-- A **game aggregate** — `GameSession` — that holds every rule: whose turn it is, whether a cell is occupied, when the game ends.
-- A **game actor** driven by `EntityBehavior` — the single writer for each game id, flushing to Postgres on every move.
+- An **event-sourced game actor** — `EventSourcedBehavior`, the single writer for each game id — split into pure **DECIDE** rules (`GameRules`) that turn a command into events, and an **EVOLVE** fold (`GameState`) that rebuilds state from the log.
+- A **read model** — the `games` table (`GameSession`) — projected from the write side so the lobby can list live games and render a board with a plain indexed query.
 - A **channel actor** — owns the connection→identity binding, decodes each client frame into a typed *intent*, stamps identity server-side, and routes each reply (broadcast vs. private) to the right sockets.
 - A **React SPA** with a lobby, game board, and token-based reconnect. React and Babel load from a CDN (with Subresource Integrity) so there is no Node toolchain.
 
@@ -32,101 +32,128 @@ Two players are racing to place moves on the same board. Without single-writer d
 - **Optimistic locking + retry.** Cheaper on Postgres, more code in every handler, still needs a separate broadcast layer.
 - **Actor per game id.** The game actor is the only writer. Two concurrent HTTP or WebSocket requests targeting game `X` are serialised inside that actor's mailbox. Move validation, persistence, and broadcast all share the same commit boundary. The game actor's reply and the channel actor's broadcast are guaranteed to reflect the same committed state.
 
-The third option is what this example demonstrates. `EntityRefFactory::of($gameId)` spawns at most one live actor per game id per worker thread — the [single-writer principle](../guides/single-writer-aggregates.md).
+The third option is what this example demonstrates. `GameRefFactory::of($gameId)` spawns at most one live actor per game id per worker thread — the [single-writer principle](../guides/single-writer-aggregates.md). Because the actor is event-sourced, that single writer also gets an audit log for free: the sequence of `PlayerJoined` / `MoveMade` / `GameWon` events *is* the game.
 
 ## Architecture
 
 ```
 Browser (React SPA)                  Nexus worker thread
 ─────────────────                   ────────────────────
-GET /api/games          ──▶  ListGamesHandler   ──▶  EntityManagerPool
-POST /api/games         ──▶  CreateGameHandler  ──▶  persist empty row
-WS /ws/games/{id}       ──▶  GameChannelActor   ──▶  GameActor
-                                     │                    │  (EntityRefFactory::of)
-                                     │                    ▼
-                                     │             GameSession (Doctrine entity)
+GET /api/games          ──▶  ListGamesHandler   ──▶  EntityManagerPool ─┐  read
+POST /api/games         ──▶  CreateGameHandler  ──▶  seed lobby row     │  model
+WS /ws/games/{id}       ──▶  GameChannelActor   ──▶  GameActor (ES)     │  (`games`
+                                     │              (GameRefFactory::of)│   table)
+                                     │               DECIDE → events    │
+                                     │               persist to log     │
+                                     │               EVOLVE → state ────┘  project
                                      ▼                    │
-                              broadcast snapshot     flush on every move
-                              to all attached             │
-                              sockets                Postgres `games` row
+                              broadcast snapshot     Event log
+                              to all attached        (InMemory → Dbal)
+                              sockets
 ```
 
 `GameChannelActor` and `GameActor` sit inside the same `ActorSystem`; the channel actor's `$ctx->self()` is the reply target on every command it forwards.
 
-## The aggregate
+## The rules: DECIDE
 
-`GameSession` (the Doctrine entity under `Domain/Entity/`) enforces every rule:
+Event sourcing splits an aggregate in two. The **decide** half is a pure function — given the current state and a command, it returns the events to record or a rejection. It never touches a database, an actor, or a clock, so you can unit-test every rule in isolation:
 
-```php title="src/Domain/Entity/GameSession.php"
-public function makeMove(string $playerId, int $cellIndex): void
+```php title="src/Domain/GameRules.php"
+public static function move(GameState $state, MakeMove $command): GameDecision
 {
-    if ($this->status !== GameStatus::InProgress) {
-        throw new GameOverException("cannot move on a {$this->status->value} game");
+    $mark = $state->markFor($command->playerId);
+
+    if ($mark === null) {
+        // $playerId is the seat token — the message names the rule, not the secret.
+        return GameDecision::reject('player is not seated in this game');
     }
 
-    $mark = $this->markFor($playerId);
-
-    if ($mark !== $this->nextTurn) {
-        throw new NotYourTurnException("it is {$this->nextTurn?->value}'s turn");
+    if ($state->status !== GameStatus::InProgress) {
+        return GameDecision::reject("cannot move on a {$state->status->value} game");
     }
 
-    $board = $this->board()->place($cellIndex, $mark);
-    $this->board = $board->toArray();
+    if ($mark !== $state->nextTurn) {
+        return GameDecision::reject("it is {$state->nextTurn?->value}'s turn");
+    }
 
-    // …winner / draw check, then advance $this->nextTurn
+    if ($state->board[$command->cellIndex] !== null) {
+        return GameDecision::reject("cell {$command->cellIndex} is already occupied");
+    }
+
+    $board = $state->board()->place($command->cellIndex, $mark);
+    $events = [new MoveMade($mark, $command->cellIndex)];
+
+    $winner = $board->winner();
+
+    if ($winner !== null) {
+        $events[] = new GameWon($winner);
+    } elseif ($board->isFull()) {
+        $events[] = new GameDrawn();
+    }
+
+    return GameDecision::accept(...$events);
 }
 ```
 
-Every rule check throws a `GameDomainException` subclass. The actor doesn't validate; it just calls the aggregate and lets the exception surface. The game actor catches those exceptions and replies with a `GameRejected` message carrying the offending connection's fd, so the error reaches only that one client — not every spectator.
+A rejection carries a *token-free* message: the "seat" is an unguessable capability token, so `GameRules` is careful never to echo it into a message that will be logged or sent to a client.
 
-## The game actor
+## The state: EVOLVE
 
-The actor is a thin command dispatcher. The Doctrine wiring lives in `DoctrineKit` — this class exposes only the pure handler. It replies with one of three actor-layer messages, each routed differently by the channel actor:
+The **evolve** half is the fold — apply one event to the state and return the next state. This is what the persistence engine replays on (re)spawn to rebuild the game before the first command:
 
-```php title="src/Actor/GameActor.php"
-public static function handler(LoggerInterface $log): Closure
+```php title="src/Domain/State/GameState.php"
+public function apply(GameEvent $event): self
 {
-    return static function (ActorContext $ctx, GameEnvelope $env, GameSession $game) use ($log): EntityEffect {
-        $cmd = $env->command;
-        $replyTo = $env->replyTo;
-        $fd = $env->originFd;
-
-        try {
-            return match (true) {
-                // A join broadcasts the new state AND privately welcomes the joiner.
-                $cmd instanceof JoinGame => self::persist(
-                    $replyTo,
-                    static fn() => $game->join($cmd->playerId, $cmd->playerName),
-                    static fn(GameSession $g): Seated => new Seated($g->toSnapshot(), $fd, $cmd->playerId),
-                ),
-                $cmd instanceof MakeMove => self::persist(
-                    $replyTo,
-                    static fn() => $game->makeMove($cmd->playerId, $cmd->cellIndex),
-                    static fn(GameSession $g) => $g->toSnapshot(),
-                ),
-                $cmd instanceof Forfeit => self::persist(
-                    $replyTo,
-                    static fn() => $game->forfeit($cmd->playerId),
-                    static fn(GameSession $g) => $g->toSnapshot(),
-                ),
-                $cmd instanceof GetSnapshot => self::read($game, $replyTo),
-                default => throw new LogicException('unhandled GameCommand: ' . $cmd::class),
-            };
-        } catch (GameDomainException $e) {
-            // Targeted failure: only the fd that acted hears about it.
-            $replyTo->tell(new GameRejected($e->getMessage(), $fd));
-
-            return EntityEffect::same();
-        }
+    return match (true) {
+        $event instanceof PlayerJoined  => $this->seat($event),      // second join → InProgress, X to move
+        $event instanceof MoveMade      => $this->place($event),     // place mark, flip turn
+        $event instanceof GameWon       => $this->finishWon($event->winner),
+        $event instanceof GameDrawn     => $this->finishDrawn(),
+        $event instanceof GameForfeited => $this->finishForfeited($event->winner),
     };
 }
 ```
 
-The reply target and the originating fd are transport concerns, so they ride an actor-layer `GameEnvelope` — never the domain command. The domain commands (`JoinGame`, `MakeMove`, `Forfeit`, `GetSnapshot`) are pure data with no `ActorRef` and no fd, so you can unit-test the aggregate without ever booting an `ActorSystem`.
+`GameState` is `readonly`; every arm returns a new instance. Because DECIDE and EVOLVE are both pure, the whole rulebook is tested without booting an `ActorSystem` — see `GameRulesTest` and `GameStateTest`.
+
+## The game actor
+
+`GameActor` wires those two halves into an `EventSourcedBehavior`. DECIDE runs in the command handler and turns a `GameDecision` into an `Effect`; EVOLVE is the event handler. After events persist, the actor replies and projects the new state into the read model:
+
+```php title="src/Actor/GameActor.php"
+public static function behavior(string $gameId, EventStore $store, GameReadModel $readModel, LoggerInterface $log): Behavior
+{
+    return EventSourcedBehavior::create(
+        PersistenceId::of('Game', $gameId),
+        GameState::empty($gameId),
+        static fn(GameState $s, ActorContext $ctx, object $cmd): Effect => self::dispatch($s, $cmd, $readModel, $log), // DECIDE
+        static fn(GameState $s, object $event): GameState => self::applyEvent($s, $event),                             // EVOLVE
+    )
+        ->withEventStore($store)
+        ->toBehavior();
+}
+
+// A move: persist the events, reply the new snapshot, project it into the read model.
+private static function onMutation(GameState $state, GameDecision $decision, ActorRef $replyTo, int $fd, ...): Effect
+{
+    if ($decision->isRejected()) {
+        // Targeted failure: only the fd that acted hears about it.
+        return Effect::reply($replyTo, new GameRejected((string) $decision->rejection, $fd));
+    }
+
+    return Effect::persist(...$decision->events)
+        ->thenRun(static fn(GameState $next) => $readModel->apply($next->toSnapshot()))     // project read model
+        ->thenReply($replyTo, static fn(GameState $next) => $next->toSnapshot());           // broadcast source
+}
+```
+
+The reply target and the originating fd are transport concerns, so they ride an actor-layer `GameEnvelope` — never the domain command. The domain commands (`JoinGame`, `MakeMove`, `Forfeit`, `GetSnapshot`) are pure data with no `ActorRef` and no fd. Events persist *before* the reply and the projection fire, so a snapshot is never sent for a move that wasn't recorded.
+
+The journal itself is pluggable. The example wires a per-worker `InMemoryEventStore`; swap it for `DbalEventStore` (from `nexus-persistence-dbal`) to make the log durable — `GameActor` does not change.
 
 ## The channel actor: server-owned identity
 
-One actor per game id, holding two collaborators — an `EntityRefFactory` and a `ClientFrameCodec`. It owns the connection→identity binding, and this is where the security model lives.
+One actor per game id, holding two collaborators — a `GameRefFactory` (which locates the event-sourced game actor for an id) and a `ClientFrameCodec`. It owns the connection→identity binding, and this is where the security model lives.
 
 **A client never asserts who it is on a gameplay frame.** A `move` frame is `{"type":"move","cell":4}` — no player id. The codec decodes frames into *intents* (`JoinIntent`, `MoveIntent`, …), never domain commands. The channel actor turns an intent into a command by stamping the mover from the authenticated connection:
 
@@ -210,7 +237,7 @@ $app->paramResolver(new EntityManagerResolver());
 Routes::register($app, $doctrine->gameFactory, $serializer, $indexHandler, $log);
 ```
 
-The channel factory closure is how the actor receives its collaborators at spawn time — an `EntityRefFactory`, the `ClientFrameCodec`, and a logger:
+`DoctrineKit` builds the persistence side: the pooled connections for the lobby, the `InMemoryEventStore`, the `DoctrineGameReadModel` projection, and the `GameRefFactory` that ties them to the game actor. The channel factory closure is how the channel actor receives its collaborators at spawn time — the `GameRefFactory`, the `ClientFrameCodec`, and a logger:
 
 ```php title="src/Http/Routes.php"
 $codec = new ClientFrameCodec($serializer);
@@ -277,7 +304,7 @@ What the example intentionally leaves to you: authentication/rate-limiting on `P
 
 ## Where to go next
 
-- [Wallet app](./wallet-app.md) — the same `EntityBehavior` pattern with event-sourced writes and REST-only I/O.
+- [Wallet app](./wallet-app.md) — another event-sourced aggregate, REST-only, with a per-owner directory actor.
+- [Event sourcing](../persistence/event-sourcing.md) — the full `EventSourcedBehavior` API: `Effect`, event/snapshot stores, replay, and recovery.
 - [WebSockets](../http/websockets.md) — the reference page for `WebSocketChannelActor` and the DSL that registers it.
 - [Single-writer aggregates](../guides/single-writer-aggregates.md) — why per-id actors beat row locks and optimistic retry for state races.
-- [Doctrine / EntityBehavior DSL](../doctrine/entity-behavior.md) — full API for `EntityRefFactory`, `EntityEffect`, and passivation.
