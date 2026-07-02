@@ -1,72 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the api.nexusactors.com phpDocumentor site against the full Nexus monorepo.
-# Wraps a workaround invocation around 2 known phpDocumentor 3.9-dev bugs:
-# 1. Extension finder TypeError when project's vendor requires PHP > container's
-# 2. ProvideTemplateOverridePathMiddleware URI-scheme bug on default config loading
+# Build the api.nexusactors.com phpDocumentor reference — same pipeline as
+# .github/workflows/pages-api.yml: phpDocumentor from the nexus-actors fork
+# (whose default template carries the Nexus branding), run via Docker.
 #
-# These workarounds let phpdoc bypass config-file path detection by using
-# CLI flags + running from a fixtures dir (no phpdoc.dist.xml auto-detected).
+# The fork is cloned into build/.phpdocumentor (gitignored) and its vendor/
+# persists there, so repeat builds skip the composer download.
 
 NEXUS_WT="$(cd "$(dirname "$0")/.." && pwd)"
-PLUGIN_WT="${PLUGIN_WT:-$NEXUS_WT/../phpdoc-templates-plugin}"
+FORK_DIR="${PHPDOC_FORK_DIR:-$NEXUS_WT/build/.phpdocumentor}"
+FORK_REPO="https://github.com/nexus-actors/phpDocumentor.git"
 
-if [ ! -d "$PLUGIN_WT" ]; then
-    echo "ERROR: plugin worktree not found at $PLUGIN_WT" >&2
-    echo "Set PLUGIN_WT env var to the phpdoc-templates-plugin checkout." >&2
-    exit 1
+if [ ! -d "$FORK_DIR/.git" ]; then
+    git clone --depth 1 "$FORK_REPO" "$FORK_DIR"
+else
+    git -C "$FORK_DIR" fetch --depth 1 origin master
+    git -C "$FORK_DIR" reset --hard origin/master
 fi
 
 docker run --rm \
-    -v "$PLUGIN_WT":/app \
-    -v "$NEXUS_WT/packages":/nexus-packages:ro \
-    -v "$NEXUS_WT":/nexus \
-    phpdoc-templates-plugin:dev \
-    bash -c '
-set -euo pipefail
-
-# 1. Merge all 31 package src dirs into one flat dir
-MERGED=/tmp/phpdoc-nexus-merged
-mkdir -p $MERGED
-for pkg in nexus-core nexus-runtime nexus-runtime-fiber nexus-runtime-swoole \
-           nexus-runtime-step nexus-app nexus-serialization nexus-logger \
-           nexus-cluster nexus-worker-pool nexus-worker-pool-swoole \
-           nexus-persistence nexus-persistence-dbal nexus-persistence-doctrine \
-           nexus-http nexus-http-ws nexus-http-auth nexus-http-toolkit \
-           nexus-http-server-swoole nexus-http-server-swoole-threads \
-           nexus-doctrine-dbal nexus-doctrine-orm \
-           nexus-observability nexus-observability-otel nexus-observability-http \
-           nexus-observability-persistence nexus-observability-worker-pool \
-           nexus-observability-doctrine nexus-observability-logger \
-           nexus-observability-swoole nexus-observability-actor; do
-    cp -r /nexus-packages/$pkg/src/. $MERGED/ 2>/dev/null || true
-done
-
-# 2. Symlink .phpdoc/build → nexus target so api-classes.json lands there
-FIXTURES=/app/tests/Integration/fixtures
-if [ -d $FIXTURES/.phpdoc/build ]; then
-    mv $FIXTURES/.phpdoc/build $FIXTURES/.phpdoc/build.bak
-fi
-ln -sf /nexus/build/api-nexus $FIXTURES/.phpdoc/build
-cd $FIXTURES
-
-# 3. Run phpdoc with CLI flags (bypasses config file + URI bugs)
-/app/vendor/bin/phpdoc \
-    --directory=$MERGED \
-    --target=/nexus/build/api-nexus \
-    --cache-folder=/nexus/build/.phpdoc-cache \
-    --extensions-dir=/app \
-    --visibility=public --visibility=protected \
-    --ignore-tags=internal \
-    --force --no-ansi
-
-# 4. Restore
-rm $FIXTURES/.phpdoc/build
-if [ -f $FIXTURES/.phpdoc/build.bak ]; then
-    mv $FIXTURES/.phpdoc/build.bak $FIXTURES/.phpdoc/build
-fi
-'
+    -v "$FORK_DIR":/phpdoc \
+    -v "$NEXUS_WT":/data \
+    -w /data \
+    composer:2 \
+    sh -c 'composer install --no-dev --no-interaction --no-progress --quiet --working-dir=/phpdoc \
+        && php /phpdoc/bin/phpdoc --config=phpdoc.dist.xml --target=build/api-nexus --force'
 
 echo "API docs built at $NEXUS_WT/build/api-nexus/"
-echo "  Open index.html in a browser, or check api-classes.json for the catalog."

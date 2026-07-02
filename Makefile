@@ -96,7 +96,7 @@ spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?
 docs-verify: ## Verify ```php snippets in website/docs/ via bin/verify-doc-snippets
 	@docker compose exec -T php bin/verify-doc-snippets
 
-docs-api: ## Build the api.nexusactors.com phpDocumentor reference (uses phpdoc-templates-plugin)
+docs-api: ## Build the api.nexusactors.com phpDocumentor reference (nexus-actors/phpDocumentor fork)
 	@./bin/build-api-docs.sh
 
 docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default PORT=8081; set API_BASE_URL=http://127.0.0.1:$(PORT) in .env.local)
