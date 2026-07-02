@@ -4,8 +4,8 @@ sidebar_position: 3
 related:
   - runtimes/fiber
   - runtimes/swoole
-  - architecture/adrs/0001-actor-model-architecture
-  - architecture/adrs/0008-worker-pool-cluster-separation
+  - architecture/adrs/actor-model-architecture
+  - architecture/adrs/worker-pool-cluster-separation
 ---
 
 # ADR 0003: Dual Runtime Strategy — Fiber and Swoole

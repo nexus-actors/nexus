@@ -3,7 +3,7 @@ title: "ADR 0007: Remote Ask Protocol Standards"
 sidebar_position: 7
 related:
   - core-concepts/ask-pattern
-  - architecture/adrs/0008-worker-pool-cluster-separation
+  - architecture/adrs/worker-pool-cluster-separation
   - scaling/overview
 ---
 

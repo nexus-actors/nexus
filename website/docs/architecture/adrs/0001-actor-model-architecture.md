@@ -5,7 +5,7 @@ related:
   - architecture/design-philosophy
   - core-concepts/actors
   - core-concepts/supervision
-  - architecture/adrs/0002-immutable-behavior-api
+  - architecture/adrs/immutable-behavior-api
 ---
 
 # ADR 0001: Actor Model Architecture for PHP

@@ -2,8 +2,8 @@
 title: "ADR 0008: Worker Pool / Cluster Separation"
 sidebar_position: 8
 related:
-  - architecture/adrs/0005-multi-process-clustering
-  - architecture/adrs/0007-remote-ask-protocol
+  - architecture/adrs/multi-process-clustering
+  - architecture/adrs/remote-ask-protocol
   - scaling/overview
 ---
 
