@@ -1,0 +1,95 @@
+---
+import IDEEditor from './IDEEditor';
+
+const files = [
+  {
+    name: 'bootstrap.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+use Monadial\\Nexus\\App\\NexusApp;
+use Monadial\\Nexus\\Observability\\Config\\ObservabilityConfig;
+use Monadial\\Nexus\\Observability\\Otel\\ObservabilityFactory;
+use Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime;
+
+// One call wires traces, metrics, and logs into every actor.
+NexusApp::create('payments')
+    ->withObservability(ObservabilityFactory::fromConfig(
+        ObservabilityConfig::fromEnv($_SERVER),
+    ))
+    ->actor('payments', Props::fromBehavior($paymentBehavior))
+    ->run(new SwooleRuntime());
+
+// No call to withObservability()? A no-op provider — zero overhead.`,
+  },
+  {
+    name: 'PaymentActor.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+// W3C traceparent propagates through every tell() and ask().
+// Custom spans and metrics, straight from the actor context:
+$behavior = Behavior::receive(
+    static function (ActorContext $ctx, object $msg): Behavior {
+        if ($msg instanceof ChargeCard) {
+            $span = $ctx->tracer()->spanBuilder('charge-card')->startSpan();
+            $gateway->charge($msg->card, $msg->amount);
+            $span->end();
+
+            $ctx->meter()->createCounter('payments.charged')->add(1);
+        }
+
+        return Behavior::same();
+    },
+);
+
+// Resulting trace — one request, every hop:
+//   POST /payments         [200ms]
+//   └─ payments.handle     [180ms]
+//      └─ charge-card      [140ms]`,
+  },
+];
+---
+
+<section class="os-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">Every message leaves a trace.</h2>
+    <p class="nx-section-sub">
+      OpenTelemetry traces, RED metrics, and trace-correlated logs — propagated across every actor,
+      HTTP request, and worker thread. Off by default, zero overhead when disabled.
+    </p>
+    <IDEEditor client:load files={files} defaultIndex={0} />
+    <p class="os-cta">
+      <a href="/observability">→ See the full Observability guide</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .os-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .os-cta {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  .os-cta a {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+
+  .os-cta a:hover {
+    opacity: 0.75;
+    text-decoration: underline;
+  }
+</style>
