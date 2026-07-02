@@ -14,6 +14,8 @@ use Psr\Log\LoggerInterface;
  * Context passed to background tasks spawned via {@see ActorContext::spawnTask()}.
  *
  * Provides cooperative cancellation and a channel back to the parent actor.
+ *
+ * @internal Implementation detail of {@see ActorRef::ask()}. Not for direct use.
  */
 final class TaskContext implements Cancellable
 {

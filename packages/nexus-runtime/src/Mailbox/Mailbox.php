@@ -40,5 +40,17 @@ interface Mailbox
 
     public function isEmpty(): bool;
 
+    /**
+     * Close the mailbox. Subsequent enqueue() calls return
+     * EnqueueResult::Dropped without raising. Blocked dequeueBlocking()
+     * calls return null once the mailbox drains (closed-and-empty).
+     *
+     * Idempotent — calling close() on an already-closed mailbox is a no-op.
+     *
+     * Required by Plan 5 (graceful shutdown). Without close(), the actor's
+     * message loop has no way to wake up cleanly when the system stops.
+     */
     public function close(): void;
+
+    public function isClosed(): bool;
 }

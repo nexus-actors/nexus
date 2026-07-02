@@ -14,6 +14,8 @@ use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Lifecycle\PreRestart;
+use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Message\Resume;
@@ -37,12 +39,22 @@ final class ActorCellAdvancedTest extends TestCase
     private TestLogger $logger;
 
     #[Test]
-    public function checked_exception_in_handler_is_caught_and_logged(): void
+    public function checked_exception_in_handler_is_caught_logged_and_restarts(): void
     {
+        $restarted = false;
+
         /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new AskTimeoutException(ActorPath::root(), Duration::seconds(1));
+            },
+        )->onSignal(
+            static function (ActorContext $ctx, Signal $signal) use (&$restarted): Behavior {
+                if ($signal instanceof PreRestart) {
+                    $restarted = true;
+                }
+
+                return Behavior::same();
             },
         );
 
@@ -53,7 +65,7 @@ final class ActorCellAdvancedTest extends TestCase
         // should be caught, NOT propagated, and logged at error level.
         $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
-        // Actor should still be running (exception was caught)
+        // Default supervision (Restart) restarts the actor: it lands back in Running.
         self::assertSame(ActorState::Running, $cell->actorState());
 
         // Should have logged at error level
@@ -61,15 +73,28 @@ final class ActorCellAdvancedTest extends TestCase
             $this->logger->hasLogMatching('error', 'NexusException'),
             'Expected error log for NexusException; got: ' . print_r($this->logger->logs, true),
         );
+
+        // PreRestart should have been delivered on restart.
+        self::assertTrue($restarted, 'Expected PreRestart signal to be delivered on restart');
     }
 
     #[Test]
-    public function unchecked_logic_exception_in_handler_is_caught_and_logged(): void
+    public function unchecked_logic_exception_in_handler_is_caught_logged_and_restarts(): void
     {
+        $restarted = false;
+
         /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new LogicException('bug in handler code');
+            },
+        )->onSignal(
+            static function (ActorContext $ctx, Signal $signal) use (&$restarted): Behavior {
+                if ($signal instanceof PreRestart) {
+                    $restarted = true;
+                }
+
+                return Behavior::same();
             },
         );
 
@@ -78,7 +103,8 @@ final class ActorCellAdvancedTest extends TestCase
 
         $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
-        // Actor should still be running
+        // Unchecked exceptions now route through supervision: default Restart
+        // restarts the actor, which lands back in Running.
         self::assertSame(ActorState::Running, $cell->actorState());
 
         // Should have logged at critical level
@@ -86,15 +112,27 @@ final class ActorCellAdvancedTest extends TestCase
             $this->logger->hasLogMatching('critical', 'Unchecked exception in handler'),
             'Expected critical log for LogicException; got: ' . print_r($this->logger->logs, true),
         );
+
+        self::assertTrue($restarted, 'Expected PreRestart signal to be delivered on restart');
     }
 
     #[Test]
-    public function unexpected_exception_in_handler_is_caught_and_logged(): void
+    public function unexpected_exception_in_handler_is_caught_logged_and_restarts(): void
     {
+        $restarted = false;
+
         /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 throw new OverflowException('some unexpected error');
+            },
+        )->onSignal(
+            static function (ActorContext $ctx, Signal $signal) use (&$restarted): Behavior {
+                if ($signal instanceof PreRestart) {
+                    $restarted = true;
+                }
+
+                return Behavior::same();
             },
         );
 
@@ -103,7 +141,8 @@ final class ActorCellAdvancedTest extends TestCase
 
         $cell->processMessage($this->envelope(new AdvancedTestMessage('trigger')));
 
-        // Actor should still be running
+        // Unexpected throwables now route through supervision: default Restart
+        // restarts the actor, which lands back in Running.
         self::assertSame(ActorState::Running, $cell->actorState());
 
         // Should have logged at critical level (Throwable catch-all)
@@ -111,6 +150,8 @@ final class ActorCellAdvancedTest extends TestCase
             $this->logger->hasLogMatching('critical', 'Unexpected exception in handler'),
             'Expected critical log for unexpected exception; got: ' . print_r($this->logger->logs, true),
         );
+
+        self::assertTrue($restarted, 'Expected PreRestart signal to be delivered on restart');
     }
 
     // ======================================================================

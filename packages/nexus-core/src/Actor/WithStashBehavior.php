@@ -14,6 +14,8 @@ use Override;
  * Wrapper behavior that provides a StashBuffer to its factory before resolving
  * the runtime behavior. The capacity limits how many messages can be stashed.
  *
+ * @internal Implementation detail of {@see ActorContext::stash()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

@@ -5,10 +5,37 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 /**
+ * Result type returned from a stateful actor handler.
+ *
+ * When an actor is defined with `Behavior::withState()` or
+ * `StatefulActorHandler::handle()`, the handler returns a
+ * `BehaviorWithState<T, S>` on every message. The four factory methods encode
+ * all legal outcomes: advance state, keep state unchanged, stop the actor, or
+ * atomically swap both behavior and state.
+ *
+ * Example:
+ * ```php
+ * $behavior = Behavior::withState(
+ *     0,
+ *     static function (ActorContext $ctx, object $msg, int $count): BehaviorWithState {
+ *         return match (true) {
+ *             $msg instanceof Increment => BehaviorWithState::next($count + 1),
+ *             $msg instanceof Reset     => BehaviorWithState::next(0),
+ *             $msg instanceof GetCount  => (static function () use ($ctx, $count): BehaviorWithState {
+ *                 $ctx->sender()?->tell(new CountValue($count));
+ *                 return BehaviorWithState::same();
+ *             })(),
+ *             default => BehaviorWithState::same(),
+ *         };
+ *     },
+ * );
+ * ```
+ *
+ * @see Behavior::withState() for the factory that creates stateful behaviors
+ * @see StatefulActorHandler for the class-based alternative
+ *
  * @psalm-api
  * @psalm-immutable
- *
- * Result of a stateful behavior handler.
  *
  * @template T of object
  * @template S

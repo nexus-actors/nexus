@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpdocumentor configVersion="3"
+               xmlns="https://www.phpdoc.org/phpdoc/xsd/phpdocumentor.xsd"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <title>Nexus API Reference</title>
+    <paths>
+        <output>build/api-nexus</output>
+        <cache>build/.phpdoc-cache</cache>
+    </paths>
+    <version number="dev">
+        <api>
+            <source dsn="file://packages">
+                <path>nexus-core/src</path>
+                <path>nexus-runtime/src</path>
+                <path>nexus-runtime-fiber/src</path>
+                <path>nexus-runtime-swoole/src</path>
+                <path>nexus-runtime-step/src</path>
+                <path>nexus-app/src</path>
+                <path>nexus-serialization/src</path>
+                <path>nexus-logger/src</path>
+                <path>nexus-cluster/src</path>
+                <path>nexus-worker-pool/src</path>
+                <path>nexus-worker-pool-swoole/src</path>
+                <path>nexus-persistence/src</path>
+                <path>nexus-persistence-dbal/src</path>
+                <path>nexus-persistence-doctrine/src</path>
+                <path>nexus-http/src</path>
+                <path>nexus-http-ws/src</path>
+                <path>nexus-http-auth/src</path>
+                <path>nexus-http-toolkit/src</path>
+                <path>nexus-http-server-swoole/src</path>
+                <path>nexus-http-server-swoole-threads/src</path>
+                <path>nexus-doctrine-dbal/src</path>
+                <path>nexus-doctrine-orm/src</path>
+            </source>
+            <visibility>public</visibility>
+            <visibility>protected</visibility>
+            <markers>
+                <marker>TODO</marker>
+                <marker>FIXME</marker>
+            </markers>
+            <ignore-tags>
+                <ignore-tag>internal</ignore-tag>
+            </ignore-tags>
+        </api>
+    </version>
+</phpdocumentor>

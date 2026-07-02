@@ -14,6 +14,8 @@ use Override;
  * Wrapper behavior that provides a TimerScheduler to its factory before resolving
  * the runtime behavior.
  *
+ * @internal Implementation detail of {@see ActorContext::scheduleOnce()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

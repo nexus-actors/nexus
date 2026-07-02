@@ -1,69 +1,50 @@
 ---
 sidebar_position: 8
 title: nexus-app
+related:
+  - packages/core
+  - packages/runtime-fiber
+  - packages/runtime-swoole
+  - scaling/bootstrap
 ---
 
 # nexus-app
 
-Application kernel for Nexus actor applications. Provides a declarative API
-for registering actors and running them in single-process mode.
+Declarative bootstrap kernel for single-process Nexus applications.
 
-**Namespace:** `Monadial\Nexus\App\`
+## What's in this package
 
-## Classes
+- `NexusApp` — fluent builder that registers actors and starts the event loop
+- `ActorDefinition` — immutable value object pairing an actor name with its `Props`
 
-### NexusApp
+## Install
 
-Builder for defining and running an actor application.
-
-```php
-final class NexusApp
-{
-    public static function create(string $name): self;
-    public function actor(string $name, Props $props): self;
-    public function onStart(callable $callback): self;
-    public function actors(): array;
-    public function run(Runtime $runtime): void;
-}
+```bash
+composer require nexus-actors/app
 ```
 
-Usage:
+## Quick example
 
-```php
+<!-- verify:skip: requires a running actor system -->
+```php title="src/bootstrap.php" verify:skip
 use Monadial\Nexus\App\NexusApp;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 
 NexusApp::create('my-app')
     ->actor('orders', Props::fromBehavior($orderBehavior))
-    ->actor('payments', Props::fromBehavior($paymentBehavior))
+    ->actor('payments', Props::fromFactory(fn() => new PaymentActor()))
     ->onStart(function (ActorSystem $system): void {
-        // Called after all actors are spawned
+        // Called after all actors are spawned.
     })
     ->run(new SwooleRuntime());
 ```
 
-### ActorDefinition
+`run()` starts the runtime event loop and blocks until the system shuts down. All registered actors are spawned under `/user` before `onStart` fires.
 
-Immutable value object holding an actor's name and Props.
+For multi-worker deployments, use `WorkerPoolApp` or `WorkerPoolBootstrap` from `nexus-worker-pool-swoole` instead.
 
-```php
-/** @psalm-immutable */
-final readonly class ActorDefinition
-{
-    public function __construct(
-        public string $name,
-        public Props $props,
-    ) {}
-}
-```
+## See also
 
-## Single-process vs multi-worker
-
-`NexusApp::run()` runs all actors in a single process. For multi-worker
-scaling, use `WorkerPoolApp` or `WorkerPoolBootstrap` from
-`nexus-worker-pool-swoole`. See [Scaling Bootstrap](../scaling/bootstrap.md).
-
-```php
-// Single process
-$app->run(new SwooleRuntime());
-```
+- [Scaling / bootstrap](../scaling/bootstrap.md) — multi-worker entry point
+- [nexus-runtime-swoole](./runtime-swoole.md) — production runtime
+- [nexus-runtime-fiber](./runtime-fiber.md) — development runtime

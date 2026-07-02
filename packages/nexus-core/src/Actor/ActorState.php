@@ -4,7 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * Internal lifecycle state machine for actors.
+ *
+ * @internal Implementation detail of {@see ActorSystem::spawn()}. Not for direct use.
+ */
 enum ActorState: string
 {
     case New = 'new';
@@ -20,8 +26,8 @@ enum ActorState: string
      * Valid transitions:
      *   New -> Starting
      *   Starting -> Running
-     *   Running -> Suspended, Stopping
-     *   Suspended -> Running, Stopping
+     *   Running -> Suspended, Stopping, Starting (supervised restart)
+     *   Suspended -> Running, Stopping, Starting (supervised restart)
      *   Stopping -> Stopped
      */
     public function canTransitionTo(self $target): bool
@@ -29,8 +35,12 @@ enum ActorState: string
         return match ($this) {
             self::New => $target === self::Starting,
             self::Starting => $target === self::Running,
-            self::Running => $target === self::Suspended || $target === self::Stopping,
-            self::Suspended => $target === self::Running || $target === self::Stopping,
+            self::Running => $target === self::Suspended
+                || $target === self::Stopping
+                || $target === self::Starting,
+            self::Suspended => $target === self::Running
+                || $target === self::Stopping
+                || $target === self::Starting,
             self::Stopping => $target === self::Stopped,
             self::Stopped => false,
         };

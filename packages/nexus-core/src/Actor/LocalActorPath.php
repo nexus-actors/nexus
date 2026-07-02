@@ -10,6 +10,8 @@ use Override;
  * Explicit local actor path wrapper.
  *
  * @psalm-api
+ *
+ * @internal Implementation detail of {@see ActorPath}. Not for direct use.
  */
 final readonly class LocalActorPath implements ActorPathContract
 {

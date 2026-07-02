@@ -1,0 +1,42 @@
+# .github/workflows/lychee-links.yml
+# Link-rot check using lychee against the built Docusaurus site.
+# Runs on push/PR touching website/, weekly cron on Monday noon UTC,
+# and on-demand via workflow_dispatch.
+name: link-rot — lychee
+
+on:
+  push:
+    branches: [main, docs/v1-launch]
+    paths:
+      - 'website/**'
+      - '.github/workflows/lychee-links.yml'
+  pull_request:
+    paths:
+      - 'website/**'
+  schedule:
+    - cron: '0 12 * * MON'   # weekly Monday noon UTC
+  workflow_dispatch:
+
+jobs:
+  lychee:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install deps + build site
+        working-directory: website
+        run: |
+          npm ci
+          npm run build
+
+      - name: Run lychee
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --max-concurrency 10 --exclude-loopback "website/build/**/*.html"
+          fail: true

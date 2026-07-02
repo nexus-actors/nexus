@@ -1,5 +1,5 @@
 # ── Base stage (non-ZTS, for Fiber + Xdebug) ──
-FROM php:8.5-cli AS base
+FROM php:8.5.7-cli AS base
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y \
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # ── Base ZTS stage (thread-safe, for Swoole Thread) ──
-FROM php:8.5-zts AS base-zts
+FROM php:8.5.7-zts AS base-zts
 
 WORKDIR /app
 
@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     libssl-dev \
     libicu-dev \
+    zlib1g-dev \
     && docker-php-ext-install bcmath intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -68,10 +69,10 @@ RUN echo "xdebug.mode=${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/docker-php-ex
 FROM base-zts AS swoole-build
 
 RUN cd /tmp \
-    && git clone --depth 1 --branch v6.2.0-rc1 https://github.com/swoole/swoole-src.git \
+    && git clone --depth 1 --branch v6.2.1 https://github.com/swoole/swoole-src.git \
     && cd swoole-src \
     && phpize \
-    && ./configure --enable-swoole --enable-swoole-thread \
+    && ./configure --enable-swoole --enable-swoole-thread --enable-swoole-zlib \
     && make -j$(nproc) \
     && make install \
     && rm -rf /tmp/swoole-src
@@ -87,6 +88,16 @@ FROM base-zts AS php-swoole
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
 
+# OPcache + JIT — see docker/opcache.ini for the rationale per-setting
+# and website/docs/http/performance.md for the full tuning guide. The
+# zzz- prefix on the prod override matters: PHP loads conf.d/*.ini in
+# alphabetical order and later files override earlier ones. ASCII sorts
+# '-' (0x2D) BEFORE '.' (0x2E), so a name like `zz-opcache-prod.ini`
+# would actually load BEFORE `zz-opcache.ini` and get clobbered by it.
+# `zzz-` sorts strictly after `zz-`, ensuring the prod override wins.
+COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
+COPY docker/zzz-opcache-prod.ini /usr/local/etc/php/conf.d/zzz-opcache-prod.ini
+
 CMD ["tail", "-f", "/dev/null"]
 
 # ── Target: php-full (ZTS + xdebug + swoole thread) ──
@@ -94,5 +105,12 @@ FROM xdebug-zts AS php-full
 
 COPY --from=swoole-build /usr/local/lib/php/extensions/ /usr/local/lib/php/extensions/
 RUN docker-php-ext-enable swoole
+
+# DEV image: base OPcache only — NO -prod.ini override. Devs editing
+# volume-mounted code expect changes to take effect; validate_timestamps=1
+# (the default in opcache.ini) re-stats every 2 seconds. Xdebug also
+# disables JIT at load, so the jit_buffer_size in opcache.ini is unused
+# here — acceptable cost for a dev image.
+COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 
 CMD ["tail", "-f", "/dev/null"]

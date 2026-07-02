@@ -1,76 +1,56 @@
 ---
 sidebar_position: 2
 title: nexus-runtime-fiber
+related:
+  - packages/runtime
+  - packages/runtime-swoole
+  - packages/runtime-step
+  - runtimes/fiber
 ---
 
 # nexus-runtime-fiber
 
-Fiber-based runtime using PHP 8.1+ native Fibers for cooperative multitasking.
-No extensions required.
+PHP 8.1+ native Fiber runtime for Nexus — cooperative multitasking with no extensions required.
 
-**Composer:** `nexus-actors/runtime-fiber`
+## What's in this package
 
-**Namespace:** `Monadial\Nexus\Runtime\Fiber\`
+- `FiberRuntime` — implements `Runtime`; manages a map of `Fiber` instances and a `FiberScheduler`; `run()` enters a tick loop
+- `FiberMailbox` — `SplQueue`-backed mailbox; `dequeueBlocking()` suspends the current fiber until a message arrives
+- `FiberScheduler` — sorted timer queue; `scheduleOnce`, `scheduleRepeatedly`, `advanceTimers`
+- `FiberCancellable` — boolean-flag cancellation handle
 
-## Classes
+## Install
 
-### FiberRuntime
-
-Implements `Monadial\Nexus\Runtime\Runtime\Runtime`.
-
-The main runtime class. Manages a map of `Fiber` instances and a
-`FiberScheduler` for timer management. The `run()` method enters a tick loop
-that starts/resumes fibers and advances timers until all work is complete.
-
-```php
-use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
-
-$runtime = new FiberRuntime();
+```bash
+composer require nexus-actors/runtime-fiber
 ```
 
-**Key methods (from Runtime interface):**
+## Quick example
 
-- `name(): string` -- Returns `'fiber'`.
-- `createMailbox(MailboxConfig): Mailbox` -- Returns a new `FiberMailbox`.
-- `createFutureSlot(): FutureSlot` -- Returns a runtime slot implementation for `Future`.
-- `spawn(callable): string` -- Creates a `Fiber` from the callable and returns an ID like `'fiber-0'`.
-- `scheduleOnce(Duration, callable): Cancellable` -- Delegates to `FiberScheduler`.
-- `scheduleRepeatedly(Duration, Duration, callable): Cancellable` -- Delegates to `FiberScheduler`.
-- `yield(): void` -- Calls `Fiber::suspend('yield')` if inside a fiber.
-- `sleep(Duration): void` -- Calls `usleep()`.
-- `run(): void` -- Starts the tick loop.
-- `shutdown(Duration): void` -- Signals the loop to exit after all fibers complete.
-- `isRunning(): bool` -- Returns whether the tick loop is active.
+<!-- verify:skip: requires a running actor system -->
+```php title="src/bootstrap.php" verify:skip
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Runtime\Duration;
 
-### FiberMailbox
+$runtime = new FiberRuntime();
+$system  = ActorSystem::create('app', $runtime);
 
-Implements `Monadial\Nexus\Runtime\Mailbox\Mailbox`.
+$ref = $system->spawn(Props::fromBehavior(Behavior::receive(
+    static fn($ctx, $msg): Behavior => Behavior::same(),
+)), 'worker');
 
-Array-backed (`SplQueue`) mailbox with blocking dequeue via fiber suspension.
-When `dequeueBlocking()` is called on an empty mailbox, the current fiber
-suspends itself. It is resumed when a new message is enqueued.
+$ref->tell(new MyMessage());
+$runtime->scheduleOnce(Duration::millis(100), fn() => $system->shutdown(Duration::seconds(1)));
+$system->run();
+```
 
-Supports all `OverflowStrategy` modes for bounded mailboxes.
+Each actor runs in its own PHP Fiber. The runtime tick loop starts and resumes fibers, then advances the scheduler. Use `nexus-runtime-swoole` for production workloads requiring true async I/O.
 
-### FiberScheduler
+## See also
 
-Internal timer manager. Maintains a sorted list of `TimerEntry` objects.
-Provides:
-
-- `scheduleOnce(Duration, Closure, DateTimeImmutable): Cancellable`
-- `scheduleRepeatedly(Duration, Duration, Closure, DateTimeImmutable): Cancellable`
-- `advanceTimers(DateTimeImmutable): void`
-- `hasPendingTimers(): bool`
-
-### FiberCancellable
-
-Implements `Monadial\Nexus\Runtime\Runtime\Cancellable`.
-
-Simple boolean-flag cancellable. Calling `cancel()` sets the flag; the
-scheduler checks it on the next `advanceTimers()` pass and skips cancelled
-entries.
-
-### TimerEntry
-
-Internal `readonly` value object holding a timer's callback, fire time,
-repeat flag, interval, and `FiberCancellable` reference.
+- [nexus-runtime](./runtime.md) — `Runtime` interface, `Duration`, and mailbox contracts
+- [nexus-runtime-swoole](./runtime-swoole.md) — Swoole coroutine runtime for production
+- [nexus-runtime-step](./runtime-step.md) — deterministic step runtime for tests

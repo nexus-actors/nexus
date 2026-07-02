@@ -1,0 +1,10 @@
+# .lycheeignore — lychee link-checker allowlist
+# Domains excluded from link-rot CI checks.
+
+# Not yet deployed — nexusactors.com subdomains will return 404 until V1 launch
+nexusactors\.com
+docs\.nexusactors\.com
+api\.nexusactors\.com
+
+# GitHub issues URLs change constantly (new issues created/closed)
+github\.com/nexus-actors/nexus/issues/

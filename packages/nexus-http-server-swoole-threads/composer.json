@@ -1,0 +1,29 @@
+{
+    "name": "nexus-actors/http-server-swoole-threads",
+    "description": "Thread-mode HTTP server built on Swoole 6 native SWOOLE_THREAD; cross-thread pool-singleton actors via WorkerNode.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "ext-swoole": ">=6.2.1",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/http-server-swoole": "dev-main",
+        "nexus-actors/http-ws": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
+        "nexus-actors/worker-pool": "dev-main",
+        "nexus-actors/worker-pool-swoole": "dev-main"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\Tests\\": "tests/"
+        }
+    }
+}

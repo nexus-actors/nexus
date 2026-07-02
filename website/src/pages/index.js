@@ -292,7 +292,7 @@ function Hero() {
             <Link className={styles.ctaPrimary} to="/docs/getting-started/quick-start">
               Quick Start
             </Link>
-            <Link className={styles.ctaGhost} to="/docs/intro">
+            <Link className={styles.ctaGhost} to="/docs/welcome">
               Docs
             </Link>
             <Link

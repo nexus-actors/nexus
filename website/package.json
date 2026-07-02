@@ -25,7 +25,9 @@
   "devDependencies": {
     "@docusaurus/eslint-plugin": "^3.9.2",
     "@docusaurus/module-type-aliases": "^3.7",
+    "@docusaurus/plugin-client-redirects": "^3.9.2",
     "@docusaurus/types": "^3.7",
+    "@easyops-cn/docusaurus-search-local": "^0.55.2",
     "eslint": "^8.57.1"
   },
   "browserslist": {

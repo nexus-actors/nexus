@@ -1,0 +1,16 @@
+{
+  "name": "nexus-brand",
+  "version": "0.1.0",
+  "description": "Shared design tokens, logo set, and OG-image generator for the Nexus documentation triumvirate (Astro landing, Docusaurus docs, phpDocumentor API ref).",
+  "type": "module",
+  "private": true,
+  "main": "./tokens.json",
+  "exports": {
+    ".": "./tokens.json",
+    "./tokens.css": "./tokens.css",
+    "./tokens.json": "./tokens.json",
+    "./logo.svg": "./logo.svg",
+    "./logo-mark.svg": "./logo-mark.svg",
+    "./favicon.svg": "./favicon.svg"
+  }
+}

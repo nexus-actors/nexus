@@ -1,18 +1,18 @@
 ---
 sidebar_position: 2
 title: Bootstrap Runtime
+related:
+  - runtimes/overview
+  - runtimes/fiber
+  - runtimes/swoole
+  - runtimes/step
 ---
 
 # Bootstrap Runtime
 
-This page is the fastest way to bootstrap Nexus runtime usage.
+This page shows the minimum code to get any Nexus runtime running — pick the path that matches your use case and you will have a working actor system or standalone future in under a minute.
 
-Use one of two tracks:
-
-- Track A: bootstrap an actor system with Fiber, Swoole, or Step runtime
-- Track B: use standalone runtime primitives (`Future`, `FutureSlot`) without actors
-
-## Choose Your Runtime Path
+## Choosing a path
 
 | Path | Install | Best for |
 |---|---|---|
@@ -21,24 +21,29 @@ Use one of two tracks:
 | Step actor runtime | `composer require nexus-actors/core nexus-actors/runtime-step` | Deterministic testing with manual stepping |
 | Standalone runtime primitives | `composer require nexus-actors/runtime` | Async composition without actor system APIs |
 
-## Track A: Actor System Bootstrap
+## Actor system bootstrap
 
 ### Fiber (development default)
 
-```php
+`FiberRuntime` needs no configuration. Create the runtime, pass it to `ActorSystem::create()`, spawn actors, then call `run()`.
+
+```php title="src/bootstrap-fiber.php"
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
 $runtime = new FiberRuntime();
 $system = ActorSystem::create('app', $runtime);
 
-// spawn actors, then run
+// spawn actors here
+
 $system->run();
 ```
 
 ### Swoole (production)
 
-```php
+Pass a `SwooleConfig` to control mailbox capacity, coroutine hooking, and the coroutine ceiling.
+
+```php title="src/bootstrap-swoole.php"
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
@@ -55,54 +60,56 @@ $system->run();
 
 ### Step (tests)
 
-```php
+Pass `$runtime->clock()` to the actor system so actors share the same virtual clock. Time and message processing are both under your control.
+
+```php title="tests/bootstrap-step.php"
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 
 $runtime = new StepRuntime();
 $system = ActorSystem::create('test-system', $runtime, clock: $runtime->clock());
 
-// manual execution for deterministic assertions
+// send messages, then manually advance execution
 $runtime->step();
 $runtime->advanceTime(\Monadial\Nexus\Runtime\Duration::seconds(1));
 ```
 
-## Track B: Standalone Runtime Primitives
+## Standalone runtime primitives
 
-You can compose futures without bootstrapping an actor system.
-Use this minimal bootstrap:
+You can compose futures without bootstrapping an `ActorSystem`. This minimal approach works when you need async orchestration but not full actor lifecycle management.
 
-```php
+```php title="src/standalone.php"
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Step\StepRuntime;
 
 $runtime = new StepRuntime();
-// Result placeholder managed by the runtime (resolve/fail + await).
 $resultSlot = $runtime->createFutureSlot();
 $future = new Future($resultSlot);
 
-$runtime->scheduleOnce(Duration::millis(100), static fn() => $resultSlot->resolve((object) ['ok' => true]));
+$runtime->scheduleOnce(
+    Duration::millis(100),
+    static fn() => $resultSlot->resolve((object) ['ok' => true]),
+);
+
 $runtime->advanceTime(Duration::millis(100));
 $result = $future->await();
 ```
 
-For complete standalone guidance and richer examples, see:
-[Runtime Without Actors](./runtime-without-actors.md).
+For richer examples and motivation, see [Standalone Runtime](./standalone.md).
 
-## Bootstrap Checklist
+## Bootstrap checklist
 
 You are bootstrapped when:
 
 - dependencies are installed for exactly one chosen path
-- namespace imports compile with `Monadial\Nexus\Runtime\...`
-- actor path: `ActorSystem::create(...)` runs with selected runtime
+- namespace imports compile under `Monadial\Nexus\Runtime\…`
+- actor path: `ActorSystem::create(…)` runs without error
 - standalone path: `Future` resolves and combinators execute as expected
 
-## Next
+## See also
 
-- Runtime details: [Runtime Overview](./overview.md)
-- Fiber deep dive: [Fiber Runtime](./fiber.md)
-- Swoole deep dive: [Swoole Runtime](./swoole.md)
-- Deterministic testing: [Step Runtime](./step.md)
-- Package reference: [nexus-runtime](../packages/runtime.md)
+- [Runtime Overview](./overview.md) — the `Runtime` interface contract and when to choose each implementation
+- [Fiber Runtime](./fiber.md) — cooperative scheduling deep dive
+- [Swoole Runtime](./swoole.md) — configuration, coroutine hooking, graceful shutdown
+- [Step Runtime](./step.md) — `step()`, `drain()`, `advanceTime()`, and testing patterns

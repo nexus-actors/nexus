@@ -12,16 +12,39 @@
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
             <directory>packages/nexus-persistence/tests/Unit</directory>
             <directory>packages/nexus-persistence-dbal/tests/Unit</directory>
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
+            <directory>packages/nexus-http/tests/Unit</directory>
+            <directory>packages/nexus-http-ws/tests/Unit</directory>
+            <directory>packages/nexus-logger/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
             <directory>packages/nexus-worker-pool-swoole/tests/Unit</directory>
+            <directory>packages/nexus-http-server-swoole/tests/Unit</directory>
+            <directory>packages/nexus-http-server-swoole-threads/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-dbal/tests/UnitSwoole</directory>
+        </testsuite>
+        <testsuite name="integration-doctrine-entity-behavior">
+            <directory>tests/Integration/Doctrine/Orm/EntityBehavior</directory>
+        </testsuite>
+        <testsuite name="integration-doctrine-fiber">
+            <directory>tests/Integration/Doctrine/Fiber</directory>
+        </testsuite>
+        <testsuite name="integration-doctrine-orm-fiber">
+            <directory>tests/Integration/Doctrine/Orm/Fiber</directory>
+        </testsuite>
+        <testsuite name="integration-doctrine-orm-swoole">
+            <directory>tests/Integration/Doctrine/Orm/Swoole</directory>
+        </testsuite>
+        <testsuite name="integration-doctrine-swoole">
+            <directory>tests/Integration/Doctrine/Swoole</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -29,14 +52,23 @@
         <testsuite name="integration-swoole">
             <directory>tests/Integration/Swoole</directory>
         </testsuite>
+        <testsuite name="integration-http-swoole">
+            <directory>tests/Integration/HttpSwoole</directory>
+        </testsuite>
         <testsuite name="integration-step">
             <directory>tests/Integration/Step</directory>
+        </testsuite>
+        <testsuite name="integration-http">
+            <directory>tests/Integration/Http</directory>
         </testsuite>
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
         <testsuite name="integration-workerPool">
             <directory>tests/Integration/WorkerPool</directory>
+        </testsuite>
+        <testsuite name="integration-worker-pool-swoole">
+            <directory>tests/Integration/WorkerPoolSwoole</directory>
         </testsuite>
         <testsuite name="unit-persistence">
             <directory>packages/nexus-persistence/tests/Unit</directory>
@@ -53,6 +85,13 @@
         <testsuite name="performance">
             <directory>tests/Performance</directory>
         </testsuite>
+        <testsuite name="performance-http-swoole">
+            <directory>tests/Performance/HttpSwoole</directory>
+            <exclude>tests/Performance/HttpSwoole/Support</exclude>
+        </testsuite>
+        <testsuite name="performance-http-swoole-threads">
+            <directory>tests/Performance/HttpSwooleThreads</directory>
+        </testsuite>
         <testsuite name="psalm">
             <directory>packages/nexus-psalm/tests</directory>
         </testsuite>
@@ -65,6 +104,8 @@
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
+            <directory>packages/nexus-doctrine-dbal/src</directory>
+            <directory>packages/nexus-doctrine-orm/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>
             <directory>packages/nexus-worker-pool-swoole/src</directory>
             <directory>packages/nexus-app/src</directory>
@@ -72,6 +113,11 @@
             <directory>packages/nexus-persistence-dbal/src</directory>
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
+            <directory>packages/nexus-http/src</directory>
+            <directory>packages/nexus-http-ws/src</directory>
+            <directory>packages/nexus-logger/src</directory>
+            <directory>packages/nexus-http-server-swoole/src</directory>
+            <directory>packages/nexus-http-server-swoole-threads/src</directory>
             <directory>packages/nexus-core/tests/Support</directory>
         </include>
     </source>

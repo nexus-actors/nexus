@@ -10,6 +10,8 @@ use Stringable;
  * Common contract for local and remote actor paths.
  *
  * @psalm-api
+ *
+ * @internal Implementation detail of {@see ActorPath}. Not for direct use.
  */
 interface ActorPathContract extends Stringable
 {

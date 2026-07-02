@@ -22,8 +22,8 @@ install: ## Composer install
 update: ## Composer install
 	$(DC) composer update
 
-test: ## Run all tests
-	$(DC) vendor/bin/phpunit
+test: ## Run all tests safe on the php container (Swoole suites: make test-swoole; Doctrine fiber: make test-doctrine)
+	$(DC) vendor/bin/phpunit --testsuite=unit,integration-doctrine-entity-behavior,integration-fiber,integration-http,integration-step,integration-serialization,integration-persistence,psalm
 
 test-unit: ## Unit tests only
 	$(DC) vendor/bin/phpunit --testsuite=unit
@@ -34,14 +34,36 @@ test-fiber: ## Fiber integration tests
 test-swoole: ## Swoole integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-swoole
 
+test-worker-pool-swoole: ## Worker pool Swoole integration tests
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-worker-pool-swoole
+
 test-serialization: ## Serialization integration tests
 	$(DC) vendor/bin/phpunit --testsuite=integration-serialization
 
 test-cluster: ## Cluster integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
 
+test-doctrine: ## Doctrine DBAL pool + ORM pool + EntityBehavior integration tests
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-fiber
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-orm-fiber
+	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-entity-behavior
+	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-swoole
+	docker compose exec -T php-swoole vendor/bin/phpunit --testsuite=integration-doctrine-orm-swoole
+
 test-persistence: ## Persistence unit + integration tests
 	$(DC) vendor/bin/phpunit --testsuite=unit-persistence,unit-persistence-dbal,unit-persistence-doctrine,integration-persistence
+
+test-http: ## HTTP integration tests
+	$(DC) vendor/bin/phpunit --testsuite=integration-http
+
+test-http-swoole: ## HTTP Swoole integration tests
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-http-swoole
+
+perf-http-swoole: ## HTTP Swoole performance benchmarks (worker mode)
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole
+
+perf-http-swoole-threads: ## HTTP Swoole performance benchmarks (thread mode)
+	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole-threads
 
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
@@ -67,4 +89,10 @@ profile-hotpath: ## Profile hotpath breakdown with SPX (then run make spx-ui)
 spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?SPX_KEY=nexus&SPX_UI_URI=/)
 	docker compose exec php-swoole php -S 0.0.0.0:8889 docker/spx-ui.php
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-serialization test-cluster test-persistence psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui
+docs-verify: ## Verify ```php snippets in website/docs/ via bin/verify-doc-snippets
+	@docker compose exec -T php bin/verify-doc-snippets
+
+docs-api: ## Build the api.nexusactors.com phpDocumentor reference (uses phpdoc-templates-plugin)
+	@./bin/build-api-docs.sh
+
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-cluster test-doctrine test-persistence test-http test-http-swoole psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api

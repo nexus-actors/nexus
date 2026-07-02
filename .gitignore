@@ -12,9 +12,21 @@ docs/plans/
 .vscode/
 .DS_Store
 .worktrees/
+.superpowers/
 
 # Docusaurus
 website/node_modules/
 website/.docusaurus/
 website/build/
 coverage-guard-test.php
+
+# Performance harness results
+tests/Performance/HttpSwoole/.results/
+
+# phpDocumentor output (sub-spec 4b)
+/build/api-nexus/
+/build/.phpdoc-cache/
+
+# Local agent tooling
+.claude/
+.claire/

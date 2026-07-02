@@ -18,6 +18,8 @@ use RuntimeException;
  *
  * Created internally by ask(). Not intended for direct use.
  *
+ * @internal Implementation detail of {@see ActorRef::ask()}. Not for direct use.
+ *
  * @template T of object
  * @implements ActorRef<T>
  */

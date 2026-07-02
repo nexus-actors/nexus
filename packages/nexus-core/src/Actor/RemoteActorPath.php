@@ -10,6 +10,8 @@ use Override;
  * Remote actor path with explicit cluster address plus local actor path.
  *
  * @psalm-api
+ *
+ * @internal Implementation detail of {@see ActorPath}. Not for direct use.
  */
 final readonly class RemoteActorPath implements ActorPathContract
 {

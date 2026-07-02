@@ -74,7 +74,7 @@ final class SwooleRuntime implements Runtime
     {
         $id = 'swoole-' . $this->nextId++;
 
-        if ($this->insideCoRun) {
+        if ($this->insideCoRun || Coroutine::getCid() > 0) {
             Coroutine::create($actorLoop);
         } else {
             $this->pendingSpawns[$id] = $actorLoop;
@@ -126,7 +126,11 @@ final class SwooleRuntime implements Runtime
     #[Override]
     public function yield(): void
     {
-        Coroutine::yield();
+        // Coroutine::yield() suspends until someone explicitly calls
+        // Coroutine::resume($cid) — that's generator-style, not cooperative.
+        // Coroutine::sleep(0) drops to the scheduler for one tick and
+        // resumes automatically; this is what shutdown/drain loops need.
+        Coroutine::sleep(0);
     }
 
     #[Override]

@@ -1,0 +1,172 @@
+#!/usr/bin/env php
+<?php declare(strict_types=1);
+
+/**
+ * Sub-spec 2 deliverable. Per spec §7.3.1.
+ *
+ * Extracts ```php fenced code blocks from website/docs/**\/*.md, lints
+ * each via `php -l`, optionally runs Psalm on each, aggregates results.
+ *
+ * Markers (on the fence line):
+ *   ```php                                  → full verify (php -l + psalm)
+ *   ```php title="..." verify:skip          → skipped (reason required in HTML comment above)
+ *   ```php title="..." verify:lint-only     → php -l only, no Psalm
+ *
+ * Exit codes:
+ *   0 = all snippets clean
+ *   1 = at least one snippet failed
+ *   2 = script error (missing autoload, etc.)
+ */
+
+const DOCS_GLOB = __DIR__ . '/../website/docs';
+
+// Resolve vendor/autoload.php — supports both a normal checkout and a git
+// worktree where vendor lives in the common repo root rather than the
+// worktree directory itself.
+function resolveAutoload(): string
+{
+    $candidates = [
+        __DIR__ . '/../vendor/autoload.php',
+    ];
+
+    // In a git worktree the .git file (not dir) points to the common dir.
+    // Walk up from __DIR__ looking for vendor/ alongside any .git entry.
+    $dir = dirname(__DIR__);
+    for ($i = 0; $i < 5; $i++) {
+        if (file_exists($dir . '/.git')) {
+            // Could be a worktree .git file — resolve the common dir.
+            $gitEntry = $dir . '/.git';
+            if (is_file($gitEntry)) {
+                // e.g. "gitdir: /path/to/main/.git/worktrees/ia-restructure-2"
+                $content = file_get_contents($gitEntry);
+                if (preg_match('/gitdir:\s*(.+)/i', $content, $m)) {
+                    $worktreeGitDir = trim($m[1]);
+                    // Walk up from worktree gitdir to main .git, then to repo root.
+                    $commonGitDir = realpath($worktreeGitDir . '/../../..') ?: null;
+                    if ($commonGitDir !== null) {
+                        $candidates[] = $commonGitDir . '/vendor/autoload.php';
+                    }
+                }
+            }
+            $candidates[] = $dir . '/vendor/autoload.php';
+        }
+        $dir = dirname($dir);
+    }
+
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate)) {
+            return $candidate;
+        }
+    }
+
+    return __DIR__ . '/../vendor/autoload.php'; // return original for error message
+}
+
+$autoload = resolveAutoload();
+
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "ERROR: vendor/autoload.php not found (tried multiple locations).\n");
+    fwrite(STDERR, "Run `composer install` first.\n");
+    exit(2);
+}
+
+if (!is_dir(DOCS_GLOB)) {
+    fwrite(STDERR, "ERROR: docs directory not found at " . DOCS_GLOB . "\n");
+    exit(2);
+}
+
+$mdFiles = [];
+$iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(DOCS_GLOB));
+foreach ($iterator as $file) {
+    if ($file->getExtension() === 'md' || $file->getExtension() === 'mdx') {
+        $mdFiles[] = $file->getPathname();
+    }
+}
+
+sort($mdFiles);
+echo "Scanning " . count($mdFiles) . " markdown files...\n";
+
+$totalSnippets = 0;
+$skipped = 0;
+$failed = 0;
+$failures = [];
+
+foreach ($mdFiles as $mdPath) {
+    $content = file_get_contents($mdPath);
+    // Extract ```php blocks (with optional metadata on the fence line)
+    if (!preg_match_all('/```php([^\n]*)\n(.*?)```/s', $content, $matches, PREG_SET_ORDER)) {
+        continue;
+    }
+
+    foreach ($matches as $i => $match) {
+        $totalSnippets++;
+        $fenceLine = $match[1];
+        $code = $match[2];
+
+        if (str_contains($fenceLine, 'verify:skip')) {
+            $skipped++;
+            continue;
+        }
+
+        $lintOnly = str_contains($fenceLine, 'verify:lint-only');
+
+        // Write to tempfile with autoload header
+        $tmpFile = tempnam(sys_get_temp_dir(), 'docsnip_') . '.php';
+        $bootstrap = "<?php\nrequire_once '" . $autoload . "';\n";
+        file_put_contents($tmpFile, $bootstrap . $code);
+
+        // php -l
+        $output = [];
+        $exitCode = 0;
+        exec("php -l " . escapeshellarg($tmpFile) . " 2>&1", $output, $exitCode);
+        if ($exitCode !== 0) {
+            $failed++;
+            $failures[] = [
+                'file' => $mdPath,
+                'snippet' => $i + 1,
+                'kind' => 'php -l',
+                'output' => implode("\n", $output),
+            ];
+        }
+
+        // psalm (skip if lint-only)
+        if (!$lintOnly && $exitCode === 0) {
+            $psalmOutput = [];
+            $psalmExit = 0;
+            $psalmBin = dirname($autoload) . '/bin/psalm';
+            exec(
+                escapeshellarg($psalmBin) . " --no-cache --no-progress " . escapeshellarg($tmpFile) . " 2>&1",
+                $psalmOutput,
+                $psalmExit,
+            );
+            if ($psalmExit !== 0) {
+                $failed++;
+                $failures[] = [
+                    'file' => $mdPath,
+                    'snippet' => $i + 1,
+                    'kind' => 'psalm',
+                    'output' => implode("\n", $psalmOutput),
+                ];
+            }
+        }
+
+        unlink($tmpFile);
+    }
+}
+
+echo "Summary:\n";
+echo "  Files scanned: " . count($mdFiles) . "\n";
+echo "  Total snippets: $totalSnippets\n";
+echo "  Skipped: $skipped\n";
+echo "  Failed: $failed\n";
+
+if ($failed > 0) {
+    echo "\nFailures:\n";
+    foreach ($failures as $fail) {
+        echo "\n--- {$fail['file']}, snippet #{$fail['snippet']} ({$fail['kind']}) ---\n";
+        echo $fail['output'] . "\n";
+    }
+    exit(1);
+}
+
+exit(0);
