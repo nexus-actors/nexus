@@ -44,7 +44,7 @@ jobs:
   deploy-preview:
     name: Deploy Preview
     needs: build
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-latest
 
     permissions:
@@ -87,8 +87,9 @@ jobs:
     name: Deploy Production
     needs: build
     if: >
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+      vars.CLOUDFLARE_ACCOUNT_ID != '' &&
+      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     environment: prod
 

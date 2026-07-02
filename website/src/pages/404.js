@@ -25,9 +25,9 @@ export default function NotFound() {
         <p style={{ color: 'var(--nexus-text-muted, #6b7280)', fontSize: '1.1rem', marginTop: '1rem' }}>
           The page you asked for does not exist. In Nexus, undeliverable messages
           end up in the{' '}
-          <a href="/docs/core-concepts/dead-letters">
+          <Link to="/docs/core-concepts/dead-letters">
             <code>DeadLetterRef</code>
-          </a>{' '}
+          </Link>{' '}
           for inspection — same idea here.
         </p>
         <p style={{ color: 'var(--nexus-text-muted, #6b7280)', fontSize: '0.95rem' }}>

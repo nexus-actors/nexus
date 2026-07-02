@@ -63,7 +63,7 @@ jobs:
         run: npm run build
 
       - name: Deploy to Cloudflare Pages (Production)
-        if: steps.has-landing.outputs.present == 'true' && github.event_name != 'pull_request'
+        if: steps.has-landing.outputs.present == 'true' && github.event_name != 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -72,7 +72,7 @@ jobs:
           command: pages deploy dist --project-name=nexus-website --branch=main
 
       - name: Deploy to Cloudflare Pages (Preview)
-        if: steps.has-landing.outputs.present == 'true' && github.event_name == 'pull_request'
+        if: steps.has-landing.outputs.present == 'true' && github.event_name == 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
