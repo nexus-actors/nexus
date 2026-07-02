@@ -14,6 +14,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableEffect;
 use Monadial\Nexus\Persistence\State\DurableStateEngine;
@@ -615,6 +616,7 @@ final class DurableStateEngineTest extends TestCase
             $this->runtime->clock(),
             $this->logger,
             $this->deadLetters,
+            new NoopObservability(),
         );
     }
 

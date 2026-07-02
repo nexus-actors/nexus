@@ -16,6 +16,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -233,6 +234,7 @@ final class SpawnTaskTest extends TestCase
             $this->runtime->clock(),
             $this->logger,
             $this->deadLetters,
+            new NoopObservability(),
         );
     }
 }

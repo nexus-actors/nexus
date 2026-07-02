@@ -18,6 +18,7 @@ use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -207,6 +208,7 @@ final class PropsTest extends TestCase
             new TestClock(),
             new NullLogger(),
             new DeadLetterRef(),
+            new NoopObservability(),
         );
 
         $this->expectException(ActorInitializationException::class);

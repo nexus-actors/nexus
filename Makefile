@@ -59,6 +59,10 @@ test-http: ## HTTP integration tests
 test-http-swoole: ## HTTP Swoole integration tests
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-http-swoole
 
+test-observability: ## Observability package unit tests
+	docker compose exec -T php vendor/bin/phpunit packages/nexus-observability/tests/Unit packages/nexus-observability-otel/tests/Unit packages/nexus-observability-http/tests/Unit packages/nexus-observability-persistence/tests/Unit packages/nexus-observability-worker-pool/tests/Unit packages/nexus-observability-doctrine/tests/Unit packages/nexus-observability-logger/tests/Unit packages/nexus-observability-actor/tests/Unit
+	docker compose exec -T php-swoole vendor/bin/phpunit packages/nexus-observability-swoole/tests/Unit
+
 perf-http-swoole: ## HTTP Swoole performance benchmarks (worker mode)
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole
 
@@ -95,4 +99,10 @@ docs-verify: ## Verify ```php snippets in website/docs/ via bin/verify-doc-snipp
 docs-api: ## Build the api.nexusactors.com phpDocumentor reference (uses phpdoc-templates-plugin)
 	@./bin/build-api-docs.sh
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-cluster test-doctrine test-persistence test-http test-http-swoole psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api
+docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default PORT=8081; set API_BASE_URL=http://127.0.0.1:$(PORT) in .env.local)
+	@echo "Serving API docs at http://127.0.0.1:$(PORT) (Ctrl-C to stop)"
+	@cd build/api-nexus && python3 -m http.server $(PORT) --bind 127.0.0.1
+
+PORT ?= 8081
+
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-cluster test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve

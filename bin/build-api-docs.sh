@@ -26,7 +26,7 @@ docker run --rm \
     bash -c '
 set -euo pipefail
 
-# 1. Merge all 22 package src dirs into one flat dir
+# 1. Merge all 31 package src dirs into one flat dir
 MERGED=/tmp/phpdoc-nexus-merged
 mkdir -p $MERGED
 for pkg in nexus-core nexus-runtime nexus-runtime-fiber nexus-runtime-swoole \
@@ -35,7 +35,11 @@ for pkg in nexus-core nexus-runtime nexus-runtime-fiber nexus-runtime-swoole \
            nexus-persistence nexus-persistence-dbal nexus-persistence-doctrine \
            nexus-http nexus-http-ws nexus-http-auth nexus-http-toolkit \
            nexus-http-server-swoole nexus-http-server-swoole-threads \
-           nexus-doctrine-dbal nexus-doctrine-orm; do
+           nexus-doctrine-dbal nexus-doctrine-orm \
+           nexus-observability nexus-observability-otel nexus-observability-http \
+           nexus-observability-persistence nexus-observability-worker-pool \
+           nexus-observability-doctrine nexus-observability-logger \
+           nexus-observability-swoole nexus-observability-actor; do
     cp -r /nexus-packages/$pkg/src/. $MERGED/ 2>/dev/null || true
 done
 

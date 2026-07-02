@@ -15,6 +15,7 @@ use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -197,6 +198,7 @@ final class ActorCellReceiveTimeoutTest extends TestCase
             $this->runtime->clock(),
             new NullLogger(),
             $this->deadLetters,
+            new NoopObservability(),
         );
     }
 

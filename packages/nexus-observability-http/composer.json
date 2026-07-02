@@ -1,0 +1,32 @@
+{
+    "name": "nexus-actors/observability-http",
+    "description": "Nexus HTTP observability — PSR-15 server-span middleware and PSR-14 RED-metrics listener.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/http": "dev-main",
+        "nexus-actors/observability": "dev-main",
+        "psr/http-message": "^1.1 || ^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0"
+    },
+    "require-dev": {
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/observability-otel": "dev-main",
+        "nexus-actors/runtime-fiber": "dev-main",
+        "nyholm/psr7": "^1.8",
+        "open-telemetry/sdk": "^1.14",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Http\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Http\\Tests\\": "tests/"
+        }
+    }
+}

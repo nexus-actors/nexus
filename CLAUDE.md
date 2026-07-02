@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 24 packages under `packages/`, each published independently to Packagist.
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 33 packages under `packages/`, each published independently to Packagist.
 
 ## Development Environment
 
@@ -114,7 +114,16 @@ nexus-core (no dependencies — foundational)
 ├── nexus-cluster          → Core only (remote contracts)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
-└── nexus-psalm            → (standalone Psalm plugin)
+├── nexus-psalm            → (standalone Psalm plugin)
+└── nexus-observability    → Core only (OTel contracts + no-op impls — foundational)
+    ├── nexus-observability-otel       → Observability, OTel SDK (concrete OTel backend)
+    ├── nexus-observability-actor      → Observability, Core (ActorSystem metrics)
+    ├── nexus-observability-http       → Observability, nexus-http (HTTP tracing + metrics)
+    ├── nexus-observability-persistence → Observability, nexus-persistence (store tracing)
+    ├── nexus-observability-worker-pool → Observability, nexus-worker-pool (transport tracing)
+    ├── nexus-observability-doctrine   → Observability, nexus-doctrine-dbal/-orm (DBAL/ORM metrics)
+    ├── nexus-observability-logger     → Observability, PSR-3 (trace-correlation log processor)
+    └── nexus-observability-swoole     → Observability, nexus-runtime-swoole (Swoole admin metrics)
 ```
 
 Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
@@ -150,6 +159,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 - `scheduleOnce(Duration, object): Cancellable` / `scheduleRepeatedly(Duration, Duration, object): Cancellable`
 - `stash(): void` / `unstashAll(): void` — Message buffering
 - `log(): LoggerInterface` — PSR-3 logger
+- `tracer(): TracerInterface` / `meter(): MeterInterface` / `currentSpan(): SpanInterface` — Custom telemetry (no-op when observability is disabled; provided by `nexus-observability`)
 
 **`Props<T>`** (`Actor/Props.php`) — Immutable spawn configuration:
 - `Props::fromBehavior(Behavior<T>)` — Closure-based actor

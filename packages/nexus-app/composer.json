@@ -5,12 +5,16 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/runtime": "dev-main",
         "monolog/monolog": "^3.0",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/observability": "dev-main",
+        "nexus-actors/runtime": "dev-main",
         "symfony/console": "^7.0"
     },
     "require-dev": {
+        "nexus-actors/observability-otel": "dev-main",
+        "nexus-actors/runtime-fiber": "dev-main",
+        "open-telemetry/sdk": "^1.14",
         "phpunit/phpunit": "^13.0"
     },
     "autoload": {

@@ -112,13 +112,61 @@ deptrac:
         - type: directory
           value: packages/nexus-http-server-swoole-threads/src/.*
 
+    - name: Observability
+      collectors:
+        - type: directory
+          value: packages/nexus-observability/src/.*
+
+    - name: ObservabilityOtel
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-otel/src/.*
+
+    - name: ObservabilityHttp
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-http/src/.*
+
+    - name: ObservabilityPersistence
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-persistence/src/.*
+
+    - name: ObservabilityWorkerPool
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-worker-pool/src/.*
+
+    - name: ObservabilityDoctrine
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-doctrine/src/.*
+
+    - name: ObservabilityLogger
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-logger/src/.*
+
+    - name: ObservabilitySwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-swoole/src/.*
+
+    - name: ObservabilityActor
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-actor/src/.*
+
+
   ruleset:
     Core:
+      - Observability
       - Runtime
     Runtime:
       - Core
     App:
       - Core
+      - Observability
       - Runtime
     Serialization:
       - Core
@@ -194,3 +242,28 @@ deptrac:
       - RuntimeSwoole
       - WorkerPool
       - WorkerPoolSwoole
+    Observability: []
+    ObservabilityOtel:
+      - Observability
+    ObservabilityHttp:
+      - Http
+      - Observability
+    ObservabilityPersistence:
+      - Observability
+      - Persistence
+    ObservabilityWorkerPool:
+      - Core
+      - Observability
+      - WorkerPool
+    ObservabilityDoctrine:
+      - DoctrineDbal
+      - DoctrineOrm
+      - Observability
+    ObservabilityLogger:
+      - Logger
+      - Observability
+    ObservabilitySwoole:
+      - Observability
+    ObservabilityActor:
+      - Core
+      - Observability

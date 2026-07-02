@@ -1,0 +1,30 @@
+{
+    "name": "nexus-actors/observability-otel",
+    "description": "Nexus observability OpenTelemetry bridge — SDK-backed Tracer/Meter and an OTLP provider factory.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/observability": "dev-main",
+        "open-telemetry/api": "^1.9",
+        "open-telemetry/exporter-otlp": "^1.4",
+        "open-telemetry/sdk": "^1.14",
+        "open-telemetry/sem-conv": "^1.38"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "suggest": {
+        "symfony/http-client": "A PSR-18 HTTP client (with php-http/discovery) is required to export telemetry over OTLP/HTTP in production"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Otel\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Otel\\Tests\\": "tests/"
+        }
+    }
+}

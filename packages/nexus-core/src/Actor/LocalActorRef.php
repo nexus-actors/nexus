@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
@@ -32,12 +33,14 @@ final readonly class LocalActorRef implements ActorRef
      * @param Mailbox<Envelope> $mailbox The actor's mailbox for message delivery
      * @param Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      * @param Runtime $runtime Runtime for creating FutureSlots
+     * @param Observability $observability Provider used to inject trace context into outgoing envelopes.
      */
     public function __construct(
         private ActorPath $path,
         private Mailbox $mailbox,
         private Closure $aliveChecker,
         private Runtime $runtime,
+        private Observability $observability,
     ) {}
 
     /** @param T $message */
@@ -45,7 +48,7 @@ final readonly class LocalActorRef implements ActorRef
     public function tell(object $message): void
     {
         try {
-            $_ = $this->mailbox->enqueue(Envelope::of($message, ActorPath::root(), $this->path));
+            $_ = $this->mailbox->enqueue($this->envelopeFor($message, ActorPath::root()));
         } catch (MailboxClosedException) {
             // fire-and-forget: silently drop messages to closed mailboxes
         }
@@ -83,7 +86,7 @@ final readonly class LocalActorRef implements ActorRef
             $slot->fail(new AskTimeoutException($targetPath, $timeout));
         });
 
-        $envelope = Envelope::of($message, $futureRefPath, $this->path)->withSenderRef($futureRef);
+        $envelope = $this->envelopeFor($message, $futureRefPath)->withSenderRef($futureRef);
 
         try {
             $_ = $this->mailbox->enqueue($envelope);
@@ -105,5 +108,21 @@ final readonly class LocalActorRef implements ActorRef
     public function isAlive(): bool
     {
         return ($this->aliveChecker)();
+    }
+
+    private function envelopeFor(object $message, ActorPath $sender): Envelope
+    {
+        $envelope = Envelope::of($message, $sender, $this->path);
+
+        if (!$this->observability->isEnabled()) {
+            return $envelope;
+        }
+
+        $carrier = [];
+        $this->observability->propagator()->inject($this->observability->currentContext(), $carrier);
+
+        return $carrier === []
+            ? $envelope
+            : $envelope->withMetadata($carrier);
     }
 }

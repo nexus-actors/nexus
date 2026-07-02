@@ -12,6 +12,11 @@
         "lcobucci/jwt": "^5.0",
         "nikic/fast-route": "^1.3",
         "nyholm/psr7": "^1.8",
+        "open-telemetry/api": "^1.9",
+        "open-telemetry/context-swoole": "^1.2",
+        "open-telemetry/exporter-otlp": "^1.4",
+        "open-telemetry/sdk": "^1.14",
+        "open-telemetry/sem-conv": "^1.38",
         "opis/closure": "^4.0",
         "psr/clock": "^1.0",
         "psr/event-dispatcher": "^1.0",
@@ -35,6 +40,7 @@
         "squizlabs/php_codesniffer": "^4.0",
         "swoole/ide-helper": "^6.0",
         "symfony/cache": "^8.0",
+        "symfony/http-client": "^8.1",
         "vimeo/psalm": "^6.0"
     },
     "autoload": {
@@ -64,6 +70,15 @@
             "Monadial\\Nexus\\Doctrine\\Dbal\\": "packages/nexus-doctrine-dbal/src/",
             "Monadial\\Nexus\\Doctrine\\Orm\\": "packages/nexus-doctrine-orm/src/",
             "Monadial\\Nexus\\Persistence\\Dbal\\": "packages/nexus-persistence-dbal/src/",
+            "Monadial\\Nexus\\Observability\\": "packages/nexus-observability/src/",
+            "Monadial\\Nexus\\Observability\\Actor\\": "packages/nexus-observability-actor/src/",
+            "Monadial\\Nexus\\Observability\\Doctrine\\": "packages/nexus-observability-doctrine/src/",
+            "Monadial\\Nexus\\Observability\\Http\\": "packages/nexus-observability-http/src/",
+            "Monadial\\Nexus\\Observability\\Logger\\": "packages/nexus-observability-logger/src/",
+            "Monadial\\Nexus\\Observability\\Otel\\": "packages/nexus-observability-otel/src/",
+            "Monadial\\Nexus\\Observability\\Persistence\\": "packages/nexus-observability-persistence/src/",
+            "Monadial\\Nexus\\Observability\\Swoole\\": "packages/nexus-observability-swoole/src/",
+            "Monadial\\Nexus\\Observability\\WorkerPool\\": "packages/nexus-observability-worker-pool/src/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\": "packages/nexus-persistence-doctrine/src/"
         }
     },
@@ -93,6 +108,15 @@
             "Monadial\\Nexus\\Doctrine\\Dbal\\Tests\\": "packages/nexus-doctrine-dbal/tests/",
             "Monadial\\Nexus\\Doctrine\\Orm\\Tests\\": "packages/nexus-doctrine-orm/tests/",
             "Monadial\\Nexus\\Persistence\\Dbal\\Tests\\": "packages/nexus-persistence-dbal/tests/",
+            "Monadial\\Nexus\\Observability\\Tests\\": "packages/nexus-observability/tests/",
+            "Monadial\\Nexus\\Observability\\Actor\\Tests\\": "packages/nexus-observability-actor/tests/",
+            "Monadial\\Nexus\\Observability\\Doctrine\\Tests\\": "packages/nexus-observability-doctrine/tests/",
+            "Monadial\\Nexus\\Observability\\Http\\Tests\\": "packages/nexus-observability-http/tests/",
+            "Monadial\\Nexus\\Observability\\Logger\\Tests\\": "packages/nexus-observability-logger/tests/",
+            "Monadial\\Nexus\\Observability\\Otel\\Tests\\": "packages/nexus-observability-otel/tests/",
+            "Monadial\\Nexus\\Observability\\Persistence\\Tests\\": "packages/nexus-observability-persistence/tests/",
+            "Monadial\\Nexus\\Observability\\Swoole\\Tests\\": "packages/nexus-observability-swoole/tests/",
+            "Monadial\\Nexus\\Observability\\WorkerPool\\Tests\\": "packages/nexus-observability-worker-pool/tests/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\Tests\\": "packages/nexus-persistence-doctrine/tests/"
         }
     },

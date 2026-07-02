@@ -28,6 +28,12 @@ final class MutableActorStateRule implements AfterClassLikeAnalysisInterface
             return null;
         }
 
+        // A readonly class cannot have mutable properties — every property is
+        // implicitly readonly, regardless of the per-property flag.
+        if ($storage->readonly) {
+            return null;
+        }
+
         if (!self::implementsActorHandler($storage->class_implements)) {
             return null;
         }
