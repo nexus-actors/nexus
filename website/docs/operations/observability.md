@@ -10,6 +10,10 @@ related:
 
 # Observability
 
+:::info OpenTelemetry traces, metrics, and logs
+Looking for distributed tracing, OTel metrics export, or trace/log correlation? The [Observability guide](/docs/observability/overview) covers the full OTEL integration — spans, metrics catalog, custom instrumentation, and production wiring.
+:::
+
 The HTTP layer uses PSR-3 logging, PSR-14 event dispatch, and PSR-20 clock throughout. This page covers what the framework logs, how to add per-request context via MDC, how to keep logging off the hot path, and how to wire PSR-14 events for external observability tools.
 
 ## What the framework logs

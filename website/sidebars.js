@@ -91,6 +91,20 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Observability',
+      items: [
+        'observability/overview',
+        'observability/quick-start',
+        'observability/configuration',
+        'observability/tracing',
+        'observability/metrics',
+        'observability/custom-instrumentation',
+        'observability/logs',
+        'observability/wiring',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Persistence',
       items: [
         'persistence/overview',
