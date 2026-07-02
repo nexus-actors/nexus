@@ -5,7 +5,7 @@
 # which holds CLOUDFLARE_API_TOKEN (secret) and CLOUDFLARE_ACCOUNT_ID (var).
 # Swap the build step for the phpdoc-templates-plugin image once published.
 
-name: api.nexusactors.com — phpDocumentor deploy
+name: pages — api
 
 on:
   push:
@@ -13,16 +13,16 @@ on:
     paths:
       - 'packages/**/src/**'
       - 'phpdoc.dist.xml'
-      - '.github/workflows/api-deploy.yml'
+      - '.github/workflows/pages-api.yml'
   pull_request:
     paths:
       - 'packages/**/src/**'
       - 'phpdoc.dist.xml'
-      - '.github/workflows/api-deploy.yml'
+      - '.github/workflows/pages-api.yml'
   workflow_dispatch:
 
 concurrency:
-  group: api-deploy-${{ github.ref }}
+  group: pages-api-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
