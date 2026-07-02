@@ -35,7 +35,7 @@ export default function NotFound() {
         </p>
         <p style={{ marginTop: '2.5rem' }}>
           <Link
-            to="/docs/welcome"
+            to="/docs/"
             style={{
               background: 'var(--nexus-primary, #6366f1)',
               color: 'white',
