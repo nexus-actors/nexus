@@ -34,6 +34,17 @@ final readonly class IndexHandler
 
     public function __invoke(): ResponseInterface
     {
-        return new Psr7Response(200, ['content-type' => 'text/html; charset=utf-8'], $this->body);
+        // Never cache the SPA shell: it is a single hand-edited file that
+        // changes with every deploy, and browsers heuristically cache HTML
+        // served without cache headers — which silently pins players to a
+        // stale build. `no-store` forces a fresh fetch on every load.
+        return new Psr7Response(
+            200,
+            [
+                'cache-control' => 'no-store, no-cache, must-revalidate',
+                'content-type' => 'text/html; charset=utf-8',
+            ],
+            $this->body,
+        );
     }
 }

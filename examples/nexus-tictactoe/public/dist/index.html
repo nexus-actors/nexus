@@ -303,18 +303,25 @@
 
         const send = useCallback((payload) => {
             const ws = wsRef.current;
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                // The socket is mid-(re)connect. Surface it instead of silently
+                // dropping the click, so a move/forfeit is never lost without a
+                // trace — the player just retries once reconnected.
+                cbRef.current.onError('reconnecting — try again in a moment');
+                return;
+            }
             ws.send(JSON.stringify(payload));
 
-            // Arm a watchdog on mutating intents: if no snapshot/error comes
-            // back in time the server is stalled, so surface it and drop the
-            // socket — onclose then reconnects and replays the join.
+            // Arm a soft watchdog on mutating intents: if no snapshot/error
+            // comes back in time, surface a hint. We do NOT close the socket —
+            // force-closing a healthy connection caused reconnect churn that
+            // swallowed the next action. A genuinely dropped socket is handled
+            // by onclose's reconnect; server faults are handled by supervision.
             if (payload.type === 'move' || payload.type === 'forfeit') {
                 if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
                 moveTimerRef.current = setTimeout(() => {
                     moveTimerRef.current = null;
-                    cbRef.current.onError('server not responding — reconnecting…');
-                    if (wsRef.current) wsRef.current.close();
+                    cbRef.current.onError('server is taking longer than usual…');
                 }, MOVE_TIMEOUT_MS);
             }
         }, []);
@@ -415,8 +422,7 @@
         const yourTurn = snapshot && yourMark === snapshot.nextTurn && snapshot.status === 'in_progress';
 
         const clickCell = (i) => {
-            if (!yourTurn) return;
-            if (snapshot.board[i]) return;
+            if (!yourTurn || snapshot.board[i]) return;
             send({ type: 'move', cell: i });
         };
 
