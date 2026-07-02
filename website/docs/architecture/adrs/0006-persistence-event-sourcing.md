@@ -2,8 +2,8 @@
 title: "ADR 0006: Persistence via Event Sourcing and Durable State"
 sidebar_position: 6
 related:
-  - architecture/adrs/0001-actor-model-architecture
-  - architecture/adrs/0002-immutable-behavior-api
+  - architecture/adrs/actor-model-architecture
+  - architecture/adrs/immutable-behavior-api
   - core-concepts/actors
 ---
 

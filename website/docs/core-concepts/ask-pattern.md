@@ -5,7 +5,7 @@ related:
   - core-concepts/actors
   - core-concepts/behaviors
   - core-concepts/mailboxes
-  - guides/testing-actors
+  - best-practices/testing
 ---
 
 # Ask pattern

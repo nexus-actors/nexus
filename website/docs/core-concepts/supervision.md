@@ -5,7 +5,7 @@ related:
   - core-concepts/actors
   - core-concepts/lifecycle
   - core-concepts/behaviors
-  - guides/supervision-recipes
+  - best-practices/supervision
 ---
 
 # Supervision

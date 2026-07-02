@@ -2,8 +2,8 @@
 title: "ADR 0005: Multi-Process Clustering via Swoole IPC"
 sidebar_position: 5
 related:
-  - architecture/adrs/0008-worker-pool-cluster-separation
-  - architecture/adrs/0004-message-serialization
+  - architecture/adrs/worker-pool-cluster-separation
+  - architecture/adrs/message-serialization
   - scaling/overview
 ---
 

@@ -4,8 +4,8 @@ sidebar_position: 2
 related:
   - core-concepts/behaviors
   - core-concepts/actors
-  - architecture/adrs/0001-actor-model-architecture
-  - architecture/adrs/0003-dual-runtime-strategy
+  - architecture/adrs/actor-model-architecture
+  - architecture/adrs/dual-runtime-strategy
 ---
 
 # ADR 0002: Immutable Behavior-Based Actor API

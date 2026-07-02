@@ -2,8 +2,8 @@
 title: "ADR 0004: Valinor-Based Message Serialization"
 sidebar_position: 4
 related:
-  - architecture/adrs/0005-multi-process-clustering
-  - architecture/adrs/0008-worker-pool-cluster-separation
+  - architecture/adrs/multi-process-clustering
+  - architecture/adrs/worker-pool-cluster-separation
   - architecture/design-philosophy
 ---
 
