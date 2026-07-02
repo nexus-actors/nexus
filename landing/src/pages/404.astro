@@ -1,0 +1,35 @@
+---
+import Base from '../layouts/Base.astro';
+import { docsUrl } from '../lib/urls';
+---
+<Base
+  title="404 — Dead Letter | Nexus"
+  description="This message was undeliverable. No actor registered at this path."
+>
+  <section class="max-w-2xl mx-auto px-4 py-24 text-center">
+    <p class="text-7xl mb-6" aria-hidden="true">📭</p>
+    <h2 class="text-4xl font-extrabold mb-4">404 — Dead Letter</h2>
+    <p class="text-lg text-slate-600 dark:text-slate-400 mb-4">
+      In Nexus, a message sent to an actor that no longer exists (or never did) is
+      routed to the <code class="font-mono text-sm bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">DeadLetterRef</code> —
+      a null-object sink that captures undeliverable envelopes so they're never silently
+      dropped. Every dead letter is logged.
+    </p>
+    <p class="text-slate-600 dark:text-slate-400 mb-10">
+      The URL you requested doesn't match any route on this site. It has been safely
+      delivered to the dead-letter queue.
+    </p>
+    <a
+      href="/"
+      class="inline-block bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-md font-semibold transition"
+    >
+      Back to home
+    </a>
+    <p class="mt-6 text-sm text-slate-500">
+      Looking for the docs? They live at
+      <a href={docsUrl()} class="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300">
+        docs.nexusactors.com
+      </a>.
+    </p>
+  </section>
+</Base>

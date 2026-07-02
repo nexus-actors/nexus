@@ -1,0 +1,108 @@
+---
+// landing/src/components/CodeTour.astro
+import IDEEditor from './IDEEditor';
+
+const files = [
+  {
+    name: 'PlaceOrder.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+namespace App\\Order\\Message;
+
+use Monadial\\Nexus\\Core\\Actor\\ActorRef;
+
+readonly class PlaceOrder
+{
+    public function __construct(
+        public string $orderId,
+        public array $items,
+        public ActorRef $replyTo,
+    ) {}
+}`,
+  },
+  {
+    name: 'OrderActor.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+namespace App\\Order\\Actor;
+
+use App\\Order\\Message\\PlaceOrder;
+use App\\Order\\Message\\OrderPlaced;
+use Monadial\\Nexus\\Core\\Actor\\ActorContext;
+use Monadial\\Nexus\\Core\\Actor\\Behavior;
+
+final class OrderActor
+{
+    public static function behavior(): Behavior
+    {
+        return Behavior::receive(
+            static function (ActorContext $ctx, object $msg): Behavior {
+                if ($msg instanceof PlaceOrder) {
+                    $ctx->log()->info('order received', ['id' => $msg->orderId]);
+
+                    $msg->replyTo->tell(
+                        new OrderPlaced($msg->orderId),
+                    );
+                }
+
+                return Behavior::same();
+            },
+        );
+    }
+}`,
+  },
+  {
+    name: 'bootstrap.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+use App\\Order\\Actor\\OrderActor;
+use App\\Order\\Message\\PlaceOrder;
+use Monadial\\Nexus\\Core\\Actor\\ActorSystem;
+use Monadial\\Nexus\\Core\\Actor\\Props;
+use Monadial\\Nexus\\Core\\Supervision\\SupervisionStrategy;
+use Monadial\\Nexus\\Runtime\\Duration;
+use Monadial\\Nexus\\Runtime\\Fiber\\FiberRuntime;
+use Monadial\\Nexus\\Runtime\\Mailbox\\MailboxConfig;
+
+$system = ActorSystem::create('orders', new FiberRuntime());
+
+$props = Props::fromBehavior(OrderActor::behavior())
+    ->withMailbox(MailboxConfig::bounded(5000))
+    ->withSupervision(
+        SupervisionStrategy::exponentialBackoff(
+            initialBackoff: Duration::millis(100),
+            maxBackoff: Duration::seconds(30),
+        ),
+    );
+
+$ref = $system->spawn($props, 'order-service');
+$ref->tell(new PlaceOrder('ORD-1', ['widget'], $replyTo));
+
+$system->run();`,
+  },
+];
+---
+
+<section class="ct-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">Anatomy of an actor.</h2>
+    <p class="nx-section-sub">Three files. Complete working example.</p>
+    <IDEEditor client:load files={files} defaultIndex={1} />
+  </div>
+</section>
+
+<style>
+  .ct-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+</style>

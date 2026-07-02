@@ -1,0 +1,235 @@
+---
+import '../styles/global.css';
+import Nav from '../components/Nav.astro';
+import { docsUrl, apiUrl } from '../lib/urls';
+
+interface Props {
+  title: string;
+  description?: string;
+  canonical?: string;
+}
+const { title, description = 'Nexus — Actor System for PHP 8.5+', canonical } = Astro.props;
+const canonicalUrl = canonical ?? new URL(Astro.url.pathname, Astro.site).toString();
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Nexus" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <slot name="head" />
+    <!-- Anti-FOUC: apply theme before first paint. Also honours ?theme=dark for screenshot testing. -->
+    <script is:inline>
+      (function() {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var qp = params.get('theme');
+          // Read from both keys: 'nexus-theme' (landing) and 'theme' (Docusaurus)
+          var stored = localStorage.getItem('nexus-theme') || localStorage.getItem('theme');
+          var sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var dark = qp === 'dark' || stored === 'dark' || (!qp && !stored && sysDark);
+          if (dark) document.documentElement.classList.add('dark');
+          if (qp === 'light' || qp === 'dark') {
+            // Write to both keys so Docusaurus and landing stay in sync
+            localStorage.setItem('nexus-theme', qp);
+            localStorage.setItem('theme', qp);
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+    <Nav />
+    <main id="main-content">
+      <slot />
+    </main>
+
+    <!-- Rich structured footer -->
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <a href="/" class="footer-logo">
+            <img src="/logo.svg" alt="Nexus" width="32" height="32" class="footer-logo-img" />
+            <span class="footer-logo-word">Nexus</span>
+          </a>
+          <p class="footer-tagline">Actor system for PHP 8.5+.<br />MIT licensed.</p>
+          <p class="footer-copy">&copy; {new Date().getFullYear()} Nexus Contributors</p>
+        </div>
+
+        <div class="footer-col">
+          <h2 class="footer-col-title">Project</h2>
+          <ul class="footer-links">
+            <li><a href={docsUrl()}>Docs</a></li>
+            <li><a href={apiUrl()}>API Reference</a></li>
+            <li><a href="https://github.com/nexus-actors/nexus">GitHub</a></li>
+            <li><a href="/security">Security</a></li>
+            <li><a href="/adoption">Adoption</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h2 class="footer-col-title">Get Started</h2>
+          <ul class="footer-links">
+            <li><a href="/bootstrap">Bootstrap your app</a></li>
+            <li><a href={docsUrl('/getting-started/quick-start')}>Quick Start</a></li>
+            <li><a href={docsUrl('/getting-started/installation')}>Installation</a></li>
+            <li><a href={docsUrl('/getting-started/concepts')}>Core Concepts</a></li>
+            <li><a href={docsUrl('/tutorials/overview')}>Tutorials</a></li>
+            <li><a href="/http">HTTP Integration</a></li>
+            <li><a href="/doctrine">Doctrine Integration</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h2 class="footer-col-title">Community</h2>
+          <ul class="footer-links">
+            <li><a href="https://github.com/nexus-actors/nexus/discussions">GitHub Discussions</a></li>
+            <li><a href="https://github.com/nexus-actors/nexus/issues">Issues</a></li>
+            <li><a href="https://github.com/nexus-actors/nexus/blob/main/CHANGELOG.md">Changelog</a></li>
+            <li><a href="/why-nexus">Why Nexus</a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  .site-footer {
+    border-top: 1px solid var(--nx-border);
+    background: var(--nx-bg-raised);
+    padding: 4rem 2rem 2rem;
+    margin-top: 0;
+  }
+
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    gap: 3rem;
+  }
+
+  .footer-brand {}
+
+  .footer-logo {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    text-decoration: none;
+  }
+
+  .footer-logo-img {
+    width: 2rem;
+    height: 2rem;
+    display: block;
+  }
+
+  .footer-logo-word {
+    font-family: var(--nx-font-mono);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--nx-text);
+  }
+
+  .footer-tagline {
+    font-size: 0.85rem;
+    color: var(--nx-text-muted);
+    line-height: 1.6;
+    margin: 0 0 0.75rem;
+  }
+
+  :global(.dark) .footer-tagline {
+    color: var(--nx-text-secondary, #94a3b8);
+  }
+
+  .footer-copy {
+    font-size: 0.78rem;
+    color: var(--nx-text-dim);
+    margin: 0;
+  }
+
+  :global(.dark) .footer-copy {
+    color: var(--nx-text-muted);
+  }
+
+  .footer-col-title {
+    font-family: var(--nx-font-mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--nx-text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 1rem;
+  }
+
+  .footer-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .footer-links a {
+    font-size: 0.88rem;
+    color: var(--nx-text-muted);
+    text-decoration: none;
+    transition: color 0.15s;
+  }
+
+  .footer-links a:hover {
+    color: var(--nx-accent);
+    text-decoration: none;
+  }
+
+  @media (max-width: 996px) {
+    .footer-inner {
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    .footer-brand {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .site-footer { padding: 3rem 1rem 1.5rem; }
+    .footer-inner {
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+  }
+
+  /* Accessibility: skip to main content */
+  .skip-to-content {
+    position: absolute;
+    top: -3rem;
+    left: 0;
+    background: var(--nx-accent);
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 0 0 4px 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    z-index: 9999;
+    transition: top 0.2s;
+  }
+
+  .skip-to-content:focus {
+    top: 0;
+  }
+</style>

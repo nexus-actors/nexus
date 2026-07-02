@@ -1,0 +1,169 @@
+---
+// landing/src/components/ArchitectureDiagram.astro
+---
+
+<section class="ad-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">How it fits together.</h2>
+    <p class="nx-section-sub">One model. Three runtimes. Production-ready supervision.</p>
+
+    <div class="ad-diagram-wrap">
+      <svg
+        viewBox="0 0 900 500"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label="Nexus actor system architecture diagram"
+        class="ad-svg"
+      >
+        <defs>
+          <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#34D399" />
+          </marker>
+          <marker id="arrow-dim" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="#475569" />
+          </marker>
+          <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="1" fill="#1e293b" />
+          </pattern>
+        </defs>
+
+        <!-- Background -->
+        <rect width="900" height="500" fill="#080f1a" rx="12" />
+        <rect width="900" height="500" fill="url(#dots)" rx="12" />
+
+        <!-- ── ActorSystem box ── -->
+        <g id="actor-system">
+          <rect x="325" y="28" width="250" height="60" rx="6" fill="#0F172A" stroke="#10B981" stroke-width="1.5" />
+          <text x="450" y="55" font-family="monospace" font-size="13" fill="#10B981" text-anchor="middle" font-weight="bold">ActorSystem</text>
+          <text x="450" y="74" font-family="monospace" font-size="10" fill="#64748B" text-anchor="middle">'my-app'</text>
+        </g>
+
+        <!-- ── ActorRef boxes ── -->
+        <g id="actor-refs">
+          <!-- left -->
+          <rect x="75" y="138" width="130" height="44" rx="5" fill="#0F172A" stroke="#10B981" stroke-width="1" />
+          <text x="140" y="158" font-family="monospace" font-size="11" fill="#E2E8F0" text-anchor="middle">ActorRef</text>
+          <text x="140" y="173" font-family="monospace" font-size="9" fill="#64748B" text-anchor="middle">&lt;OrderMsg&gt;</text>
+          <!-- center -->
+          <rect x="385" y="138" width="130" height="44" rx="5" fill="#0F172A" stroke="#10B981" stroke-width="1" />
+          <text x="450" y="158" font-family="monospace" font-size="11" fill="#E2E8F0" text-anchor="middle">ActorRef</text>
+          <text x="450" y="173" font-family="monospace" font-size="9" fill="#64748B" text-anchor="middle">&lt;PaymentMsg&gt;</text>
+          <!-- right -->
+          <rect x="695" y="138" width="130" height="44" rx="5" fill="#0F172A" stroke="#10B981" stroke-width="1" />
+          <text x="760" y="158" font-family="monospace" font-size="11" fill="#E2E8F0" text-anchor="middle">ActorRef</text>
+          <text x="760" y="173" font-family="monospace" font-size="9" fill="#64748B" text-anchor="middle">&lt;UserMsg&gt;</text>
+        </g>
+
+        <!-- ── Mailbox boxes ── -->
+        <g id="mailboxes">
+          <!-- left -->
+          <rect x="75" y="222" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="140" y="242" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">Mailbox</text>
+          <text x="140" y="257" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">bounded(1000)</text>
+          <!-- center -->
+          <rect x="385" y="222" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="450" y="242" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">Mailbox</text>
+          <text x="450" y="257" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">unbounded</text>
+          <!-- right -->
+          <rect x="695" y="222" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="760" y="242" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">Mailbox</text>
+          <text x="760" y="257" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">bounded(500)</text>
+        </g>
+
+        <!-- ── ActorCell boxes ── -->
+        <g id="actor-cells">
+          <!-- left -->
+          <rect x="75" y="310" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="140" y="330" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">ActorCell</text>
+          <text x="140" y="345" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">Running</text>
+          <!-- center -->
+          <rect x="385" y="310" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="450" y="330" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">ActorCell</text>
+          <text x="450" y="345" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">Running</text>
+          <!-- right -->
+          <rect x="695" y="310" width="130" height="44" rx="5" fill="#0F172A" stroke="#334155" stroke-width="1" />
+          <text x="760" y="330" font-family="monospace" font-size="11" fill="#94A3B8" text-anchor="middle">ActorCell</text>
+          <text x="760" y="345" font-family="monospace" font-size="9" fill="#475569" text-anchor="middle">Suspended</text>
+        </g>
+
+        <!-- ── Runtime rail ── -->
+        <g id="runtime-rail">
+          <rect x="40" y="402" width="820" height="64" rx="8" fill="#0F172A" stroke="#10B981" stroke-width="1.5" stroke-dasharray="6 3" />
+          <text x="450" y="430" font-family="monospace" font-size="13" fill="#10B981" text-anchor="middle" font-weight="bold">Runtime</text>
+          <text x="450" y="452" font-family="monospace" font-size="10" fill="#64748B" text-anchor="middle">FiberRuntime  |  SwooleRuntime  |  StepRuntime</text>
+        </g>
+
+        <!-- ── Arrows: ActorSystem → ActorRefs ── -->
+        <g id="as-to-refs" stroke="#34D399" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+          <!-- to left -->
+          <line x1="380" y1="88" x2="205" y2="138" />
+          <!-- to center -->
+          <line x1="450" y1="88" x2="450" y2="138" />
+          <!-- to right -->
+          <line x1="520" y1="88" x2="695" y2="138" />
+        </g>
+
+        <!-- ── Arrows: ActorRefs → Mailboxes ── -->
+        <g id="refs-to-mailboxes" stroke="#34D399" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+          <line x1="140" y1="182" x2="140" y2="222" />
+          <line x1="450" y1="182" x2="450" y2="222" />
+          <line x1="760" y1="182" x2="760" y2="222" />
+        </g>
+
+        <!-- ── Arrows: Mailboxes → ActorCells ── -->
+        <g id="mailboxes-to-cells" stroke="#34D399" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+          <line x1="140" y1="266" x2="140" y2="310" />
+          <line x1="450" y1="266" x2="450" y2="310" />
+          <line x1="760" y1="266" x2="760" y2="310" />
+        </g>
+
+        <!-- ── Arrows: ActorCells → Runtime ── -->
+        <g id="cells-to-runtime" stroke="#34D399" stroke-width="1.5" fill="none" marker-end="url(#arrow)">
+          <line x1="140" y1="354" x2="140" y2="402" />
+          <line x1="450" y1="354" x2="450" y2="402" />
+          <line x1="760" y1="354" x2="760" y2="402" />
+        </g>
+
+        <!-- ── Supervision annotation (right side, dashed) ── -->
+        <g id="supervision-annotation">
+          <line x1="840" y1="58" x2="840" y2="332" stroke="#475569" stroke-width="1" stroke-dasharray="4 3" />
+          <line x1="840" y1="58" x2="576" y2="58" stroke="#475569" stroke-width="1" stroke-dasharray="4 3" />
+          <line x1="840" y1="332" x2="826" y2="332" stroke="#475569" stroke-width="1" stroke-dasharray="4 3" />
+          <text x="855" y="200" font-family="monospace" font-size="10" fill="#64748B" text-anchor="start" transform="rotate(90 855 200)">Supervision</text>
+        </g>
+
+        <!-- ── Death watch annotation (curved between ActorCells) ── -->
+        <g id="death-watch-annotation">
+          <path d="M 210 332 Q 297 295 385 332" stroke="#475569" stroke-width="1" stroke-dasharray="3 3" fill="none" marker-end="url(#arrow-dim)" />
+          <text x="297" y="288" font-family="monospace" font-size="10" fill="#64748B" text-anchor="middle">Death watch</text>
+        </g>
+
+        <!-- ── Stashing annotation (left side, pointing at left mailbox) ── -->
+        <g id="stashing-annotation">
+          <line x1="30" y1="244" x2="74" y2="244" stroke="#475569" stroke-width="1" stroke-dasharray="4 3" marker-end="url(#arrow-dim)" />
+          <text x="28" y="244" font-family="monospace" font-size="10" fill="#64748B" text-anchor="end">Stashing</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<style>
+  .ad-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .ad-diagram-wrap {
+    margin-top: 2.5rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .ad-svg {
+    width: 100%;
+    max-width: 900px;
+    border-radius: 0.75rem;
+    display: block;
+  }
+</style>

@@ -1,0 +1,330 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const workerFarmCode = `<?php
+// Before Nexus: three moving parts that break independently.
+// ✗  cron fires duplicate jobs when the previous run overruns
+// ✗  queue workers hold DB connections even when idle
+// ✗  daemon crashes at 3 AM; cron never notices
+
+// After Nexus: one supervised actor tree.
+$system->spawn(
+    Props::fromBehavior(
+        Behavior::setup(function ($ctx) {
+            $ctx->spawn(
+                Props::fromFactory(fn() => new OrderProcessorActor())
+                    ->withSupervision(SupervisionStrategy::exponentialBackoff(
+                        initialBackoff: Duration::millis(100),
+                        maxBackoff:     Duration::seconds(30),
+                        maxRetries:     10,
+                    )),
+                'order-processor',
+            );
+            return Behavior::same();
+        })
+    ),
+    'worker-supervisor',
+);`;
+
+const psalmCode = `<?php
+// Psalm catches actor mismatches at analysis time — not in production.
+
+/** @var ActorRef<DepositRequest> $walletRef */
+$walletRef->tell(new WithdrawalRequest(...)); // ← Psalm ERROR: wrong message type
+
+// nexus-psalm rules enforce:
+// • Messages to tell() must be readonly classes
+// • #[FromActor] parameter types must match actor reply types
+// • Props::fromFactory() closures must not capture by reference
+// • Blocking I/O calls (sleep, file_get_contents) are banned inside handlers`;
+
+const supervisionCode = `<?php
+// Supervision: define failure policy at spawn time, not at call time.
+// The parent actor declares what happens when a child crashes.
+
+Props::fromFactory(fn() => new PaymentGatewayActor($client))
+    ->withSupervision(
+        SupervisionStrategy::exponentialBackoff(
+            initialBackoff: Duration::millis(200),
+            maxBackoff:     Duration::seconds(60),
+            maxRetries:     5,
+            decider: static fn(\\Throwable $e): Directive => match(true) {
+                $e instanceof NetworkException   => Directive::Restart,
+                $e instanceof InvalidPaymentData => Directive::Stop,
+                default                          => Directive::Escalate,
+            },
+        ),
+    );
+// Network blip? Restart with backoff.
+// Bad data? Stop immediately, let the parent decide.
+// Unknown? Escalate — bubble to the grandparent supervisor.`;
+
+const runtimeCode = `<?php
+// Same actor code — swap one line to change the runtime.
+
+// Development / testing: FiberRuntime — no extensions required
+$system = ActorSystem::create('app', new FiberRuntime());
+
+// Production: SwooleRuntime — true async I/O, coroutine concurrency
+$system = ActorSystem::create('app', new SwooleRuntime());
+
+// Deterministic tests: StepRuntime — full control over message ordering
+$runtime = new StepRuntime();
+$system  = ActorSystem::create('app', $runtime);
+$runtime->step(); // process exactly one message
+$runtime->drain(); // process all queued messages`;
+---
+<Marketing
+  title="Why Nexus — Actor System for PHP"
+  description="PHP has always excelled at request-response. Nexus extends that model to long-lived, concurrent, fault-tolerant server processes — without leaving PHP."
+>
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-4 py-16 md:py-24 text-center">
+    <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Why Nexus</p>
+    <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+      PHP was built for requests.<br />
+      Nexus extends it to processes.
+    </h1>
+    <p class="text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
+      Modern PHP applications need daemons, workers, event streams, and real-time
+      connections — not just request-response handlers. Nexus brings Erlang/OTP
+      supervision and Akka-style actor semantics to the PHP you already know,
+      without rewriting your stack.
+    </p>
+  </section>
+
+  <!-- Production gap -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-start">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">The production gap no framework fills.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        PHP-FPM handles HTTP superbly. But the moment you need a background worker,
+        a WebSocket handler, a rate-limit counter, or a pub/sub fan-out, you reach
+        for a message queue, a Redis key, a cron job, and maybe a supervisor daemon.
+        Four separate systems. Four separate failure modes. Four separate ops surfaces.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        That patchwork is not a design choice — it's the absence of a model for
+        concurrent, stateful PHP processes. Every team reinvents it differently.
+        Nexus is the model.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Actors replace the queue, the counter, the daemon loop, and the cron
+        coordinator — each as a typed, supervised, restartable unit of work with
+        its own mailbox and lifecycle. The supervision tree monitors all of them.
+        One failure doesn't cascade.
+      </p>
+    </div>
+    <div class="space-y-4">
+      <div class="p-5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+        <h3 class="font-bold text-red-700 dark:text-red-400 mb-1">Without Nexus</h3>
+        <ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+          <li>Cron + queue + daemon + Redis = four failure surfaces</li>
+          <li>Shared state via database rows — locking, deadlocks, retries</li>
+          <li>Worker crash unnoticed until the next health check</li>
+          <li>No type safety across process boundaries</li>
+        </ul>
+      </div>
+      <div class="p-5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
+        <h3 class="font-bold text-green-700 dark:text-green-400 mb-1">With Nexus</h3>
+        <ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+          <li>Supervised actor tree replaces all four</li>
+          <li>Each actor owns its state — no shared memory</li>
+          <li>Supervisor restarts crashed actors automatically</li>
+          <li>Psalm generics enforce message types at compile time</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Worker-farm rip-out -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <CodeBlock code={workerFarmCode} lang="php" title="bootstrap.php — before + after" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Rip out the worker farm.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        A typical "worker farm" — cron + queue + worker daemon + supervisor conf —
+        requires four components to agree on the same shared state. When the queue
+        backpressures, cron fires again. When the daemon crashes, nothing notices
+        until the next health check interval.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        An actor replaces all of it. It receives messages from its mailbox, processes
+        them one at a time, and persists its own state. The supervision strategy
+        defines exactly what happens on failure — restart with backoff, stop, escalate
+        to the parent — and the actor tree enforces it automatically.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        You get the reliability of a supervised daemon without writing a single
+        process-management script.
+      </p>
+      <a
+        href={docsUrl('/guides/overview')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Actor system guides →
+      </a>
+    </div>
+  </section>
+
+  <!-- Type safety -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Type safety from handler to actor and back.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">ActorRef&lt;T&gt;</code> carries the message
+        type as a Psalm generic. Send the wrong type to <code class="font-mono">tell()</code>
+        and Psalm reports an error before the code ships — not after a production
+        incident.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The <code class="font-mono">nexus-psalm</code> plugin adds seven actor-specific
+        rules on top of Psalm level 1: message immutability, mutable closure capture
+        detection, blocking I/O inside handlers, and generic type inference for
+        <code class="font-mono">Props::from*()</code> methods.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Every actor in the system carries its type contract in the source. No runtime
+        surprises from mismatched message shapes.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Isolation and supervision are security properties as much as reliability
+        properties — actor boundaries prevent TOCTOU races and shared-state corruption
+        by construction, not by convention.
+        <a href="/security" class="text-primary hover:underline font-semibold">See the full security model →</a>
+      </p>
+      <a
+        href={docsUrl('/reference/psalm-rules')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Psalm plugin rules →
+      </a>
+    </div>
+    <CodeBlock code={psalmCode} lang="php" title="Psalm catches this at analysis time" />
+  </section>
+
+  <!-- Supervision -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Supervision: failure as a first-class concern.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        In a traditional PHP daemon, a crashed worker takes the whole process down —
+        or at best, a supervisor script notices after a health check interval.
+        In Nexus, every actor has a parent. When a child crashes, the parent's
+        supervision strategy runs immediately: restart with backoff, stop permanently,
+        or escalate to the grandparent.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Supervision strategies are declared at spawn time with a typed decider closure.
+        The decider receives the actual <code class="font-mono">Throwable</code> and
+        returns a <code class="font-mono">Directive</code>. Different exception types
+        produce different outcomes — Psalm ensures the decider is exhaustive.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        "Let it crash" is not recklessness — it is the deliberate separation of
+        the error path from the happy path. The actor that crashes is isolated.
+        The supervision tree handles recovery. Your business logic stays clean.
+      </p>
+      <a
+        href={docsUrl('/core-concepts/supervision')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Supervision model →
+      </a>
+    </div>
+    <CodeBlock code={supervisionCode} lang="php" title="Props with supervision strategy" />
+  </section>
+
+  <!-- Three runtimes -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={runtimeCode} lang="php" title="ActorSystem::create — runtime swap" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Three runtimes, one codebase.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <strong>FiberRuntime</strong> uses PHP 8.5 Fibers — no extensions required.
+        It is the right choice for local development, CI pipelines, and unit testing.
+        Each actor runs in its own Fiber; the scheduler yields cooperatively.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <strong>SwooleRuntime</strong> uses Swoole coroutines and true async I/O.
+        It supports multi-worker scaling via the worker pool, thousands of concurrent
+        WebSocket connections, and non-blocking database operations. This is the
+        production runtime for latency-sensitive services.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        <strong>StepRuntime</strong> is deterministic. You control exactly how many
+        messages are processed and in what order. It makes complex actor interaction
+        tests straightforward to write and deterministic to run on any CI machine.
+      </p>
+      <a
+        href={docsUrl('/runtimes/overview')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Runtime comparison →
+      </a>
+    </div>
+  </section>
+
+  <!-- When NOT to use Nexus -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">When not to use Nexus.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Nexus is not a universal PHP framework. The actor model adds structural overhead:
+        message passing instead of direct calls, mailboxes, supervision configuration,
+        and a new mental model for your team. That overhead pays off when you have
+        long-lived state, concurrent workflows, or failure isolation requirements.
+        It does not pay off for a straightforward CRUD service with ten endpoints.
+      </p>
+      <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-400 mb-6">
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Simple CRUD APIs</strong> — Symfony or Laravel with Doctrine ORM is faster to build and easier to staff.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Simple background jobs</strong> — if Symfony Messenger or Laravel Queues already meet your needs, they are simpler to operate.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Raw async I/O only</strong> — if you need a fast event loop without actor semantics, ReactPHP or bare Swoole are lighter options.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Teams new to PHP 8.x generics</strong> — Nexus relies on Psalm level-1 generics. If your team has not used Psalm before, budget time for the learning curve.</span>
+        </li>
+      </ul>
+      <p class="text-slate-600 dark:text-slate-300">
+        If you land in the "not sure" category, the
+        <a href={docsUrl('/best-practices/when-to-use-actors')} class="text-primary hover:underline">when-to-use-actors decision guide</a>
+        walks through a concrete checklist.
+      </p>
+    </div>
+  </section>
+
+  <!-- Comparison teaser -->
+  <section class="max-w-4xl mx-auto px-4 py-16 text-center">
+    <h2 class="text-3xl font-bold mb-4">How does Nexus compare?</h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-8 max-w-xl mx-auto">
+      Amphp, Spiral RoadRunner, raw Swoole, or queue+cron+workers — the comparison
+      page lays out the tradeoffs row by row. No marketing language; each cell
+      either has a link to the code or marks a planned feature.
+    </p>
+    <a
+      href="/comparison"
+      class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+    >
+      View the comparison →
+    </a>
+  </section>
+
+  <CtaBlock
+    title="See it in five minutes."
+    subtitle="The quick-start installs Nexus, spawns a counter actor, and runs it on FiberRuntime."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start' }}
+    secondary={{ href: docsUrl('/core-concepts/actors'), label: 'Actor model concepts' }}
+  />
+</Marketing>

@@ -1,0 +1,2 @@
+# Legacy /docs/* → docs.nexusactors.com (subdomain migration per spec §5.3)
+/docs/*  https://docs.nexusactors.com/:splat  301

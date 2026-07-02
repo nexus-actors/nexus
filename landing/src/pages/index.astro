@@ -1,0 +1,67 @@
+---
+// landing/src/pages/index.astro
+import Marketing from '../layouts/Marketing.astro';
+import { docsUrl } from '../lib/urls';
+import Hero from '../components/Hero.astro';
+import ComparisonTable from '../components/ComparisonTable.astro';
+import RuntimeTabs from '../components/RuntimeTabs';
+import CodeTour from '../components/CodeTour.astro';
+import HttpShowcase from '../components/HttpShowcase.astro';
+import PersistenceShowcase from '../components/PersistenceShowcase.astro';
+import SecurityHighlights from '../components/SecurityHighlights.astro';
+import ArchitectureDiagram from '../components/ArchitectureDiagram.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+---
+<Marketing
+  title="Nexus — Concurrent PHP, done right"
+  description="Type-safe actors, supervision trees, event sourcing, multi-worker scaling, pluggable runtimes. Erlang/OTP and Akka patterns — in the PHP you already know."
+>
+  <Hero />
+  <ComparisonTable />
+  <CodeTour />
+  <HttpShowcase />
+  <PersistenceShowcase />
+  <SecurityHighlights />
+
+  <!-- Observability integration card -->
+  <section class="max-w-6xl mx-auto px-4 py-8">
+    <a
+      href="/observability"
+      class="flex items-start gap-4 p-6 rounded-lg border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 transition-colors group"
+    >
+      <div class="flex-1">
+        <p class="text-xs font-semibold uppercase tracking-wide text-primary mb-1">Integration</p>
+        <h3 class="text-lg font-bold group-hover:text-primary transition-colors mb-1">Observability</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Distributed tracing, RED metrics, and structured logs via OpenTelemetry — zero overhead when disabled.
+        </p>
+      </div>
+      <span class="text-slate-400 group-hover:text-primary transition-colors flex-shrink-0 mt-1">→</span>
+    </a>
+  </section>
+
+  <section class="rt-section">
+    <div class="nx-section-inner">
+      <h2 class="nx-section-title">One codebase, three runtimes.</h2>
+      <p class="nx-section-sub">
+        Same actor logic. Swap one line to change how it runs.
+      </p>
+      <RuntimeTabs client:load />
+    </div>
+  </section>
+
+  <ArchitectureDiagram />
+  <CtaBlock
+    title="Try it in five minutes."
+    subtitle="Install, create demo.php, and run it. That's the whole setup."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start Guide' }}
+    secondary={{ href: docsUrl(), label: 'Explore the Docs' }}
+  />
+</Marketing>
+
+<style>
+  .rt-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+</style>

@@ -1,0 +1,390 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const readonlyMessageCode = `<?php
+readonly class TransferFunds
+{
+    public function __construct(
+        public string $fromAccount,
+        public string $toAccount,
+        public int $amountCents,
+        public ActorRef $replyTo,
+    ) {}
+}
+
+// Psalm ReadonlyMessageRule rejects non-readonly messages at analysis time:
+// $ref->tell(new TransferFunds(...));  // ← ERROR if class is not readonly
+// $ref->tell(['amount' => 500]);       // ← ERROR: not an object`;
+
+const supervisionCode = `<?php
+$props = Props::fromBehavior($behavior)->withSupervision(
+    SupervisionStrategy::oneForOne(
+        maxRetries: 3,
+        window: Duration::seconds(60),
+        decider: static fn (Throwable $t): Directive => match (true) {
+            $t instanceof CryptographicInvariantException => Directive::Escalate,
+            $t instanceof AuthenticationFailure        => Directive::Stop,
+            $t instanceof TransientNetworkError        => Directive::Restart,
+            default                                    => Directive::Escalate,
+        },
+    ),
+);`;
+
+const mailboxCode = `<?php
+MailboxConfig::bounded(
+    capacity: 10_000,
+    strategy: OverflowStrategy::Backpressure,
+);
+
+// OverflowStrategy options:
+// • Backpressure   — sender blocks until capacity frees
+// • DropNewest     — new messages are silently discarded
+// • DropOldest     — oldest queued messages make room
+// • ThrowException — MailboxOverflowException for explicit handling`;
+
+const writerCode = `<?php
+use Monadial\\Nexus\\Persistence\\Recovery\\ReplayFilter;
+
+$system = ActorSystem::create('orders', new SwooleRuntime());
+$writerId = $system->writerId();  // unique ULID stamped on every write
+
+EventSourcedBehavior::create($persistenceId, $emptyState, $cmdHandler, $evHandler)
+    ->withEventStore($eventStore)
+    ->withReplayFilter(ReplayFilter::fail());  // throw WriterConflictException on interleave
+// WriterConflictException is raised if another ActorSystem wrote to the same
+// persistence ID — split-brain corruption is surfaced immediately, not silently.`;
+---
+<Marketing
+  title="Security & isolation — Nexus"
+  description="Actor isolation is a security property. Typed messages, bounded mailboxes, supervised failure, and single-writer persistence eliminate entire classes of vulnerability at the language level."
+>
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-4 py-16 md:py-24 text-center">
+    <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Security & Isolation</p>
+    <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+      Isolation is a security property.
+    </h1>
+    <p class="text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
+      Typed messages, bounded mailboxes, supervised failure, and single-writer
+      persistence eliminate entire classes of vulnerability at the language level —
+      before your application ever starts.
+    </p>
+  </section>
+
+  <!-- 1. Isolation by design -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-start">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Isolation by design.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Actors hold no shared mutable state. Every state change returns a new
+        value — <code class="font-mono text-primary">Behavior::same()</code> to keep the
+        current behavior, <code class="font-mono text-primary">BehaviorWithState::next($state)</code>
+        to advance to a new state. No two actors can write to the same memory
+        simultaneously, by construction. TOCTOU races, data races, and most
+        concurrency vulnerabilities are removed at the language level — not
+        by convention or discipline.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The Psalm plugin's <code class="font-mono">MutableActorStateRule</code> enforces
+        this statically: mutable properties on any class that implements
+        <code class="font-mono">ActorHandler</code> or <code class="font-mono">StatefulActorHandler</code>
+        are flagged as errors at analysis time. You cannot accidentally introduce shared
+        mutable state that Psalm misses.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        This is not defensive programming applied after the fact — it is the
+        structural consequence of the actor model. Isolation is load-bearing,
+        not advisory.
+      </p>
+    </div>
+    <div class="space-y-4">
+      <div class="p-5 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20">
+        <h3 class="font-bold text-green-700 dark:text-green-400 mb-2">Eliminated by the model</h3>
+        <ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+          <li>Time-of-check/time-of-use (TOCTOU) races</li>
+          <li>Data races on shared counters and caches</li>
+          <li>Uncontrolled concurrent writes to entity state</li>
+          <li>Global mutable singleton abuse</li>
+        </ul>
+      </div>
+      <div class="p-5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+        <h3 class="font-bold text-blue-700 dark:text-blue-400 mb-2">Enforced by Psalm</h3>
+        <ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+          <li><code class="font-mono">MutableActorStateRule</code> — rejects mutable handler properties</li>
+          <li><code class="font-mono">ReadonlyMessageRule</code> — requires readonly message classes</li>
+          <li><code class="font-mono">MutableClosureCaptureRule</code> — bans by-reference closure captures</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Typed message contracts -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Typed message contracts.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Messages are <code class="font-mono">readonly</code> classes — enforced by the
+        <code class="font-mono">ReadonlyMessageRule</code> Psalm hook. There are no
+        string-key dispatch tables, no <code class="font-mono">eval()</code>-like patterns,
+        no dynamic property bags. Every field on every message has a declared type and
+        is immutable from the moment it is constructed.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Handler dispatch uses a <code class="font-mono">match(true)</code> expression on
+        <code class="font-mono">instanceof</code> checks. Psalm Level 1 flags unhandled
+        message types at analysis time — not at runtime, and not in production logs.
+        Sending the wrong message type to an <code class="font-mono">ActorRef&lt;T&gt;</code>
+        is a Psalm error before the code ships. There is no way to craft an unexpected
+        message shape that bypasses the type system.
+      </p>
+    </div>
+    <CodeBlock code={readonlyMessageCode} lang="php" title="TransferFunds.php — readonly message contract" />
+  </section>
+
+  <!-- 3. Supervision as security policy -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={supervisionCode} lang="php" title="Props with security-aware supervision strategy" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Supervision as security policy.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Failures are contained to the subtree they originate in. A supervision
+        strategy maps exception types to explicit security actions:
+        escalate a cryptographic invariant violation, stop permanently on authentication
+        failure, restart with backoff on transient network errors. The decider is a
+        typed closure — Psalm ensures the match is exhaustive.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        This means your security policy is expressed in the same language as your
+        business logic, in the same file as the actor that needs it, and verified
+        by the same static analysis pipeline. You do not need a separate configuration
+        format or a runtime policy engine to express "stop this actor if an
+        authentication failure occurs".
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        The "let it crash" philosophy is a security principle as much as a reliability
+        one: a compromised or corrupted actor is isolated and replaced, not patched
+        in place while it continues to process messages.
+      </p>
+    </div>
+  </section>
+
+  <!-- 4. Bounded mailboxes resist DoS -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Bounded mailboxes resist DoS.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        A flood of messages cannot exhaust memory. Bounded mailboxes with
+        overflow strategies — <code class="font-mono">DropNewest</code>,
+        <code class="font-mono">DropOldest</code>,
+        <code class="font-mono">Backpressure</code>,
+        <code class="font-mono">ThrowException</code> — provide explicit, auditable
+        load-shedding. The capacity and strategy are set at spawn time on the
+        <code class="font-mono">MailboxConfig</code>; there is no global tuning knob
+        that silently changes under load.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Pair <code class="font-mono">Backpressure</code> with the HTTP layer's
+        <code class="font-mono">ask()</code> timeout to cap end-to-end request latency
+        under saturation. The actor signals its own overwhelm before your upstream
+        services time out. Pair <code class="font-mono">DropNewest</code> with a
+        circuit-breaker pattern at the actor boundary for fire-and-forget traffic
+        that should shed gracefully when the consumer falls behind.
+      </p>
+    </div>
+    <CodeBlock code={mailboxCode} lang="php" title="MailboxConfig — bounded with overflow strategy" />
+  </section>
+
+  <!-- 5. Single-writer principle -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={writerCode} lang="php" title="ActorSystem writer ID + replay filter" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Single-writer principle for persistence.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Each <code class="font-mono">ActorSystem</code> is assigned a unique ULID at
+        construction — the writer ID — stamped on every persisted envelope.
+        Persistence stores enforce single-writer semantics: a write from a different
+        writer ID raises <code class="font-mono">WriterConflictException</code>
+        immediately. Split-brain corruption when two workers race for the same
+        persistence ID is surfaced as an exception, not silently overwritten.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        During event replay, <code class="font-mono">ReplayFilterMode::Fail</code>
+        throws on any cross-writer interleave. The alternative modes —
+        <code class="font-mono">Warn</code>, <code class="font-mono">RepairByDiscardOld</code>,
+        <code class="font-mono">Off</code> — are available but must be opted into
+        explicitly. The default is strict: if the event stream is inconsistent,
+        you know immediately.
+      </p>
+    </div>
+  </section>
+
+  <!-- 6. Audit trail -->
+  <section class="max-w-6xl mx-auto px-4 py-16 bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div class="max-w-3xl mx-auto px-4">
+      <h2 class="text-3xl font-bold mb-4">Audit trail built in.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Event sourcing makes every state change an immutable, timestamped fact.
+        Events are appended, never mutated. After a security incident you
+        reconstruct exactly what happened from the event log — not from guesswork
+        about current state, and not from application logs that might have been
+        tampered with or rotated away. The authoritative record is the event store.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Snapshots accelerate recovery without sacrificing the audit trail. The
+        snapshot stores the current state for fast startup; the event store
+        retains the full history. Retention policy controls event pruning
+        independently from snapshot frequency — so you can keep snapshots rolling
+        while holding a forensic window of raw events for compliance or incident
+        response.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Every event carries the writer ID, sequence number, and timestamp.
+        Forensic reconstruction can verify sequence continuity and detect gaps
+        without any application-level audit middleware.
+      </p>
+    </div>
+  </section>
+
+  <!-- 7. No deserialization on the hot path -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-3xl mx-auto">
+      <h2 class="text-3xl font-bold mb-4">No deserialization on the hot path.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Cross-worker messages pass <code class="font-mono">Envelope</code> objects
+        directly via <code class="font-mono">Swoole\Thread\Queue</code>. There is no
+        PHP <code class="font-mono">unserialize()</code> round-trip on local messaging.
+        PHP's <code class="font-mono">unserialize()</code> gadget-chain attack surface —
+        the class of vulnerability that has burned PHP applications for over a decade —
+        simply does not exist on the in-process actor messaging path.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Remote cluster transport, when it ships, will require explicit
+        <code class="font-mono">#[MessageType]</code> registration and an allowlist
+        serializer. Arbitrary object deserialization from untrusted sources is not
+        an architecture the system supports by default — it must be opted into at
+        the transport boundary with explicit type registration.
+      </p>
+    </div>
+  </section>
+
+  <!-- 8. Secrets stay outside actor state -->
+  <section class="max-w-6xl mx-auto px-4 py-16 bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div class="max-w-3xl mx-auto px-4">
+      <h2 class="text-3xl font-bold mb-4">Secrets stay outside actor state.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Inject secrets through the PSR-11 container at actor construction time via
+        <code class="font-mono">Props::fromContainer(ContainerInterface $container, string $class)</code>.
+        The container resolves the actor class with its dependencies — including
+        secret-bearing service objects — at spawn time. The secret lives in the
+        container binding, not in the actor's behavior closure.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Never store secrets on the actor's behavior closure or stateful field.
+        Mailbox introspection, dead-letter logging, supervision restart context,
+        and Psalm tooling can all incidentally observe handler state. A secret
+        captured in a closure is one crash report or one debug dump away from
+        exposure. Keep secrets in your secret manager; keep references to
+        service objects — not raw secret strings — in your actors.
+      </p>
+    </div>
+  </section>
+
+  <!-- 9. Deterministic security testing -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-3xl mx-auto">
+      <h2 class="text-3xl font-bold mb-4">Deterministic security testing.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The <code class="font-mono">StepRuntime</code> combined with
+        <code class="font-mono">VirtualClock</code>
+        makes security properties testable as ordinary deterministic unit tests.
+        Call <code class="font-mono">$runtime->step()</code> to process exactly one
+        message; call <code class="font-mono">$runtime->drain()</code> to flush the
+        entire queue. Advance the clock by exactly the backoff window. Assert retry
+        counts, supervision decisions, and mailbox overflow behaviour without flaky
+        timing-dependent assertions.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Replay-filter behaviour, writer-conflict handling, and retention policy
+        enforcement are all exercisable in the same way — no mocking of external
+        stores needed for the core security property tests. Security invariants
+        belong in CI just like functional correctness. The StepRuntime makes that
+        practical.
+      </p>
+    </div>
+  </section>
+
+  <!-- 10. Threat model & non-goals -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">Threat model & non-goals.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Nexus protects the in-process actor topology. It eliminates concurrency
+        vulnerabilities, enforces message immutability, constrains resource exhaustion,
+        and makes failure visible. These are meaningful guarantees, but they operate
+        inside the process boundary.
+      </p>
+      <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-400 mb-6">
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">TLS termination</strong> — use Nginx, Caddy, or your cloud load balancer in front.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Input validation &amp; authentication</strong> — use PSR-15 middleware before requests become actor messages.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Secret management</strong> — use Vault, AWS SSM, or your platform's secret store. Nexus provides the injection point (PSR-11 container) but not the store.</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Runtime sandboxing</strong> — Nexus does not constrain what PHP code can do at the OS level. Use containers, seccomp profiles, or read-only filesystems for process isolation.</span>
+        </li>
+      </ul>
+      <p class="text-slate-600 dark:text-slate-300">
+        Use Nexus in concert with PSR-15 middleware for HTTP request validation,
+        a secrets manager for credential rotation, and your normal infra controls.
+        Nexus handles the application-tier concurrency model; your infra stack handles
+        the network perimeter.
+      </p>
+    </div>
+  </section>
+
+  <!-- CTA section linking to related pages -->
+  <section class="max-w-4xl mx-auto px-4 py-16 text-center">
+    <h2 class="text-2xl font-bold mb-4">Security across the stack.</h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-8 max-w-xl mx-auto">
+      The security model extends to HTTP request boundaries and database transaction isolation.
+    </p>
+    <div class="flex flex-wrap justify-center gap-4">
+      <a
+        href="/http"
+        class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+      >
+        HTTP request boundary security →
+      </a>
+      <a
+        href="/doctrine"
+        class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+      >
+        Doctrine transaction isolation →
+      </a>
+      <a
+        href={docsUrl('/contributing/security')}
+        class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+      >
+        Full security docs →
+      </a>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Build with isolation as a guarantee."
+    subtitle="Actor semantics remove concurrency vulnerabilities by construction. Psalm enforces the contract before you ship."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start' }}
+    secondary={{ href: docsUrl('/contributing/security'), label: 'Security docs' }}
+  />
+</Marketing>

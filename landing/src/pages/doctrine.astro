@@ -1,0 +1,438 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const heroCode = `<?php
+// One actor per aggregate. One connection per actor. No connection contention.
+use Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehavior;
+use Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityEffect;
+
+$behavior = EntityBehavior::create(
+    Wallet::class,
+    $walletId,
+    static fn (ActorContext $ctx, object $cmd, Wallet $w): EntityEffect => match (true) {
+        $cmd instanceof Deposit  => EntityEffect::persist(),
+        $cmd instanceof Withdraw => $w->canWithdraw($cmd->amount)
+            ? EntityEffect::persist()
+            : EntityEffect::reply($cmd->replyTo, new InsufficientFunds()),
+        default                  => EntityEffect::same(),
+    },
+)->toBehavior();`;
+
+const poolCode = `<?php
+// Under Swoole, wire an EntityManager pool via DoctrineEmPool::forConfig().
+// Each actor draws from the pool — writes are never interleaved across actors.
+use Monadial\\Nexus\\Doctrine\\Orm\\DoctrineEmPool;
+use Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime;
+use Monadial\\Nexus\\App\\NexusApp;
+
+$emPool = DoctrineEmPool::forConfig(
+    name: 'wallets',
+    connParams: (new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql']))->parse($_ENV['DATABASE_URL']),
+    ormSetup: $ormConfig,
+);
+
+NexusApp::create('wallet-service')
+    ->actor('wallets', Props::fromBehavior($walletBehavior))
+    ->onStart(static function ($system) use ($emPool): void {
+        // Inject $emPool into actors that need an EntityManager.
+    })
+    ->run(new SwooleRuntime());`;
+
+const entityBehaviorCode = `<?php
+// EntityBehavior is event-sourced by default. Commands produce events.
+// Events mutate the entity. The Doctrine EM writes atomically.
+final class Wallet
+{
+    public function __construct(
+        public readonly string $id,
+        public int $balance = 0,
+    ) {}
+
+    public function apply(Deposited|Withdrawn $event): self
+    {
+        return match(true) {
+            $event instanceof Deposited  => new self($this->id, $this->balance + $event->amount),
+            $event instanceof Withdrawn  => new self($this->id, $this->balance - $event->amount),
+        };
+    }
+}`;
+
+const transactionCode = `<?php
+// Multi-entity transactions via Saga actors.
+// Each step is an actor message; compensation is a Behavior branch.
+$saga = Behavior::setup(static function (ActorContext $ctx) use ($order, $inventoryRef): Behavior {
+    $inventoryRef->tell(new ReserveStock($order));
+    return Behavior::receive(static function ($c, $msg) use ($paymentRef, $replyTo, $order) {
+        if ($msg instanceof StockReserved) {
+            $paymentRef->tell(new ChargeCard($order));
+            return Behavior::same();
+        }
+        if ($msg instanceof StockFailed) {
+            $replyTo->tell(new OrderRejected('out of stock'));
+            return Behavior::stopped();
+        }
+        if ($msg instanceof PaymentCharged) {
+            $replyTo->tell(new OrderConfirmed($order->id));
+            return Behavior::stopped();
+        }
+        return Behavior::unhandled();
+    });
+});`;
+
+const repoInjectionCode = `<?php
+// Repository injection: pass a Doctrine repository into an actor via Props.
+// The repository is resolved once at spawn time; no DI container magic inside handlers.
+
+final class ProductCatalogActor implements ActorHandler
+{
+    public function __construct(
+        private readonly ProductRepository $products,
+    ) {}
+
+    public function handle(ActorContext $ctx, object $msg): Behavior
+    {
+        if ($msg instanceof FindProduct) {
+            $product = $this->products->find($msg->id);
+            $msg->replyTo->tell($product ?? new ProductNotFound($msg->id));
+        }
+        return Behavior::same();
+    }
+}
+
+// Props wires it up:
+Props::fromContainer($container, ProductCatalogActor::class);`;
+
+const migrationCode = `<?php
+// Schema migrations work normally — Nexus does not interfere with Doctrine Migrations.
+// Run migrations before deploying new actor versions, just as you would with any ORM.
+
+// doctrine.php — standard Doctrine CLI configuration (ORM 3 / DBAL 4)
+use Doctrine\\DBAL\\DriverManager;
+use Doctrine\\Migrations\\Configuration\\EntityManager\\ExistingEntityManager;
+use Doctrine\\Migrations\\DependencyFactory;
+use Doctrine\\ORM\\EntityManager;
+
+$dsnParser  = new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql', 'mysql' => 'pdo_mysql']);
+$connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));
+$entityManager = new EntityManager($connection, $ormConfig);
+
+return DependencyFactory::fromEntityManager(
+    new Doctrine\\Migrations\\Configuration\\Migration\\PhpFile('migrations.php'),
+    new ExistingEntityManager($entityManager),
+);
+
+// Persistence schema is created by Nexus on first run:
+// event_store: (persistence_id, sequence_number, event_type, payload, written_at, writer_id)
+// snapshot_store: (persistence_id, sequence_number, snapshot_type, payload, written_at)
+// Both tables are append-only — no UPDATE or DELETE in hot paths.`;
+
+const tradeoffCode = `<?php
+// DBAL store: zero ORM overhead, best for high-throughput event append.
+$eventStore = new DbalEventStore($dbalConnection);
+
+// Doctrine ORM store: EntityManager integration, works with existing ORM setup.
+$eventStore = new DoctrineEventStore($entityManager);
+
+// Both implement the same EventStore interface — swap without touching actor code.
+// Rule of thumb:
+//   Use DBAL if you care about raw insert throughput (IoT, trading, logging).
+//   Use Doctrine ORM if you already have an EM in your container and
+//   want migrations + schema management in one place.`;
+---
+<Marketing
+  title="Doctrine Integration — Nexus"
+  description="Single-writer EntityBehavior actors, Swoole-pooled connections, and composable Saga transactions. Doctrine without connection contention."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Doctrine Integration</p>
+      <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+        One actor. One connection. Zero contention.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        Nexus wraps Doctrine entities as single-writer aggregate actors.
+        Each actor owns its Entity Manager — no shared state, no optimistic
+        locking races, no stale reads. Commands flow in; events flow out;
+        Doctrine writes are race-free by construction.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/doctrine/entity-behavior')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          EntityBehavior docs
+        </a>
+        <a
+          href={docsUrl('/doctrine/overview')}
+          class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+        >
+          Quick Start
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={heroCode} lang="php" title="src/Actor/WalletBehavior.php" />
+  </section>
+
+  <!-- Pooled connections -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Swoole-pooled connections that scale linearly.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Traditional PHP-FPM gives each request its own connection — expensive to open,
+        expensive to close, and totally wasted between queries. Under Nexus + Swoole,
+        connections are pooled once per worker thread and reused across thousands of
+        coroutines. Scale to 8 threads and you need exactly 8 connections — not 800.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> One EntityManager per worker — no cross-actor EM sharing</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> autoFlush after each successful command handler</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Connection errors trigger supervisor restart, not a 500</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with Doctrine ORM 3.x and DBAL 4.x</li>
+      </ul>
+    </div>
+    <CodeBlock code={poolCode} lang="php" title="bootstrap.php" />
+  </section>
+
+  <!-- EntityBehavior DSL -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={entityBehaviorCode} lang="php" title="src/Domain/Wallet.php" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Entities as pure value objects.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">EntityBehavior</code> separates command
+        handling from entity mutation. Your entity is a <code class="font-mono">readonly</code>
+        value object with an <code class="font-mono">apply()</code> method. No
+        <code class="font-mono">@Entity</code> annotations needed — Nexus uses Doctrine
+        DBAL under the hood, not the ORM class mapper, so your domain model stays clean.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Events are persisted first. If the Doctrine write fails, the actor restarts
+        from its last good snapshot. No partial state. No phantom writes.
+      </p>
+      <a
+        href={docsUrl('/doctrine/entity-behavior')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Full EntityBehavior reference →
+      </a>
+    </div>
+  </section>
+
+  <!-- Transactions / Saga -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Distributed transactions without a transaction manager.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Multi-entity workflows that span aggregates use the Saga pattern — a dedicated
+        coordinator actor that sends compensating commands on failure. No two-phase
+        commit. No distributed lock. The saga actor is durable: it persists its own
+        state and resumes after a restart.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Each step in the saga is a typed actor message. The compensation path is an
+        explicit <code class="font-mono">Behavior</code> branch — visible, testable, and
+        Psalm-checked.
+      </p>
+      <a
+        href={docsUrl('/guides/saga')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Saga pattern guide →
+      </a>
+    </div>
+    <CodeBlock code={transactionCode} lang="php" title="src/Actor/OrderSaga.php" />
+  </section>
+
+  <!-- Why this beats alternatives -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">Why not optimistic locking?</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        Optimistic locking works until it doesn't — under load, retry storms saturate
+        your database before they converge. With Nexus, each aggregate has one writer
+        by definition. Contention is structurally impossible, not just unlikely.
+        Your database sees sequential writes per entity, not competing UPDATE+version transactions.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">No optimistic lock retries</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Single-writer actors eliminate the retry loop. Conflicting writes queue in the
+          mailbox — no database roundtrip wasted.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Snapshot + event replay</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Configure snapshot frequency. Startup recovery replays only events since
+          the last snapshot — cold-start latency stays bounded.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">DBAL + ORM both supported</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Use <code class="font-mono">nexus-persistence-dbal</code> for raw DBAL or
+          <code class="font-mono">nexus-persistence-doctrine</code> for ORM. Switch without
+          touching actor code.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Repository injection -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Repository injection into actors.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Not every actor needs event sourcing. Some actors are read-heavy — they answer
+        queries by fetching data from a Doctrine repository and replying.
+        <code class="font-mono text-primary">Props::fromContainer()</code> resolves
+        your actor class from the PSR-11 container, injecting repositories, services, or
+        any other dependency via the constructor.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The repository is resolved once at actor spawn time. After that, the actor uses
+        it directly — no service locator inside the handler, no container calls mid-message.
+        Psalm verifies the constructor types; there are no runtime surprises.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        This pattern works best for catalog lookups, reporting queries, and read projections —
+        anything where you want Doctrine's query builder without the overhead of full
+        event sourcing on each entity.
+      </p>
+      <a
+        href={docsUrl('/doctrine/overview')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Doctrine ORM docs →
+      </a>
+    </div>
+    <CodeBlock code={repoInjectionCode} lang="php" title="src/Actor/ProductCatalogActor.php" />
+  </section>
+
+  <!-- Schema migrations -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <CodeBlock code={migrationCode} lang="php" title="doctrine.php — migration config" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Schema migrations work normally.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Nexus does not replace Doctrine Migrations — it sits alongside it.
+        Your domain schema is managed by Doctrine Migrations exactly as before.
+        The Nexus persistence tables (<code class="font-mono">event_store</code> and
+        <code class="font-mono">snapshot_store</code>) are created by Nexus on first run
+        and are separate from your application schema.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Both persistence tables are append-only. There are no <code class="font-mono">UPDATE</code>
+        or <code class="font-mono">DELETE</code> operations in hot paths — only
+        <code class="font-mono">INSERT</code> and <code class="font-mono">SELECT</code>.
+        This makes the event log safe to back up with point-in-time recovery and
+        straightforward to replicate with standard Postgres/MySQL streaming replication.
+      </p>
+      <a
+        href={docsUrl('/doctrine/migrations')}
+        class="inline-block mt-2 text-primary hover:underline font-semibold"
+      >
+        Schema and migrations →
+      </a>
+    </div>
+  </section>
+
+  <!-- DBAL vs Doctrine ORM tradeoff -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">DBAL or ORM: pick what fits.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">nexus-persistence-dbal</code> writes events
+        via raw DBAL — no ORM overhead, no identity map, no change-tracking. It is the
+        right choice when throughput matters more than integration with the rest of your
+        Doctrine setup: IoT telemetry, high-frequency trading signals, audit logs.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">nexus-persistence-doctrine</code> uses the
+        EntityManager and participates in your existing Doctrine lifecycle. If your
+        application already has an EntityManager wired through a DI container and you
+        want schema management in one place, this is the correct starting point.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Both packages implement the same <code class="font-mono">EventStore</code> and
+        <code class="font-mono">SnapshotStore</code> interfaces. Swap between them with
+        one line in your bootstrap — actor code never changes.
+      </p>
+      <a
+        href={docsUrl('/persistence/stores')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Compare persistence backends →
+      </a>
+    </div>
+    <CodeBlock code={tradeoffCode} lang="php" title="bootstrap.php — DBAL vs ORM" />
+  </section>
+
+  <!-- Transaction boundaries -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">Transaction boundaries without surprise.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Each actor processes one message at a time. That means each command handler
+        runs inside a single database transaction by default when using
+        <code class="font-mono">autoFlush(true)</code>. If the flush throws, the actor's
+        supervisor catches the exception and restarts — the event is not acknowledged,
+        and the actor replays from its last persisted snapshot.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        The single-writer guarantee means you never need pessimistic locking.
+        Two commands on the same aggregate never run concurrently — the second
+        queues in the mailbox until the first is fully committed. Your database
+        sees a clean sequential write log per aggregate, which is friendlier to
+        indexes, WAL replication, and point-in-time recovery than concurrent writes.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        For multi-aggregate workflows, use the Saga pattern above. Sagas are
+        explicit, durable, and their compensation paths are statically analysed
+        by Psalm — not hidden inside a two-phase commit protocol.
+      </p>
+    </div>
+  </section>
+
+  <!-- Transaction isolation per actor -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <h2 class="text-3xl font-bold mb-4">Transaction isolation per actor.</h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-6">
+      Each actor that needs database access should receive its own
+      <code class="font-mono">EntityManager</code> — either injected request-scoped via
+      the PSR-11 container at spawn time, or obtained per message through a dedicated
+      factory. Do not share an <code class="font-mono">EntityManager</code> across
+      actors: Doctrine's unit-of-work is not thread-safe or coroutine-safe. A shared
+      EM means interleaved identity maps, flushed state from the wrong actor, and
+      opaque hydration bugs that only appear under concurrent load. Under Swoole, the
+      connection pool ensures one connection per worker thread — the actor model's
+      single-writer property means there is no contention within a worker.
+    </p>
+    <p class="text-slate-600 dark:text-slate-300 mb-6">
+      Long-running actor handlers that process many commands in sequence should call
+      <code class="font-mono">$em->clear()</code> after each command to release the
+      identity map. Without clearing, the in-memory entity graph grows unbounded with
+      each message, leaking memory and potentially surfacing stale state to the next
+      command. Use <code class="font-mono">autoFlush(true)</code> in the Doctrine config
+      to flush after each successful command automatically; pair with
+      <code class="font-mono">clear()</code> to reset the identity map between commands
+      in high-throughput handlers.
+    </p>
+    <a href="/security" class="inline-block text-primary hover:underline font-semibold">
+      Full security model →
+    </a>
+  </section>
+
+  <CtaBlock
+    title="Start with EntityBehavior."
+    subtitle="The getting-started guide creates a bank account aggregate in under fifteen minutes."
+    primary={{ href: docsUrl('/doctrine/overview'), label: 'Doctrine Quick Start' }}
+    secondary={{ href: docsUrl('/doctrine/entity-behavior'), label: 'EntityBehavior reference' }}
+  />
+</Marketing>

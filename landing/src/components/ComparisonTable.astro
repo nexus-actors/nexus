@@ -1,0 +1,192 @@
+---
+// landing/src/components/ComparisonTable.astro
+---
+
+<section class="ct-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">Why Nexus, not the alternatives?</h2>
+    <p class="nx-section-sub">Every other PHP concurrency approach leaves critical gaps. Nexus closes them all.</p>
+
+    <div class="ct-wrapper" tabindex="0" role="region" aria-label="Capability comparison (scrollable)">
+      <table class="ct-table">
+        <thead>
+          <tr>
+            <th class="ct-th ct-th-cap">Capability</th>
+            <th class="ct-th">Queue workers</th>
+            <th class="ct-th">Plain Fibers</th>
+            <th class="ct-th">Threads ext</th>
+            <th class="ct-th ct-th-nexus">Nexus</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="ct-td ct-td-cap">Typed messages</td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Supervision trees</td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Cross-worker messaging</td>
+            <td class="ct-td"><span class="ct-partial">partial</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-partial">partial</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Deterministic testing</td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Event sourcing</td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Backpressure / mailbox limits</td>
+            <td class="ct-td"><span class="ct-partial">partial</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+          <tr>
+            <td class="ct-td ct-td-cap">Runtime swap (dev → prod)</td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td"><span class="ct-no">✗</span></td>
+            <td class="ct-td ct-td-nexus"><span class="ct-yes">✓</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<style>
+  .ct-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .ct-wrapper {
+    overflow-x: auto;
+    margin-top: 2.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--nx-border);
+  }
+  .ct-wrapper:focus {
+    outline: 3px solid #059669;
+    outline-offset: 2px;
+  }
+
+  .ct-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--nx-mono);
+    font-size: 0.85rem;
+  }
+
+  thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .ct-th {
+    padding: 0.85rem 1.25rem;
+    text-align: center;
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--nx-muted);
+    background: #0a1120;
+    border-bottom: 1px solid var(--nx-border);
+    white-space: nowrap;
+  }
+
+  .ct-th-cap {
+    text-align: left;
+    color: var(--nx-text);
+  }
+
+  .ct-th-nexus {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10B981;
+    border-left: 1px solid rgba(16, 185, 129, 0.25);
+  }
+
+  .ct-td {
+    padding: 0.9rem 1.25rem;
+    text-align: center;
+    border-bottom: 1px solid var(--nx-border);
+    color: var(--nx-muted);
+  }
+
+  .ct-td-cap {
+    text-align: left;
+    color: var(--nx-text);
+    font-size: 0.875rem;
+    font-family: inherit;
+  }
+
+  .ct-td-nexus {
+    background: rgba(16, 185, 129, 0.06);
+    border-left: 1px solid rgba(16, 185, 129, 0.2);
+  }
+
+  tbody tr:last-child .ct-td {
+    border-bottom: none;
+  }
+
+  tbody tr:hover .ct-td {
+    background: rgba(255,255,255,0.02);
+  }
+
+  tbody tr:hover .ct-td-nexus {
+    background: rgba(16, 185, 129, 0.1);
+  }
+
+  .ct-yes {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: #10B981;
+  }
+
+  .ct-no {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    color: #475569;
+  }
+
+  :global(.dark) .ct-no {
+    color: #94a3b8;
+  }
+
+  .ct-partial {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-family: var(--nx-mono);
+    background: rgba(245, 158, 11, 0.15);
+    color: #F59E0B;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    letter-spacing: 0.02em;
+  }
+</style>

@@ -1,0 +1,173 @@
+---
+// landing/src/components/Hero.astro
+import CodeBlock from './CodeBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const heroCode = `// Messages are plain readonly classes
+readonly class Increment {}
+
+// Stateful actor: receives messages, returns next state
+$counter = Behavior::withState(0, function (
+    ActorContext $ctx, object $msg, int $count,
+): BehaviorWithState {
+    if ($msg instanceof Increment) {
+        $ctx->log()->info("count: " . ($count + 1));
+        return BehaviorWithState::next($count + 1);
+    }
+    return BehaviorWithState::same();
+});
+
+// Create system, spawn actor, send messages
+$system = ActorSystem::create('app', new FiberRuntime());
+$ref = $system->spawn(Props::fromBehavior($counter), 'counter');
+$ref->tell(new Increment());
+$ref->tell(new Increment());
+$ref->tell(new Increment());
+$system->run();`;
+---
+<section class="hero-section">
+  <div class="nx-dot-grid"></div>
+  <div class="hero-split">
+    <div class="hero-left">
+      <div class="hero-badge">Open source &middot; PHP 8.5+</div>
+      <h1 class="hero-title">
+        Concurrent PHP,<br />
+        <span class="hero-accent">done right.</span>
+      </h1>
+      <p class="hero-tagline">
+        Type-safe actors, supervision trees, event sourcing, multi-worker scaling, pluggable runtimes.
+        Erlang/OTP and Akka patterns — in the PHP you already know.
+      </p>
+      <div class="hero-cta">
+        <a class="nx-btn-primary" href={docsUrl('/getting-started/quick-start')}>Quick Start</a>
+        <a class="nx-btn-ghost" href={docsUrl()}>Docs</a>
+        <a class="nx-btn-ghost" href="https://github.com/nexus-actors/nexus">GitHub</a>
+      </div>
+      <div class="hero-install">
+        <code>composer require nexus-actors/nexus</code>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hero-code-wrap">
+        <CodeBlock code={heroCode} lang="php" title="demo.php" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hero-section {
+    position: relative;
+    overflow: hidden;
+    padding: 5rem 2rem 4rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .hero-split {
+    position: relative;
+    max-width: 1280px;
+    margin: 0 auto;
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 3rem;
+    align-items: center;
+  }
+
+  .hero-left {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .hero-right {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+  }
+
+  .hero-badge {
+    font-family: var(--nx-font-mono);
+    font-size: 0.8rem;
+    color: var(--nx-text-muted);
+    border: 1px solid var(--nx-border);
+    border-radius: 100px;
+    padding: 0.4rem 1.25rem;
+    margin-bottom: 2rem;
+    letter-spacing: 0.03em;
+  }
+
+  .hero-title {
+    font-family: var(--nx-font-mono);
+    font-size: 3.25rem;
+    font-weight: 800;
+    line-height: 1.15;
+    margin: 0 0 1.25rem;
+    color: var(--nx-text);
+  }
+
+  .hero-accent {
+    background: linear-gradient(135deg, #34D399 0%, #10B981 40%, #6EE7B7 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero-tagline {
+    font-size: 1.15rem;
+    color: var(--nx-text-muted);
+    line-height: 1.7;
+    margin: 0 0 2rem;
+  }
+
+  .hero-cta {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .hero-install {
+    margin-top: 2rem;
+    font-family: var(--nx-font-mono);
+    font-size: 0.85rem;
+    color: var(--nx-text-dim);
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: 8px;
+    padding: 0.65rem 1.25rem;
+  }
+
+  .hero-install code {
+    color: var(--nx-accent);
+    font-family: var(--nx-font-mono);
+  }
+
+  .hero-code-wrap {
+    width: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+      0 0 60px rgba(16, 185, 129, 0.07),
+      0 0 120px rgba(16, 185, 129, 0.03);
+  }
+
+  @media (max-width: 996px) {
+    .hero-section { padding: 3.5rem 1.5rem 3rem; }
+    .hero-split { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
+    .hero-left { align-items: center; text-align: center; }
+    .hero-cta { justify-content: center; }
+    .hero-install { align-self: center; }
+    .hero-title { font-size: 2.75rem; }
+  }
+
+  @media (max-width: 640px) {
+    .hero-section { padding: 2.5rem 1rem 2rem; }
+    .hero-title { font-size: 2rem; }
+    .hero-tagline { font-size: 0.95rem; }
+    .hero-badge { font-size: 0.72rem; padding: 0.35rem 1rem; margin-bottom: 1.5rem; }
+    .hero-cta { flex-direction: column; width: 100%; }
+    .hero-install { font-size: 0.78rem; padding: 0.5rem 1rem; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; min-width: 0; }
+  }
+</style>

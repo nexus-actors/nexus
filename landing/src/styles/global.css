@@ -1,0 +1,247 @@
+@import '../../../nexus-brand/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Prevent horizontal page scroll from any unbreakable token or wide element */
+html,
+body {
+  overflow-x: clip;
+}
+
+/* ------------------------------------------------------------------ */
+/* Landing-site design token overrides                                 */
+/* nexus-brand tokens now ship emerald (#047857). These local overrides */
+/* exist because the landing uses a darker dot-grid background and     */
+/* needs slightly brighter accent values (#10B981 / #34D399) than the  */
+/* docs theme. Keep in sync if the brand palette shifts.               */
+/* ------------------------------------------------------------------ */
+
+:root {
+  --nx-bg:          #ffffff;
+  --nx-bg-raised:   #f8fafb;
+  --nx-bg-card:     #f1f5f4;
+  --nx-border:      #e2e8f0;
+  --nx-border-glow: #10B981;
+  --nx-text:        #1a202c;
+  --nx-text-muted:  #64748b;
+  --nx-text-dim:    #64748b;  /* slate-500 — 4.60:1 on white, passes WCAG AA */
+  --nx-accent:      #10B981;
+  --nx-accent-bright: #059669;
+  --nx-green:       #34d399;
+  --nx-red:         #ef4444;
+  --nx-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
+}
+
+.dark {
+  --nx-bg:          #080D19;
+  --nx-bg-raised:   #0c1222;
+  --nx-bg-card:     #111a2e;
+  --nx-border:      #1a2332;
+  --nx-border-glow: #10B981;
+  --nx-text:        #e2e8f0;
+  --nx-text-muted:  #8b9bb4;
+  --nx-text-dim:    #7a92b2;  /* ~4.5:1 on dark bg #080D19 */
+  --nx-accent:      #34D399;
+  --nx-accent-bright: #6EE7B7;
+  --nx-green:       #34d399;
+  --nx-red:         #f87171;
+}
+
+@layer base {
+  html {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  body {
+    background: var(--nx-bg);
+    color: var(--nx-text);
+  }
+  pre, code {
+    font-family: var(--nx-font-mono);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared section helpers                                               */
+/* ------------------------------------------------------------------ */
+
+.nx-section-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.nx-section-title {
+  font-family: var(--nx-font-mono);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--nx-text);
+  text-align: center;
+  margin: 0 0 0.5rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.nx-section-sub {
+  text-align: center;
+  font-size: 0.95rem;
+  color: var(--nx-text-muted);
+  margin: 0 auto 2rem;
+  max-width: 560px;
+  line-height: 1.55;
+}
+
+/* Dot-grid background utility */
+.nx-dot-grid {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--nx-border) 1px, transparent 1px);
+  background-size: 32px 32px;
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* CTA buttons                                                          */
+/* ------------------------------------------------------------------ */
+
+.nx-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--nx-font-mono);
+  color: #fff;
+  /* Use emerald-700 (#047857, 5.38:1 on white) instead of emerald-500 (#10B981, 2.54:1) to pass WCAG AA */
+  background: #047857;
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.3);
+}
+
+.nx-btn-primary:hover {
+  background: #065f46;
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.5);
+  color: #fff;
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.nx-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem 2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: var(--nx-font-mono);
+  color: var(--nx-text-muted);
+  background: transparent;
+  border: 1px solid var(--nx-border);
+  border-radius: 8px;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.nx-btn-ghost:hover {
+  color: var(--nx-text);
+  border-color: var(--nx-text-muted);
+  text-decoration: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Code block chrome                                                    */
+/* ------------------------------------------------------------------ */
+
+.nx-code-block {
+  border-radius: 12px;
+  overflow: clip;
+  border: 1px solid var(--nx-border);
+}
+
+.nx-code-block-title {
+  background: #1e2433;
+  border-bottom: 1px solid #2d3748;
+  padding: 0.6rem 1rem;
+  font-family: var(--nx-font-mono);
+  font-size: 0.78rem;
+  color: #7b8da6;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.nx-code-block-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34D399;
+}
+
+.nx-code-block .shiki {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.85rem !important;
+}
+
+.nx-code-block pre {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  padding: 1.25rem 1.5rem !important;
+  overflow-x: auto;
+}
+
+/* Force dark code even in light mode for the marketing site */
+.nx-code-block [data-theme='light'],
+.nx-code-block .shiki.github-light {
+  display: none !important;
+}
+
+.nx-code-block [data-theme='dark'],
+.nx-code-block .shiki.github-dark {
+  display: block !important;
+}
+
+@media (max-width: 768px) {
+  .nx-section-title { font-size: 1.5rem; }
+  .nx-section-sub { font-size: 0.95rem; margin-bottom: 2.5rem; }
+  .nx-section-inner { padding: 0 1rem; }
+}
+
+@media (max-width: 640px) {
+  /* Prevent hero and code blocks from overflowing the 375px viewport */
+  .hero-code-wrap,
+  .nx-code-block,
+  pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  /* Bootstrap wizard runtime-choice cards */
+  .nx-wizard-cards {
+    flex-direction: column;
+  }
+
+  /* CTA button rows should stack on narrow viewports */
+  .nx-cta-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-cta-row a,
+  .nx-cta-row button {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Primary button text contrast — use darker emerald to pass WCAG AA */
+  .nx-btn-primary {
+    background: #047857;
+  }
+}
