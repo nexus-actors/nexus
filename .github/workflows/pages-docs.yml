@@ -1,11 +1,11 @@
-name: Deploy Documentation
+name: pages — docs
 
 on:
   push:
     branches: [main]
     paths:
       - 'website/**'
-      - '.github/workflows/deploy-docs.yml'
+      - '.github/workflows/pages-docs.yml'
   pull_request:
     branches: [main]
     paths:
@@ -14,7 +14,6 @@ on:
 
 jobs:
   build:
-    name: Build
     if: true
     runs-on: ubuntu-latest
     defaults:
@@ -40,7 +39,6 @@ jobs:
           retention-days: 1
 
   deploy-preview:
-    name: Deploy Preview
     needs: build
     if: github.event_name == 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
     runs-on: ubuntu-latest
@@ -81,8 +79,7 @@ jobs:
               body: '🚀 Preview deployed to https://${{ github.head_ref }}.nexus-docs.pages.dev'
             })
 
-  deploy-production:
-    name: Deploy Production
+  deploy:
     needs: build
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
