@@ -17,11 +17,11 @@ use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
-final class DbalEventStore implements EventStore
+final readonly class DbalEventStore implements EventStore
 {
     public function __construct(
-        private readonly Connection $connection,
-        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
+        private Connection $connection,
+        private MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     #[Override]

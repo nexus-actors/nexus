@@ -39,13 +39,13 @@ use ReflectionParameter;
  * Walks a handler (class string, 'Class::method' string, or Closure) and
  * produces a ResolvedHandler. Reflection happens exactly once per handler.
  */
-final class HandlerResolver
+final readonly class HandlerResolver
 {
     public function __construct(
-        private readonly ResolvedActorTable $actors,
-        private readonly ?ContainerInterface $container,
-        private readonly ?MessageSerializer $serializer = null,
-        private readonly ?ParamResolverRegistry $registry = null,
+        private ResolvedActorTable $actors,
+        private ?ContainerInterface $container,
+        private ?MessageSerializer $serializer = null,
+        private ?ParamResolverRegistry $registry = null,
     ) {}
 
     /**

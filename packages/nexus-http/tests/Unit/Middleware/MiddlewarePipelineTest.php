@@ -17,9 +17,9 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
-final class _AddHeaderMiddleware implements MiddlewareInterface
+final readonly class _AddHeaderMiddleware implements MiddlewareInterface
 {
-    public function __construct(private readonly string $name, private readonly string $value) {}
+    public function __construct(private string $name, private string $value) {}
 
     #[Override]
     public function process(ServerRequestInterface $r, RequestHandlerInterface $next): ResponseInterface

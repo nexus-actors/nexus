@@ -15,11 +15,11 @@ use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
-final class DbalSnapshotStore implements SnapshotStore
+final readonly class DbalSnapshotStore implements SnapshotStore
 {
     public function __construct(
-        private readonly Connection $connection,
-        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
+        private Connection $connection,
+        private MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     #[Override]

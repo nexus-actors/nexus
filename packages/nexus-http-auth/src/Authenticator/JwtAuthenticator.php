@@ -44,22 +44,22 @@ use function array_map;
  * Failures (bad signature, expired, malformed) return null — never throw.
  * The reason is logged via PSR-3 at info/debug, never disclosed on the wire.
  */
-final class JwtAuthenticator implements Authenticator
+final readonly class JwtAuthenticator implements Authenticator
 {
-    private readonly TokenExtractor $extractor;
+    private TokenExtractor $extractor;
 
-    private readonly LoggerInterface $logger;
+    private LoggerInterface $logger;
 
-    private readonly ClockInterface $clock;
+    private ClockInterface $clock;
 
     /** @var Closure(Plain): ?Principal */
-    private readonly Closure $claimsMapper;
+    private Closure $claimsMapper;
 
     /**
      * @param Closure(Plain): ?Principal $claimsMapper
      */
     public function __construct(
-        private readonly Configuration $jwt,
+        private Configuration $jwt,
         ?TokenExtractor $extractor = null,
         ?Closure $claimsMapper = null,
         ?LoggerInterface $logger = null,

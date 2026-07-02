@@ -14,16 +14,16 @@ use Swoole\Thread\Queue;
  * Handle passed to the onStart callback. Gives the main thread access to the
  * running worker pool for message injection, monitoring, and graceful stop.
  */
-final class WorkerPoolHandle
+final readonly class WorkerPoolHandle
 {
     /**
      * @param array<int, Queue> $queues
      */
     public function __construct(
-        private readonly int $workerCount,
-        private readonly array $queues,
-        private readonly Map $directory,
-        private readonly Atomic $stopSignal,
+        private int $workerCount,
+        private array $queues,
+        private Map $directory,
+        private Atomic $stopSignal,
     ) {}
 
     public function workerCount(): int

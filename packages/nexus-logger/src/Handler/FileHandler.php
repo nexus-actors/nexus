@@ -31,9 +31,9 @@ use const LOCK_UN;
  * per-write fopen is fine for typical app traffic and standard practice
  * for monolog-style file sinks.
  */
-final class FileHandler implements Handler
+final readonly class FileHandler implements Handler
 {
-    public function __construct(private readonly string $path, private readonly Formatter $formatter) {}
+    public function __construct(private string $path, private Formatter $formatter) {}
 
     #[Override]
     public function handle(Record $record): void

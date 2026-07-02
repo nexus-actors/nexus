@@ -18,11 +18,11 @@ use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
-final class DoctrineEventStore implements EventStore
+final readonly class DoctrineEventStore implements EventStore
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
-        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
+        private EntityManagerInterface $em,
+        private MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     #[Override]

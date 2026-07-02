@@ -36,9 +36,9 @@ use Throwable;
  * A check that THROWS is treated as down; the exception class becomes
  * the `error` detail. The handler itself never throws.
  */
-final class HealthCheckHandler
+final readonly class HealthCheckHandler
 {
-    public function __construct(private readonly HealthCheckRegistry $registry) {}
+    public function __construct(private HealthCheckRegistry $registry) {}
 
     public function __invoke(): ResponseInterface
     {

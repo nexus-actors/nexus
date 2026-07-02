@@ -16,9 +16,9 @@ use function is_string;
  * Reads a token from a cookie. The cookie value is treated as-is — if you
  * use signed cookies, verify the signature inside the Authenticator.
  */
-final class CookieTokenExtractor implements TokenExtractor
+final readonly class CookieTokenExtractor implements TokenExtractor
 {
-    public function __construct(private readonly string $cookieName) {}
+    public function __construct(private string $cookieName) {}
 
     #[Override]
     public function extract(ServerRequestInterface $request): ?string

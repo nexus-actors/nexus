@@ -10,9 +10,9 @@ use Doctrine\DBAL\Schema\Schema;
 use Doctrine\DBAL\Schema\Table;
 
 /** @psalm-api */
-final class PersistenceSchemaManager
+final readonly class PersistenceSchemaManager
 {
-    public function __construct(private readonly Connection $connection) {}
+    public function __construct(private Connection $connection) {}
 
     public function createSchema(): void
     {

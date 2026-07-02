@@ -15,11 +15,11 @@ use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
-final class DoctrineSnapshotStore implements SnapshotStore
+final readonly class DoctrineSnapshotStore implements SnapshotStore
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
-        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
+        private EntityManagerInterface $em,
+        private MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     #[Override]

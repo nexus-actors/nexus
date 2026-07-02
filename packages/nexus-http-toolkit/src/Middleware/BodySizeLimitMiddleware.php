@@ -35,13 +35,13 @@ use function strtolower;
  *   $app->post('/upload', UploadHandler::class)
  *       ->middleware(new BodySizeLimitMiddleware(maxBytes: 100 * 1024 * 1024));
  */
-final class BodySizeLimitMiddleware implements MiddlewareInterface
+final readonly class BodySizeLimitMiddleware implements MiddlewareInterface
 {
-    private readonly ResponseFactoryInterface $responseFactory;
-    private readonly StreamFactoryInterface $streamFactory;
+    private ResponseFactoryInterface $responseFactory;
+    private StreamFactoryInterface $streamFactory;
 
     public function __construct(
-        private readonly int $maxBytes,
+        private int $maxBytes,
         ?ResponseFactoryInterface $responseFactory = null,
         ?StreamFactoryInterface $streamFactory = null,
     ) {

@@ -17,9 +17,9 @@ use Psr\SimpleCache\CacheInterface;
  * Cache payload shape: list of [method, path, handler, middleware[], name]
  * arrays. var_export-safe so any PSR-16 backend can serialize it.
  */
-final class RouteCachePersister
+final readonly class RouteCachePersister
 {
-    public function __construct(private readonly CacheInterface $cache, private readonly string $key) {}
+    public function __construct(private CacheInterface $cache, private string $key) {}
 
     public function clear(): void
     {

@@ -25,12 +25,12 @@ use function fwrite;
  *
  * @implements StatefulActorHandler<object, list<Handler>>
  */
-final class LogActor implements StatefulActorHandler
+final readonly class LogActor implements StatefulActorHandler
 {
     /**
      * @param list<Handler> $handlers
      */
-    public function __construct(private readonly array $handlers) {}
+    public function __construct(private array $handlers) {}
 
     #[Override]
     public function initialState(): mixed

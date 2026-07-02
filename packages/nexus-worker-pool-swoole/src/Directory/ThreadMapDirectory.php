@@ -15,9 +15,9 @@ use Swoole\Thread\Map;
  * All workers share the same Map instance — Thread\Map handles
  * internal synchronization, no explicit locking needed.
  */
-final class ThreadMapDirectory implements WorkerDirectory
+final readonly class ThreadMapDirectory implements WorkerDirectory
 {
-    public function __construct(private readonly Map $map) {}
+    public function __construct(private Map $map) {}
 
     /**
      * @psalm-suppress InaccessibleProperty, InvalidArgument

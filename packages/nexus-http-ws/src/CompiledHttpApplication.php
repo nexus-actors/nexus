@@ -10,9 +10,9 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /** @psalm-api */
-final class CompiledHttpApplication implements CompiledApplication
+final readonly class CompiledHttpApplication implements CompiledApplication
 {
-    public function __construct(private readonly CompiledHttpApp $http) {}
+    public function __construct(private CompiledHttpApp $http) {}
 
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface

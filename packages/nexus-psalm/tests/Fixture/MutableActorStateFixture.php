@@ -71,9 +71,9 @@ final class PrivateMutableActorHandler implements ActorHandler
  *
  * @implements ActorHandler<GoodMsg>
  */
-final class PublicReadonlyActorHandler implements ActorHandler
+final readonly class PublicReadonlyActorHandler implements ActorHandler
 {
-    public function __construct(public readonly string $name) {}
+    public function __construct(public string $name) {}
 
     /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]

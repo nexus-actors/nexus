@@ -36,16 +36,16 @@ use function str_starts_with;
  * constructor parameter resolution through a shared ParamResolverRegistry,
  * symmetric with nexus-http's HandlerResolver.
  */
-final class HandlerInstantiator
+final readonly class HandlerInstantiator
 {
-    private readonly LoggerInterface $logger;
+    private LoggerInterface $logger;
 
     public function __construct(
-        private readonly ContainerInterface $container,
+        private ContainerInterface $container,
         ?LoggerInterface $logger = null,
-        private readonly ?ParamResolverRegistry $registry = null,
-        private readonly ?ResolvedActorTable $actors = null,
-        private readonly ?MessageSerializer $serializer = null,
+        private ?ParamResolverRegistry $registry = null,
+        private ?ResolvedActorTable $actors = null,
+        private ?MessageSerializer $serializer = null,
     ) {
         $this->logger = $logger ?? new NullLogger();
     }

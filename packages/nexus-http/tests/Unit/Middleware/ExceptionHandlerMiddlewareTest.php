@@ -20,9 +20,9 @@ use Psr\Http\Server\RequestHandlerInterface;
 use RuntimeException;
 use Throwable;
 
-final class _ThrowingHandler implements RequestHandlerInterface
+final readonly class _ThrowingHandler implements RequestHandlerInterface
 {
-    public function __construct(private readonly Throwable $error) {}
+    public function __construct(private Throwable $error) {}
 
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface

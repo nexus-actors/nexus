@@ -32,20 +32,20 @@ use function is_string;
  * lazily (only if the route needs one), runs route-level middlewares, calls
  * the handler, awaits Future if applicable, and disposes the scope in finally.
  */
-final class RouterMiddleware implements MiddlewareInterface
+final readonly class RouterMiddleware implements MiddlewareInterface
 {
     /**
      * @param array<string, ResolvedHandler> $handlersByRouteKey key = "METHOD:path"
      * @param array<string, list<MiddlewareInterface>> $routeMiddlewaresByKey
      */
     public function __construct(
-        private readonly Dispatcher $dispatcher,
-        private readonly array $handlersByRouteKey,
-        private readonly array $routeMiddlewaresByKey,
-        private readonly MiddlewarePipeline $pipeline,
-        private readonly ActorSystem $system,
-        private readonly ResolvedActorTable $actors,
-        private readonly ?EventDispatcherInterface $events,
+        private Dispatcher $dispatcher,
+        private array $handlersByRouteKey,
+        private array $routeMiddlewaresByKey,
+        private MiddlewarePipeline $pipeline,
+        private ActorSystem $system,
+        private ResolvedActorTable $actors,
+        private ?EventDispatcherInterface $events,
     ) {}
 
     #[Override]

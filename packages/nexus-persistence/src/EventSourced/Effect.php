@@ -34,18 +34,18 @@ use Monadial\Nexus\Core\Actor\ActorRef;
  *
  * @psalm-api
  */
-final class Effect
+final readonly class Effect
 {
     /**
      * @param array<object> $events
      * @param array<Closure> $sideEffects
      */
     private function __construct(
-        public readonly EffectType $type,
-        public readonly array $events = [],
-        public readonly ?ActorRef $replyTo = null,
-        public readonly mixed $replyMsg = null,
-        public readonly array $sideEffects = [],
+        public EffectType $type,
+        public array $events = [],
+        public ?ActorRef $replyTo = null,
+        public mixed $replyMsg = null,
+        public array $sideEffects = [],
     ) {}
 
     /**

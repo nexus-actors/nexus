@@ -12,10 +12,10 @@ use function array_values;
 use function FastRoute\simpleDispatcher;
 
 /** @psalm-api */
-final class WebSocketRouter
+final readonly class WebSocketRouter
 {
     /** @param array<int, WebSocketRoute> $routes */
-    private function __construct(private readonly Dispatcher $delegate, private readonly array $routes) {}
+    private function __construct(private Dispatcher $delegate, private array $routes) {}
 
     /** @param list<WebSocketRoute> $routes */
     public static function build(array $routes): self

@@ -41,9 +41,9 @@ final class _PrincipalInvokeHandler
     }
 }
 
-final class _PrincipalCtorHandler
+final readonly class _PrincipalCtorHandler
 {
-    public function __construct(#[FromPrincipal] private readonly stdClass $principal) {}
+    public function __construct(#[FromPrincipal] private stdClass $principal) {}
 
     public function __invoke(ServerRequestInterface $r): ResponseInterface
     {

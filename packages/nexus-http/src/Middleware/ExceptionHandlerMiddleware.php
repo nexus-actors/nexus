@@ -20,12 +20,9 @@ use Throwable;
  * Outermost middleware by default. Catches everything below and runs the
  * mapper registry. Logs with PSR-3 (NullLogger if none supplied).
  */
-final class ExceptionHandlerMiddleware implements MiddlewareInterface
+final readonly class ExceptionHandlerMiddleware implements MiddlewareInterface
 {
-    public function __construct(
-        private readonly ExceptionMapperRegistry $mappers,
-        private readonly ?LoggerInterface $logger = null,
-    ) {}
+    public function __construct(private ExceptionMapperRegistry $mappers, private ?LoggerInterface $logger = null) {}
 
     #[Override]
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface

@@ -200,9 +200,9 @@ final class FromPrincipalResolverTest extends TestCase
     }
 }
 
-final class StubWebSocketContext implements WebSocketContext
+final readonly class StubWebSocketContext implements WebSocketContext
 {
-    public function __construct(private readonly int $id, private readonly ServerRequestInterface $request) {}
+    public function __construct(private int $id, private ServerRequestInterface $request) {}
 
     #[Override]
     public function id(): int
