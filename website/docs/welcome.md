@@ -1,6 +1,7 @@
 ---
 sidebar_position: 1
 title: Introduction
+slug: /
 related:
   - core-concepts/nexus-thesis
   - getting-started/installation

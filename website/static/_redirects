@@ -1,4 +1,6 @@
 # Cloudflare Pages server-side redirects.
 # The docs root goes straight to the documentation; the marketing
 # landing lives at nexusactors.com.
-/ /docs/welcome 302
+/ /docs/ 302
+/docs/welcome/ /docs/ 301
+/docs/welcome /docs/ 301
