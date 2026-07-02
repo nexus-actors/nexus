@@ -1,139 +1,130 @@
-# Scaling Overview
+---
+title: Scaling overview
+related:
+  - scaling/configuration
+  - scaling/bootstrap
+  - core-concepts/actors
+  - packages/worker-pool-swoole
+---
 
-Nexus scales to multiple CPU cores on the same machine using a thread-based worker pool.
-Each worker thread runs an independent `ActorSystem`. Actors are distributed across workers
-via a consistent hash ring. Messages between workers are delivered as `Envelope` objects
-directly through `Swoole\Thread\Queue` — no serialization step.
+# Scaling overview
+
+Nexus scales to multiple CPU cores on a single machine using a thread-based worker pool: each worker thread runs an independent `ActorSystem`, and actors are distributed across workers via a consistent hash ring.
+
+## The design
+
+The worker pool model gives you true parallelism without changing actor code. The same `Props`, `Behavior`, and `ActorRef` abstractions you use in a single-process `FiberRuntime` deploy work identically inside a worker pool — `WorkerNode.spawn()` returns an `ActorRef<T>` that routes correctly whether the actor lives on this worker or another.
+
+The scaling progression from development to production:
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "lineColor": "#6b7280"}}}%%
+flowchart TD
+    A["Single-process\nFiberRuntime\n(development / testing)"] --> B["Multi-process\nSwooleRuntime\n(I/O-bound workloads)"]
+    B --> C["Worker pool\nSwooleRuntime + ConsistentHashRing\n(CPU-bound / multi-core)"]
+    C --> D["Cluster\nnexus-cluster + NodeHashRing\n(multi-machine — contracts only)"]
+
+    style A fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    style B fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
+    style C fill:#c7d2fe,stroke:#4f46e5,color:#1e1b4b
+    style D fill:#f3f4f6,stroke:#6b7280,color:#374151
+```
+
+_Figure 1: Scaling progression from a single-process fiber runtime through worker-pool multi-core to multi-machine cluster contracts. The same actor code runs at every level._
+
+### Worker pool internals
+
+```
+WorkerPoolBootstrap (main thread)
+  Thread\Map (shared directory)   Thread\Queue[0..N-1] (per-worker inboxes)
+        │
+        │  Thread\Pool spawns N threads
+   ┌────┼────┐
+   ▼    ▼    ▼
+Worker 0  Worker 1  Worker 2
+ActorSystem ActorSystem ActorSystem
+WorkerNode  WorkerNode  WorkerNode
+```
+
+Key components:
+
+- **`WorkerNode`** — Coordinator for one worker. On `spawn()`, consults the hash ring to decide whether the actor lives locally or on another worker, then registers the result in the shared `WorkerDirectory`.
+- **`ConsistentHashRing`** — Maps actor names to worker IDs via CRC32 with 150 virtual nodes per worker, giving statistically uniform distribution.
+- **`WorkerActorRef`** — Implements `ActorRef<T>`. For actors on other workers, `tell()` wraps the message in an `Envelope` and pushes it to the target worker's `Swoole\Thread\Queue`. No serializer; `Thread\Queue` handles the internal copy.
+- **`ThreadQueueTransport`** — One `Swoole\Thread\Queue` per worker as inbox. A coroutine-based receive loop with adaptive backoff polls the queue and delivers incoming envelopes to local actor mailboxes.
+- **`ThreadMapDirectory`** — Shared `Swoole\Thread\Map` mapping actor path strings to worker IDs. All threads read and write the same map; `Thread\Map` handles synchronization internally.
+
+## Cross-worker message flow
+
+When an actor on Worker 0 sends a message to an actor on Worker 2:
+
+```mermaid
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "lineColor": "#6b7280"}}}%%
+sequenceDiagram
+    participant Caller as Caller (Worker 0)
+    participant WAR as WorkerActorRef
+    participant TQT as ThreadQueueTransport
+    participant TQ as Thread\Queue[2]
+    participant WN as WorkerNode (Worker 2)
+    participant Cell as ActorCell (Worker 2)
+
+    Caller->>WAR: tell(PlaceOrder)
+    WAR->>TQT: send(targetWorker=2, Envelope)
+    TQT->>TQ: push(Envelope)
+    Note over TQ: Swoole\Thread\Queue copies object
+    WN->>TQ: receive loop polls
+    TQ-->>WN: Envelope
+    WN->>Cell: enqueueEnvelope(Envelope)
+    Cell->>Cell: handler(ctx, PlaceOrder)
+```
+
+_Figure 2: Cross-worker `tell()` path. `WorkerActorRef` routes via `ThreadQueueTransport` to the target worker's queue. No serialization step — `Swoole\Thread\Queue` copies the object across thread boundaries._
+
+For local delivery (actor on the same worker), `tell()` goes directly to a `LocalActorRef` and into the actor's mailbox — the `Thread\Queue` hop is skipped entirely.
+
+## Location transparency
+
+`WorkerNode.spawn()` returns an `ActorRef<T>`. Whether the actor lives on this worker or another, the caller uses the same interface:
+
+<!-- verify:skip: illustrates location transparency at runtime — requires a running worker pool -->
+```php title="src/App/OrderApp.php" verify:skip
+$ref = $node->spawn(Props::fromBehavior($behavior), 'orders');
+$ref->tell(new PlaceOrder($items));  // identical regardless of which worker owns 'orders'
+```
+
+The hash ring assigns `'orders'` to one worker deterministically. Every other worker that calls `spawn()` with the same name gets a `WorkerActorRef` pointing to that worker — the routing is transparent.
+
+## Ask protocol (cross-worker request/response)
+
+`WorkerActorRef::ask()` supports request-response across threads using a reservation slot on the sending worker:
+
+1. The caller enqueues a `WorkerAskRequest` to the target worker's queue.
+2. The target actor processes the request and sends a `WorkerAskReply` back to the sender's queue.
+3. The sending `WorkerNode` resolves the reservation slot and returns the result.
+
+If no reply arrives within the configured timeout, `AskTimeoutException` is thrown on the calling coroutine.
+
+## Performance characteristics
+
+| Metric | Value |
+|---|---|
+| Cross-worker throughput | ~260K messages/sec per worker pair |
+| Cross-worker latency | ~20 µs round-trip |
+| Optimal worker count | `swoole_cpu_num()` for CPU-bound workloads |
+
+No serialization overhead exists because `Swoole\Thread\Queue` copies PHP objects across thread boundaries using Swoole's internal object transfer — the same `Envelope` object arrives on the target worker without a serialize/unserialize round-trip.
 
 ## Prerequisites
 
 - ZTS (Zend Thread Safety) PHP 8.5+
 - Swoole 6.0+ compiled with `--enable-swoole-thread`
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  WorkerPoolBootstrap (main thread)                              │
-│  Thread\Map (shared directory)   Thread\Queue[0..N-1] (inboxes) │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ Thread\Pool spawns N threads
-     ┌─────────────┼─────────────┐
-     ▼             ▼             ▼
-  Worker 0      Worker 1      Worker 2
-  ActorSystem   ActorSystem   ActorSystem
-  WorkerNode    WorkerNode    WorkerNode
-```
-
-### Key components
-
-- **`WorkerNode`** — Coordinator for one worker. On `spawn()`, consults the hash ring to
-  decide whether the actor lives locally or on another worker. Registers the result in the
-  shared `WorkerDirectory`.
-- **`ConsistentHashRing`** — Maps actor names to worker IDs via CRC32 with 150 virtual
-  nodes per worker for uniform distribution.
-- **`WorkerActorRef`** — Implements `ActorRef<T>`. For actors on other workers, `tell()`
-  wraps the message in an `Envelope` and pushes it to the target worker's `Thread\Queue`.
-  No serializer; `Thread\Queue` handles the internal copy.
-- **`ThreadQueueTransport`** — One `Swoole\Thread\Queue` per worker as inbox. A
-  coroutine-based receive loop with adaptive backoff polls the queue and delivers
-  incoming envelopes to local actor mailboxes.
-- **`ThreadMapDirectory`** — Shared `Swoole\Thread\Map` mapping actor path strings to
-  worker IDs. All threads read and write the same map; `Thread\Map` handles synchronization.
-
-## Message flow
-
-### Local delivery (actor on same worker)
-```
-tell() → Envelope → LocalActorRef → mailbox → handler
-```
-
-### Cross-worker delivery
-```
-tell() → Envelope → WorkerActorRef
-  → ThreadQueueTransport.send(targetWorker, envelope)
-  → Thread\Queue[targetWorker].push(envelope)      (Thread\Queue copies object)
-  → receive loop on target worker
-  → LocalActorRef.enqueueEnvelope(envelope)
-  → mailbox → handler
-```
-
-## Location transparency
-
-`WorkerNode.spawn()` returns an `ActorRef<T>`. Whether the actor lives on this worker or
-another, the caller uses the same interface:
-
-```php
-$ref = $node->spawn(Props::fromBehavior($behavior), 'orders');
-$ref->tell(new PlaceOrder($items));  // identical regardless of which worker owns 'orders'
-```
-
-## Getting started
-
-The fastest way to start a worker pool is the `WorkerPool` DSL builder in
-`nexus-worker-pool-swoole`:
-
-```php
-use Monadial\Nexus\WorkerPool\Swoole\WorkerPool;
-use Monadial\Nexus\WorkerPool\WorkerNode;
-use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
-
-WorkerPool::create()
-    ->actor('orders', OrderActor::class)
-    ->actor('payments', PaymentActor::class)
-    ->onStart(static function (WorkerNode $node): void {
-        // runs on every worker thread after ActorSystem boots
-    })
-    ->run(WorkerPoolConfig::withWorkers(swoole_cpu_num()));
-```
-
-`WorkerPool::actor()` registers a class-based actor on every worker. The hash ring
-ensures a given actor name always resolves to the same worker thread, so state is
-local within each worker.
-
-For closure-based actors:
-
-```php
-use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Actor\BehaviorWithState;
-use Monadial\Nexus\Core\Actor\Props;
-
-WorkerPool::create()
-    ->behavior('counter', static fn (): Props => Props::fromBehavior(
-        Behavior::withState(0, static fn ($ctx, $msg, $n) => BehaviorWithState::next($n + 1)),
-    ))
-    ->run(WorkerPoolConfig::withWorkers(4));
-```
-
-See [Worker Pool Swoole package reference](../packages/worker-pool-swoole.md) for all
-builder methods.
-
-## Ask protocol (cross-worker request/response)
-
-`WorkerActorRef::ask()` supports request-response across threads. The ask protocol
-uses a reservation slot on the sending worker:
-
-```
-Sender calls ask() → WorkerAskRequest sent to target worker via Thread\Queue
-  → Target processes request, sends WorkerAskReply back to sender's queue
-  → Sender's WorkerNode resolves the Future slot
-  → ask() caller receives the result
-```
-
-The protocol is fault-tolerant: if no reply arrives within a configurable timeout, the
-request times out. See [Worker Pool package reference](../packages/worker-pool.md) for
-the full ask protocol API.
-
-## Performance characteristics
-
-- **Cross-worker throughput**: ~260K messages/sec per worker pair (no serialization step)
-- **Cross-worker latency**: ~20 µs round-trip
-- **Worker count**: set to the number of available CPU cores for CPU-bound workloads
-
 ## Multi-machine clustering
 
-For distributing actors across multiple machines over TCP, see the `nexus-cluster` package.
-It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts — the
-same interface shape as `WorkerTransport` and `WorkerDirectory` but addressed by
-`NodeAddress` (cluster/datacenter/application/node) rather than worker ID.
-A TCP transport implementation is deferred to a future package.
+For distributing actors across multiple machines over a network, see the `nexus-cluster` package. It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts — the same interface shape as `WorkerTransport` and `WorkerDirectory`, but addressed by `NodeAddress` (cluster/datacenter/application/node) rather than worker ID. A TCP transport implementation is not yet available.
+
+## See also
+
+- [Configuration](./configuration.md) — `WorkerPoolConfig`, hash ring parameters, and actor placement
+- [Bootstrap](./bootstrap.md) — `WorkerPoolApp`, `WorkerPoolBootstrap`, and `WorkerStartHandler` patterns
+- [Worker Pool Swoole package](../packages/worker-pool-swoole.md) — full API reference

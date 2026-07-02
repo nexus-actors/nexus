@@ -52,6 +52,16 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster/src/.*
 
+    - name: DoctrineDbal
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-dbal/src/.*
+
+    - name: DoctrineOrm
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-orm/src/.*
+
     - name: WorkerPool
       collectors:
         - type: directory
@@ -77,6 +87,31 @@ deptrac:
         - type: directory
           value: packages/nexus-persistence-doctrine/src/.*
 
+    - name: Http
+      collectors:
+        - type: directory
+          value: packages/nexus-http/src/.*
+
+    - name: HttpWs
+      collectors:
+        - type: directory
+          value: packages/nexus-http-ws/src/.*
+
+    - name: Logger
+      collectors:
+        - type: directory
+          value: packages/nexus-logger/src/.*
+
+    - name: HttpServerSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-http-server-swoole/src/.*
+
+    - name: HttpServerSwooleThreads
+      collectors:
+        - type: directory
+          value: packages/nexus-http-server-swoole-threads/src/.*
+
   ruleset:
     Core:
       - Runtime
@@ -98,10 +133,21 @@ deptrac:
       - Runtime
     Psalm:
       - Core
+      - DoctrineOrm
+      - Runtime
       - Serialization
       - WorkerPool
     Cluster:
       - Core
+    DoctrineDbal:
+      - Core
+      - Http
+      - Runtime
+    DoctrineOrm:
+      - Core
+      - DoctrineDbal
+      - Http
+      - Runtime
     WorkerPool:
       - Core
       - Runtime
@@ -122,3 +168,29 @@ deptrac:
       - PersistenceDbal
       - Core
       - Serialization
+    Http:
+      - Core
+      - Runtime
+      - Serialization
+    HttpWs:
+      - Core
+      - Http
+      - Serialization
+    Logger:
+      - Core
+    HttpServerSwoole:
+      - Core
+      - Http
+      - HttpWs
+      - Runtime
+      - RuntimeSwoole
+      - WorkerPool
+    HttpServerSwooleThreads:
+      - Core
+      - Http
+      - HttpServerSwoole
+      - HttpWs
+      - Runtime
+      - RuntimeSwoole
+      - WorkerPool
+      - WorkerPoolSwoole

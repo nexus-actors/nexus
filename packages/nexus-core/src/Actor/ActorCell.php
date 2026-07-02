@@ -5,15 +5,19 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
+use DateTimeImmutable;
 use Error;
 use LogicException;
 use Monadial\Nexus\Core\Exception\ActorInitializationException;
 use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
+use Monadial\Nexus\Core\Exception\MaxRetriesExceededException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
+use Monadial\Nexus\Core\Lifecycle\PreRestart;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
+use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\PoisonPill;
@@ -35,12 +39,17 @@ use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
+use function array_filter;
+use function array_values;
 use function assert;
+use function count;
 
 /**
  * @psalm-api
  *
  * Internal engine of an actor. Manages behavior, state machine, children, stash, and supervision.
+ *
+ * @internal Implementation detail of {@see ActorSystem::spawn()}. Not for direct use.
  *
  * @template T of object
  * @implements ActorContext<T>
@@ -51,6 +60,24 @@ final class ActorCell implements ActorContext
 
     /** @var Behavior<T> */
     private Behavior $currentBehavior;
+
+    /**
+     * Pristine behavior captured at construction. resolveWrappers() and behavior
+     * swaps mutate {@see self::$currentBehavior}, losing the original — so a
+     * supervised restart resets back to this untouched copy.
+     *
+     * @var Behavior<T>
+     */
+    private readonly Behavior $initialBehavior;
+
+    /**
+     * Timestamps of recent supervised restarts, used to enforce the retry cap
+     * within {@see SupervisionStrategy::$window}. Older entries are pruned on
+     * each restart attempt.
+     *
+     * @var list<DateTimeImmutable>
+     */
+    private array $restartLog = [];
 
     private mixed $currentState = null;
 
@@ -75,6 +102,10 @@ final class ActorCell implements ActorContext
 
     private ?SupervisionStrategy $behaviorSupervision = null;
 
+    private ?Duration $receiveTimeout = null;
+
+    private ?Cancellable $receiveTimer = null;
+
     /**
      * @param Behavior<T> $behavior
      * @param Mailbox<Envelope> $mailbox
@@ -92,6 +123,7 @@ final class ActorCell implements ActorContext
         private readonly DeadLetterRef $deadLetters,
     ) {
         $this->currentBehavior = $behavior;
+        $this->initialBehavior = $behavior;
 
         /** @var ActorRef<T> $ref */
         $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive(), $this->runtime);
@@ -153,6 +185,7 @@ final class ActorCell implements ActorContext
             } elseif ($message instanceof Signal) {
                 $this->handleSignal($message);
             } else {
+                $this->resetReceiveTimer();
                 $this->handleUserMessage($message);
             }
         } finally {
@@ -178,6 +211,12 @@ final class ActorCell implements ActorContext
             $this->timerScheduler->cancelAll();
         }
 
+        // Cancel the receive-timeout timer
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+            $this->receiveTimer = null;
+        }
+
         // Stop all children
         foreach ($this->childrenMap as $child) {
             $child->tell(new PoisonPill());
@@ -189,6 +228,77 @@ final class ActorCell implements ActorContext
         $this->mailbox->close();
 
         $this->transitionTo(ActorState::Stopped);
+    }
+
+    /**
+     * Supervised restart: reset the actor to its pristine behavior and re-run
+     * startup, mirroring {@see self::start()}. Children are torn down, stash and
+     * timers are cleared, and lifecycle signals are delivered (PreRestart on the
+     * failed instance, PreStart on the fresh one — Akka semantics).
+     */
+    public function restart(Throwable $cause): void
+    {
+        // Deliver PreRestart to the current (failed) behavior before we discard
+        // it. Best-effort: handleSignal already swallows signal-handler errors.
+        $this->handleSignal(new PreRestart($cause));
+
+        // Tear down children exactly like a stop would.
+        foreach ($this->childrenMap as $child) {
+            $child->tell(new PoisonPill());
+        }
+
+        $this->childrenMap = [];
+
+        // Cancel spawned tasks and keyed timers from the previous incarnation.
+        foreach ($this->taskHandles as $handle) {
+            $handle->cancel();
+        }
+
+        $this->taskHandles = [];
+
+        if ($this->timerScheduler !== null) {
+            $this->timerScheduler->cancelAll();
+            $this->timerScheduler = null;
+        }
+
+        // Drop buffered work and the pending receive-timeout timer.
+        $this->stashBuffer = [];
+
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+            $this->receiveTimer = null;
+        }
+
+        $this->receiveTimeout = null;
+
+        // Reset to the pristine behavior and re-resolve wrappers on a fresh
+        // instance (Setup/WithTimers/WithStash/Supervised factories re-run).
+        $this->currentBehavior = $this->initialBehavior;
+        $this->currentState = null;
+        $this->behaviorSupervision = null;
+
+        $this->transitionTo(ActorState::Starting);
+
+        try {
+            $this->resolveWrappers();
+        } catch (Throwable $e) {
+            // A restart that cannot even re-initialize is unrecoverable; stop.
+            $this->transitionTo(ActorState::Running);
+            $this->logger->critical('Actor restart failed during setup: ' . $e->getMessage());
+            $this->initiateStop();
+
+            return;
+        }
+
+        // Re-seed initial state for stateful behaviors, mirroring start().
+        if ($this->currentBehavior instanceof WithStateBehavior) {
+            $this->currentState = $this->currentBehavior->initialState;
+        }
+
+        $this->transitionTo(ActorState::Running);
+
+        // Deliver PreStart on the restarted instance.
+        $this->handleSignal(new PreStart());
     }
 
     // ---- ActorContext implementation ----
@@ -391,6 +501,23 @@ final class ActorCell implements ActorContext
         $sender->tell($message);
     }
 
+    #[Override]
+    public function setReceiveTimeout(?Duration $timeout): void
+    {
+        $this->receiveTimeout = $timeout;
+
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+            $this->receiveTimer = null;
+        }
+
+        if ($timeout === null) {
+            return;
+        }
+
+        $this->armReceiveTimer($timeout);
+    }
+
     /** @param Closure(TaskContext): void $task */
     #[Override]
     public function spawnTask(Closure $task): Cancellable
@@ -503,6 +630,42 @@ final class ActorCell implements ActorContext
         }
     }
 
+    private function resetReceiveTimer(): void
+    {
+        $timeout = $this->receiveTimeout;
+
+        if ($timeout === null) {
+            return;
+        }
+
+        if ($this->receiveTimer !== null) {
+            $this->receiveTimer->cancel();
+        }
+
+        $this->armReceiveTimer($timeout);
+    }
+
+    private function armReceiveTimer(Duration $timeout): void
+    {
+        $self = $this;
+        $this->receiveTimer = $this->runtime->scheduleOnce(
+            $timeout,
+            static function () use ($self, $timeout): void {
+                $self->onReceiveTimeoutFired($timeout);
+            },
+        );
+    }
+
+    private function onReceiveTimeoutFired(Duration $configured): void
+    {
+        if ($this->receiveTimer === null) {
+            return;
+        }
+
+        $this->receiveTimer = null;
+        $this->handleSignal(new ReceiveTimeout($configured));
+    }
+
     private function handleSignal(Signal $signal): void
     {
         $signalHandler = $this->currentBehavior->signalHandler();
@@ -547,8 +710,10 @@ final class ActorCell implements ActorContext
             $this->decideSupervisedAction($e);
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in handler: ' . $e->getMessage());
+            $this->decideSupervisedAction($e);
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in handler: ' . $e->getMessage());
+            $this->decideSupervisedAction($e);
         }
     }
 
@@ -565,8 +730,10 @@ final class ActorCell implements ActorContext
             $this->decideSupervisedAction($e);
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in stateful handler: ' . $e->getMessage());
+            $this->decideSupervisedAction($e);
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in stateful handler: ' . $e->getMessage());
+            $this->decideSupervisedAction($e);
         }
     }
 
@@ -656,17 +823,92 @@ final class ActorCell implements ActorContext
         }
     }
 
-    private function decideSupervisedAction(NexusException $e): void
+    /**
+     * Compute and ENACT the supervision directive for a handler failure.
+     *
+     * Behavior-level supervision (from Behavior::supervise) takes precedence; a
+     * non-Escalate directive it yields wins, otherwise we fall back to the
+     * props-level strategy supplied at spawn.
+     */
+    private function decideSupervisedAction(Throwable $cause): void
     {
         if ($this->behaviorSupervision !== null) {
-            $directive = $this->behaviorSupervision->decide($e);
+            $behaviorDirective = $this->behaviorSupervision->decide($cause);
 
-            if ($directive !== Directive::Escalate) {
+            if ($behaviorDirective !== Directive::Escalate) {
+                $this->applyDirective($behaviorDirective, $this->behaviorSupervision, $cause);
+
                 return;
             }
         }
 
-        $this->supervision->decide($e);
+        $this->applyDirective($this->supervision->decide($cause), $this->supervision, $cause);
+    }
+
+    private function applyDirective(Directive $directive, SupervisionStrategy $strategy, Throwable $cause): void
+    {
+        match ($directive) {
+            // Keep behavior + state intact. If suspended by a prior failure,
+            // resume message processing.
+            Directive::Resume => $this->resumeAfterFailure(),
+            Directive::Restart => $this->restartWithinLimits($strategy, $cause),
+            Directive::Stop => $this->initiateStop(),
+            // Escalation-to-parent is not yet wired (there is no ChildFailed
+            // channel toward the parent). Fail safe by stopping for now.
+            Directive::Escalate => $this->escalateAsStop(),
+        };
+    }
+
+    private function resumeAfterFailure(): void
+    {
+        if ($this->state === ActorState::Suspended) {
+            $this->transitionTo(ActorState::Running);
+        }
+    }
+
+    private function escalateAsStop(): void
+    {
+        $this->logger->warning(
+            'Supervision escalation is not wired to the parent; stopping actor ' . (string) $this->actorPath,
+        );
+        $this->initiateStop();
+    }
+
+    /**
+     * Restart the actor, honoring the retry cap: if the number of restarts
+     * within {@see SupervisionStrategy::$window} reaches maxRetries, stop the
+     * actor instead of looping forever.
+     */
+    private function restartWithinLimits(SupervisionStrategy $strategy, Throwable $cause): void
+    {
+        $now = $this->clock->now();
+
+        // Prune restarts that fell outside the sliding window so the cap only
+        // counts recent failures. A zero window (e.g. exponentialBackoff) has no
+        // expiry, so the cap applies across the actor's whole lifetime.
+        if ($strategy->window->toNanos() > 0) {
+            $windowMicros = (int) ($strategy->window->toNanos() / 1000);
+            $cutoff = $now->modify("-{$windowMicros} microseconds");
+            $this->restartLog = array_values(array_filter(
+                $this->restartLog,
+                static fn(DateTimeImmutable $timestamp): bool => $timestamp > $cutoff,
+            ));
+        }
+
+        if (count($this->restartLog) >= $strategy->maxRetries) {
+            $this->logger->error((string) new MaxRetriesExceededException(
+                $this->actorPath,
+                $strategy->maxRetries,
+                $strategy->window,
+                $cause,
+            ));
+            $this->initiateStop();
+
+            return;
+        }
+
+        $this->restartLog[] = $now;
+        $this->restart($cause);
     }
 
     /**

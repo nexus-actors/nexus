@@ -17,6 +17,8 @@ final class InMemoryWorkerTransport implements WorkerTransport
     /** @var ?Closure(Envelope): void */
     private ?Closure $listener = null;
 
+    private bool $stopping = false;
+
     #[Override]
     public function send(int $targetWorker, Envelope $envelope): void
     {
@@ -33,6 +35,18 @@ final class InMemoryWorkerTransport implements WorkerTransport
     public function close(): void
     {
         $this->listener = null;
+    }
+
+    #[Override]
+    public function stop(): void
+    {
+        $this->stopping = true;
+    }
+
+    #[Override]
+    public function isStopped(): bool
+    {
+        return $this->stopping;
     }
 
     /**

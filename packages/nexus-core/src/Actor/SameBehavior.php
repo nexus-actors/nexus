@@ -13,6 +13,8 @@ use Override;
  *
  * Sentinel behavior returned from handlers to keep the current behavior unchanged.
  *
+ * @internal Implementation detail of {@see Behavior::same()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

@@ -1,28 +1,31 @@
 ---
 sidebar_position: 1
 title: Installation
+related:
+  - getting-started/quick-start
+  - getting-started/concepts
+  - runtimes/overview
 ---
 
 # Installation
 
+This page covers installing Nexus into your PHP project. Nexus requires PHP 8.5+ and Composer 2.x; Swoole is optional and needed only for production workloads.
+
 ## Requirements
 
-- **PHP 8.5+** -- Nexus uses features introduced in PHP 8.5.
-- **Swoole 5.0+** (optional) -- required only if you use the `nexus-runtime-swoole` package for production workloads. Not needed for local development with the Fiber runtime.
-- **Composer 2.x** -- for package management.
+- **PHP 8.5+** — Nexus uses features introduced in PHP 8.5.
+- **Composer 2.x** — for package management.
+- **Swoole 5.0+** (optional) — required only if you use `nexus-runtime-swoole`. Not needed for local development with the Fiber runtime.
 
-## Composer packages
+## Install the meta-package
 
-### Meta-package (recommended for most projects)
-
-The `nexus-actors/nexus` meta-package installs `nexus-core`, `nexus-runtime-fiber`,
-and `nexus-serialization` in one step:
+The `nexus-actors/nexus` meta-package installs `nexus-core`, `nexus-runtime-fiber`, and `nexus-serialization` in one step. This is the right starting point for most projects:
 
 ```bash
 composer require nexus-actors/nexus
 ```
 
-### Individual packages
+## Install individual packages
 
 Install only the packages you need:
 
@@ -46,10 +49,9 @@ composer require nexus-actors/serialization
 composer require --dev nexus-actors/psalm
 ```
 
-### Swoole runtime dependency
+### Swoole extension
 
-The Swoole runtime requires the `ext-swoole` PHP extension. Install it via PECL
-or your system package manager:
+The Swoole runtime requires the `ext-swoole` PHP extension. Install it via PECL or your system package manager:
 
 ```bash
 pecl install swoole
@@ -61,22 +63,27 @@ Then enable it in your `php.ini`:
 extension=swoole
 ```
 
-## Docker setup
+## Verify the installation
 
-The project ships a Docker Compose configuration with three service targets:
-`php` (full environment), `php-fiber` (Fiber-only), and `php-swoole`
-(Swoole-only). A `Makefile` provides shorthand commands.
+After installation, confirm the packages are present:
 
-### Build and start
+```bash
+composer show nexus-actors/*
+```
+
+Run the test suite to confirm everything works:
+
+```bash
+vendor/bin/phpunit
+```
+
+## Docker setup (for contributors)
+
+The repository ships a Docker Compose configuration with three service targets: `php` (full environment), `php-fiber` (Fiber-only), and `php-swoole` (Swoole-only). A `Makefile` provides shorthand commands.
 
 ```bash
 make build && make up && make install
 ```
-
-This builds the Docker images, starts the containers in the background, and runs
-`composer install` inside the PHP container.
-
-### Common make targets
 
 | Command | Description |
 |---|---|
@@ -86,32 +93,70 @@ This builds the Docker images, starts the containers in the background, and runs
 | `make install` | Run `composer install` inside the container |
 | `make shell` | Open a bash shell in the PHP container |
 | `make test` | Run all tests |
-| `make test-unit` | Run unit tests only |
-| `make test-fiber` | Run Fiber integration tests |
-| `make test-swoole` | Run Swoole integration tests |
 | `make psalm` | Run Psalm static analysis |
 
-## Verification
+## Smoke test
 
-After installation, verify that everything works by running the test suite:
+Run this script after installation to confirm the actor system, Fiber runtime, and message delivery all work end-to-end. If it prints `OK`, your install is healthy.
 
-```bash
-# Inside Docker
-make test
+<!-- verify:skip: requires a running actor system -->
+```php title="smoke.php" verify:skip
+<?php
 
-# Or directly with Composer
-vendor/bin/phpunit
+declare(strict_types=1);
+
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+
+require 'vendor/autoload.php';
+
+readonly class Increment {}
+readonly class GetCount { public function __construct(public object $replyTo) {} }
+
+$captured = null;
+$runtime  = new FiberRuntime();
+$system   = ActorSystem::create('smoke', $runtime);
+
+$counter = $system->spawn(
+    Props::fromBehavior(Behavior::withState(
+        0,
+        static function ($ctx, object $msg, int $n) use (&$captured): BehaviorWithState {
+            if ($msg instanceof Increment) {
+                return BehaviorWithState::next($n + 1);
+            }
+            if ($msg instanceof GetCount) {
+                $captured = $n;
+            }
+            return BehaviorWithState::same();
+        },
+    )),
+    'counter',
+);
+
+$counter->tell(new Increment());
+$counter->tell(new Increment());
+$counter->tell(new Increment());
+$counter->tell(new GetCount($system->deadLetters()));
+$runtime->scheduleOnce(Duration::millis(200), fn () => $system->shutdown(Duration::seconds(1)));
+$system->run();
+
+echo $captured === 3 ? 'OK' : 'FAIL: expected 3, got ' . $captured;
+echo PHP_EOL;
 ```
 
-You can also confirm the packages are installed:
+Run the smoke test:
 
 ```bash
-composer show nexus-actors/*
+php smoke.php
+# OK
 ```
-
-This should list the Nexus packages along with their installed versions.
 
 ## Next steps
 
-- [Quick Start](./quick-start.md) -- build your first actor.
-- [Key Concepts](./concepts.md) -- learn the actor model fundamentals.
+- [Quick Start](./quick-start.md) — build your first actor.
+- [Key Concepts](./concepts.md) — learn the actor model fundamentals.
+- [Runtimes](../runtimes/overview.md) — choose between Fiber and Swoole for your workload.

@@ -1,131 +1,115 @@
 ---
 sidebar_position: 2
 title: Roadmap
+related:
+  - contributing/development
+  - architecture/design-philosophy
+  - scaling/overview
 ---
 
 # Roadmap
 
-This page outlines planned features for Nexus. Items are listed roughly in
-order of priority.
+Where Nexus stands today, what is actively in progress, and what is planned but not yet started. Items within each section are ordered roughly by user impact.
 
-## Multi-worker scaling
+## Shipped
 
-**Status:** Implemented.
+Everything in this section is available today.
 
-Multi-worker scaling is available via the `nexus-cluster` and
-`nexus-worker-pool-swoole` packages. See the [Scaling documentation](../scaling/overview.md)
-for full details.
+### Core actor model
 
-This is single-machine scaling via Swoole threads -- utilizing all CPU
-cores on one server. Not to be confused with multi-server clustering (see below).
+- `ActorSystem`, `ActorContext`, `ActorRef` (`LocalActorRef`, `WorkerActorRef`, `DeadLetterRef`).
+- Closure-based `Behavior::receive` / `withState` / `setup` + class-based `ActorHandler` / `StatefulActorHandler` / `AbstractActor`.
+- Lifecycle signals: `PreStart`, `PostStop`, `Terminated`, `ChildFailed`, `ReceiveTimeout`.
+- Stash / unstash, death watch, scheduled messages, custom mailbox config, supervision strategies (one-for-one, all-for-one, exponential-backoff).
+- Ask pattern returning `Future<R>` — `->await()` to block, `->map()` / `->flatMap()` to compose, `Future::all` for fan-out.
 
-Key features:
+### Runtimes
 
-- **`WorkerPoolApp`** and **`WorkerPoolBootstrap`** start N worker threads, each
-  running an independent `ActorSystem`.
-- **`ConsistentHashRing`** determines actor placement without coordination.
-- **`WorkerActorRef`** provides location-transparent cross-worker messaging.
-- **`ThreadQueueTransport`** passes `Envelope` objects directly via `Thread\Queue`.
-  Benchmarked at 260K msgs/sec per worker pair.
-- **`ThreadMapDirectory`** provides O(1) shared actor lookups via `Thread\Map`.
-- Pure PHP abstractions in `nexus-cluster` are designed to support future
-  multi-server clustering without changes to actor code.
+- **`FiberRuntime`** — PHP 8.5 native Fibers, cooperative scheduler, priority-queue timers. Used in development and tests.
+- **`SwooleRuntime`** — Swoole 6 coroutines, native channel-backed mailboxes, true async I/O via `SWOOLE_HOOK_ALL`. Production runtime.
+- **`StepRuntime`** — Deterministic single-step runtime for unit tests. `step()` / `drain()` give exact control over message ordering.
 
-## Multi-machine clustering
+### Single-machine scaling
 
-**Status:** Planned.
+- `WorkerPool` / `WorkerPoolApp` / `WorkerPoolBootstrap` (Swoole thread pool, one `ActorSystem` per worker, shared `Thread\Map` directory).
+- `ConsistentHashRing` — placement decided locally, no coordination.
+- `WorkerActorRef` — location-transparent cross-worker messaging.
+- `ThreadQueueTransport` — direct `Envelope` over `Thread\Queue` (~260K msgs/sec/pair).
 
-TCP-based clustering across multiple hosts. `nexus-cluster` contracts
-(`ClusterTransport`, `NodeDirectory`, `NodeHashRing`, `NodeAddress`) are defined.
-A future TCP transport package will provide the implementation.
+### HTTP
 
-## Observability
+- `HttpApplication` / `WsApplication` composition root.
+- PSR-7/15 routing, handler resolution, attribute-driven param resolution (`#[FromActor]`, `#[FromService]`, `#[FromBody]`, `#[FromContext]`, `#[FromPrincipal]`).
+- Bearer-token auth (`AuthenticationMiddleware`), per-request actor scoping, exception mapping (`onException()`).
+- Toolkit middlewares: body-size limit, CORS, rate limit.
+- Swoole-thread HTTP server with graceful shutdown wired through `BeforeShutdown` and a per-worker watchdog coroutine.
+- WebSocket routing + dispatcher (Swoole-thread mode rejects channel-mode routes at boot).
 
-**Status:** Planned.
+### Persistence
 
-Comprehensive observability tooling for production deployments:
+- **Event sourcing**: `EventSourcedBehavior` + `Effect::persist/none/stash/stop/reply`, snapshots, retention policies, command/event handlers, replay filter modes (`Fail`/`Warn`/`RepairByDiscardOld`/`Off`).
+- **Durable state**: `DurableStateBehavior` for aggregates that persist the full state snapshot.
+- Storage backends: `InMemoryEventStore`, `DbalEventStore`, `DoctrineEventStore`, equivalents for snapshots + durable state.
+- **Single-writer guarantee**: `ActorSystem::writerId()` (ULID) stamped on every persisted envelope, `WriterConflictException` on inter-writer drift, optimistic versioning on durable state.
 
-- **Metrics** -- Actor count, message throughput, mailbox depth, processing
-  latency, supervision events. Integration with Prometheus or OpenTelemetry.
-- **Structured logging** -- Contextual log entries with actor path, message
-  type, and correlation IDs.
-- **Tracing** -- Distributed trace propagation through actor message chains,
-  compatible with OpenTelemetry.
+### Doctrine integration
 
-## Developer tooling
+- **`ConnectionPool`** (DBAL): channel-backed, idle-TTL eviction, leak detection, PSR-14 events, accurate wait/timeout metrics.
+- **`EntityManagerPool`** (ORM): same lifecycle on top of `ConnectionPool`, `clearOnReturn`, `recreateAfter` recycling.
+- **`#[Transactional]`** attribute: works on raw `Connection` handlers and `EntityManagerInterface` handlers.
+- **`PoolExhaustedToServiceUnavailable`**: maps both pools' exhaustion to HTTP 503 + `Retry-After: 1`.
+- **`EntityBehavior` DSL**: entity-as-actor-state for non-event-sourced aggregates with replay policies, idle passivation, optimistic-lock-aware retry, dedicated-connection and pool-backed modes.
 
-**Status:** Planned.
+### Tooling
 
-Tools to improve the development and debugging experience:
+- `nexus-psalm` plugin: readonly message classes, mutable-state detection in handlers, blocking-call detection inside handler closures, mutable-closure capture detection in `Props::fromFactory`, type providers for `Props::from*()` and `clone()`.
+- Test runtime support: `TestRuntime`, `TestMailbox`, `TestClock`, Step runtime for deterministic ordering.
+- Docker-only dev loop: `make` targets for unit, fiber, swoole, cluster, persistence, doctrine, http, http-swoole, mutation testing, Psalm, PHPCS, PHP-CS-Fixer, GrumPHP pre-commit gate.
 
-- **Actor inspector** -- Runtime introspection of actor hierarchies, states,
-  mailbox depths, and behavior chains.
-- **Message tracing** -- Record and replay message flows for debugging
-  complex actor interactions.
+## In progress
 
-## Single-writer persistence
+These features are partially shipped. The contracts are in the codebase and the pieces that work today are usable, but the full surface area is still being filled in.
 
-**Status:** Implemented.
+### Multi-machine clustering
 
-Akka-style single-writer guarantee for persistent actors. Each `ActorSystem`
-gets a unique ULID identity stamped on every persisted envelope, enabling
-detection of concurrent writes from different systems:
+The `nexus-cluster` package ships the contracts (`NodeAddress`, `ClusterTransport`, `NodeDirectory`, `NodeHashRing`) so that actor code is forward-compatible with a future TCP transport. A real TCP-based implementation is the next piece. ETA: open.
 
-- **Writer identity** -- `ActorSystem::writerId()` returns a `Ulid` assigned at
-  startup. All `EventEnvelope`, `SnapshotEnvelope`, and `DurableStateEnvelope`
-  carry a `writerId` field stored in a `writer_id` column.
-- **`WriterConflictException`** -- thrown when a store detects a write from a
-  different writer. Properties: `persistenceId`, `expectedWriter`, `actualWriter`,
-  `sequenceNr`.
-- **`ReplayFilter`** -- validates writer consistency during event replay with
-  configurable modes: `Fail` (throw on interleave), `Warn` (log warning),
-  `RepairByDiscardOld` (keep only latest writer's events), `Off` (skip).
-  Configurable via `withReplayFilter(ReplayFilterMode)` on behavior builders.
-- **Optimistic version checks** -- Event stores use composite primary key
-  `(persistence_id, sequence_nr)` for natural conflict detection. Durable state
-  stores use version checking (`WHERE version = ?` in DBAL, `#[ORM\Version]` in
-  Doctrine). Conflicts throw `ConcurrentModificationException`.
-- **Injectable serializers** -- All DBAL and Doctrine stores accept a
-  `MessageSerializer` constructor parameter (default: `PhpNativeSerializer`),
-  allowing custom serialization strategies (JSON, Valinor, etc.).
+### Observability
 
-## Symfony integration
+PSR-14 events are emitted today across pools, HTTP, and persistence; a turnkey Prometheus / OpenTelemetry bridge is not yet shipped. Structured logging via `nexus-logger` works (async, mailbox-backed, Monolog-handler compatible). Distributed tracing through actor chains is on the roadmap but not yet started.
 
-**Status:** Planned.
+## Planned
 
-A `nexus-symfony` bundle providing deep integration between Nexus and the
-Symfony framework:
+Designed but not yet under active development.
 
-- **Symfony Messenger transport** -- Dispatch Symfony Messenger messages to Nexus
-  actors. Actors act as message handlers, benefiting from supervision, mailbox
-  backpressure, and concurrent processing.
-- **Actor-aware Dependency Injection** -- Register actor behaviors as services
-  in the Symfony container. Inject dependencies (repositories, API clients,
-  loggers) into actor factories via standard Symfony DI.
-- **Swoole Runtime integration** -- Run the full Symfony HTTP kernel inside
-  Swoole workers alongside the actor system. Handle HTTP requests and actor
-  messages in the same process with shared async I/O.
-- **Console commands** -- Artisan-style commands to inspect running actors, dump
-  the actor hierarchy, and manage the cluster from the CLI.
-- **Event dispatcher bridge** -- Bridge between Symfony's `EventDispatcher` and
-  Nexus actor messages. Symfony events can trigger actor messages and vice versa.
-- **Profiler integration** -- Web Debug Toolbar panel showing actor count,
-  message throughput, mailbox depths, and supervision events during development.
+### Developer tooling
 
-The goal is for Symfony applications to use actors as naturally as they use
-services and message handlers today -- with full access to Symfony's ecosystem
-(Doctrine, Security, Messenger, Cache) from within actors.
+- **Actor inspector** — runtime introspection of actor hierarchies, mailbox depths, behavior chains.
+- **Message tracing** — record/replay message flows for debugging complex actor interactions.
 
-## Additional runtimes
+### Symfony integration
 
-**Status:** Under consideration.
+A `nexus-symfony` bundle for deep Symfony interop:
 
-The runtime-agnostic architecture allows new runtime implementations:
+- Messenger transport — actors as Symfony Messenger handlers.
+- Actor-aware DI — register behaviors as services.
+- Swoole runtime integration — Symfony HTTP kernel inside Swoole workers alongside the actor system.
+- Console commands — inspect the actor hierarchy, dump mailbox depths.
+- Event dispatcher bridge — Symfony events ↔ actor messages.
+- Profiler panel — Web Debug Toolbar showing actor stats.
 
-- **ReactPHP** -- Event loop integration for ReactPHP-based applications.
-- **AMPHP** -- Fiber-based async runtime with native async I/O.
-- **FrankenPHP** -- Worker mode integration for FrankenPHP deployments.
+## Under consideration
 
-Community contributions for additional runtimes are welcome. Any implementation
-of the `Monadial\Nexus\Runtime\Runtime\Runtime` interface is compatible with the
-full Nexus actor system.
+### Additional runtimes
+
+The `Runtime` interface is small and stable. Contributions for any of these are welcome:
+
+- **ReactPHP** — event loop integration.
+- **AMPHP** — fiber-based async runtime with native async I/O.
+- **FrankenPHP** — worker-mode integration.
+
+## See also
+
+- [Development](./development.md) — how to set up the development environment and run tests.
+- [Design philosophy](../architecture/design-philosophy.md) — the principles that drive architectural decisions.
+- [Scaling](../scaling/overview.md) — the worker pool implementation available today.

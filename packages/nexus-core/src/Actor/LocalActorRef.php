@@ -20,6 +20,8 @@ use Override;
  *
  * Local (in-process) actor reference that delivers messages via a mailbox.
  *
+ * @internal Implementation detail of {@see ActorRef}. Not for direct use.
+ *
  * @template T of object
  * @implements ActorRef<T>
  */

@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 15 packages under `packages/`, each published independently to Packagist.
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 24 packages under `packages/`, each published independently to Packagist.
 
 ## Development Environment
 
@@ -21,7 +21,7 @@ make up / make down # Start/stop containers
 make shell          # Interactive bash in PHP container
 ```
 
-**Docker services** (`docker-compose.yml`):
+**Docker services** (`compose.yaml`):
 - `php` — Full environment (Xdebug + Swoole) for development
 - `php-fiber` — Fiber-only for unit/integration tests and CI
 - `php-swoole` — Swoole-only for Swoole and worker-pool tests and CI
@@ -160,9 +160,9 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 
 **`ActorSystem`** (`Actor/ActorSystem.php`) — Entry point:
 - `ActorSystem::create(string $name, Runtime, ?Clock, ?Logger, ?EventDispatcher)`
-- `spawn(Props<T>, string $name): ActorRef<T>` / `spawnAnonymous(Props<T>): ActorRef<T>`
+- `spawn(Props<T>, string $name): ActorRef<T>` — Spawn a child actor. If a child with the given name has already terminated, it is pruned automatically and a new actor is spawned in its place. If a **live** child with that name already exists, throws `ActorNameExistsException`. This enables passivation patterns like `EntityRefFactory::of($id)` where dead actors are transparently respawned. / `spawnAnonymous(Props<T>): ActorRef<T>`
 - `run(): void` — Start event loop (blocking)
-- `shutdown(Duration $timeout): void`
+- `shutdown(Duration $timeout): void` — Deadline-driven graceful shutdown: marks system stopping, broadcasts `PoisonPill` to root children, yields cooperatively until drained or deadline, force-closes survivors' mailboxes, signals runtime shutdown. Coroutine-safe (`Mailbox::enqueue` wraps `Channel::push` when called outside a coroutine). On Swoole thread mode, `SwooleThreadServer` flips a `Thread\Atomic` from `BeforeShutdown` so per-worker watchdog coroutines invoke this before Swoole's reactor exit timeout.
 - `deadLetters(): DeadLetterRef`
 
 **`ActorCell<T>`** (`Actor/ActorCell.php`) — Internal engine implementing `ActorContext<T>`. Manages the behavior state machine, children map, watchers, stash buffer, and message processing. States: `New → Starting → Running → {Suspended, Stopping} → Stopped`.
@@ -243,6 +243,7 @@ readonly class Greeted { public function __construct(public string $greeting) {}
 - `PostStop` — During shutdown, after children stopped
 - `Terminated(ActorRef)` — Watched actor terminated
 - `ChildFailed(ActorRef, Throwable)` — Child threw exception
+- `ReceiveTimeout` — No user message received within the duration set by `$ctx->setReceiveTimeout(Duration)`. Resets on every user message; system messages do not reset. Cancel with `$ctx->setReceiveTimeout(null)`.
 
 ### Mailbox System
 
@@ -432,3 +433,69 @@ When modifying dev dependency versions (e.g., PHPUnit), update both the root `co
 - **PSR-11** (ContainerInterface) — Actor resolution via `Props::fromContainer()`
 - **PSR-14** (EventDispatcherInterface) — System-level event dispatching
 - **PSR-20** (ClockInterface) — Time abstraction (TestClock for deterministic tests)
+
+# CLAUDE.md
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

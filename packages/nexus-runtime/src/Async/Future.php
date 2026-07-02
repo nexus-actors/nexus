@@ -25,6 +25,65 @@ final readonly class Future
     public function __construct(private FutureSlot $slot) {}
 
     /**
+     * Create a Future that is already completed with the given value.
+     *
+     * @template R2 of object
+     * @param R2 $value
+     * @return self<R2>
+     */
+    public static function resolved(object $value): self
+    {
+        /** @var ImmediateFutureSlot<R2> $slot */
+        $slot = new ImmediateFutureSlot();
+        $slot->resolve($value);
+
+        return new self($slot);
+    }
+
+    /**
+     * Create a Future that is already failed.
+     *
+     * @return self<object>
+     */
+    public static function failed(FutureException $error): self
+    {
+        $slot = new ImmediateFutureSlot();
+        $slot->fail($error);
+
+        return new self($slot);
+    }
+
+    /**
+     * Wait for all futures and collect their results, keyed identically to the input.
+     * If any future fails, the combined future fails with the first failure encountered.
+     *
+     * @param array<array-key, Future<object>> $futures
+     * @return Future<FutureResult<object>>
+     */
+    public static function all(array $futures): self
+    {
+        if ($futures === []) {
+            /** @var FutureResult<object> $empty */
+            $empty = new FutureResult([]);
+
+            return self::resolved($empty);
+        }
+
+        /** @var FutureSlot<FutureResult<object>> $combined */
+        $combined = new LazyFutureSlot(static function () use ($futures): FutureResult {
+            $values = [];
+
+            foreach ($futures as $key => $future) {
+                $values[$key] = $future->await();
+            }
+
+            return new FutureResult($values);
+        });
+
+        return new self($combined);
+    }
+
+    /**
      * Block the current fiber until the result is available.
      *
      * @return R

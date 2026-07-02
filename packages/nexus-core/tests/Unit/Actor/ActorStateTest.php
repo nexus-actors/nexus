@@ -33,6 +33,9 @@ final class ActorStateTest extends TestCase
         self::assertTrue(ActorState::Suspended->canTransitionTo(ActorState::Running));
         self::assertTrue(ActorState::Suspended->canTransitionTo(ActorState::Stopping));
         self::assertTrue(ActorState::Stopping->canTransitionTo(ActorState::Stopped));
+        // Supervised restart re-enters startup from a live/suspended actor.
+        self::assertTrue(ActorState::Running->canTransitionTo(ActorState::Starting));
+        self::assertTrue(ActorState::Suspended->canTransitionTo(ActorState::Starting));
     }
 
     #[Test]
@@ -43,6 +46,5 @@ final class ActorStateTest extends TestCase
         self::assertFalse(ActorState::New->canTransitionTo(ActorState::Running));
         self::assertFalse(ActorState::New->canTransitionTo(ActorState::Stopped));
         self::assertFalse(ActorState::Running->canTransitionTo(ActorState::New));
-        self::assertFalse(ActorState::Running->canTransitionTo(ActorState::Starting));
     }
 }

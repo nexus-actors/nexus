@@ -8,23 +8,49 @@
     xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
 >
     <projectFiles>
+        <directory name="packages/nexus-app/src" />
+        <directory name="packages/nexus-cluster/src" />
         <directory name="packages/nexus-core/src" />
+        <directory name="packages/nexus-doctrine-dbal/src" />
+        <directory name="packages/nexus-doctrine-orm/src" />
+        <directory name="packages/nexus-http/src" />
+        <directory name="packages/nexus-http-auth/src" />
+        <directory name="packages/nexus-http-server-swoole/src" />
+        <directory name="packages/nexus-http-server-swoole-threads/src" />
+        <directory name="packages/nexus-http-toolkit/src" />
+        <directory name="packages/nexus-http-ws/src" />
+        <directory name="packages/nexus-logger/src" />
+        <directory name="packages/nexus-persistence/src" />
+        <directory name="packages/nexus-persistence-dbal/src" />
+        <directory name="packages/nexus-persistence-doctrine/src" />
+        <directory name="packages/nexus-psalm/src" />
+        <directory name="packages/nexus-runtime/src" />
         <directory name="packages/nexus-runtime-fiber/src" />
         <directory name="packages/nexus-runtime-step/src" />
         <directory name="packages/nexus-runtime-swoole/src" />
         <directory name="packages/nexus-serialization/src" />
-        <directory name="packages/nexus-psalm/src" />
-        <directory name="packages/nexus-cluster/src" />
         <directory name="packages/nexus-worker-pool/src" />
         <directory name="packages/nexus-worker-pool-swoole/src" />
-        <directory name="packages/nexus-app/src" />
-        <directory name="packages/nexus-persistence/src" />
-        <directory name="packages/nexus-persistence-dbal/src" />
-        <directory name="packages/nexus-persistence-doctrine/src" />
         <ignoreFiles>
             <directory name="vendor" />
+            <directory name="examples" />
         </ignoreFiles>
     </projectFiles>
+
+    <stubs>
+        <!--
+            Swoole ext is loaded at runtime via reflection when Psalm scans the
+            whole project, but grumphp/pre-commit runs Psalm on individual
+            staged files and can miss `Swoole\WebSocket\Frame` etc. Point at
+            swoole/ide-helper so Psalm resolves those classes deterministically.
+        -->
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Server.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Frame.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/CloseFrame.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Server.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Request.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Response.php" />
+    </stubs>
 
     <plugins>
         <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
@@ -45,5 +71,23 @@
                 <directory name="packages/nexus-psalm/src" />
             </errorLevel>
         </InternalClass>
+
+        <!-- WebSocket actor / handler base classes use abstract methods
+             whose params are unused in the base impl; subclasses use them. -->
+        <PossiblyUnusedParam>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-http-ws/src" />
+                <directory name="packages/nexus-http-toolkit/src" />
+            </errorLevel>
+        </PossiblyUnusedParam>
+
+        <!-- Logger Mdc methods are public API surface — Psalm can't see
+             user-code calls. -->
+        <PossiblyUnusedMethod>
+            <errorLevel type="suppress">
+                <directory name="packages/nexus-logger/src" />
+                <directory name="packages/nexus-http-ws/src" />
+            </errorLevel>
+        </PossiblyUnusedMethod>
     </issueHandlers>
 </psalm>

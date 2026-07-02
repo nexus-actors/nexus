@@ -13,6 +13,8 @@ use Override;
  *
  * Sentinel behavior returned from handlers to stop the actor.
  *
+ * @internal Implementation detail of {@see Behavior::stopped()}. Not for direct use.
+ *
  * @template T of object
  * @extends Behavior<T>
  */

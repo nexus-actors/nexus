@@ -4,8 +4,8 @@
     "type": "library",
     "license": "MIT",
     "require": {
-        "php": ">=8.5",
-        "ext-swoole": "*",
+        "php": ">=8.5.7",
+        "ext-swoole": ">=6.2.1",
         "nexus-actors/runtime": "dev-main"
     },
     "require-dev": {

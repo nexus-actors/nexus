@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Nexus Tic-Tac-Toe</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            color-scheme: light dark;
+            --bg: #0b1020;
+            --panel: #131a30;
+            --border: #263056;
+            --text: #e6ebff;
+            --muted: #94a3d1;
+            --accent: #7c9cff;
+            --x: #ff6b7a;
+            --o: #58d0d3;
+            --danger: #e04b6b;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+
+        #root {
+            max-width: 780px;
+            margin: 0 auto;
+            padding: 32px 20px 80px;
+        }
+
+        h1 {
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            margin: 0 0 8px;
+        }
+
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 28px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            font: inherit;
+            color: var(--text);
+            background: var(--accent);
+            border: 0;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+        }
+
+        button.danger {
+            background: var(--danger);
+        }
+
+        input {
+            font: inherit;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text);
+            min-width: 220px;
+        }
+
+        .row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .games-list {
+            list-style: none;
+            padding: 0;
+            margin: 12px 0 0;
+        }
+
+        .games-list li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+            width: min(360px, 100%);
+            aspect-ratio: 1;
+            margin: 20px auto;
+        }
+
+        .cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            user-select: none;
+            transition: background 120ms;
+        }
+
+        .cell:hover:not(.disabled):not(.filled) {
+            background: rgba(124, 156, 255, 0.15);
+        }
+
+        .cell.filled {
+            cursor: default;
+        }
+
+        .cell.disabled {
+            cursor: not-allowed;
+        }
+
+        .cell.mark-X { color: var(--x); }
+        .cell.mark-O { color: var(--o); }
+
+        .status-line {
+            text-align: center;
+            font-size: 1.1rem;
+            margin: 8px 0 16px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid var(--border);
+        }
+
+        .badge.waiting { background: rgba(148, 163, 209, 0.15); }
+        .badge.in_progress { background: rgba(124, 156, 255, 0.2); }
+        .badge.won { background: rgba(88, 208, 211, 0.2); }
+        .badge.draw { background: rgba(148, 163, 209, 0.15); }
+        .badge.abandoned { background: rgba(224, 75, 107, 0.2); }
+
+        .muted { color: var(--muted); }
+    </style>
+</head>
+<body>
+    <div id="root">Loading…</div>
+
+    <!--
+        Pinned exact versions + Subresource Integrity: the browser refuses to
+        run a script whose hash doesn't match, so a compromised/MITM'd CDN
+        can't inject code. Babel-in-browser is used to keep the example
+        build-step-free; a real deployment would precompile and self-host.
+    -->
+    <script crossorigin="anonymous"
+        integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"
+        src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin="anonymous"
+        integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"
+        src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script crossorigin="anonymous"
+        integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj"
+        src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+    <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // Note: the token is persisted only when the `welcome` frame arrives. If a
+    // player refreshes in the sub-second window before that, the reconnect has
+    // no token and the server seats them fresh (possibly the other side). This
+    // is inherent to mint-on-server + persist-on-welcome and is acceptable for
+    // the demo; a production app would ack the token before enabling the board.
+    //
+    // The server owns identity. On first join it mints an unguessable seat
+    // token and hands it to THIS connection privately (a `welcome` frame);
+    // we stash it per-game so a refresh can reclaim the same seat. We never
+    // send a player id on move/forfeit — the server knows who we are from
+    // the connection.
+    const tokenKey = (gameId) => `tictactoe.token.${gameId}`;
+
+    // How long to wait for a server snapshot after a move/forfeit before
+    // telling the player the server is unresponsive and forcing a reconnect.
+    // The server flushes to Postgres on every move, so a healthy round-trip is
+    // well under a second; 6s only trips on a real stall (dead connection,
+    // actor fault) rather than a silent forever-hang.
+    const MOVE_TIMEOUT_MS = 6000;
+    const RECONNECT_MIN_MS = 500;
+    const RECONNECT_MAX_MS = 5000;
+
+    function useGameSocket(gameId, playerName, onSnapshot, onWelcome, onError) {
+        const wsRef = useRef(null);
+        const closedRef = useRef(false);     // set on unmount — suppress reconnect
+        const attemptRef = useRef(0);         // reconnect backoff counter
+        const reconnectRef = useRef(null);    // pending reconnect timer
+        const moveTimerRef = useRef(null);    // pending move-response watchdog
+
+        // Keep the latest callbacks without re-running the connect effect on
+        // every parent render (which would thrash the socket).
+        const cbRef = useRef({ onSnapshot, onWelcome, onError });
+        cbRef.current = { onSnapshot, onWelcome, onError };
+
+        useEffect(() => {
+            if (!gameId) return;
+            closedRef.current = false;
+
+            const clearMoveTimer = () => {
+                if (moveTimerRef.current) {
+                    clearTimeout(moveTimerRef.current);
+                    moveTimerRef.current = null;
+                }
+            };
+
+            const connect = () => {
+                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${proto}//${location.host}/ws/games/${gameId}`);
+                wsRef.current = ws;
+
+                ws.onopen = () => {
+                    attemptRef.current = 0; // healthy connect resets backoff
+                    const token = localStorage.getItem(tokenKey(gameId));
+                    ws.send(JSON.stringify(
+                        token
+                            ? { type: 'join', name: playerName, token }
+                            : { type: 'join', name: playerName },
+                    ));
+                };
+
+                ws.onmessage = (ev) => {
+                    try {
+                        const msg = JSON.parse(ev.data);
+                        if (msg.type === 'snapshot') {
+                            clearMoveTimer(); // the server answered — clear the watchdog
+                            cbRef.current.onSnapshot(msg.data);
+                        } else if (msg.type === 'welcome') {
+                            localStorage.setItem(tokenKey(gameId), msg.data.token);
+                            cbRef.current.onWelcome(msg.data.mark);
+                        } else if (msg.type === 'error') {
+                            clearMoveTimer();
+                            cbRef.current.onError(msg.data?.message ?? 'error');
+                        }
+                    } catch (e) {
+                        cbRef.current.onError('bad server message');
+                    }
+                };
+
+                // Reconnect on any unexpected close with capped backoff, so an
+                // actor restart, worker recycle, or dropped socket recovers on
+                // its own instead of leaving a dead board. The stored token is
+                // replayed on reconnect, reclaiming the same seat.
+                ws.onclose = () => {
+                    clearMoveTimer();
+                    if (closedRef.current) return;
+                    const delay = Math.min(
+                        RECONNECT_MAX_MS,
+                        RECONNECT_MIN_MS * 2 ** attemptRef.current,
+                    );
+                    attemptRef.current += 1;
+                    cbRef.current.onError('connection lost — reconnecting…');
+                    reconnectRef.current = setTimeout(connect, delay);
+                };
+
+                ws.onerror = () => { /* surfaced via onclose, which always follows */ };
+            };
+
+            connect();
+
+            return () => {
+                closedRef.current = true;
+                clearMoveTimer();
+                if (reconnectRef.current) clearTimeout(reconnectRef.current);
+                if (wsRef.current) wsRef.current.close();
+            };
+        }, [gameId, playerName]);
+
+        const send = useCallback((payload) => {
+            const ws = wsRef.current;
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                // The socket is mid-(re)connect. Surface it instead of silently
+                // dropping the click, so a move/forfeit is never lost without a
+                // trace — the player just retries once reconnected.
+                cbRef.current.onError('reconnecting — try again in a moment');
+                return;
+            }
+            ws.send(JSON.stringify(payload));
+
+            // Arm a soft watchdog on mutating intents: if no snapshot/error
+            // comes back in time, surface a hint. We do NOT close the socket —
+            // force-closing a healthy connection caused reconnect churn that
+            // swallowed the next action. A genuinely dropped socket is handled
+            // by onclose's reconnect; server faults are handled by supervision.
+            if (payload.type === 'move' || payload.type === 'forfeit') {
+                if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
+                moveTimerRef.current = setTimeout(() => {
+                    moveTimerRef.current = null;
+                    cbRef.current.onError('server is taking longer than usual…');
+                }, MOVE_TIMEOUT_MS);
+            }
+        }, []);
+
+        return send;
+    }
+
+    function Lobby({ playerName, setPlayerName, onJoin }) {
+        const [games, setGames] = useState([]);
+        const [loading, setLoading] = useState(false);
+
+        const refresh = async () => {
+            setLoading(true);
+            try {
+                const res = await fetch('/api/games');
+                const data = await res.json();
+                setGames(data.games || []);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        useEffect(() => {
+            refresh();
+            const t = setInterval(refresh, 3000);
+            return () => clearInterval(t);
+        }, []);
+
+        const createGame = async () => {
+            const res = await fetch('/api/games', { method: 'POST' });
+            const data = await res.json();
+            onJoin(data.gameId);
+        };
+
+        return (
+            <>
+                <h1>Nexus Tic-Tac-Toe</h1>
+                <p className="subtitle">
+                    Multiplayer game session powered by <strong>EntityBehavior</strong>,
+                    <strong> WebSocketChannelActor</strong>, and worker-pool sharding.
+                </p>
+
+                <div className="panel">
+                    <div className="row">
+                        <input
+                            placeholder="Your name"
+                            value={playerName}
+                            onChange={(e) => setPlayerName(e.target.value)}
+                        />
+                        <button onClick={createGame} disabled={!playerName.trim()}>
+                            Start new game
+                        </button>
+                        <button className="secondary" onClick={refresh} disabled={loading}>
+                            {loading ? 'Refreshing…' : 'Refresh'}
+                        </button>
+                    </div>
+                </div>
+
+                <div className="panel">
+                    <strong>Live lobby</strong>
+                    <ul className="games-list">
+                        {games.length === 0 && (
+                            <li className="muted">No games right now — start one above.</li>
+                        )}
+                        {games.map((g) => (
+                            <li key={g.gameId}>
+                                <span>
+                                    <span className={`badge ${g.status}`}>{g.status.replace('_', ' ')}</span>
+                                    <span style={{ marginLeft: 12 }}>
+                                        {g.playerX || '— '} <span className="muted">vs</span> {g.playerO || '—'}
+                                    </span>
+                                </span>
+                                <button
+                                    onClick={() => onJoin(g.gameId)}
+                                    disabled={!playerName.trim() || g.status === 'won' || g.status === 'draw' || g.status === 'abandoned'}
+                                >
+                                    {g.status === 'waiting' ? 'Join' : 'Watch'}
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                <p className="subtitle" style={{ marginTop: 32 }}>
+                    Open this URL in another browser (or an incognito window) to play as the second player.
+                </p>
+            </>
+        );
+    }
+
+    function GameView({ gameId, playerName, onLeave }) {
+        const [snapshot, setSnapshot] = useState(null);
+        const [yourMark, setYourMark] = useState(null);
+        const [error, setError] = useState(null);
+
+        const send = useGameSocket(gameId, playerName, setSnapshot, setYourMark, setError);
+
+        const yourTurn = snapshot && yourMark === snapshot.nextTurn && snapshot.status === 'in_progress';
+
+        const clickCell = (i) => {
+            if (!yourTurn || snapshot.board[i]) return;
+            send({ type: 'move', cell: i });
+        };
+
+        const forfeit = () => {
+            if (!confirm('Forfeit this game?')) return;
+            send({ type: 'forfeit' });
+        };
+
+        if (!snapshot) return <p className="muted">Connecting…</p>;
+
+        let statusText = '';
+        if (snapshot.status === 'waiting') {
+            statusText = 'Waiting for opponent to join…';
+        } else if (snapshot.status === 'in_progress') {
+            statusText = yourTurn ? "Your turn" : `Waiting for ${snapshot.nextTurn}`;
+        } else if (snapshot.status === 'won') {
+            const winnerSeat = snapshot.winner === 'X' ? snapshot.playerX : snapshot.playerO;
+            statusText = `${winnerSeat?.name ?? 'winner'} won as ${snapshot.winner}`;
+        } else if (snapshot.status === 'draw') {
+            statusText = 'Draw';
+        } else if (snapshot.status === 'abandoned') {
+            statusText = 'Game abandoned';
+        }
+
+        return (
+            <>
+                <h1>Game <span className="muted">{gameId.slice(0, 8)}</span></h1>
+                <p className="subtitle">
+                    You are <strong>{playerName}</strong>{yourMark ? ` (${yourMark})` : ' (spectator)'}
+                    {' · '}
+                    <span className={`badge ${snapshot.status}`}>{snapshot.status.replace('_', ' ')}</span>
+                </p>
+
+                <div className="panel">
+                    <div className="status-line">{statusText}</div>
+                    <div className="board">
+                        {snapshot.board.map((cell, i) => (
+                            <div
+                                key={i}
+                                className={`cell ${cell ? `filled mark-${cell}` : ''} ${yourTurn && !cell ? '' : 'disabled'}`}
+                                onClick={() => clickCell(i)}
+                            >
+                                {cell}
+                            </div>
+                        ))}
+                    </div>
+                    <div className="row" style={{ justifyContent: 'center' }}>
+                        <button className="secondary" onClick={onLeave}>Leave</button>
+                        {yourMark && snapshot.status === 'in_progress' && (
+                            <button className="danger" onClick={forfeit}>Forfeit</button>
+                        )}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="panel" style={{ borderColor: 'var(--danger)' }}>
+                        <strong>Notice:</strong> {error}
+                    </div>
+                )}
+            </>
+        );
+    }
+
+    function App() {
+        const [playerName, setPlayerName] = useState(() => localStorage.getItem('tictactoe.playerName') || '');
+        const [gameId, setGameId] = useState(() => {
+            const hash = location.hash.slice(1);
+            return hash || null;
+        });
+
+        useEffect(() => {
+            localStorage.setItem('tictactoe.playerName', playerName);
+        }, [playerName]);
+
+        useEffect(() => {
+            location.hash = gameId || '';
+        }, [gameId]);
+
+        useEffect(() => {
+            const onHash = () => {
+                const h = location.hash.slice(1);
+                setGameId(h || null);
+            };
+            window.addEventListener('hashchange', onHash);
+            return () => window.removeEventListener('hashchange', onHash);
+        }, []);
+
+        if (!gameId) {
+            return <Lobby playerName={playerName} setPlayerName={setPlayerName} onJoin={setGameId} />;
+        }
+
+        return (
+            <GameView
+                key={gameId}
+                gameId={gameId}
+                playerName={playerName}
+                onLeave={() => setGameId(null)}
+            />
+        );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>

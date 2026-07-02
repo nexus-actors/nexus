@@ -1,219 +1,76 @@
 ---
 sidebar_position: 1
 title: nexus-core
+related:
+  - packages/runtime
+  - core-concepts/actors
+  - core-concepts/behaviors
+  - core-concepts/supervision
 ---
 
 # nexus-core
 
-The core package contains actor system abstractions, behaviors, supervision,
-lifecycle signals, and the `ActorSystem` entry point. Concurrency primitives
-(`Duration`, `Cancellable`, mailbox contracts) are provided by
-`nexus-runtime`, and `nexus-core` depends on that package.
+Foundational actor model abstractions: `ActorSystem`, `Behavior`, `Props`, `ActorRef`, supervision, lifecycle signals, and the full exception hierarchy.
 
-**Composer:** `nexus-actors/core`
+## What's in this package
 
-<details>
-<summary>View class diagram</summary>
+**Actor namespace** (`Monadial\Nexus\Core\Actor\`)
 
-```mermaid
-classDiagram
-    class ActorRef~T~ {
-        <<interface>>
-        +tell(T message) void
-        +ask(callable, Duration) R
-        +path() ActorPath
-        +isAlive() bool
-    }
+- `ActorSystem` — entry point; spawns top-level actors and drives the runtime
+- `ActorRef<T>` — type-safe reference; `tell()`, `ask()`, `path()`, `isAlive()`
+- `ActorContext<T>` — handler context; spawn, stop, watch, schedule, stash, log
+- `Behavior<T>` — immutable behavior definition; `receive`, `withState`, `setup`, `same`, `stopped`, `unhandled`
+- `BehaviorWithState<T,S>` — result type for stateful handlers; `next`, `same`, `stopped`, `withBehavior`
+- `Props<T>` — spawn configuration; `fromBehavior`, `fromFactory`, `fromContainer`, `fromStatefulFactory`
+- `ActorHandler<T>`, `StatefulActorHandler<T,S>`, `AbstractActor<T>` — class-based actor interfaces
+- `ActorCell<T>`, `LocalActorRef<T>`, `DeadLetterRef` — internal engine and ref implementations
+- `ActorPath`, `ActorState` — path and state-machine types
 
-    class Behavior~T~ {
-        +receive(Closure)$ Behavior
-        +withState(S, Closure)$ Behavior
-        +setup(Closure)$ Behavior
-        +same()$ Behavior
-        +stopped()$ Behavior
-    }
+**Supervision namespace** (`Monadial\Nexus\Core\Supervision\`)
 
-    class Props~T~ {
-        +fromBehavior(Behavior)$ Props
-        +fromFactory(callable)$ Props
-        +withMailbox(MailboxConfig) Props
-        +withSupervision(strategy) Props
-    }
+- `SupervisionStrategy` — `oneForOne`, `allForOne`, `exponentialBackoff`
+- `Directive` enum — `Restart`, `Stop`, `Resume`, `Escalate`
 
-    class ActorSystem {
-        +create(string, Runtime)$ ActorSystem
-        +spawn(Props, string) ActorRef
-        +shutdown(Duration) void
-    }
+**Lifecycle namespace** (`Monadial\Nexus\Core\Lifecycle\`)
 
-    class RuntimeMailbox {
-        <<interface>>
-        +enqueue(Envelope) EnqueueResult
-        +dequeueBlocking(Duration) Envelope
-        +close() void
-    }
+- `Signal`, `PreStart`, `PostStop`, `PreRestart`, `PostRestart`, `ChildFailed`, `Terminated`
 
-    class SupervisionStrategy {
-        +oneForOne()$ SupervisionStrategy
-        +allForOne()$ SupervisionStrategy
-        +exponentialBackoff()$ SupervisionStrategy
-        +decide(Throwable) Directive
-    }
+**Message namespace** (`Monadial\Nexus\Core\Message\`)
 
-    ActorSystem --> Props
-    Props --> Behavior
-    LocalActorRef ..|> ActorRef
-    RemoteActorRef ..|> ActorRef
-    DeadLetterRef ..|> ActorRef
+- `PoisonPill`, `Kill`, `Suspend`, `Resume`, `Watch`, `Unwatch`, `DeadLetter`
+
+**Exception namespace** (`Monadial\Nexus\Core\Exception\`)
+
+- `NexusException`, `ActorInitializationException`, `AskTimeoutException`, `MaxRetriesExceededException`, `InvalidActorPathException`, `InvalidActorStateTransition`
+
+## Install
+
+```bash
+composer require nexus-actors/core
 ```
 
-`RuntimeMailbox` in this diagram refers to the mailbox interface provided by
-`nexus-runtime`.
+## Quick example
 
-</details>
+<!-- verify:skip: requires a running actor system -->
+```php title="src/Actor/GreeterActor.php" verify:skip
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
-## Actor namespace
+$runtime = new FiberRuntime();
+$system  = ActorSystem::create('app', $runtime);
 
-`Monadial\Nexus\Core\Actor\`
+$behavior = Behavior::receive(static fn ($ctx, $msg) => Behavior::same());
+$ref = $system->spawn(Props::fromBehavior($behavior), 'greeter');
 
-| Class / Interface | Description |
-|---|---|
-| `ActorRef<T>` | Interface for sending messages to an actor. Methods: `tell(T)`, `ask(callable, Duration): R`, `path(): ActorPath`, `isAlive(): bool`. |
-| `ActorContext<T>` | Interface passed to behavior handlers. See method reference below. |
-| `ActorSystem` | Entry point. Created via `ActorSystem::create(string $name, Runtime $runtime)`. Spawns top-level actors under `/user`, manages the runtime lifecycle, and provides the dead-letter endpoint. |
-| `Behavior<T>` | Immutable behavior definition. Factory methods: `receive(Closure)`, `withState(mixed, Closure)`, `setup(Closure)`, `same()`, `stopped()`, `unhandled()`, `empty()`. Instance method: `onSignal(Closure)`. |
-| `BehaviorWithState<T, S>` | Result of a stateful behavior handler. Factory methods: `next(S)`, `same()`, `stopped()`, `withBehavior(Behavior, S)`. |
-| `Props<T>` | Actor configuration. Factory methods: `fromBehavior(Behavior)`, `fromFactory(callable)`, `fromContainer(ContainerInterface, string)`, `fromStatefulFactory(callable)`. Instance methods: `withMailbox(MailboxConfig)`, `withSupervision(object)`. |
-| `ActorHandler<T>` | Interface for class-based actors. Single method: `handle(ActorContext, T): Behavior`. |
-| `StatefulActorHandler<T, S>` | Interface for stateful class-based actors. Methods: `initialState(): S`, `handle(ActorContext, T, S): BehaviorWithState`. |
-| `AbstractActor<T>` | Base class implementing `ActorHandler` with optional lifecycle hooks: `onPreStart(ActorContext)`, `onPostStop(ActorContext)`. |
-| `ActorPath` | Immutable hierarchical path (e.g., `/user/orders/order-123`). Methods: `root()`, `fromString(string)`, `child(string)`, `name()`, `parent()`, `equals()`, `isChildOf()`, `isDescendantOf()`, `depth()`. |
-| `ActorCell<T>` | Internal engine per actor. Manages behavior evaluation, state machine transitions, children, stash buffer, and supervision. Implements `ActorContext<T>`. |
-| `LocalActorRef<T>` | In-process `ActorRef` that delivers messages via a `Mailbox`. |
-| `DeadLetterRef` | Null-object `ActorRef` that captures undeliverable messages. Always returns `false` from `isAlive()`. |
-| `ActorState` | Enum: `New`, `Starting`, `Running`, `Suspended`, `Stopping`, `Stopped`. |
-| `ReceiveBehavior<T>` | Concrete `Behavior` for stateless message handling. |
-| `WithStateBehavior<T, S>` | Concrete `Behavior` for stateful message handling. |
-| `SetupBehavior<T>` | Concrete `Behavior` wrapping a factory closure; resolved at actor startup. |
-| `SameBehavior<T>` | Sentinel `Behavior` — keep current behavior unchanged. |
-| `StoppedBehavior<T>` | Sentinel `Behavior` — stop the actor. |
-| `UnhandledBehavior<T>` | Sentinel `Behavior` — route message to dead letters. |
-| `EmptyBehavior<T>` | Sentinel `Behavior` — no-op; discard all messages. |
-| `SupervisedBehavior<T>` | Wrapper `Behavior` that installs a custom `SupervisionStrategy` for its inner behavior. |
-| `WithTimersBehavior<T>` | Wrapper `Behavior` that provides a `TimerScheduler` to its factory closure. |
-| `WithStashBehavior<T>` | Wrapper `Behavior` that provides a `StashBuffer` to its factory closure. |
-| `UnstashAllBehavior<T>` | Internal `Behavior` carrying stashed envelopes to replay; produced by `StashBuffer::unstashAll()`. |
-
-### ActorContext method reference
-
-| Signature | Description |
-|---|---|
-| `self(): ActorRef<T>` | Returns the `ActorRef` of the current actor. |
-| `parent(): ?ActorRef<object>` | Returns the parent `ActorRef`, or `null` for top-level actors. |
-| `path(): ActorPath` | Returns the actor's hierarchical path. |
-| `spawn(Props<C> $props, string $name): ActorRef<C>` | Spawns a named child actor. |
-| `stop(ActorRef<object> $child): void` | Stops the given child actor. |
-| `child(string $name): ?ActorRef<object>` | Returns a child `ActorRef` by name, or `null` if not found. |
-| `children(): array<string, ActorRef<object>>` | Returns all live children keyed by name. |
-| `watch(ActorRef<object> $target): void` | Registers a death-watch on `$target`; delivers `Terminated` when it stops. |
-| `unwatch(ActorRef<object> $target): void` | Cancels a death-watch registration. |
-| `scheduleOnce(Duration $delay, object $message): Cancellable` | Schedules a one-shot message to `self()` after `$delay`. |
-| `scheduleRepeatedly(Duration $initialDelay, Duration $interval, object $message): Cancellable` | Schedules a recurring message to `self()`. |
-| `sender(): ?ActorRef<object>` | Returns the sender of the current message, or `null` for fire-and-forget. |
-| `reply(object $message): void` | Sends a message back to the current envelope's sender, propagating `correlationId`. |
-| `stash(): void` | Stashes the current message for later replay. |
-| `unstashAll(): void` | Replays all stashed messages into the mailbox. |
-| `log(): LoggerInterface` | Returns the PSR-3 logger bound to this actor. |
-| `spawnTask(Closure $task): Cancellable` | Spawns a background task tied to this actor's lifecycle; cancelled automatically on stop. |
-
-## Mailbox namespace
-
-`Monadial\Nexus\Core\Mailbox\`
-
-| Class / Interface | Description |
-|---|---|
-| `Envelope` | Immutable message wrapper. Properties: `message`, `sender` (ActorPath), `target` (ActorPath), `metadata` (array). Factory: `of(object, ActorPath, ActorPath)`. |
-
-Mailbox contracts/configuration are provided under `Monadial\Nexus\Runtime\Mailbox\...`.
-
-## Supervision namespace
-
-`Monadial\Nexus\Core\Supervision\`
-
-| Class / Interface | Description |
-|---|---|
-| `SupervisionStrategy` | Immutable strategy configuration. Factory methods: `oneForOne(int $maxRetries, ?Duration $window, ?Closure $decider)`, `allForOne(...)`, `exponentialBackoff(Duration $initialBackoff, Duration $maxBackoff, int $maxRetries, float $multiplier, ?Closure $decider)`. Instance method: `decide(Throwable): Directive`. |
-| `Directive` | Enum: `Restart`, `Stop`, `Resume`, `Escalate`. |
-| `StrategyType` | Enum: `OneForOne`, `AllForOne`, `ExponentialBackoff`. |
-
-## Lifecycle namespace
-
-`Monadial\Nexus\Core\Lifecycle\`
-
-| Class / Interface | Description |
-|---|---|
-| `Signal` | Marker interface for lifecycle signals. |
-| `PreStart` | Signal delivered after an actor starts. |
-| `PostStop` | Signal delivered before an actor stops. |
-| `PreRestart` | Signal delivered before an actor restarts. |
-| `PostRestart` | Signal delivered after an actor restarts. |
-| `ChildFailed` | Signal delivered to a parent when a child actor fails. |
-| `Terminated` | Signal delivered when a watched actor stops. |
-
-## Message namespace
-
-`Monadial\Nexus\Core\Message\`
-
-| Class / Interface | Description |
-|---|---|
-| `SystemMessage` | Marker interface for system-level messages. |
-| `PoisonPill` | System message that initiates graceful actor shutdown. |
-| `Kill` | System message that forces immediate actor termination. |
-| `Suspend` | System message that transitions an actor to the suspended state. |
-| `Resume` | System message that transitions a suspended actor back to running. |
-| `Watch` | System message that registers a watcher for death notifications. |
-| `Unwatch` | System message that removes a watcher registration. |
-| `DeadLetter` | Wraps an undeliverable message with the original sender and intended recipient. |
-
-## Exception namespace
-
-`Monadial\Nexus\Core\Exception\`
-
-| Class | Description |
-|---|---|
-| `NexusException` | Base exception for all Nexus errors. |
-| `ActorException` | Base exception for actor-related errors. |
-| `ActorInitializationException` | Thrown when actor setup fails. |
-| `AskTimeoutException` | Thrown when an `ask()` call exceeds its timeout. |
-| `MaxRetriesExceededException` | Thrown when supervision retry limits are exceeded. |
-| `InvalidActorPathException` | Thrown for malformed actor path strings. |
-| `InvalidActorStateTransition` | Thrown for illegal state machine transitions. |
-| `InvalidBehaviorException` | Thrown for invalid behavior configurations. |
-| `NexusLogicException` | Thrown for programming errors (extends `LogicException`). |
-
-## Related Runtime Types
-
-Core actor APIs use runtime types from `nexus-runtime`, including
-`Duration`, `Cancellable`, mailbox contracts/configuration, and mailbox
-exceptions under `Monadial\Nexus\Runtime\...`.
-
-## Pipe functions
-
-`Monadial\Nexus\Core\Actor\Functions\`
-
-Pipe-friendly functions for composing `Props`:
-
-```php
-use function Monadial\Nexus\Core\Actor\Functions\withMailbox;
-use function Monadial\Nexus\Core\Actor\Functions\withSupervision;
-
-// Designed for use with PHP's pipe operator:
-// $behavior |> Props::fromBehavior(...) |> withMailbox($config) |> withSupervision($strategy)
-
-$props = Props::fromBehavior($behavior)
-    ->withMailbox(MailboxConfig::bounded(100))
-    ->withSupervision(SupervisionStrategy::oneForOne());
+$ref->tell(new Greet('world'));
+$system->run();
 ```
 
-- **`withMailbox(MailboxConfig): Closure(Props): Props`** -- Returns a closure that applies a mailbox config to Props.
-- **`withSupervision(SupervisionStrategy): Closure(Props): Props`** -- Returns a closure that applies a supervision strategy to Props.
+## See also
+
+- [Core concepts / actors](../core-concepts/actors.md)
+- [Core concepts / behaviors](../core-concepts/behaviors.md)
+- [Core concepts / supervision](../core-concepts/supervision.md)
+- [nexus-runtime](./runtime.md) — `Duration`, mailbox contracts, and the `Runtime` interface

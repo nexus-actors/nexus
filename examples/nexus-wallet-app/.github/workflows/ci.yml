@@ -1,0 +1,54 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Build image and run unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Install dependencies
+        run: docker compose run --rm app composer install --no-interaction --no-progress
+
+      - name: Run unit tests
+        run: docker compose run --rm app vendor/bin/phpunit
+
+  perf-smoke:
+    name: Boot server and verify it responds
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Boot server
+        run: docker compose up -d app
+
+      - name: Wait for health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/health > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker compose logs app
+          exit 1
+
+      - name: Smoke test deposit + balance round-trip
+        run: |
+          curl -fsS -X POST -H "Authorization: Bearer alice-token" \
+               -H "Content-Type: application/json" -d '{"amount":1000}' \
+               http://localhost:8080/wallet/deposit
+          curl -fsS -H "Authorization: Bearer alice-token" \
+               http://localhost:8080/wallet/balance | tee /tmp/balance.json
+          test "$(jq -r .balance /tmp/balance.json)" = "1000"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down

@@ -1,0 +1,44 @@
+/* Nexus brand tokens — V1
+ * All values exposed as CSS custom properties for direct use in Docusaurus,
+ * Astro landing, and phpDocumentor theme overlay.
+ * Mirror in tokens.json for JS consumption.
+ */
+:root {
+  /* Primary palette — adjust to match logo when finalized */
+  --nexus-primary: #6366f1;          /* indigo-500 — placeholder; design final TBD */
+  --nexus-primary-dark: #4f46e5;
+  --nexus-accent: #ec4899;           /* pink-500 */
+  --nexus-success: #10b981;          /* emerald-500 */
+  --nexus-warning: #f59e0b;          /* amber-500 */
+  --nexus-danger: #ef4444;           /* red-500 */
+  --nexus-info: #3b82f6;             /* blue-500 */
+
+  /* Neutrals */
+  --nexus-bg: #ffffff;
+  --nexus-bg-elevated: #f9fafb;
+  --nexus-text: #111827;
+  --nexus-text-muted: #6b7280;
+  --nexus-border: #e5e7eb;
+  --nexus-code-bg: #f3f4f6;
+
+  /* Typography */
+  --nexus-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --nexus-font-mono: ui-monospace, SFMono-Regular, "Menlo", "Monaco", "Consolas", monospace;
+
+  /* Spacing */
+  --nexus-space-1: 0.25rem;
+  --nexus-space-2: 0.5rem;
+  --nexus-space-3: 0.75rem;
+  --nexus-space-4: 1rem;
+  --nexus-space-6: 1.5rem;
+  --nexus-space-8: 2rem;
+}
+
+[data-theme='dark'] {
+  --nexus-bg: #0f172a;             /* slate-900 */
+  --nexus-bg-elevated: #1e293b;    /* slate-800 */
+  --nexus-text: #f1f5f9;           /* slate-100 */
+  --nexus-text-muted: #94a3b8;     /* slate-400 */
+  --nexus-border: #334155;
+  --nexus-code-bg: #1e293b;
+}

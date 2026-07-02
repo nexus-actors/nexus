@@ -9,6 +9,8 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 /**
  * @psalm-api
  * @psalm-immutable
+ *
+ * @internal Internal system message. Not for direct use.
  */
 final readonly class Unwatch implements SystemMessage
 {

@@ -1,0 +1,51 @@
+services:
+  php:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-full
+    volumes:
+      - .:/app
+      - ../phpdoc-templates-plugin:/phpdoc-templates-plugin
+    working_dir: /app
+    environment:
+      - XDEBUG_MODE=${XDEBUG_MODE:-debug}
+
+  php-fiber:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-fiber
+    volumes:
+      - .:/app
+      - ../phpdoc-templates-plugin:/phpdoc-templates-plugin
+    working_dir: /app
+    environment:
+      - XDEBUG_MODE=${XDEBUG_MODE:-debug}
+
+  php-swoole:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-swoole
+    volumes:
+      - .:/app
+      - ../phpdoc-templates-plugin:/phpdoc-templates-plugin
+    working_dir: /app
+    ports:
+      - "8080:8080"
+    sysctls:
+      # Raise the SYN backlog and listen-accept queue from Docker defaults
+      # (4096) to 65535. Under load, the default surfaces as 1-second tail-
+      # latency spikes (kernel SYN-cookie retries take exactly the TCP RTO).
+      net.core.somaxconn: 65535
+      net.ipv4.tcp_max_syn_backlog: 65535
+      # Reuse TIME_WAIT sockets — short-lived connections recycle faster.
+      net.ipv4.tcp_tw_reuse: 1
+      # Widen the ephemeral port range so high-concurrency outbound
+      # connections (e.g. backend calls from handlers) don't starve.
+      net.ipv4.ip_local_port_range: "1024 65535"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535

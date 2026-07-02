@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" role="img" aria-label="Nexus">
+  <text x="0" y="40" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="currentColor">Nexus</text>
+  <circle cx="155" cy="25" r="6" fill="#6366f1"/>
+  <circle cx="175" cy="40" r="6" fill="#ec4899"/>
+  <circle cx="155" cy="40" r="3" fill="currentColor"/>
+  <line x1="155" y1="25" x2="175" y2="40" stroke="currentColor" stroke-width="1"/>
+  <line x1="155" y1="25" x2="155" y2="40" stroke="currentColor" stroke-width="1"/>
+</svg>

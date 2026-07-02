@@ -148,6 +148,12 @@ final class StepMailbox implements Mailbox
         }
     }
 
+    #[Override]
+    public function isClosed(): bool
+    {
+        return $this->closed;
+    }
+
     public function hasWaitingFiber(): bool
     {
         return $this->waitingFiber !== null && $this->waitingFiber->isSuspended();

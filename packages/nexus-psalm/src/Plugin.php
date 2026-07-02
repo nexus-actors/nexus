@@ -4,12 +4,20 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm;
 
+use Monadial\Nexus\Psalm\Hook\AskReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\BehaviorReceiveReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\BehaviorSetupReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BehaviorSubclassNarrowingHook;
+use Monadial\Nexus\Psalm\Hook\BehaviorWithStateReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\BlockingCallInHandlerRule;
 use Monadial\Nexus\Psalm\Hook\CloneWithReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\EntityBehaviorReturnTypeProvider;
+use Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule;
+use Monadial\Nexus\Psalm\Hook\MissingTransactionalDeclarationRule;
 use Monadial\Nexus\Psalm\Hook\MutableActorStateRule;
 use Monadial\Nexus\Psalm\Hook\MutableClosureCaptureRule;
 use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
+use Monadial\Nexus\Psalm\Hook\PooledConnectionInActorPropertyRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Override;
@@ -30,10 +38,18 @@ final class Plugin implements PluginEntryPointInterface
             ReadonlyMessageRule::class,
             MutableActorStateRule::class,
             NonSerializableRemoteMessageRule::class,
+            MissingTransactionalDeclarationRule::class,
+            PooledConnectionInActorPropertyRule::class,
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
+            AskReturnTypeProvider::class,
+            BehaviorReceiveReturnTypeProvider::class,
+            BehaviorSetupReturnTypeProvider::class,
+            BehaviorWithStateReturnTypeProvider::class,
+            EntityBehaviorReturnTypeProvider::class,
+            MismatchedReplyTypeRule::class,
         ];
 
         foreach ($hooks as $hook) {

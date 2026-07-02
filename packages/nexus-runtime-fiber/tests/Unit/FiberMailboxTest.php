@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Runtime\Fiber\Tests\Unit;
 
+use Fiber;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxOverflowException;
@@ -246,6 +247,35 @@ final class FiberMailboxTest extends TestCase
 
         $this->expectException(MailboxClosedException::class);
         $mailbox->dequeueBlocking(Duration::millis(100));
+    }
+
+    #[Test]
+    public function close_wakes_fiber_blocked_in_dequeue_blocking(): void
+    {
+        $mailbox = new FiberMailbox(MailboxConfig::unbounded());
+
+        // Run dequeueBlocking inside a fiber so it actually suspends rather
+        // than poll-with-timeout. The fiber must wake AND see closed=true
+        // on its very next resume — otherwise actor message loops can't
+        // unwind during ActorSystem::shutdown().
+        $caught = null;
+        $fiber = new Fiber(static function () use ($mailbox, &$caught): void {
+            try {
+                $mailbox->dequeueBlocking(Duration::seconds(10));
+            } catch (MailboxClosedException $e) {
+                $caught = $e;
+            }
+        });
+
+        $fiber->start();
+        self::assertTrue($fiber->isSuspended(), 'fiber should suspend on empty mailbox');
+        self::assertCount(1, $mailbox->getWaiters());
+
+        $mailbox->close();
+
+        self::assertTrue($fiber->isTerminated(), 'fiber should resume and terminate after close()');
+        self::assertInstanceOf(MailboxClosedException::class, $caught);
+        self::assertSame([], $mailbox->getWaiters(), 'waiter list cleared');
     }
 
     private function createMessage(string $label): object

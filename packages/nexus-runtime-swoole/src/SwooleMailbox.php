@@ -15,6 +15,7 @@ use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use NoDiscard;
 use Override;
 use SplQueue;
+use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 
 /**
@@ -72,6 +73,23 @@ final class SwooleMailbox implements Mailbox
 
         if ($this->config->bounded && $this->channel->length() >= $this->config->capacity) {
             return $this->handleOverflow($message);
+        }
+
+        if (Coroutine::getCid() === -1) {
+            // Outside coroutine context (e.g. Swoole WorkerStop hook).
+            // Channel::push() requires a coroutine to suspend in, so wrap
+            // the push in a fresh one. Caller sees Accepted immediately;
+            // the push lands asynchronously inside the new coroutine.
+            // The only producer that runs out-of-coroutine is the shutdown
+            // sequence broadcasting PoisonPill — message ordering across
+            // the no-coroutine window doesn't matter for that.
+            $channel = $this->channel;
+            $nonBlockingTimeout = self::NON_BLOCKING_TIMEOUT;
+            Coroutine::create(static function () use ($channel, $message, $nonBlockingTimeout): void {
+                $channel->push($message, $nonBlockingTimeout);
+            });
+
+            return EnqueueResult::Accepted;
         }
 
         $this->channel->push($message, self::NON_BLOCKING_TIMEOUT);
@@ -176,6 +194,12 @@ final class SwooleMailbox implements Mailbox
 
         /** @var bool */
         return $this->channel->isEmpty();
+    }
+
+    #[Override]
+    public function isClosed(): bool
+    {
+        return $this->closed;
     }
 
     #[Override]
