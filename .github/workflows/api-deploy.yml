@@ -49,7 +49,7 @@ jobs:
           test -f build/api-nexus/index.html
 
       - name: Deploy to Cloudflare Pages (Production)
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -57,7 +57,7 @@ jobs:
           command: pages deploy build/api-nexus --project-name=nexus-api --branch=main
 
       - name: Deploy to Cloudflare Pages (Preview)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
