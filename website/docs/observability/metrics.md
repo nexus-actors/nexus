@@ -11,11 +11,18 @@ Nexus OTel observability exposes metrics via the OpenTelemetry SDK. All metrics 
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `nexus.actor.messages.processed` | Counter | `{message}` | `actor_path`, `message_type` | Messages successfully processed by an actor |
-| `nexus.actor.messages.failed` | Counter | `{message}` | `actor_path`, `message_type`, `exception` | Messages that caused an unhandled exception |
-| `nexus.actor.mailbox.size` | UpDownCounter | `{message}` | `actor_path` | Current number of messages in an actor's mailbox |
-| `nexus.actor.processing.duration` | Histogram | `ms` | `actor_path`, `message_type` | Time from mailbox dequeue to handler return |
-| `nexus.actor_system.actors.active` | Observable Gauge | `{actor}` | `system_name` | Number of live actors in the system |
+| `nexus.actor.messages.processed` | Counter | `{message}` | `nexus.message.type` | Messages successfully processed by an actor |
+| `nexus.actor.message.processing.duration` | Histogram | `ms` | `nexus.message.type` | Time from mailbox dequeue to handler return |
+
+## Actor system state
+
+Requires `nexus-observability-actor` with `ActorSystemMetrics` registered.
+
+| Name | Type | Unit | Description |
+|---|---|---|---|
+| `nexus.actor_system.live_actors` | Observable Gauge | `{actor}` | Number of live root actors in the system |
+| `nexus.actor_system.dead_letters` | Observable Gauge | `{message}` | Total dead-lettered messages captured by the system |
+| `nexus.actor_system.running` | Observable Gauge | `{system}` | Whether the actor system runtime is running (1) or not (0) |
 
 ## HTTP server
 
@@ -23,62 +30,70 @@ Requires `nexus-observability-http` with `ServerSpanMiddleware` and `HttpMetrics
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `http.server.request.duration` | Histogram | `ms` | `http.method`, `http.route`, `http.status_code` | End-to-end HTTP request duration |
-| `http.server.request.body.size` | Histogram | `By` | `http.method`, `http.route` | Size of the incoming request body |
-| `http.server.response.body.size` | Histogram | `By` | `http.method`, `http.route`, `http.status_code` | Size of the outgoing response body |
+| `http.server.request.duration` | Histogram | `s` | `http.request.method`, `http.response.status_code` | End-to-end HTTP request duration |
+| `http.server.active_requests` | UpDownCounter | `{request}` | `http.request.method` | Number of in-flight HTTP server requests |
 
 ## Persistence
 
-Requires `nexus-observability-persistence` with `TracingEventStore` and `TracingSnapshotStore` wrappers.
+Requires `nexus-observability-persistence` with `TracingEventStore`, `TracingSnapshotStore`, and/or `TracingDurableStateStore` wrappers.
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `nexus.persistence.events.persisted` | Counter | `{event}` | `persistence_id_type` | Events written to the event store |
-| `nexus.persistence.snapshots.taken` | Counter | `{snapshot}` | `persistence_id_type` | Snapshots written to the snapshot store |
-| `nexus.persistence.recovery.duration` | Histogram | `ms` | `persistence_id_type` | Time to replay events and restore actor state on startup |
+| `nexus.persistence.events.persisted` | Counter | `{event}` | `nexus.persistence.entity.type` | Events written to the event store |
+| `nexus.persistence.snapshots.saved` | Counter | `{snapshot}` | `nexus.persistence.entity.type` | Snapshots written to the snapshot store |
+| `nexus.persistence.operation.duration` | Histogram | `s` | `nexus.persistence.entity.type`, `operation` | Duration of persistence store operations |
 
-The `persistence_id_type` dimension uses the entity type portion of the `PersistenceId` (e.g., `Order` from `PersistenceId::of('Order', $id)`), keeping cardinality fixed regardless of how many entity instances exist.
+The `nexus.persistence.entity.type` dimension uses the entity type portion of the `PersistenceId` (e.g., `Order` from `PersistenceId::of('Order', $id)`), keeping cardinality fixed regardless of how many entity instances exist.
 
 ## Worker pool
 
-Requires `nexus-observability` with `TracingWorkerTransport` installed.
+Requires `nexus-observability-worker-pool` with `TracingWorkerTransport` installed.
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `nexus.worker_pool.messages.routed` | Counter | `{message}` | `source_worker`, `target_worker` | Messages routed between worker threads |
+| `nexus.worker_pool.messages.sent` | Counter | `{message}` | `nexus.worker.target` | Messages sent across worker threads |
+| `nexus.worker_pool.send.duration` | Histogram | `s` | `nexus.worker.target` | Duration of cross-worker transport sends |
 
 ## DBAL connection pool
 
-Requires `nexus-observability-dbal` with `DbalPoolMetricsListener` registered.
+Requires `nexus-observability-doctrine` with `DbalPoolMetricsListener` registered.
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `nexus.dbal.pool.connections.active` | Observable Gauge | `{connection}` | `pool_name` | Connections currently checked out from the pool |
-| `nexus.dbal.pool.connections.idle` | Observable Gauge | `{connection}` | `pool_name` | Connections idle in the pool |
-| `nexus.dbal.pool.wait.duration` | Histogram | `ms` | `pool_name` | Time waiting for a connection to become available |
+| `nexus.dbal.pool.connections.created` | Counter | `{connection}` | `pool.name` | Connections created in the pool |
+| `nexus.dbal.pool.connections.taken` | Counter | `{connection}` | `pool.name` | Connections checked out from the pool |
+| `nexus.dbal.pool.connections.released` | Counter | `{connection}` | `pool.name` | Connections returned to the pool |
+| `nexus.dbal.pool.connections.destroyed` | Counter | `{connection}` | `pool.name` | Connections removed from the pool |
+| `nexus.dbal.pool.connections.poisoned` | Counter | `{connection}` | `pool.name` | Connections poisoned (unusable) and removed |
+| `nexus.dbal.pool.exhausted` | Counter | `{connection}` | `pool.name` | Pool-exhausted events (acquire blocked) |
+| `nexus.dbal.pool.acquire.wait` | Histogram | `s` | `pool.name` | Time spent waiting to acquire a pooled connection |
 
 ## Doctrine ORM pool
 
-Requires `nexus-observability-dbal` with `OrmPoolMetricsListener` registered.
+Requires `nexus-observability-doctrine` with `OrmPoolMetricsListener` registered.
 
 | Name | Type | Unit | Key Dimensions | Description |
 |---|---|---|---|---|
-| `nexus.orm.pool.managers.active` | Observable Gauge | `{manager}` | `pool_name` | Entity managers currently checked out from the pool |
+| `nexus.orm.pool.entity_managers.created` | Counter | `{entity_manager}` | `pool.name` | Entity managers created in the pool |
+| `nexus.orm.pool.entity_managers.cleared` | Counter | `{entity_manager}` | `pool.name` | Entity managers cleared and returned to the pool |
+| `nexus.orm.pool.entity_managers.evicted` | Counter | `{entity_manager}` | `pool.name` | Entity managers evicted from the pool |
 
 ## Swoole runtime
 
 Requires `nexus-observability-swoole` with `SwooleAdminMetrics` registered in each worker.
 
-| Name | Type | Unit | Key Dimensions | Description |
-|---|---|---|---|---|
-| `swoole.coroutine.count` | Observable Gauge | `{coroutine}` | `worker_id` | Active coroutines in the Swoole worker |
-| `swoole.server.connections` | Observable Gauge | `{connection}` | `worker_id` | Open connections handled by the Swoole worker |
-| `swoole.server.requests.total` | Counter | `{request}` | `worker_id` | Total requests processed by the Swoole worker |
+| Name | Type | Unit | Description |
+|---|---|---|---|
+| `swoole.coroutine.count` | Observable Gauge | `{coroutine}` | Number of running Swoole coroutines |
+| `swoole.coroutine.peak` | Observable Gauge | `{coroutine}` | Peak number of concurrent Swoole coroutines |
+| `swoole.server.connections` | Observable Gauge | `{connection}` | Active Swoole server connections |
+| `swoole.server.requests` | Observable Gauge | `{request}` | Total requests handled by the Swoole server |
+| `swoole.server.workers.idle` | Observable Gauge | `{worker}` | Idle Swoole worker processes |
 
 ## Cardinality guidance
 
 :::tip
-The `actor_path` dimension uses the actor's **fixed structural path** (e.g., `/orders`), not a path containing dynamic IDs. The Nexus runtime strips dynamic segments automatically. Similarly, `message_type` uses the class short name (e.g., `PlaceOrder`), not the FQCN.
+The `nexus.message.type` dimension uses the message class short name (e.g., `PlaceOrder`), not the FQCN. Similarly, `nexus.persistence.entity.type` uses only the entity-type prefix of a `PersistenceId`, keeping cardinality bounded regardless of how many entity instances exist.
 
 Never add user IDs, session IDs, or request IDs to built-in metric dimensions. Each unique combination of dimension values creates a new time series in your metrics backend. High-cardinality dimensions cause storage and query problems at scale.
 

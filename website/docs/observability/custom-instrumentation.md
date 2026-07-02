@@ -103,13 +103,22 @@ These objects accept all method calls and discard data. PHP's JIT compiler elimi
 
 ## Outside actors
 
-If you need tracing or metrics in a non-actor class (e.g., a repository or a domain service), inject the provider via PSR-11 DI or use the OTel Globals facade:
+If you need tracing or metrics in a non-actor class (e.g., a repository or a domain service), inject the `Observability` provider via PSR-11 DI:
 
 ```php title="outside-actor.php" verify:lint-only
-use OpenTelemetry\API\Globals;
+use Monadial\Nexus\Observability\Observability;
 
-$tracer = Globals::tracerProvider()->getTracer('my-app');
-$meter = Globals::meterProvider()->getMeter('my-app');
+final class OrderRepository
+{
+    public function __construct(private readonly Observability $observability) {}
+
+    public function save(object $order): void
+    {
+        $tracer = $this->observability->tracer();
+        $meter = $this->observability->meter();
+        // use $tracer and $meter as needed
+    }
+}
 ```
 
-`Globals` returns no-op providers when the SDK is not installed or is disabled, so this pattern is also safe without observability wired in.
+`tracer()` and `meter()` return no-op objects when observability is disabled, so this pattern is safe with or without observability wired in.

@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/observability-logger",
+    "description": "Nexus logs↔traces correlation — a RecordProcessor that stamps active-span trace/span ids onto log records.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/logger": "dev-main",
+        "nexus-actors/observability": "dev-main"
+    },
+    "require-dev": {
+        "nexus-actors/observability-otel": "dev-main",
+        "open-telemetry/sdk": "^1.14",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Logger\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Logger\\Tests\\": "tests/"
+        }
+    }
+}

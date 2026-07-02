@@ -23,6 +23,14 @@
             <directory>packages/nexus-http/tests/Unit</directory>
             <directory>packages/nexus-http-ws/tests/Unit</directory>
             <directory>packages/nexus-logger/tests/Unit</directory>
+            <directory>packages/nexus-observability/tests/Unit</directory>
+            <directory>packages/nexus-observability-actor/tests/Unit</directory>
+            <directory>packages/nexus-observability-http/tests/Unit</directory>
+            <directory>packages/nexus-observability-logger/tests/Unit</directory>
+            <directory>packages/nexus-observability-otel/tests/Unit</directory>
+            <directory>packages/nexus-observability-persistence/tests/Unit</directory>
+            <directory>packages/nexus-observability-worker-pool/tests/Unit</directory>
+            <directory>packages/nexus-observability-doctrine/tests/Unit</directory>
         </testsuite>
         <testsuite name="unit-swoole">
             <directory>packages/nexus-runtime-swoole/tests/Unit</directory>
@@ -30,6 +38,7 @@
             <directory>packages/nexus-http-server-swoole/tests/Unit</directory>
             <directory>packages/nexus-http-server-swoole-threads/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/UnitSwoole</directory>
+            <directory>packages/nexus-observability-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-doctrine-entity-behavior">
             <directory>tests/Integration/Doctrine/Orm/EntityBehavior</directory>
@@ -118,6 +127,15 @@
             <directory>packages/nexus-logger/src</directory>
             <directory>packages/nexus-http-server-swoole/src</directory>
             <directory>packages/nexus-http-server-swoole-threads/src</directory>
+            <directory>packages/nexus-observability/src</directory>
+            <directory>packages/nexus-observability-actor/src</directory>
+            <directory>packages/nexus-observability-http/src</directory>
+            <directory>packages/nexus-observability-logger/src</directory>
+            <directory>packages/nexus-observability-otel/src</directory>
+            <directory>packages/nexus-observability-persistence/src</directory>
+            <directory>packages/nexus-observability-worker-pool/src</directory>
+            <directory>packages/nexus-observability-doctrine/src</directory>
+            <directory>packages/nexus-observability-swoole/src</directory>
             <directory>packages/nexus-core/tests/Support</directory>
         </include>
     </source>

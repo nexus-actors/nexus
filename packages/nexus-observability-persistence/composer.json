@@ -1,0 +1,26 @@
+{
+    "name": "nexus-actors/observability-persistence",
+    "description": "Nexus persistence observability — tracing decorators for event/snapshot/durable-state stores.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/observability": "dev-main",
+        "nexus-actors/persistence": "dev-main"
+    },
+    "require-dev": {
+        "nexus-actors/observability-otel": "dev-main",
+        "open-telemetry/sdk": "^1.14",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Persistence\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Persistence\\Tests\\": "tests/"
+        }
+    }
+}

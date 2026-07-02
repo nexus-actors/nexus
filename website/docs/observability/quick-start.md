@@ -36,8 +36,8 @@ These are the only variables you need to get started locally. See [Configuration
 
 ```php title="bootstrap.php" verify:lint-only
 use Monadial\Nexus\App\NexusApp;
-use Monadial\Nexus\Observability\ObservabilityConfig;
-use Monadial\Nexus\Observability\OTel\ObservabilityFactory;
+use Monadial\Nexus\Observability\Config\ObservabilityConfig;
+use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
 NexusApp::create('my-app')

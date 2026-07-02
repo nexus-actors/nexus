@@ -9,13 +9,15 @@ Every actor message processed by Nexus automatically produces an OTel span. You 
 
 ## Automatic actor spans
 
-When an actor dequeues an envelope from its mailbox and begins processing it, Nexus starts a span named `actor.message`. The span ends when the handler returns (or throws). The following attributes are set on every actor span:
+When an actor dequeues an envelope from its mailbox and begins processing it, Nexus starts a span named `process {MessageType}` (e.g., `process PlaceOrder`). The span ends when the handler returns (or throws). The following attributes are set on every actor span:
 
 | Attribute | Example | Description |
 |---|---|---|
-| `actor.path` | `nexus://my-app/user/orders` | Full actor path |
-| `actor.message_type` | `App\Order\Command\PlaceOrder` | FQCN of the message class |
-| `actor.runtime` | `fiber` or `swoole` | Runtime that executed the handler |
+| `nexus.actor.path` | `/my-app/user/orders` | Full actor path |
+| `nexus.message.type` | `PlaceOrder` | Short class name of the message |
+| `nexus.mailbox.depth` | `3` | Number of messages in the mailbox at dequeue time |
+| `messaging.operation` | `process` | Messaging semantic convention: operation type |
+| `messaging.system` | `nexus` | Messaging semantic convention: system name |
 
 If the handler throws an exception, the span status is set to `ERROR` and the exception is recorded on the span via `recordException()`.
 

@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\TaskContext;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -31,6 +32,7 @@ final class TaskContextTest extends TestCase
             $mailbox,
             static fn(): bool => true,
             new TestRuntime(),
+            new NoopObservability(),
         );
         $logger = new TestLogger();
 
@@ -53,6 +55,7 @@ final class TaskContextTest extends TestCase
             $mailbox,
             static fn(): bool => true,
             new TestRuntime(),
+            new NoopObservability(),
         );
         $logger = new TestLogger();
 
@@ -72,6 +75,7 @@ final class TaskContextTest extends TestCase
             $mailbox,
             static fn(): bool => true,
             new TestRuntime(),
+            new NoopObservability(),
         );
         $logger = new TestLogger();
 
@@ -91,6 +95,7 @@ final class TaskContextTest extends TestCase
             $mailbox,
             static fn(): bool => true,
             new TestRuntime(),
+            new NoopObservability(),
         );
         $logger = new TestLogger();
 

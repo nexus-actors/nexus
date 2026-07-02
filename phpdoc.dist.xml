@@ -9,6 +9,10 @@
     </paths>
     <version number="dev">
         <api>
+            <!-- 31 of 34 packages included. Excluded intentionally:
+                 - nexus (meta-package, no src/ of its own)
+                 - nexus-psalm (static analysis plugin, documented at /docs/packages/psalm)
+                 - nexus-skeleton (project template, documented at /docs/getting-started/skeleton) -->
             <source dsn="file://packages">
                 <path>nexus-core/src</path>
                 <path>nexus-runtime/src</path>
@@ -32,6 +36,15 @@
                 <path>nexus-http-server-swoole-threads/src</path>
                 <path>nexus-doctrine-dbal/src</path>
                 <path>nexus-doctrine-orm/src</path>
+                <path>nexus-observability/src</path>
+                <path>nexus-observability-otel/src</path>
+                <path>nexus-observability-http/src</path>
+                <path>nexus-observability-persistence/src</path>
+                <path>nexus-observability-worker-pool/src</path>
+                <path>nexus-observability-doctrine/src</path>
+                <path>nexus-observability-logger/src</path>
+                <path>nexus-observability-swoole/src</path>
+                <path>nexus-observability-actor/src</path>
             </source>
             <visibility>public</visibility>
             <visibility>protected</visibility>

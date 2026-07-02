@@ -1,0 +1,28 @@
+{
+    "name": "nexus-actors/observability-swoole",
+    "description": "Nexus Swoole observability — coroutine-aware OTEL context storage and Swoole admin metrics.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "ext-swoole": "*",
+        "nexus-actors/observability": "dev-main",
+        "open-telemetry/context": "^1.0",
+        "open-telemetry/context-swoole": "^1.2"
+    },
+    "require-dev": {
+        "nexus-actors/observability-otel": "dev-main",
+        "open-telemetry/sdk": "^1.14",
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Swoole\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Observability\\Swoole\\Tests\\": "tests/"
+        }
+    }
+}

@@ -13,12 +13,15 @@ Nexus observability ships as a set of focused packages:
 
 | Package | Purpose |
 |---|---|
-| `nexus-observability` | Core contracts: TracerProvider and MeterProvider hooks in `ActorContext` |
-| `nexus-observability-otel` | OTel SDK wiring: OTLP exporter, samplers, propagators |
-| `nexus-observability-http` | HTTP span middleware and request/response metrics listener |
-| `nexus-observability-persistence` | Tracing wrappers for event stores and snapshot stores |
-| `nexus-observability-dbal` | DBAL driver middleware and connection pool metrics |
-| `nexus-observability-swoole` | Swoole coroutine context propagation and admin metrics |
+| `nexus-observability` | Core contracts: `Observability` interface, no-op implementations, config value object |
+| `nexus-observability-otel` | OTel SDK wiring: `OtelObservability`, `ObservabilityFactory`, OTLP exporter, samplers, propagators |
+| `nexus-observability-actor` | `ActorSystemMetrics` — live-actor, dead-letter, and running-state gauges |
+| `nexus-observability-http` | `ServerSpanMiddleware` (server spans) and `HttpMetricsListener` (request duration and active count) |
+| `nexus-observability-persistence` | Tracing decorators for event stores, snapshot stores, and durable-state stores |
+| `nexus-observability-worker-pool` | `TracingWorkerTransport` — context propagation and metrics across worker threads |
+| `nexus-observability-logger` | `TraceCorrelationProcessor` — stamps trace/span IDs onto log records |
+| `nexus-observability-doctrine` | `DbalPoolMetricsListener`, `OrmPoolMetricsListener`, and `Sql\TracingDriverMiddleware` |
+| `nexus-observability-swoole` | `SwooleContextRegistrar` and `SwooleAdminMetrics` — Swoole coroutine context and server gauges |
 
 Start with `nexus-observability-otel` and add satellites as your application grows.
 

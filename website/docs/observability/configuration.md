@@ -37,24 +37,19 @@ Nexus observability is configured via `ObservabilityConfig`, which reads `OTEL_*
 In production, `parentbased_traceidratio` with `OTEL_TRACES_SAMPLER_ARG=0.05` (5%) is a good starting point. The `parentbased_*` samplers ensure that once a trace is sampled at the HTTP ingress, all downstream actor spans in the same trace are also sampled.
 :::
 
-## Programmatic builder
+## Programmatic configuration
 
-When environment variables are not convenient — for example, in tests or when your configuration comes from a secret manager — use the builder API:
+When environment variables are not convenient — for example, in tests or when your configuration comes from a secret manager — use the fluent factory methods directly:
 
 ```php title="observability-config.php" verify:lint-only
 use Monadial\Nexus\App\NexusApp;
-use Monadial\Nexus\Observability\ObservabilityConfig;
-use Monadial\Nexus\Observability\OTel\ObservabilityFactory;
+use Monadial\Nexus\Observability\Config\ObservabilityConfig;
+use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 
-$config = ObservabilityConfig::builder()
-    ->serviceName('my-app')
-    ->endpoint('https://otel.example.com:4318')
-    ->protocol('http/protobuf')
-    ->sampler('parentbased_traceidratio', '0.1')
-    ->resourceAttribute('deployment.environment', 'production')
-    ->resourceAttribute('service.version', '1.2.3')
-    ->build();
+$config = ObservabilityConfig::enabled('my-app')
+    ->withExporterEndpoint('https://otel.example.com:4318')
+    ->withSampler('parentbased_traceidratio', 0.1);
 
 NexusApp::create('my-app')
     ->withObservability(ObservabilityFactory::fromConfig($config))

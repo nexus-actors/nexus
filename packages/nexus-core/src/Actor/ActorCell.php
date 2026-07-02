@@ -28,6 +28,13 @@ use Monadial\Nexus\Core\Message\Unwatch;
 use Monadial\Nexus\Core\Message\Watch;
 use Monadial\Nexus\Core\Supervision\Directive;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Observability;
+use Monadial\Nexus\Observability\Trace\NoopSpan;
+use Monadial\Nexus\Observability\Trace\Span;
+use Monadial\Nexus\Observability\Trace\SpanKind;
+use Monadial\Nexus\Observability\Trace\StatusCode;
+use Monadial\Nexus\Observability\Trace\Tracer;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
 use Monadial\Nexus\Runtime\Exception\MailboxTimeoutException;
@@ -43,6 +50,8 @@ use function array_filter;
 use function array_values;
 use function assert;
 use function count;
+use function strrchr;
+use function substr;
 
 /**
  * @psalm-api
@@ -106,6 +115,8 @@ final class ActorCell implements ActorContext
 
     private ?Cancellable $receiveTimer = null;
 
+    private ?Span $currentSpan = null;
+
     /**
      * @param Behavior<T> $behavior
      * @param Mailbox<Envelope> $mailbox
@@ -121,12 +132,19 @@ final class ActorCell implements ActorContext
         private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger,
         private readonly DeadLetterRef $deadLetters,
+        private readonly Observability $observability,
     ) {
         $this->currentBehavior = $behavior;
         $this->initialBehavior = $behavior;
 
         /** @var ActorRef<T> $ref */
-        $ref = new LocalActorRef($this->actorPath, $this->mailbox, fn(): bool => $this->isAlive(), $this->runtime);
+        $ref = new LocalActorRef(
+            $this->actorPath,
+            $this->mailbox,
+            fn(): bool => $this->isAlive(),
+            $this->runtime,
+            $this->observability,
+        );
         $this->selfRef = $ref;
     }
 
@@ -186,7 +204,7 @@ final class ActorCell implements ActorContext
                 $this->handleSignal($message);
             } else {
                 $this->resetReceiveTimer();
-                $this->handleUserMessage($message);
+                $this->traceUserMessage($envelope, $message);
             }
         } finally {
             $this->currentEnvelope = null;
@@ -356,6 +374,7 @@ final class ActorCell implements ActorContext
             $this->clock,
             $this->logger,
             $this->deadLetters,
+            $this->observability,
         );
         $childCell->start();
 
@@ -460,6 +479,24 @@ final class ActorCell implements ActorContext
         return $this->logger;
     }
 
+    #[Override]
+    public function tracer(): Tracer
+    {
+        return $this->observability->tracer();
+    }
+
+    #[Override]
+    public function meter(): Meter
+    {
+        return $this->observability->meter();
+    }
+
+    #[Override]
+    public function currentSpan(): Span
+    {
+        return $this->currentSpan ?? new NoopSpan();
+    }
+
     /** @return ?ActorRef<object> */
     #[Override]
     public function sender(): ?ActorRef
@@ -486,6 +523,7 @@ final class ActorCell implements ActorContext
             $this->mailbox, // placeholder — in full system would resolve actual mailbox
             static fn(): bool => true,
             $this->runtime,
+            $this->observability,
         );
     }
 
@@ -707,12 +745,18 @@ final class ActorCell implements ActorContext
             $this->applyBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Handler threw NexusException: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in handler: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in handler: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         }
     }
@@ -727,12 +771,18 @@ final class ActorCell implements ActorContext
             $this->applyStatefulBehavior($result);
         } catch (NexusException $e) {
             $this->logger->error('Stateful handler threw NexusException: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         } catch (Error|LogicException $e) {
             $this->logger->critical('Unchecked exception in stateful handler: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         } catch (Throwable $e) {
             $this->logger->critical('Unexpected exception in stateful handler: ' . $e->getMessage());
+            $this->currentSpan?->recordException($e);
+            $this->currentSpan?->setStatus(StatusCode::Error, $e->getMessage());
             $this->decideSupervisedAction($e);
         }
     }
@@ -821,6 +871,79 @@ final class ActorCell implements ActorContext
 
             $this->processMessage($envelope);
         }
+    }
+
+    private function traceUserMessage(Envelope $envelope, object $message): void
+    {
+        if (!$this->observability->isEnabled()) {
+            $this->handleUserMessage($message);
+
+            return;
+        }
+
+        $span = null;
+        $start = null;
+
+        try {
+            $type = $this->messageType($message);
+            $parent = $this->observability->propagator()->extract($envelope->metadata);
+            $span = $this->observability->tracer()->startSpan(
+                'process ' . $type,
+                SpanKind::Consumer,
+                [
+                    'messaging.operation' => 'process',
+                    'messaging.system' => 'nexus',
+                    'nexus.actor.path' => (string) $this->actorPath,
+                    'nexus.mailbox.depth' => $this->mailbox->count(),
+                    'nexus.message.type' => $type,
+                ],
+                $parent,
+            );
+            $this->currentSpan = $span;
+            $start = $this->clock->now();
+        } catch (Throwable $e) {
+            $this->logger->warning('Observability span start failed: ' . $e->getMessage());
+            $this->currentSpan = null;
+        }
+
+        try {
+            $this->handleUserMessage($message);
+        } finally {
+            try {
+                if ($span !== null && $start !== null) {
+                    $this->recordProcessingMetrics($this->messageType($message), $start);
+                    $span->end();
+                }
+            } catch (Throwable $e) {
+                $this->logger->warning('Observability span end failed: ' . $e->getMessage());
+            }
+
+            $this->currentSpan = null;
+        }
+    }
+
+    /**
+     * @psalm-suppress InvalidOperand
+     */
+    private function recordProcessingMetrics(string $type, DateTimeImmutable $start): void
+    {
+        $meter = $this->observability->meter();
+        $meter->counter('nexus.actor.messages.processed', '{message}', 'User messages processed by actors')
+            ->add(1, ['nexus.message.type' => $type]);
+
+        $durationMs = ((float) $this->clock->now()->format('U.u') - (float) $start->format('U.u')) * 1000.0;
+        $meter->histogram('nexus.actor.message.processing.duration', 'ms', 'Actor message processing duration')
+            ->record($durationMs, ['nexus.message.type' => $type]);
+    }
+
+    private function messageType(object $message): string
+    {
+        $class = $message::class;
+        $pos = strrchr($class, '\\');
+
+        return $pos === false
+            ? $class
+            : substr($pos, 1);
     }
 
     /**

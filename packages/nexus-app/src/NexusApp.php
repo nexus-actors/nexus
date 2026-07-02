@@ -7,8 +7,11 @@ namespace Monadial\Nexus\App;
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Observability\NoopObservability;
+use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Fluent bootstrap entry point for Nexus actor applications.
@@ -42,6 +45,8 @@ final class NexusApp
     /** @var list<ActorDefinition<object>> */
     private array $definitions = [];
 
+    private ?Observability $observability = null;
+
     /** @var ?Closure(ActorSystem): void */
     private ?Closure $startCallback = null;
 
@@ -50,8 +55,11 @@ final class NexusApp
     /**
      * Create a new NexusApp with the given application name.
      *
-     * The name is passed through to {@see ActorSystem::create()} and appears in
-     * log output and actor paths.
+     * The name is passed through to {@see \Monadial\Nexus\Core\Actor\ActorSystem::create()}
+     * and appears in log output and actor paths.
+     *
+     * @param string $name Human-readable application name; becomes the root actor system name
+     * @return self Fresh builder ready for actor registration
      */
     public static function create(string $name): self
     {
@@ -60,6 +68,8 @@ final class NexusApp
 
     /**
      * Returns the application name supplied to {@see create()}.
+     *
+     * @return string The application name passed to the constructor
      */
     public function name(): string
     {
@@ -69,8 +79,16 @@ final class NexusApp
     /**
      * Register an actor to be spawned on startup.
      *
+     * Definitions are accumulated in registration order and spawned during
+     * {@see start()} before the optional start callback fires. Duplicate names
+     * are not detected here — the conflict surfaces when
+     * {@see \Monadial\Nexus\Core\Actor\ActorSystem::spawn()} throws
+     * {@see \Monadial\Nexus\Core\Exception\ActorNameExistsException}.
+     *
      * @template T of object
-     * @param Props<T> $props
+     * @param string   $name  Unique child name under the user guardian (becomes part of the actor path)
+     * @param Props<T> $props Spawn configuration describing the behavior, mailbox, and supervision
+     * @return self This builder, for fluent chaining
      */
     public function actor(string $name, Props $props): self
     {
@@ -82,7 +100,15 @@ final class NexusApp
     /**
      * Register a callback invoked after all actors are spawned.
      *
-     * @param callable(ActorSystem): void $callback
+     * The callback fires synchronously at the end of {@see start()}, before the
+     * runtime event loop is started, with the configured
+     * {@see \Monadial\Nexus\Core\Actor\ActorSystem} as its sole argument. Use it
+     * to send warm-up messages, wire external listeners, or capture refs for
+     * later use. Replacing a previously registered callback is allowed; only
+     * the most recent one is invoked.
+     *
+     * @param callable(ActorSystem): void $callback Invoked once with the live ActorSystem after spawn
+     * @return self This builder, for fluent chaining
      */
     public function onStart(callable $callback): self
     {
@@ -92,9 +118,22 @@ final class NexusApp
     }
 
     /**
+     * Attach an observability provider (traces + metrics). The provider is
+     * threaded into the actor system and shut down (flushed) when {@see run()}
+     * returns. Build it via ObservabilityFactory::fromConfig(...) or pass a
+     * NoopObservability to disable. Optional — defaults to no-op.
+     */
+    public function withObservability(Observability $observability): self
+    {
+        $this->observability = $observability;
+
+        return $this;
+    }
+
+    /**
      * Returns all registered actor definitions.
      *
-     * @return list<ActorDefinition<object>>
+     * @return list<ActorDefinition<object>> Definitions in registration order
      */
     public function actors(): array
     {
@@ -102,14 +141,26 @@ final class NexusApp
     }
 
     /**
-     * Spawn all registered actors and invoke the start callback, but do not
-     * start the runtime event loop. Returns the ActorSystem so the caller
-     * can wire signal handling or other infrastructure before calling
-     * {@see ActorSystem::run()}.
+     * Spawn all registered actors, invoke the start callback, and return the
+     * live system without starting the runtime event loop.
+     *
+     * Callers use this when they need to wire infrastructure — OS signal
+     * handlers, HTTP servers, metric scrapers — around the actor system before
+     * blocking on {@see \Monadial\Nexus\Core\Actor\ActorSystem::run()}. For the
+     * common case where no extra setup is needed, prefer {@see run()}.
+     *
+     * @param Runtime              $runtime Concurrency backend (Fiber, Swoole, Step)
+     * @param LoggerInterface|null $logger  Optional PSR-3 logger; defaults to the ActorSystem default when null
+     * @return ActorSystem The configured system with all actors spawned, ready for `run()`
      */
     public function start(Runtime $runtime, ?LoggerInterface $logger = null): ActorSystem
     {
-        $system = ActorSystem::create($this->appName, $runtime, logger: $logger);
+        $system = ActorSystem::create(
+            $this->appName,
+            $runtime,
+            logger: $logger,
+            observability: $this->observability ?? new NoopObservability(),
+        );
 
         foreach ($this->definitions as $definition) {
             $system->spawn($definition->props, $definition->name);
@@ -124,10 +175,29 @@ final class NexusApp
 
     /**
      * Run in single-process mode with the given runtime.
+     *
+     * Convenience wrapper that calls {@see start()} and then blocks on
+     * {@see \Monadial\Nexus\Core\Actor\ActorSystem::run()} until the system is
+     * shut down. Suitable for Hello World and CLI entry points; long-running
+     * services that need to react to OS signals should call {@see start()} and
+     * drive the loop explicitly.
+     *
+     * @param Runtime              $runtime Concurrency backend (Fiber, Swoole, Step)
+     * @param LoggerInterface|null $logger  Optional PSR-3 logger; defaults to the ActorSystem default when null
      */
     public function run(Runtime $runtime, ?LoggerInterface $logger = null): void
     {
-        $system = $this->start($runtime, $logger);
-        $system->run();
+        $observability = $this->observability;
+
+        try {
+            $system = $this->start($runtime, $logger);
+            $system->run();
+        } finally {
+            try {
+                $observability?->shutdown();
+            } catch (Throwable) {
+                // Telemetry flush must not mask an application error.
+            }
+        }
     }
 }

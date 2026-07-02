@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Actor\TimerScheduler;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -168,6 +169,7 @@ final class TimerSchedulerTest extends TestCase
             $this->mailbox,
             static fn(): bool => true,
             $this->runtime,
+            new NoopObservability(),
         );
 
         return new DefaultTimerScheduler($selfRef, $this->runtime);

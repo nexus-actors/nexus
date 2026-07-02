@@ -16,11 +16,11 @@ use Monadial\Nexus\Logger\Formatter\JsonFormatter;
 use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\NexusLogger;
-use Monadial\Nexus\Observability\Tracing\TraceCorrelationProcessor;
+use Monadial\Nexus\Observability\Logger\TraceCorrelationProcessor;
 
 $logger = NexusLogger::create($system, 'app')
     ->minLevel(Level::Info)
-    ->processor(new TraceCorrelationProcessor())
+    ->processor(new TraceCorrelationProcessor($observability))
     ->handler(new ConsoleHandler(STDOUT, new JsonFormatter()))
     ->build();
 ```

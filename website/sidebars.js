@@ -243,6 +243,21 @@ const sidebars = {
         },
         {
           type: 'category',
+          label: 'Observability',
+          items: [
+            'packages/observability',
+            'packages/observability-otel',
+            'packages/observability-http',
+            'packages/observability-persistence',
+            'packages/observability-doctrine',
+            'packages/observability-worker-pool',
+            'packages/observability-logger',
+            'packages/observability-swoole',
+            'packages/observability-actor',
+          ],
+        },
+        {
+          type: 'category',
           label: 'Tooling',
           items: [
             'packages/app',

@@ -24,6 +24,7 @@ use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestLogger;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
 use OverflowException;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -546,6 +547,7 @@ final class ActorCellAdvancedTest extends TestCase
             $this->runtime->clock(),
             $this->logger,
             $this->deadLetters,
+            new NoopObservability(),
         );
     }
 
