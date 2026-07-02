@@ -58,7 +58,7 @@ NexusApp::create('my-app')
 
 ## Disabled by default
 
-Without a `withObservability()` call, Nexus does not load the OTel SDK at all. All calls to `$ctx->tracer()` and `$ctx->meter()` inside actor handlers return the OTel SDK's built-in no-op objects — they accept calls and discard data with no memory allocations.
+Without a `withObservability()` call, Nexus does not load the OTel SDK at all. All calls to `$ctx->tracer()` and `$ctx->meter()` inside actor handlers return the built-in no-op objects from `nexus-observability` (`NoopTracer`, `NoopMeter`) — they accept calls and discard data with no memory allocations.
 
 This means you can write instrumented actor code (calls to `$ctx->tracer()`, `$ctx->currentSpan()`, etc.) before observability is wired up, and those calls cost nothing until the provider is installed.
 

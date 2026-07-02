@@ -44,11 +44,11 @@ Inject a `LoggerInterface` like any other service:
 declare(strict_types=1);
 
 use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Http\Attribute\FromActor;
-use Monadial\Nexus\Http\Attribute\FromBody;
-use Monadial\Nexus\Http\Attribute\FromService;
+use Monadial\Nexus\Http\Handler\Attribute\FromActor;
+use Monadial\Nexus\Http\Handler\Attribute\FromBody;
+use Monadial\Nexus\Http\Handler\Attribute\FromService;
 use Monadial\Nexus\Http\Response\JsonResponse;
+use Monadial\Nexus\Runtime\Duration;
 use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use Psr\Log\LoggerInterface;
 
@@ -64,10 +64,7 @@ final class CreateOrderHandler
         #[FromBody] CreateOrderDto $dto,
     ): ResponseInterface {
         $this->log->info('placing order', ['sku' => $dto->sku]);
-        $orderId = $this->orders->ask(
-            static fn (ActorRef $r) => new Place($dto, $r),
-            Duration::seconds(2),
-        );
+        $orderId = $this->orders->ask(new Place($dto), Duration::seconds(2))->await();
         $this->log->info('order placed', ['id' => $orderId]);
 
         return JsonResponse::ok(['id' => $orderId])->withStatus(201);

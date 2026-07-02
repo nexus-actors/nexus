@@ -52,8 +52,8 @@ declare(strict_types=1);
 namespace App\Http\Handler;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 use Monadial\Nexus\Http\Response\JsonResponse;
-use Monadial\Nexus\Http\Ws\Attribute\FromActor;
 use Monadial\Nexus\Runtime\Duration;
 use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use Psr\Log\LoggerInterface;

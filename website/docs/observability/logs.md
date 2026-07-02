@@ -39,7 +39,7 @@ Each log record produced inside a traced actor handler receives three extra fiel
 
 ## Behaviour when observability is disabled
 
-When `withObservability()` has not been called, `TraceCorrelationProcessor` checks whether the current span is recording. The OTel no-op span reports `isRecording() === false`, so the processor skips stamping and the log record is emitted without trace fields. There is no error.
+When `withObservability()` has not been called, `TraceCorrelationProcessor` checks `Observability::isEnabled()` and whether the current span context is valid. With observability disabled, `isEnabled()` returns `false`, so the processor skips stamping and the log record is emitted without trace fields. There is no error.
 
 ## Relationship to `ServerSpanMiddleware`
 
