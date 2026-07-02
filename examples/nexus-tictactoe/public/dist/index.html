@@ -176,22 +176,32 @@
 <body>
     <div id="root">Loading…</div>
 
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!--
+        Pinned exact versions + Subresource Integrity: the browser refuses to
+        run a script whose hash doesn't match, so a compromised/MITM'd CDN
+        can't inject code. Babel-in-browser is used to keep the example
+        build-step-free; a real deployment would precompile and self-host.
+    -->
+    <script crossorigin="anonymous"
+        integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"
+        src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+    <script crossorigin="anonymous"
+        integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"
+        src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+    <script crossorigin="anonymous"
+        integrity="sha384-x/ilTFv/u/eu6YSmkFDZl5V5Mm/pkxxcVv2cVJOrr1J0rvILhMvRBCy6yA75wYBj"
+        src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
     <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    function makeClientId() {
-        const key = 'tictactoe.playerId';
-        const existing = localStorage.getItem(key);
-        if (existing) return existing;
-        const id = 'p_' + Math.random().toString(36).slice(2, 10);
-        localStorage.setItem(key, id);
-        return id;
-    }
+    // The server owns identity. On first join it mints an unguessable seat
+    // token and hands it to THIS connection privately (a `welcome` frame);
+    // we stash it per-game so a refresh can reclaim the same seat. We never
+    // send a player id on move/forfeit — the server knows who we are from
+    // the connection.
+    const tokenKey = (gameId) => `tictactoe.token.${gameId}`;
 
-    function useGameSocket(gameId, playerId, playerName, onSnapshot, onError) {
+    function useGameSocket(gameId, playerName, onSnapshot, onWelcome, onError) {
         const wsRef = useRef(null);
 
         useEffect(() => {
@@ -201,17 +211,22 @@
             wsRef.current = ws;
 
             ws.onopen = () => {
-                ws.send(JSON.stringify({
-                    type: 'join',
-                    playerId,
-                    playerName,
-                }));
+                const token = localStorage.getItem(tokenKey(gameId));
+                ws.send(JSON.stringify(
+                    token
+                        ? { type: 'join', name: playerName, token }
+                        : { type: 'join', name: playerName },
+                ));
             };
 
             ws.onmessage = (ev) => {
                 try {
                     const msg = JSON.parse(ev.data);
                     if (msg.type === 'snapshot') onSnapshot(msg.data);
+                    else if (msg.type === 'welcome') {
+                        localStorage.setItem(tokenKey(gameId), msg.data.token);
+                        onWelcome(msg.data.mark);
+                    }
                     else if (msg.type === 'error') onError(msg.data?.message ?? 'error');
                 } catch (e) {
                     onError('bad server message');
@@ -221,7 +236,7 @@
             ws.onerror = () => onError('connection error');
 
             return () => { ws.close(); };
-        }, [gameId, playerId, playerName]);
+        }, [gameId, playerName]);
 
         const send = useCallback((payload) => {
             const ws = wsRef.current;
@@ -316,29 +331,24 @@
         );
     }
 
-    function GameView({ gameId, playerId, playerName, onLeave }) {
+    function GameView({ gameId, playerName, onLeave }) {
         const [snapshot, setSnapshot] = useState(null);
+        const [yourMark, setYourMark] = useState(null);
         const [error, setError] = useState(null);
 
-        const send = useGameSocket(gameId, playerId, playerName, setSnapshot, setError);
-
-        const yourMark = snapshot && (
-            snapshot.playerX?.id === playerId ? 'X'
-            : snapshot.playerO?.id === playerId ? 'O'
-            : null
-        );
+        const send = useGameSocket(gameId, playerName, setSnapshot, setYourMark, setError);
 
         const yourTurn = snapshot && yourMark === snapshot.nextTurn && snapshot.status === 'in_progress';
 
         const clickCell = (i) => {
             if (!yourTurn) return;
             if (snapshot.board[i]) return;
-            send({ type: 'move', playerId, cellIndex: i });
+            send({ type: 'move', cell: i });
         };
 
         const forfeit = () => {
             if (!confirm('Forfeit this game?')) return;
-            send({ type: 'forfeit', playerId });
+            send({ type: 'forfeit' });
         };
 
         if (!snapshot) return <p className="muted">Connecting…</p>;
@@ -397,7 +407,6 @@
     }
 
     function App() {
-        const [playerId] = useState(makeClientId);
         const [playerName, setPlayerName] = useState(() => localStorage.getItem('tictactoe.playerName') || '');
         const [gameId, setGameId] = useState(() => {
             const hash = location.hash.slice(1);
@@ -429,7 +438,6 @@
             <GameView
                 key={gameId}
                 gameId={gameId}
-                playerId={playerId}
                 playerName={playerName}
                 onLeave={() => setGameId(null)}
             />

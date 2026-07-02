@@ -77,7 +77,7 @@ In Nexus with `installSignalHandlers(false)` and `maxRequest(0)`, none of those 
 
 For production Nexus services in worker mode:
 
-1. **Persist authoritative state.** Assume any actor may be respawned; use `EntityBehavior` or event-sourcing so recovery is transparent. See [Single-writer aggregates](../best-practices/single-writer-aggregates.md).
+1. **Persist authoritative state.** Assume any actor may be respawned; use `EntityBehavior` or event-sourcing so recovery is transparent. See [Single-writer aggregates](../guides/single-writer-aggregates.md).
 2. **Design WebSocket clients to auto-reconnect.** A React or Swoole client should back off + reconnect on unexpected close. Your game/chat/dashboard should be robust to a 1 s disconnect window every few minutes.
 3. **Alert on the frequency of `Worker_reactor_try_to_exit`, not on its presence.** If it fires more than once per minute you have a real problem; once every 3 minutes on an idle service is a Swoole quirk, not a real deadlock.
 4. **Consider thread mode + handler-mode WS with an external pub/sub for fan-out** if your workload can't tolerate the cycle. Sample stack: Postgres `LISTEN/NOTIFY` fan-out, or Redis pub/sub.

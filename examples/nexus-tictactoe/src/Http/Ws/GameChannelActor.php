@@ -9,43 +9,53 @@ use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameEnvelope;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameRejected;
+use Monadial\Nexus\Example\TicTacToe\Actor\Message\Seated;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\Forfeit;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\GameCommand;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\GetSnapshot;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\JoinGame;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\MakeMove;
 use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\ClientIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\ForfeitIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\JoinIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\MoveIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\SnapshotIntent;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketChannelActor;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
 use Override;
 use Psr\Log\LoggerInterface;
-use RuntimeException;
+use Symfony\Component\Uid\Ulid;
 
+use function count;
 use function is_string;
+use function strlen;
 
 /**
- * One channel actor per game id.
+ * One channel actor per game id. Owns the connection→identity binding and
+ * fans game state out to every attached socket.
  *
- * Holds three responsibilities:
- *   1. Decode inbound WS frames into pure domain commands.
- *   2. Bind an authenticated identity to the WS connection — the client's
- *      `playerId` is trusted ONLY on the join frame; every subsequent
- *      command is stamped from the per-connection map. A move frame
- *      spoofing another player's id is ignored.
- *   3. Cache the last authoritative snapshot; broadcast on every mutation;
- *      stop the actor when the last connection closes so `ChannelActorRegistry`
- *      can prune (see {@see \Monadial\Nexus\Http\Ws\WebSocket\ChannelActorRegistry::resolveOrSpawn}
- *      for the isAlive() check).
+ * Identity is server-owned. A connection proves nothing on `move`/`forfeit`;
+ * those frames carry no player id. On `join` the server mints (or, for
+ * reconnect, accepts) an unguessable capability `token`, seats the player
+ * under it, binds fd→token, and privately hands that one connection its
+ * token + mark via a {@see WelcomePayload}. A token is never broadcast, so a
+ * client cannot learn — let alone assert — another player's identity.
  *
- * State is `?GameSnapshot` — the last authoritative view of the game.
+ * State is `?GameSnapshot`: the last authoritative view, kept current by
+ * every mutation reply. When alive it is authoritative (no restart in
+ * between); a `null` cache means a freshly (re)spawned actor that must
+ * re-read the aggregate.
  *
  * @extends WebSocketChannelActor<?GameSnapshot>
  */
 final class GameChannelActor extends WebSocketChannelActor
 {
-    /** @var array<int, string> fd → authenticated playerId (set on join, cleared on close) */
-    private array $identities = [];
+    private const int MAX_FRAME_BYTES = 4096;
+
+    /** @var array<int, string> fd → seat token (bound on join reply, cleared on close). */
+    private array $seats = [];
 
     public function __construct(
         private readonly EntityRefFactory $games,
@@ -67,23 +77,30 @@ final class GameChannelActor extends WebSocketChannelActor
     #[Override]
     public function onOpened(ActorContext $ctx, WebSocketContext $conn, mixed $state): BehaviorWithState
     {
-        $gameId = self::gameIdFrom($conn);
+        $id = $conn->request()->getAttribute('id');
+
+        if (!is_string($id) || !Ulid::isValid($id)) {
+            $this->log->warning('rejecting ws upgrade — game id not a ULID', ['fd' => $conn->id()]);
+            $conn->close(1008, 'invalid game id');
+
+            return BehaviorWithState::same();
+        }
+
         $this->log->info('ws connection opened', [
-            'fd' => $conn->id(),
-            'gameId' => $gameId,
             'attached' => count($this->connections()),
+            'fd' => $conn->id(),
             'hasCache' => $state !== null,
         ]);
 
         if ($state !== null) {
-            $conn->send($this->codec->encode($state));
+            // Live actor: the cache is authoritative.
+            $conn->send($this->codec->encodeSnapshot($state));
+
+            return BehaviorWithState::same();
         }
 
-        // Always refresh from the writer — the cache may be stale after
-        // a restart. `handleAppMessage` will dedupe / broadcast.
-        $this->games->of($gameId)->tell(
-            new GameEnvelope(new GetSnapshot(), $ctx->self()),
-        );
+        // Cold (re)spawn: read the aggregate to populate the cache.
+        $this->forward($ctx, $conn, new GetSnapshot());
 
         return BehaviorWithState::same();
     }
@@ -100,56 +117,25 @@ final class GameChannelActor extends WebSocketChannelActor
         WebSocketFrame $frame,
         mixed $state,
     ): BehaviorWithState {
-        $command = $this->codec->decode($frame->text);
-        $this->log->debug('ws frame received', [
-            'fd' => $conn->id(),
-            'command' => $command === null
-                ? 'INVALID'
-                : $command::class,
-        ]);
+        if (strlen($frame->text) > self::MAX_FRAME_BYTES) {
+            $conn->send($this->codec->encodeError('frame too large'));
 
-        if ($command === null) {
-            $this->log->warning('ws frame rejected — invalid', [
-                'fd' => $conn->id(),
-                'text' => substr($frame->text, 0, 120),
-            ]);
+            return BehaviorWithState::same();
+        }
+
+        $intent = $this->codec->decode($frame->text);
+
+        if ($intent === null) {
             $conn->send($this->codec->encodeError('invalid message'));
 
             return BehaviorWithState::same();
         }
 
-        // Snapshot polls are read-only and reply to the requester alone —
-        // otherwise a single client polling would broadcast state to every
-        // attached socket. If the cache is warm, skip the actor round-trip
-        // entirely.
-        if ($command instanceof GetSnapshot) {
-            if ($state !== null) {
-                $conn->send($this->codec->encode($state));
+        $command = $this->toCommand($conn, $intent, $state);
 
-                return BehaviorWithState::same();
-            }
-
-            $this->games->of(self::gameIdFrom($conn))->tell(new GameEnvelope($command, $ctx->self()));
-
-            return BehaviorWithState::same();
+        if ($command !== null) {
+            $this->forward($ctx, $conn, $command);
         }
-
-        $command = $this->authorize($conn, $command);
-
-        if ($command === null) {
-            $this->log->warning('ws frame rejected — player id mismatch', ['fd' => $conn->id()]);
-            $conn->send($this->codec->encodeError('player id mismatch'));
-
-            return BehaviorWithState::same();
-        }
-
-        $gameId = self::gameIdFrom($conn);
-        $this->log->info('command forwarded to game actor', [
-            'fd' => $conn->id(),
-            'gameId' => $gameId,
-            'command' => $command::class,
-        ]);
-        $this->games->of($gameId)->tell(new GameEnvelope($command, $ctx->self()));
 
         return BehaviorWithState::same();
     }
@@ -162,14 +148,13 @@ final class GameChannelActor extends WebSocketChannelActor
     #[Override]
     public function handleAppMessage(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
+        if ($message instanceof Seated) {
+            return $this->onSeated($message);
+        }
+
         if ($message instanceof GameRejected) {
-            $this->log->info('game rejected — broadcasting error to clients', [
-                'reason' => $message->reason,
-                'attached' => count($this->connections()),
-            ]);
-            // The last-mutating client hears the error; we don't broadcast
-            // it to spectators (they only see committed state).
-            $this->broadcastError($message->reason);
+            // Error goes ONLY to the connection that caused it.
+            $this->connection($message->fd)?->send($this->codec->encodeError($message->reason));
 
             return BehaviorWithState::same();
         }
@@ -178,13 +163,13 @@ final class GameChannelActor extends WebSocketChannelActor
             return BehaviorWithState::same();
         }
 
-        $this->log->info('snapshot received — broadcasting to clients', [
-            'gameId' => $message->gameId,
-            'status' => $message->status->value,
-            'nextTurn' => $message->nextTurn?->value,
+        $this->log->info('state changed — broadcasting', [
             'attached' => count($this->connections()),
+            'gameId' => $message->gameId,
+            'nextTurn' => $message->nextTurn?->value,
+            'status' => $message->status->value,
         ]);
-        $this->broadcast($this->codec->encode($message));
+        $this->broadcast($this->codec->encodeSnapshot($message));
 
         /** @var BehaviorWithState<object, ?GameSnapshot> $next */
         $next = BehaviorWithState::next($message);
@@ -200,13 +185,12 @@ final class GameChannelActor extends WebSocketChannelActor
     #[Override]
     public function onClosed(ActorContext $ctx, WebSocketContext $conn, int $code, mixed $state): BehaviorWithState
     {
-        unset($this->identities[$conn->id()]);
-        $remaining = count($this->connections());
+        unset($this->seats[$conn->id()]);
 
         $this->log->info('ws connection closed', [
-            'fd' => $conn->id(),
             'code' => $code,
-            'remaining' => $remaining,
+            'fd' => $conn->id(),
+            'remaining' => count($this->connections()),
         ]);
 
         if ($this->connections() === []) {
@@ -221,52 +205,104 @@ final class GameChannelActor extends WebSocketChannelActor
     }
 
     /**
-     * Bind the client-declared `playerId` on join; enforce it thereafter.
-     * A move/forfeit whose `playerId` doesn't match the connection's bound
-     * identity is rejected — no impersonation across a WS session.
+     * Bind the seat and privately welcome the joining connection, then
+     * broadcast the new state to everyone.
+     *
+     * @return BehaviorWithState<object, ?GameSnapshot>
      */
-    private function authorize(WebSocketContext $conn, GameCommand $command): ?GameCommand
+    private function onSeated(Seated $seated): BehaviorWithState
+    {
+        $this->seats[$seated->fd] = $seated->token;
+        $mark = self::markOf($seated->snapshot, $seated->token);
+
+        $this->log->info('player seated', [
+            'fd' => $seated->fd,
+            'gameId' => $seated->snapshot->gameId,
+            'mark' => $mark,
+        ]);
+
+        $this->connection($seated->fd)?->send($this->codec->encodeWelcome($mark, $seated->token));
+        $this->broadcast($this->codec->encodeSnapshot($seated->snapshot));
+
+        /** @var BehaviorWithState<object, ?GameSnapshot> $next */
+        $next = BehaviorWithState::next($seated->snapshot);
+
+        return $next;
+    }
+
+    /**
+     * Translate a client intent into a domain command, stamping identity
+     * from the server-owned binding. Read polls are answered from cache
+     * here and return `null` (nothing to forward).
+     *
+     */
+    private function toCommand(WebSocketContext $conn, ClientIntent $intent, ?GameSnapshot $state): ?GameCommand
     {
         $fd = $conn->id();
 
-        if ($command instanceof JoinGame) {
-            $this->identities[$fd] = $command->playerId;
+        if ($intent instanceof JoinIntent) {
+            // Reconnect presents the stored token; a first join mints one.
+            $token = $intent->token ?? (string) new Ulid();
 
-            return $command;
+            return new JoinGame($token, $intent->name);
         }
 
-        $bound = $this->identities[$fd] ?? null;
+        if ($intent instanceof SnapshotIntent) {
+            if ($state !== null) {
+                $conn->send($this->codec->encodeSnapshot($state));
 
-        if ($command instanceof GetSnapshot) {
-            return $command;
+                return null;
+            }
+
+            return new GetSnapshot();
         }
 
-        if ($command instanceof MakeMove && $command->playerId === $bound) {
-            return $command;
+        $token = $this->seats[$fd] ?? null;
+
+        if ($token === null) {
+            $conn->send($this->codec->encodeError('join before playing'));
+
+            return null;
         }
 
-        if ($command instanceof Forfeit && $command->playerId === $bound) {
-            return $command;
+        if ($intent instanceof MoveIntent) {
+            return new MakeMove($token, $intent->cell);
+        }
+
+        if ($intent instanceof ForfeitIntent) {
+            return new Forfeit($token);
         }
 
         return null;
     }
 
-    private function broadcastError(string $message): void
+    /**
+     * @param ActorContext<object> $ctx
+     */
+    private function forward(ActorContext $ctx, WebSocketContext $conn, GameCommand $command): void
     {
-        $payload = $this->codec->encodeError($message);
+        $this->games->of(self::gameIdFrom($conn))->tell(
+            new GameEnvelope($command, $ctx->self(), $conn->id()),
+        );
+    }
 
-        foreach ($this->connections() as $conn) {
-            $conn->send($payload);
-        }
+    private static function markOf(GameSnapshot $snapshot, string $token): ?string
+    {
+        return match ($token) {
+            $snapshot->playerX?->id => 'X',
+            $snapshot->playerO?->id => 'O',
+            default => null,
+        };
     }
 
     private static function gameIdFrom(WebSocketContext $conn): string
     {
         $id = $conn->request()->getAttribute('id');
 
-        if (!is_string($id) || $id === '') {
-            throw new RuntimeException('game id path-param missing on upgrade request');
+        if (!is_string($id) || !Ulid::isValid($id)) {
+            // onOpened already rejected non-ULID ids; this is belt-and-suspenders
+            // for any frame that somehow arrives on an unvalidated connection.
+            throw new InvalidGameIdException('game id must be a ULID');
         }
 
         return $id;

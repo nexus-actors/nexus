@@ -102,6 +102,17 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
         return array_values($this->attached);
     }
 
+    /**
+     * Return the live context for a single attached connection, or `null`
+     * if that fd is not (or no longer) attached. Use this to reply to the
+     * one connection that triggered a message — e.g. a private welcome or
+     * a per-client error — instead of broadcasting to the whole channel.
+     */
+    final protected function connection(int $fd): ?WebSocketContext
+    {
+        return $this->attached[$fd] ?? null;
+    }
+
     final protected function broadcast(string $text, ?int $exceptFd = null): void
     {
         foreach ($this->attached as $fd => $conn) {

@@ -44,7 +44,10 @@ final class App
     public static function factory(Config $config): Closure
     {
         return static function (ActorSystem $system) use ($config): CompiledApplication {
-            $workerId = getmypid() ?: 0;
+            $pid = getmypid();
+            $workerId = $pid !== false
+                ? $pid
+                : 0;
             $preBoot = StderrLogger::create("worker-{$workerId}-preactor");
             $preBoot->info('worker startup: building app');
 
@@ -109,10 +112,12 @@ final class App
     {
         $app->onException(
             MessageDeserializationException::class,
+            // Do NOT echo the exception message — it can carry mapper internals
+            // (paths, expected types). A stable, generic 400 is enough.
             static fn(MessageDeserializationException $e): Psr7Response => new Psr7Response(
                 400,
                 ['content-type' => 'application/json'],
-                (string) json_encode(['error' => 'invalid request body', 'detail' => $e->getMessage()]),
+                (string) json_encode(['error' => 'invalid request body']),
             ),
         );
 

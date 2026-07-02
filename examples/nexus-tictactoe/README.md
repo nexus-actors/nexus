@@ -27,7 +27,7 @@ keyed by game id.
 ## Run it
 
 ```bash
-make build           # PHP 8.5 ZTS + Swoole 6.0 thread-mode
+make build           # PHP 8.5 ZTS + Swoole 6.2 (zlib-enabled) worker mode
 make install         # composer install inside the container
 make up              # start the server on http://localhost:9080
 make logs            # tail worker logs
@@ -35,8 +35,9 @@ make logs            # tail worker logs
 
 Then open [http://localhost:9080/](http://localhost:9080/) in **two browser
 tabs** (or an incognito window, or share the URL with a friend). The first
-tab creates a game; the second joins from the lobby. Each tab gets its own
-`playerId` from `localStorage`, so both count as distinct players.
+tab creates a game; the second joins from the lobby. Each tab stores its
+server-issued seat **token** in `localStorage` (keyed by game id), so both
+count as distinct players and a refresh reclaims the same seat.
 
 ## Architecture
 
@@ -69,38 +70,45 @@ Browser (React SPA)                Nexus worker thread
 
 ## Wire protocol
 
-Client → server (JSON text frames — deserialised straight into pure
-domain commands via Valinor, no per-action wire DTOs):
+Client → server — gameplay frames carry **no identity**; the server knows
+who you are from the connection. Each frame is decoded into a typed
+*intent*, never a domain command with a client-supplied player id:
 
 ```json
-{"type": "join",     "playerId": "p_abc123", "playerName": "Alice"}
-{"type": "move",     "playerId": "p_abc123", "cellIndex": 4}
-{"type": "forfeit",  "playerId": "p_abc123"}
+{"type": "join",     "name": "Alice"}
+{"type": "join",     "name": "Alice", "token": "01JX..."}   // reconnect
+{"type": "move",     "cell": 4}
+{"type": "forfeit"}
 {"type": "snapshot"}
 ```
 
-Server → client (every frame is `{type, data}` — the type stays out of
-the domain view; the codec wraps at the boundary):
+Server → client — every frame is `{type, data}`. `snapshot` is broadcast
+to everyone with **name-only** seats (tokens are never on the wire);
+`welcome` and `error` are sent privately to a single connection:
 
 ```json
 {"type": "snapshot", "data": {
     "gameId":   "01JX...",
     "status":   "in_progress",
-    "playerX":  {"id": "p_abc123", "name": "Alice"},
-    "playerO":  {"id": "p_def456", "name": "Bob"},
+    "playerX":  {"name": "Alice"},
+    "playerO":  {"name": "Bob"},
     "board":    [null, null, "X", null, "O", null, null, null, null],
     "nextTurn": "O",
     "winner":   null
 }}
-{"type": "error", "data": {"message": "it is X's turn"}}
+{"type": "welcome", "data": {"mark": "X", "token": "01JX..."}}
+{"type": "error",   "data": {"message": "it is X's turn"}}
 ```
 
 Board cells are row-major (indices 0..8).
 
-**Session identity.** The `playerId` on the `join` frame binds the WS
-connection to that player; every subsequent `move`/`forfeit` from the
-same connection is stamped with the bound id, so a spoofed `playerId`
-field is ignored.
+**Session identity.** Identity is **server-owned**. On the first join the
+server mints an unguessable capability token, seats the player under it,
+binds it to the connection, and hands *only that connection* the token in
+a private `welcome`. Every later `move`/`forfeit` is stamped from the
+connection binding — the client never sends a player id, so it can neither
+spoof nor learn another player's identity (tokens are never broadcast).
+Reconnect presents the stored token to reclaim the same seat.
 
 ## Package layout
 
@@ -120,27 +128,31 @@ src/
     Exception/    # GameFullException, NotYourTurnException, ...
   Actor/
     GameActor.php               # EntityBehavior handler — single-writer per game id
-    Message/
-      GameEnvelope.php          # transport wrapper (command + replyTo)
-      GameRejected.php          # failure reply — domain exceptions in flight
+    Message/                    # actor-layer transport (never in Domain)
+      GameEnvelope.php          # command + replyTo + originFd
+      Seated.php                # join reply — snapshot + fd + token (→ private welcome)
+      GameRejected.php          # failure reply — reason + fd (→ private error)
   Http/
     Handler/                    # CreateGame, ListGames, GameState, Index
     Response/                   # typed HTTP DTOs (Valinor-serialised)
     Ws/
-      ClientFrameCodec.php      # Valinor → domain command (no per-action DTOs)
-      GameChannelActor.php      # per-game fan-out, identity-binding, self-passivating
+      Intent/                   # JoinIntent / MoveIntent / ForfeitIntent / SnapshotIntent
+      ClientFrameCodec.php      # frame → typed intent (never a client-supplied id)
+      GameChannelActor.php      # fan-out, server-owned identity, self-passivating
+      SnapshotPayload.php       # broadcast wire shape — name-only seats (no tokens)
+      WelcomePayload.php        # private: {mark, token}
       WireEnvelope.php          # {type, data} wrapper for every outbound frame
-      ErrorPayload.php
+      SeatView.php / ErrorPayload.php / InvalidGameIdException.php
     Routes.php                  # single place all routes are declared
     JsonExceptionRenderer.php
 public/
-  server.php         # config -> bootstrap -> SwooleThreadServer::run
-  dist/index.html    # React SPA (React + Babel from CDN, no toolchain)
+  server.php         # config -> bootstrap -> SwooleWorkerServer::run
+  dist/index.html    # React SPA (React + Babel from CDN with SRI, no toolchain)
 ```
 
 ## Scaling notes
 
-- Default is **one worker thread** (`TICTACTOE_THREADS=1`). The
+- Default is **one worker process** (`TICTACTOE_THREADS=1`). The
   `WebSocketChannelActor` fans out only to sockets attached to the same
   worker; two players landing on different workers would never see each
   other. The `#[Version]` column on `GameSession` keeps the persistence
@@ -148,7 +160,7 @@ public/
   LISTEN/NOTIFY, Redis, or a `nexus-cluster` transport) that is out of
   scope for this example.
 - One worker is plenty for a game: Swoole coroutines multiplex thousands
-  of concurrent WS connections on a single thread. The interesting
+  of concurrent WS connections in a single process. The interesting
   scaling story here is per-actor (single-writer per game id, passivate
   when idle) — not per-CPU.
 

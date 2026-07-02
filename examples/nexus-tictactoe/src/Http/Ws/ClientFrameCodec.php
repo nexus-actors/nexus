@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\TicTacToe\Http\Ws;
 
 use JsonException;
-use Monadial\Nexus\Example\TicTacToe\Domain\Command\Forfeit;
-use Monadial\Nexus\Example\TicTacToe\Domain\Command\GameCommand;
-use Monadial\Nexus\Example\TicTacToe\Domain\Command\GetSnapshot;
-use Monadial\Nexus\Example\TicTacToe\Domain\Command\JoinGame;
-use Monadial\Nexus\Example\TicTacToe\Domain\Command\MakeMove;
 use Monadial\Nexus\Example\TicTacToe\Domain\Exception\GameDomainException;
 use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\ClientIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\ForfeitIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\JoinIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\MoveIntent;
+use Monadial\Nexus\Example\TicTacToe\Http\Ws\Intent\SnapshotIntent;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
 
@@ -25,32 +25,33 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Wire codec for the WebSocket protocol.
  *
- * Client frames are `{ "type": "<join|move|forfeit|snapshot>", ... }`.
- * The codec peeks at the discriminator, strips it, then hands the rest
- * to the injected {@see MessageSerializer} (Valinor) — which is strict
- * about unknown keys — to map into the pure domain command class. A
- * command IS the wire shape; there are no per-action wire DTOs.
+ * Inbound: `{ "type": "<join|move|forfeit|snapshot>", ... }` is peeked for
+ * the discriminator, then the remainder is mapped by the injected
+ * {@see MessageSerializer} (Valinor, strict on unknown keys) into a
+ * {@see ClientIntent}. Intents carry only what the client is allowed to
+ * assert — never a player id on a gameplay frame.
  *
- * Outbound frames are `{ "type": ..., "data": ... }` via {@see WireEnvelope}.
+ * Outbound: `{ "type": ..., "data": ... }` via {@see WireEnvelope}. The
+ * broadcast snapshot uses {@see SnapshotPayload} (name-only seats) so a
+ * player's capability token never leaves its owner.
  */
 final readonly class ClientFrameCodec
 {
-    /** @var array<string, class-string<GameCommand>> */
-    private const array COMMANDS = [
-        'forfeit' => Forfeit::class,
-        'join' => JoinGame::class,
-        'move' => MakeMove::class,
-        'snapshot' => GetSnapshot::class,
+    private const array INTENTS = [
+        'forfeit' => ForfeitIntent::class,
+        'join' => JoinIntent::class,
+        'move' => MoveIntent::class,
+        'snapshot' => SnapshotIntent::class,
     ];
 
     public function __construct(private MessageSerializer $serializer) {}
 
     /**
-     * Returns `null` for unrecognised, malformed, or domain-invalid
-     * frames — the channel actor then surfaces an error frame to the
-     * offending client without knowing why.
+     * Returns `null` for unrecognised, malformed, or invalid frames — the
+     * channel actor surfaces a generic error to the offending client
+     * without echoing why (no internal detail leak).
      */
-    public function decode(string $payload): ?GameCommand
+    public function decode(string $payload): ?ClientIntent
     {
         $raw = self::decodeJson($payload);
 
@@ -64,26 +65,30 @@ final readonly class ClientFrameCodec
             return null;
         }
 
-        $class = self::COMMANDS[$type] ?? null;
+        $class = self::INTENTS[$type] ?? null;
 
         if ($class === null) {
             return null;
         }
 
         unset($raw['type']);
-        $body = (string) json_encode($raw);
 
         try {
-            /** @var GameCommand */
-            return $this->serializer->deserialize($body, $class);
+            /** @var ClientIntent */
+            return $this->serializer->deserialize((string) json_encode($raw), $class);
         } catch (GameDomainException | MessageDeserializationException) {
             return null;
         }
     }
 
-    public function encode(GameSnapshot $snapshot): string
+    public function encodeSnapshot(GameSnapshot $snapshot): string
     {
-        return $this->serializer->serialize(new WireEnvelope('snapshot', $snapshot));
+        return $this->serializer->serialize(new WireEnvelope('snapshot', SnapshotPayload::of($snapshot)));
+    }
+
+    public function encodeWelcome(?string $mark, string $token): string
+    {
+        return $this->serializer->serialize(new WireEnvelope('welcome', new WelcomePayload($mark, $token)));
     }
 
     public function encodeError(string $message): string

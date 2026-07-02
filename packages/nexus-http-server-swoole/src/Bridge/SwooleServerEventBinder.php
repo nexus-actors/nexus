@@ -77,7 +77,7 @@ final class SwooleServerEventBinder
         $server->on(
             'Open',
             static function (WebSocketServer $s, Request $req) use ($runtime, $contextFactory, $logger): void {
-                $logger->debug('Swoole Open event', ['fd' => (int) $req->fd]);
+                $logger->debug('Swoole Open event', ['fd' => $req->fd]);
 
                 try {
                     $app = $runtime->app;
@@ -87,11 +87,11 @@ final class SwooleServerEventBinder
                     }
 
                     $psr7 = SwooleRequestTranslator::toPsr7($req);
-                    $ctx = $contextFactory($s, (int) $req->fd, $psr7);
+                    $ctx = $contextFactory($s, $req->fd, $psr7);
                     $app->dispatcher()->dispatchOpen($ctx, $psr7);
                 } catch (Throwable $e) {
                     $logger->error('WebSocket Open failed', ['exception' => $e]);
-                    $s->disconnect((int) $req->fd, 1011, 'Server error');
+                    $s->disconnect($req->fd, 1011, 'Server error');
                 }
             },
         );
@@ -106,11 +106,11 @@ final class SwooleServerEventBinder
                         return;
                     }
 
-                    $kind = (int) $frame->opcode === 2
+                    $kind = $frame->opcode === 2
                         ? WebSocketFrame::KIND_BINARY
                         : WebSocketFrame::KIND_TEXT;
-                    $wsFrame = new WebSocketFrame($kind, (string) $frame->data);
-                    $ctx = $contextFactory($s, (int) $frame->fd, new ServerRequest('GET', '/'));
+                    $wsFrame = new WebSocketFrame($kind, $frame->data);
+                    $ctx = $contextFactory($s, $frame->fd, new ServerRequest('GET', '/'));
                     $app->dispatcher()->dispatchMessage($ctx, $wsFrame);
                 } catch (Throwable $e) {
                     $logger->error('WebSocket Message failed', ['exception' => $e]);

@@ -23,22 +23,13 @@ use const STDERR;
  */
 final class StderrLogger extends AbstractLogger
 {
-    private function __construct(
-        private readonly ConsoleHandler $handler,
-        private readonly string $channel,
-    ) {}
+    private function __construct(private readonly ConsoleHandler $handler, private readonly string $channel) {}
 
-    public static function create(string $channel): LoggerInterface
+    /**
+     * @param array<string, mixed> $context
+     */
+    public function log(mixed $level, string|Stringable $message, array $context = []): void
     {
-        /** @var resource $stderr */
-        $stderr = STDERR;
-
-        return new self(new ConsoleHandler($stderr, new LineFormatter()), $channel);
-    }
-
-    public function log($level, string|Stringable $message, array $context = []): void
-    {
-        /** @var array<string, mixed> $context */
         $record = Record::create(
             Level::fromPsr3((string) $level),
             $message,
@@ -48,5 +39,13 @@ final class StderrLogger extends AbstractLogger
         );
 
         $this->handler->handle($record);
+    }
+
+    public static function create(string $channel): LoggerInterface
+    {
+        /** @var resource $stderr */
+        $stderr = STDERR;
+
+        return new self(new ConsoleHandler($stderr, new LineFormatter()), $channel);
     }
 }

@@ -38,13 +38,15 @@ final class SwooleWorkerServer
             ? new WebSocketServer($config->host, $config->port)
             : new HttpServer($config->host, $config->port);
 
-        // Swoole advertises `permessage-deflate` by default. If the Swoole
-        // build lacks zlib (as in our official image), every outbound frame
-        // is silently dropped with `FrameObject::pack(): Unable to compress`.
-        // Turning compression off is the portable default; users who WANT
-        // deflate can rebuild Swoole with zlib and re-enable via their own
-        // settings override.
+        // User-supplied settings are spread AFTER `websocket_compression` (so a
+        // zlib-enabled deploy can re-enable it) but BEFORE the framework's core
+        // keys (so those win). Rationale for the default: Swoole advertises
+        // `permessage-deflate`, and on a build without zlib (our official image)
+        // every outbound frame is silently dropped with `FrameObject::pack():
+        // Unable to compress`. Off is the portable default; opt back in via
+        // `SwooleWorkerConfig::withSwooleSetting(['websocket_compression' => true])`.
         $settings = [
+            ...$config->swooleSettings,
             'dispatch_mode' => $config->dispatchMode,
             'max_conn' => $config->maxConn,
             'max_request' => $config->maxRequest,
@@ -92,7 +94,6 @@ final class SwooleWorkerServer
                     $app = $factory($system);
                     $runtime->system = $system;
                     $runtime->app = $app;
-
 
                     $config->logger->info('Worker started', [
                         'hasWebSocketRoutes' => $app->hasWebSocketRoutes(),

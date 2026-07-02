@@ -17,6 +17,13 @@ use Psr\Log\NullLogger;
  */
 final readonly class SwooleWorkerConfig
 {
+    /**
+     * @param array<string, mixed> $swooleSettings Extra keys merged into
+     *        `$server->set()`. Applied BEFORE the framework's own defaults so
+     *        those defaults win on conflict — except keys the framework does
+     *        not set (e.g. `websocket_compression`), which you can override
+     *        here. Use `withSwooleSetting()` to populate immutably.
+     */
     public function __construct(
         public string $host,
         public int $port,
@@ -30,6 +37,7 @@ final readonly class SwooleWorkerConfig
         public LoggerInterface $logger,
         public string $logFile,
         public bool $enableWebSocket,
+        public array $swooleSettings = [],
     ) {}
 
     public static function bind(string $host, int $port = 8080): self
@@ -47,7 +55,19 @@ final readonly class SwooleWorkerConfig
             logger: new NullLogger(),
             logFile: '',
             enableWebSocket: false,
+            swooleSettings: [],
         );
+    }
+
+    /**
+     * Merge raw Swoole server settings (e.g. re-enable `websocket_compression`
+     * on a zlib-enabled build, tune `buffer_output_size`, set `ssl_cert_file`).
+     *
+     * @param array<string, mixed> $settings
+     */
+    public function withSwooleSetting(array $settings): self
+    {
+        return clone($this, ['swooleSettings' => [...$this->swooleSettings, ...$settings]]);
     }
 
     public function dispatchMode(int $mode): self
