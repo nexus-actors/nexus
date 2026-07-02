@@ -13,38 +13,38 @@
                  - nexus (meta-package, no src/ of its own)
                  - nexus-psalm (static analysis plugin, documented at /docs/packages/psalm)
                  - nexus-skeleton (project template, documented at /docs/getting-started/skeleton) -->
-            <source dsn="file://packages">
-                <path>nexus-core/src</path>
-                <path>nexus-runtime/src</path>
-                <path>nexus-runtime-fiber/src</path>
-                <path>nexus-runtime-swoole/src</path>
-                <path>nexus-runtime-step/src</path>
-                <path>nexus-app/src</path>
-                <path>nexus-serialization/src</path>
-                <path>nexus-logger/src</path>
-                <path>nexus-cluster/src</path>
-                <path>nexus-worker-pool/src</path>
-                <path>nexus-worker-pool-swoole/src</path>
-                <path>nexus-persistence/src</path>
-                <path>nexus-persistence-dbal/src</path>
-                <path>nexus-persistence-doctrine/src</path>
-                <path>nexus-http/src</path>
-                <path>nexus-http-ws/src</path>
-                <path>nexus-http-auth/src</path>
-                <path>nexus-http-toolkit/src</path>
-                <path>nexus-http-server-swoole/src</path>
-                <path>nexus-http-server-swoole-threads/src</path>
-                <path>nexus-doctrine-dbal/src</path>
-                <path>nexus-doctrine-orm/src</path>
-                <path>nexus-observability/src</path>
-                <path>nexus-observability-otel/src</path>
-                <path>nexus-observability-http/src</path>
-                <path>nexus-observability-persistence/src</path>
-                <path>nexus-observability-worker-pool/src</path>
-                <path>nexus-observability-doctrine/src</path>
-                <path>nexus-observability-logger/src</path>
-                <path>nexus-observability-swoole/src</path>
-                <path>nexus-observability-actor/src</path>
+            <source dsn=".">
+                <path>packages/nexus-core/src</path>
+                <path>packages/nexus-runtime/src</path>
+                <path>packages/nexus-runtime-fiber/src</path>
+                <path>packages/nexus-runtime-swoole/src</path>
+                <path>packages/nexus-runtime-step/src</path>
+                <path>packages/nexus-app/src</path>
+                <path>packages/nexus-serialization/src</path>
+                <path>packages/nexus-logger/src</path>
+                <path>packages/nexus-cluster/src</path>
+                <path>packages/nexus-worker-pool/src</path>
+                <path>packages/nexus-worker-pool-swoole/src</path>
+                <path>packages/nexus-persistence/src</path>
+                <path>packages/nexus-persistence-dbal/src</path>
+                <path>packages/nexus-persistence-doctrine/src</path>
+                <path>packages/nexus-http/src</path>
+                <path>packages/nexus-http-ws/src</path>
+                <path>packages/nexus-http-auth/src</path>
+                <path>packages/nexus-http-toolkit/src</path>
+                <path>packages/nexus-http-server-swoole/src</path>
+                <path>packages/nexus-http-server-swoole-threads/src</path>
+                <path>packages/nexus-doctrine-dbal/src</path>
+                <path>packages/nexus-doctrine-orm/src</path>
+                <path>packages/nexus-observability/src</path>
+                <path>packages/nexus-observability-otel/src</path>
+                <path>packages/nexus-observability-http/src</path>
+                <path>packages/nexus-observability-persistence/src</path>
+                <path>packages/nexus-observability-worker-pool/src</path>
+                <path>packages/nexus-observability-doctrine/src</path>
+                <path>packages/nexus-observability-logger/src</path>
+                <path>packages/nexus-observability-swoole/src</path>
+                <path>packages/nexus-observability-actor/src</path>
             </source>
             <visibility>public</visibility>
             <visibility>protected</visibility>

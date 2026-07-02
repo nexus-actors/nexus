@@ -1,6 +1,6 @@
 # api.nexusactors.com — phpDocumentor API reference deploy.
 #
-# Builds with the official phpDocumentor image (vanilla templates). The branded
+# Builds with the official phpDocumentor image (3.4 — the :3 tag is currently broken upstream) (vanilla templates). The branded
 # phpdoc-templates-plugin is not yet published to GitHub — once it is, swap the
 # build step for the plugin image to restore the custom theme.
 
@@ -41,7 +41,7 @@ jobs:
           docker run --rm \
             -v "${{ github.workspace }}":/data \
             -w /data \
-            phpdoc/phpdoc:3 \
+            phpdoc/phpdoc:3.4 \
             --config=phpdoc.dist.xml --target=build/api-nexus --force
 
       - name: Verify output

@@ -1,5 +1,6 @@
 import React from 'react';
 import Footer from '@theme-original/DocItem/Footer';
+import Link from '@docusaurus/Link';
 import {useDoc} from '@docusaurus/plugin-content-docs/client';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
@@ -15,7 +16,7 @@ export default function FooterWrapper(props) {
           <ul style={{margin: 0, paddingLeft: '1.25rem'}}>
             {related.map(slug => (
               <li key={slug}>
-                <a href={`${base}${slug}`}>{slug.replace(/-/g, ' ')}</a>
+                <Link to={`${base}${slug}`}>{slug.replace(/-/g, ' ')}</Link>
               </li>
             ))}
           </ul>
