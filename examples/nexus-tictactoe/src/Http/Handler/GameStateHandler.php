@@ -17,9 +17,9 @@ use function is_string;
 
 /**
  * `GET /api/games/{id}` — one-shot snapshot for spectators and reload
- * paths. Reads the committed row via the pooled EM; concurrent moves
- * inside the `GameActor` are safely observable because the version column
- * keeps the row consistent per-commit.
+ * paths. Reads the `games` lobby read model via the pooled EM; the
+ * event-sourced `GameActor` keeps that row current by projecting each new
+ * state after its events are persisted.
  *
  * Returns the name-only {@see SnapshotPayload} — never the seat ids, which
  * are capability tokens. Same privacy boundary as the WebSocket broadcast.

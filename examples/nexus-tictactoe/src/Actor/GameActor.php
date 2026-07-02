@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\TicTacToe\Actor;
 
-use Closure;
-use LogicException;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorRef;
-use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
+use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameEnvelope;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameRejected;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\Seated;
@@ -16,109 +14,170 @@ use Monadial\Nexus\Example\TicTacToe\Domain\Command\Forfeit;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\GetSnapshot;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\JoinGame;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\MakeMove;
-use Monadial\Nexus\Example\TicTacToe\Domain\Entity\GameSession;
-use Monadial\Nexus\Example\TicTacToe\Domain\Exception\GameDomainException;
+use Monadial\Nexus\Example\TicTacToe\Domain\Event\GameEvent;
+use Monadial\Nexus\Example\TicTacToe\Domain\GameDecision;
+use Monadial\Nexus\Example\TicTacToe\Domain\GameRules;
+use Monadial\Nexus\Example\TicTacToe\Domain\State\GameState;
+use Monadial\Nexus\Example\TicTacToe\ReadModel\GameReadModel;
+use Monadial\Nexus\Persistence\Event\EventStore;
+use Monadial\Nexus\Persistence\EventSourced\Effect;
+use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
+use Monadial\Nexus\Persistence\PersistenceId;
 use Psr\Log\LoggerInterface;
 
 /**
- * Command handler for the per-game aggregate — single writer per game id.
+ * The per-game aggregate, event-sourced — single writer per game id.
  *
- * Dispatches the enclosed {@see \Monadial\Nexus\Example\TicTacToe\Domain\Command\GameCommand}
- * against {@see GameSession} and replies with one of three actor-layer
- * messages, each routed by the channel actor:
- *  - {@see Seated} — a successful join; broadcast state + private welcome.
- *  - {@see GameSnapshot} — a move/forfeit success or a read; the new state.
- *  - {@see GameRejected} — a domain-rule violation, carrying the offending
- *    `fd` so the error reaches only that client.
+ * Two halves, in the CQRS/ES shape:
+ *  - DECIDE ({@see dispatch}): route the enveloped command, ask the pure
+ *    {@see GameRules} for a {@see GameDecision}, and turn it into an
+ *    `Effect` — persist events + reply, or reply a rejection with no events.
+ *  - EVOLVE ({@see applyEvent}): fold one event into the {@see GameState}.
  *
- * No Doctrine knowledge lives here: {@see \Monadial\Nexus\Example\TicTacToe\Boot\DoctrineKit}
- * wires the connection factory, ORM configuration, and passivation.
+ * The event log is the source of truth: on (re)spawn the persistence engine
+ * replays it through `applyEvent` to rebuild state before the first command.
+ * After each persist the new state is projected into the {@see GameReadModel}
+ * so the REST lobby can query it. Swap the injected {@see EventStore} from
+ * `InMemoryEventStore` to `DbalEventStore` for durable journals — this class
+ * does not change.
+ *
+ * Replies are addressed from the {@see GameEnvelope} (its `replyTo` channel
+ * actor + originating `fd`), never `ctx->sender()`, so a private welcome or
+ * rejection reaches exactly the connection that acted.
  */
 final class GameActor
 {
-    /**
-     * @return Closure(ActorContext<GameEnvelope>, GameEnvelope, GameSession): EntityEffect<GameSession>
-     */
-    public static function handler(LoggerInterface $log): Closure
-    {
-        return
-            /**
-             * @return EntityEffect<GameSession>
-             */
-            static function (ActorContext $ctx, GameEnvelope $env, GameSession $game) use ($log): EntityEffect {
-                $cmd = $env->command;
-                $replyTo = $env->replyTo;
-                $fd = $env->originFd;
+    public static function behavior(
+        string $gameId,
+        EventStore $store,
+        GameReadModel $readModel,
+        LoggerInterface $log,
+    ): Behavior {
+        return EventSourcedBehavior::create(
+            PersistenceId::of('Game', $gameId),
+            GameState::empty($gameId),
+            static fn(GameState $state, ActorContext $ctx, object $command): Effect => self::dispatch(
+                $state,
+                $command,
+                $readModel,
+                $log,
+            ),
+            static fn(GameState $state, object $event): GameState => self::applyEvent($state, $event),
+        )
+            ->withEventStore($store)
+            ->toBehavior();
+    }
 
-                $log->debug('game command received', [
-                    'gameId' => $game->id(),
-                    'command' => $cmd::class,
-                    'fd' => $fd,
-                    'statusBefore' => $game->status()->value,
-                ]);
+    private static function dispatch(
+        GameState $state,
+        object $command,
+        GameReadModel $readModel,
+        LoggerInterface $log,
+    ): Effect {
+        if (!$command instanceof GameEnvelope) {
+            return Effect::unhandled();
+        }
 
-                try {
-                    $effect = match (true) {
-                        $cmd instanceof JoinGame => self::persist(
-                            $replyTo,
-                            static fn() => $game->join($cmd->playerId, $cmd->playerName),
-                            static fn(GameSession $g): Seated => new Seated($g->toSnapshot(), $fd, $cmd->playerId),
-                        ),
-                        $cmd instanceof MakeMove => self::persist(
-                            $replyTo,
-                            static fn() => $game->makeMove($cmd->playerId, $cmd->cellIndex),
-                            static fn(GameSession $g) => $g->toSnapshot(),
-                        ),
-                        $cmd instanceof Forfeit => self::persist(
-                            $replyTo,
-                            static fn() => $game->forfeit($cmd->playerId),
-                            static fn(GameSession $g) => $g->toSnapshot(),
-                        ),
-                        $cmd instanceof GetSnapshot => self::read($game, $replyTo),
-                        default => throw new LogicException('unhandled GameCommand: ' . $cmd::class),
-                    };
+        $cmd = $command->command;
+        $replyTo = $command->replyTo;
+        $fd = $command->originFd;
 
-                    $log->debug('game command applied', [
-                        'command' => $cmd::class,
-                        'gameId' => $game->id(),
-                        'statusAfter' => $game->status()->value,
-                    ]);
-
-                    return $effect;
-                } catch (GameDomainException $e) {
-                    $log->warning('game command rejected by aggregate', [
-                        'command' => $cmd::class,
-                        'error' => $e::class . ': ' . $e->getMessage(),
-                        'gameId' => $game->id(),
-                    ]);
-                    $replyTo->tell(new GameRejected($e->getMessage(), $fd));
-
-                    return EntityEffect::same();
-                }
-            };
+        return match (true) {
+            $cmd instanceof JoinGame => self::onJoin($state, $cmd, $replyTo, $fd, $readModel, $log),
+            $cmd instanceof MakeMove => self::onMutation(
+                $state,
+                GameRules::move($state, $cmd),
+                $replyTo,
+                $fd,
+                $readModel,
+                $log,
+                $cmd::class,
+            ),
+            $cmd instanceof Forfeit => self::onMutation(
+                $state,
+                GameRules::forfeit($state, $cmd),
+                $replyTo,
+                $fd,
+                $readModel,
+                $log,
+                $cmd::class,
+            ),
+            $cmd instanceof GetSnapshot => Effect::reply($replyTo, $state->toSnapshot()),
+            default => Effect::unhandled(),
+        };
     }
 
     /**
      * @param ActorRef<object> $replyTo
-     * @param Closure(): void $mutate
-     * @param Closure(GameSession): object $reply
-     * @return EntityEffect<GameSession>
      */
-    private static function persist(ActorRef $replyTo, Closure $mutate, Closure $reply): EntityEffect
-    {
-        $mutate();
+    private static function onJoin(
+        GameState $state,
+        JoinGame $cmd,
+        ActorRef $replyTo,
+        int $fd,
+        GameReadModel $readModel,
+        LoggerInterface $log,
+    ): Effect {
+        $decision = GameRules::join($state, $cmd);
 
-        return EntityEffect::persist()->thenReply($replyTo, $reply);
+        if ($decision->isRejected()) {
+            $log->debug('join rejected', ['gameId' => $state->gameId, 'reason' => $decision->rejection]);
+
+            return Effect::reply($replyTo, new GameRejected((string) $decision->rejection, $fd));
+        }
+
+        $token = $cmd->playerId;
+
+        if ($decision->events === []) {
+            // Reconnect to a seat already held — no new fact, just re-welcome
+            // this connection with the current snapshot.
+            return Effect::reply($replyTo, new Seated($state->toSnapshot(), $fd, $token));
+        }
+
+        return self::persistWithProjection($decision->events, $readModel)
+            ->thenReply($replyTo, static fn(GameState $next): Seated => new Seated($next->toSnapshot(), $fd, $token));
     }
 
     /**
      * @param ActorRef<object> $replyTo
-     * @return EntityEffect<GameSession>
      */
-    private static function read(GameSession $game, ActorRef $replyTo): EntityEffect
-    {
-        $replyTo->tell($game->toSnapshot());
+    private static function onMutation(
+        GameState $state,
+        GameDecision $decision,
+        ActorRef $replyTo,
+        int $fd,
+        GameReadModel $readModel,
+        LoggerInterface $log,
+        string $commandClass,
+    ): Effect {
+        if ($decision->isRejected()) {
+            $log->debug('command rejected', [
+                'command' => $commandClass,
+                'gameId' => $state->gameId,
+                'reason' => $decision->rejection,
+            ]);
 
-        return EntityEffect::same();
+            return Effect::reply($replyTo, new GameRejected((string) $decision->rejection, $fd));
+        }
+
+        return self::persistWithProjection($decision->events, $readModel)
+            ->thenReply($replyTo, static fn(GameState $next) => $next->toSnapshot());
+    }
+
+    /**
+     * @param list<GameEvent> $events
+     */
+    private static function persistWithProjection(array $events, GameReadModel $readModel): Effect
+    {
+        return Effect::persist(...$events)->thenRun(static function (GameState $next) use ($readModel): void {
+            $readModel->apply($next->toSnapshot());
+        });
+    }
+
+    private static function applyEvent(GameState $state, object $event): GameState
+    {
+        return $event instanceof GameEvent
+            ? $state->apply($event)
+            : $state;
     }
 }

@@ -1,16 +1,22 @@
 # nexus-tictactoe
 
 Multiplayer tic-tac-toe over WebSocket. A single-file React SPA talks to a
-Nexus Swoole-Threads HTTP server; every game is a persisted Doctrine
-aggregate driven by a per-id `EntityBehavior` actor. Broadcast between the
-two players (and any spectators) goes through a `WebSocketChannelActor`
-keyed by game id.
+Nexus Swoole-Threads HTTP server; every game is an **event-sourced** actor —
+commands produce events, the state is a fold of the log — projected into a
+Doctrine read model for the lobby. Broadcast between the two players (and any
+spectators) goes through a `WebSocketChannelActor` keyed by game id.
 
 ## What it shows
 
-- **`EntityBehavior` as a rich aggregate** — the `GameSession` entity holds
-  every rule (whose turn, cell occupied, game over) and the actor is a thin
-  command dispatcher that flushes on each move. Single-writer per game id.
+- **`EventSourcedBehavior` (CQRS)** — the game actor is split into DECIDE
+  (pure `GameRules` turns a command into events or a token-free rejection)
+  and EVOLVE (`GameState` folds each event). The event log is the source of
+  truth; on (re)spawn the persistence engine replays it to rebuild state.
+  Single writer per game id.
+- **Read model as a projection** — after each persist the actor projects the
+  new state into the `games` table (`GameSession`), so the REST lobby can
+  answer "which games are live?" and "show me the board" with a plain
+  indexed query — the one thing an event log alone can't do cheaply.
 - **`WebSocketChannelActor` for fan-out** — one channel actor per game id
   attaches every connected client; snapshot replies from the game actor
   broadcast to all attached sockets.
@@ -21,8 +27,8 @@ keyed by game id.
   cached snapshot immediately; the game id lives in the URL hash so
   refreshing a tab picks the game right back up.
 - **Worker-pool sharding** — game actors are addressed by
-  `EntityRefFactory::of($id)`; the shared Postgres row is the source of
-  truth, so any worker thread can serve any game.
+  `GameRefFactory::of($id)`; the read model is shared, so any worker thread
+  can serve any game.
 
 ## Run it
 
@@ -44,29 +50,32 @@ count as distinct players and a refresh reclaims the same seat.
 ```
 Browser (React SPA)                Nexus worker thread
   ─────────────────                 ─────────────────────────
-  GET  /api/games       ─▶ HTTP handler ─▶ Doctrine EM (pool)
-  POST /api/games       ─▶ CreateGameHandler ─▶ persist row
-  WS   /ws/games/{id}   ─▶ GameChannelActor  ─▶ GameActor
-                                      │            │  (EntityRefFactory::of)
-                                      │            ▼
-                                      │       GameSession (Doctrine entity)
+  GET  /api/games       ─▶ HTTP handler ─▶ Doctrine EM (pool)  ─┐  read
+  POST /api/games       ─▶ CreateGameHandler ─▶ seed row        │  model
+  WS   /ws/games/{id}   ─▶ GameChannelActor  ─▶ GameActor       │  (`games`
+                                      │            │ (ES)       │   table)
+                                      │       DECIDE → events   │
+                                      │       persist to log    │
+                                      │       EVOLVE → state ───┘  project
                                       ▼            │
-                                  broadcast    flush on every move
-                                  snapshot         │
-                                  to all       Postgres `games` row
-                                  attached
-                                  sockets
+                                  broadcast    Event log
+                                  snapshot     (InMemory → Dbal)
+                                  to all
+                                  attached sockets
 ```
 
-- The **game actor** is spawned lazily by `EntityRefFactory::of($gameId)`.
-  It handles the sealed `GameCommand` set (`JoinGame`, `MakeMove`,
-  `Forfeit`, `GetSnapshot`) and returns an `EntityEffect` on every
-  transition — the entity flushes to Postgres before the reply goes out.
-- The **channel actor** decodes each client JSON frame into a typed
-  command, forwards it to the game actor with `$ctx->self()` as the reply
-  target, then caches and broadcasts each `GameSnapshot` that comes back.
-- If both players idle for 5 minutes the game actor **passivates** — the
-  next command from `EntityRefFactory::of()` reloads the row and resumes.
+- The **game actor** is spawned lazily by `GameRefFactory::of($gameId)`. It
+  handles the sealed `GameCommand` set (`JoinGame`, `MakeMove`, `Forfeit`,
+  `GetSnapshot`) wrapped in a `GameEnvelope`, asks `GameRules` for the
+  events, persists them, and only then replies + projects the new state into
+  the `games` read model.
+- The **channel actor** decodes each client JSON frame into a typed intent,
+  stamps identity from the connection, forwards a command to the game actor
+  with itself as the reply target, then caches and broadcasts each
+  `GameSnapshot` that comes back.
+- The journal is a per-worker `InMemoryEventStore` for the demo. Swap it for
+  `DbalEventStore` (nexus-persistence-dbal) to persist events durably — the
+  actor code does not change.
 
 ## Wire protocol
 
@@ -118,16 +127,22 @@ src/
     App.php            # per-worker HTTP+WS factory
     Bootstrap.php      # main-thread once-only wiring (Swoole coroutine hook)
     Config.php / DbConfig.php / HttpConfig.php
-    DoctrineKit.php    # pools + EntityRefFactory (the only Doctrine wiring)
+    DoctrineKit.php    # pools + event store + GameRefFactory (persistence wiring)
     SchemaBootstrap.php
   Domain/         # framework-agnostic — no imports from Actor/ or Http/
     Command/      # marker + JoinGame / MakeMove / Forfeit / GetSnapshot
-    Entity/       # GameSession Doctrine aggregate — every rule lives here
+    Event/        # PlayerJoined / MoveMade / GameWon / GameDrawn / GameForfeited
+    State/        # GameState — immutable fold of the event log
+    GameRules.php # pure DECIDE: (state, command) → events or rejection
+    GameDecision.php # events-to-persist or a token-free rejection
+    Entity/       # GameSession — lobby READ MODEL (projection, not the aggregate)
     View/         # GameSnapshot + PlayerSeat (read models)
     Value/        # PlayerMark, GameStatus, Board (immutable 3x3)
-    Exception/    # GameFullException, NotYourTurnException, ...
+    Exception/    # GameDomainException + CellOccupied / InvalidCell / InvalidCommand
+  ReadModel/      # GameReadModel (interface) + DoctrineGameReadModel (projection)
   Actor/
-    GameActor.php               # EntityBehavior handler — single-writer per game id
+    GameActor.php               # EventSourcedBehavior — DECIDE + EVOLVE, single-writer
+    GameRefFactory.php          # per-id spawn/cache of the ES game actor
     Message/                    # actor-layer transport (never in Domain)
       GameEnvelope.php          # command + replyTo + originFd
       Seated.php                # join reply — snapshot + fd + token (→ private welcome)
@@ -155,27 +170,21 @@ public/
 - Default is **one worker process** (`TICTACTOE_THREADS=1`). The
   `WebSocketChannelActor` fans out only to sockets attached to the same
   worker; two players landing on different workers would never see each
-  other. The `#[Version]` column on `GameSession` keeps the persistence
-  layer safe, but multi-worker fan-out needs a pub/sub layer (Postgres
-  LISTEN/NOTIFY, Redis, or a `nexus-cluster` transport) that is out of
-  scope for this example.
+  other. Multi-worker fan-out needs a pub/sub layer (Postgres LISTEN/NOTIFY,
+  Redis, or a `nexus-cluster` transport) that is out of scope here.
 - One worker is plenty for a game: Swoole coroutines multiplex thousands
   of concurrent WS connections in a single process. The interesting
-  scaling story here is per-actor (single-writer per game id, passivate
-  when idle) — not per-CPU.
-- **Connection-per-live-game.** Each live game actor owns a *dedicated*
-  Doctrine connection for its lifetime (single-writer isolation) — it does
-  not borrow from the HTTP pool. So the passivation window caps concurrent
-  connections: an idle game holds its connection until `withReceiveTimeout`
-  (30s here) fires. Size Postgres `max_connections` for your peak of
-  *simultaneously active* games, and shorten the timeout if that peak is
-  high. The row is the source of truth, so passivation is invisible —
-  the next move re-spawns and re-reads.
+  scaling story here is per-actor (single-writer per game id) — not per-CPU.
+- **No connection is pinned per game.** Unlike the state-stored
+  `EntityBehavior`, the event-sourced actor holds no dedicated Doctrine
+  connection: the event journal is an in-memory store, and the read-model
+  projection borrows a pooled EntityManager only for the duration of one
+  upsert (`EntityManagerPool::withEntityManager`). Swap the journal to
+  `DbalEventStore` for durability; the write side then appends to
+  `nexus_event_journal` and the per-id sequence column rejects a concurrent
+  cross-worker append (`ConcurrentModificationException`).
 
 ## Resilience notes
-
-The demo keeps failure handling deliberately small; a few gaps are worth
-naming so you know where the edges are:
 
 - **Client self-heals.** The SPA reconnects with capped backoff on any
   socket close and replays its stored token to reclaim the seat, and a
@@ -183,18 +192,15 @@ naming so you know where the edges are:
   reconnect if a move goes unanswered — so an actor restart, worker
   recycle, or dropped connection recovers on its own instead of leaving a
   dead board.
-- **A mid-move DB fault is not yet self-healing server-side.** The
-  `EntityBehavior` reply hooks fire only after a successful flush, and
-  nexus-core supervision does not currently re-instantiate an actor that
-  faults on its held connection. If Postgres blips mid-move the actor can
-  keep a dead connection; the client watchdog turns that into a visible
-  "reconnecting…" rather than a silent hang, but true server-side recovery
-  (reply-on-failure + restart-on-infra-error) is a framework concern, not
-  something this example papers over.
-- **Optimistic locking is per-game, single-writer.** With one worker there
-  is exactly one writer per game id, so the `#[Version]` column never
-  conflicts. Across workers (see above) a losing write would surface as a
-  conflict the client retries via reconnect.
+- **Crash → replay.** Because the actor is event-sourced, recovery is just
+  replay: if the game actor crashes, nexus-core supervision restarts it and
+  the persistence engine folds the event log back into `GameState` before
+  the next command. Events are persisted *before* the reply and projection,
+  so a failure after persist never loses a move.
+- **Single writer per id.** One actor owns each game's command stream, so
+  moves never interleave. If a durable store is used and two workers ever
+  race the same id, the journal's sequence check rejects the loser, which
+  the client retries via reconnect.
 
 ## Extend it
 
@@ -204,7 +210,7 @@ naming so you know where the edges are:
   pairs waiting players by rating.
 - **Multi-machine** — swap `nexus-worker-pool-swoole` for a
   `nexus-cluster`-backed transport; the game actor's addressing
-  (`EntityRefFactory::of($gameId)`) does not change.
+  (`GameRefFactory::of($gameId)`) does not change.
 
 ## License
 

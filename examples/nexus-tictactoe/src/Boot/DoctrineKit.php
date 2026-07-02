@@ -4,37 +4,40 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\TicTacToe\Boot;
 
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\ORMSetup;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Doctrine\Dbal\DoctrinePool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
-use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
-use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
-use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
 use Monadial\Nexus\Doctrine\Orm\DoctrineEmPool;
-use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
 use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
-use Monadial\Nexus\Example\TicTacToe\Actor\GameActor;
-use Monadial\Nexus\Example\TicTacToe\Domain\Entity\GameSession;
-use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Example\TicTacToe\Actor\GameRefFactory;
+use Monadial\Nexus\Example\TicTacToe\ReadModel\DoctrineGameReadModel;
+use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
 use Psr\Log\LoggerInterface;
 
 /**
- * Per-worker Doctrine wiring — the only place Doctrine config touches the
- * app. Downstream code (game actor handler, HTTP handlers) receives
- * ready-to-use collaborators; nothing else knows about connection params
- * or ORM paths.
+ * Per-worker persistence wiring — the only place persistence config touches
+ * the app. Downstream code receives ready-to-use collaborators.
+ *
+ * Two sides, CQRS-style:
+ *  - `connPool` / `emPool` — pooled DBAL/ORM handles for the stateless HTTP
+ *    lobby AND for the read-model projection (borrowed per write, never held).
+ *  - `gameFactory` — the event-sourced write side: one {@see GameRefFactory}
+ *    spawning a per-id game actor whose events are the source of truth.
+ *
+ * The journal is a per-worker {@see InMemoryEventStore} for the demo. Swap it
+ * for `DbalEventStore` (nexus-persistence-dbal) to persist events durably —
+ * the actor code is identical either way. The `games` table remains the
+ * lobby read model, kept current by the actor's projection.
  */
 final readonly class DoctrineKit
 {
     public function __construct(
         public ConnectionPool $connPool,
         public EntityManagerPool $emPool,
-        public EntityRefFactory $gameFactory,
+        public GameRefFactory $gameFactory,
     ) {}
 
     public static function build(DbConfig $db, ActorSystem $system, LoggerInterface $log): self
@@ -48,36 +51,28 @@ final readonly class DoctrineKit
 
         SchemaBootstrap::sync($connParams, $ormConfig);
 
+        $connPool = DoctrinePool::fromParams(
+            name: 'tictactoe-dbal',
+            connParams: $connParams,
+            config: new PoolConfig(max: 8, minIdle: 1),
+        );
+
+        $emPool = DoctrineEmPool::forConfig(
+            name: 'tictactoe-em',
+            connParams: $connParams,
+            ormSetup: $ormConfig,
+            config: new EmPoolConfig(max: 8, minIdle: 1),
+        );
+
         return new self(
-            connPool: DoctrinePool::fromParams(
-                name: 'tictactoe-dbal',
-                connParams: $connParams,
-                config: new PoolConfig(max: 8, minIdle: 1),
+            connPool: $connPool,
+            emPool: $emPool,
+            gameFactory: new GameRefFactory(
+                $system,
+                new InMemoryEventStore(),
+                new DoctrineGameReadModel($emPool),
+                $log,
             ),
-            emPool: DoctrineEmPool::forConfig(
-                name: 'tictactoe-em',
-                connParams: $connParams,
-                ormSetup: $ormConfig,
-                config: new EmPoolConfig(max: 8, minIdle: 1),
-            ),
-            // Each live game actor owns a DEDICATED Doctrine connection for its
-            // whole lifetime (single-writer isolation) — it does NOT borrow from
-            // $connPool/$emPool, which serve the stateless HTTP lobby. That makes
-            // the passivation window a hard cap on concurrent connections:
-            // ~max_idle_games ≈ receiveTimeout × moves_per_second. Keep it short
-            // (30s, not minutes) so an idle game frees its connection quickly and
-            // Postgres max_connections is not the ceiling on concurrent games.
-            // The row is the source of truth, so the next move transparently
-            // re-spawns and re-reads — passivation is invisible to players.
-            gameFactory: EntityRefFactory::for(new ActorSystemSpawner($system), GameSession::class)
-                ->using(new DefaultEntityManagerFactory($ormConfig))
-                ->withConnectionSource(static fn(): Connection => DriverManager::getConnection($connParams))
-                ->withReplayPolicy(new CreateIfMissing(
-                    static fn(string $gameId): GameSession => new GameSession($gameId),
-                ))
-                ->withReceiveTimeout(Duration::seconds(30))
-                ->handle(GameActor::handler($log))
-                ->build(),
         );
     }
 }

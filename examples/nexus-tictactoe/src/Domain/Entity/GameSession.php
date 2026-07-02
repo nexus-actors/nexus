@@ -10,11 +10,6 @@ use Doctrine\ORM\Mapping\Entity;
 use Doctrine\ORM\Mapping\Id;
 use Doctrine\ORM\Mapping\Index;
 use Doctrine\ORM\Mapping\Table;
-use Doctrine\ORM\Mapping\Version;
-use Monadial\Nexus\Example\TicTacToe\Domain\Exception\GameFullException;
-use Monadial\Nexus\Example\TicTacToe\Domain\Exception\GameOverException;
-use Monadial\Nexus\Example\TicTacToe\Domain\Exception\NotYourTurnException;
-use Monadial\Nexus\Example\TicTacToe\Domain\Exception\UnknownPlayerException;
 use Monadial\Nexus\Example\TicTacToe\Domain\Value\Board;
 use Monadial\Nexus\Example\TicTacToe\Domain\Value\GameStatus;
 use Monadial\Nexus\Example\TicTacToe\Domain\Value\PlayerMark;
@@ -22,16 +17,21 @@ use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
 use Monadial\Nexus\Example\TicTacToe\Domain\View\PlayerSeat;
 
 /**
- * Aggregate root for one game.
+ * Lobby READ MODEL for one game — a denormalised projection, not the write
+ * model.
  *
- * Every rule (whose turn, cell occupied, game over) lives here. The
- * game actor calls one method; the aggregate mutates or throws. No rule
- * checks live in the actor layer.
+ * The rules and the source of truth live in the event-sourced write side
+ * ({@see \Monadial\Nexus\Example\TicTacToe\Domain\GameRules} decides,
+ * {@see \Monadial\Nexus\Example\TicTacToe\Domain\State\GameState} folds the
+ * event log). The game actor projects each new state into this `games` row
+ * via {@see applySnapshot()} so the REST lobby (`GET /api/games`,
+ * `GET /api/games/{id}`) can answer "which games are live?" and "show me the
+ * board" with a plain indexed query — the one thing an event log alone can't
+ * do cheaply.
  *
- * Concurrency: the `#[Version]` column turns any cross-worker overwrite
- * into a loud `OptimisticLockException` instead of a silent last-write-
- * wins race. Supervision restarts the actor on conflict; the reloaded
- * entity retries the command.
+ * Because a game is single-writer (one actor per id), the projection needs
+ * no optimistic-lock column: the actor is the only writer, so last-write is
+ * the only write.
  */
 #[Entity]
 #[Table(name: 'games')]
@@ -72,10 +72,6 @@ final class GameSession
 
     #[Column(name: 'ended_at', nullable: true)]
     private ?DateTimeImmutable $endedAt = null;
-
-    #[Version]
-    #[Column(type: 'integer')]
-    private int $version = 1;
 
     public function __construct(string $id)
     {
@@ -123,115 +119,23 @@ final class GameSession
     }
 
     /**
-     * Seat a player. First joiner gets X, second gets O and the game moves
-     * to `InProgress`. Re-join under the same id refreshes the display
-     * name; returns silently for the "reconnect after dropped WS" case.
+     * Overwrite this projection with the latest authoritative snapshot from
+     * the event-sourced write side. Called by the game actor after each
+     * batch of events is persisted and folded.
      */
-    public function join(string $playerId, string $playerName): void
+    public function applySnapshot(GameSnapshot $snapshot): void
     {
-        if ($this->playerXId === $playerId) {
-            $this->playerXName = $playerName;
+        $this->status = $snapshot->status;
+        $this->playerXId = $snapshot->playerX?->id;
+        $this->playerXName = $snapshot->playerX?->name;
+        $this->playerOId = $snapshot->playerO?->id;
+        $this->playerOName = $snapshot->playerO?->name;
+        $this->board = $snapshot->board;
+        $this->nextTurn = $snapshot->nextTurn;
+        $this->winner = $snapshot->winner;
 
-            return;
-        }
-
-        if ($this->playerOId === $playerId) {
-            $this->playerOName = $playerName;
-
-            return;
-        }
-
-        if ($this->playerXId === null) {
-            $this->playerXId = $playerId;
-            $this->playerXName = $playerName;
-
-            return;
-        }
-
-        if ($this->playerOId === null) {
-            $this->playerOId = $playerId;
-            $this->playerOName = $playerName;
-            $this->status = GameStatus::InProgress;
-            $this->nextTurn = PlayerMark::X;
-
-            return;
-        }
-
-        throw new GameFullException('both seats are taken');
-    }
-
-    /**
-     * @param int<0, 8> $cellIndex
-     */
-    public function makeMove(string $playerId, int $cellIndex): void
-    {
-        if ($this->status !== GameStatus::InProgress) {
-            throw new GameOverException("cannot move on a {$this->status->value} game");
-        }
-
-        $mark = $this->markFor($playerId);
-
-        if ($mark !== $this->nextTurn) {
-            throw new NotYourTurnException("it is {$this->nextTurn?->value}'s turn");
-        }
-
-        $board = Board::fromCells($this->board)->place($cellIndex, $mark);
-        $this->board = $board->toArray();
-
-        $winner = $board->winner();
-
-        if ($winner !== null) {
-            $this->status = GameStatus::Won;
-            $this->winner = $winner;
-            $this->nextTurn = null;
+        if ($this->endedAt === null && $snapshot->status->isTerminal()) {
             $this->endedAt = new DateTimeImmutable();
-
-            return;
         }
-
-        if ($board->isFull()) {
-            $this->status = GameStatus::Draw;
-            $this->nextTurn = null;
-            $this->endedAt = new DateTimeImmutable();
-
-            return;
-        }
-
-        $this->nextTurn = $mark->opponent();
-    }
-
-    public function forfeit(string $playerId): void
-    {
-        if ($this->status->isTerminal()) {
-            throw new GameOverException("game already {$this->status->value}");
-        }
-
-        $mark = $this->markFor($playerId);
-
-        if ($this->status === GameStatus::InProgress) {
-            $this->status = GameStatus::Won;
-            $this->winner = $mark->opponent();
-        } else {
-            $this->status = GameStatus::Abandoned;
-        }
-
-        $this->nextTurn = null;
-        $this->endedAt = new DateTimeImmutable();
-    }
-
-    private function markFor(string $playerId): PlayerMark
-    {
-        if ($this->playerXId === $playerId) {
-            return PlayerMark::X;
-        }
-
-        if ($this->playerOId === $playerId) {
-            return PlayerMark::O;
-        }
-
-        // Deliberately token-free: $playerId is the server-issued capability
-        // token. Embedding it here would leak the secret into logs and the
-        // client error frame. The message names the rule, not the token.
-        throw new UnknownPlayerException('player is not seated in this game');
     }
 }

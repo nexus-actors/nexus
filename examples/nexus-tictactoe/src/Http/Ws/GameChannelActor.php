@@ -6,7 +6,7 @@ namespace Monadial\Nexus\Example\TicTacToe\Http\Ws;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
-use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
+use Monadial\Nexus\Example\TicTacToe\Actor\GameRefFactory;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameEnvelope;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameRejected;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\Seated;
@@ -58,7 +58,7 @@ final class GameChannelActor extends WebSocketChannelActor
     private array $seats = [];
 
     public function __construct(
-        private readonly EntityRefFactory $games,
+        private readonly GameRefFactory $games,
         private readonly ClientFrameCodec $codec,
         private readonly LoggerInterface $log,
     ) {}

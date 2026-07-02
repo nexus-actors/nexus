@@ -12,12 +12,12 @@ use Psr\Http\Message\ResponseInterface;
 use Symfony\Component\Uid\Ulid;
 
 /**
- * `POST /api/games` — mint a game id and persist an empty row.
+ * `POST /api/games` — mint a game id and seed the lobby read-model row.
  *
- * The Ulid is globally unique, so this INSERT never races another
- * creator; every subsequent mutation flows through the per-id `GameActor`
- * whose `#[Version]` column enforces cross-worker single-writer safety
- * via optimistic-lock retry (see {@see GameSession}).
+ * The Ulid is globally unique, so this INSERT never races another creator.
+ * Gameplay then flows through the per-id, event-sourced `GameActor`
+ * (single writer per game); this `games` row is only the lobby projection,
+ * refreshed as the actor applies events (see {@see GameSession}).
  */
 final class CreateGameHandler
 {

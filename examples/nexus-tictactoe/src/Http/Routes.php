@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\TicTacToe\Http;
 
-use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
+use Monadial\Nexus\Example\TicTacToe\Actor\GameRefFactory;
 use Monadial\Nexus\Example\TicTacToe\Domain\Exception\GameDomainException;
 use Monadial\Nexus\Example\TicTacToe\Http\Handler\CreateGameHandler;
 use Monadial\Nexus\Example\TicTacToe\Http\Handler\GameStateHandler;
@@ -33,7 +33,7 @@ final class Routes
 {
     public static function register(
         WsApplication $app,
-        EntityRefFactory $gameFactory,
+        GameRefFactory $gameFactory,
         MessageSerializer $serializer,
         IndexHandler $index,
         LoggerInterface $log,
