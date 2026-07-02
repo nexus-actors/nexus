@@ -1,8 +1,9 @@
 # api.nexusactors.com — phpDocumentor API reference deploy.
 #
-# Builds with the official phpDocumentor image (3.4 — the :3 tag is currently broken upstream) (vanilla templates). The branded
-# phpdoc-templates-plugin is not yet published to GitHub — once it is, swap the
-# build step for the plugin image to restore the custom theme.
+# Builds with the official phpDocumentor image (vanilla templates; 3.4 — the
+# :3 tag is currently broken upstream). Deploys use the `prod` environment,
+# which holds CLOUDFLARE_API_TOKEN (secret) and CLOUDFLARE_ACCOUNT_ID (var).
+# Swap the build step for the phpdoc-templates-plugin image once published.
 
 name: api.nexusactors.com — phpDocumentor deploy
 
@@ -25,13 +26,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      deployments: write
-
     steps:
       - name: Checkout Nexus
         uses: actions/checkout@v4
@@ -48,18 +44,31 @@ jobs:
         run: |
           test -f build/api-nexus/index.html
 
-      - name: Deploy to Cloudflare Pages (Production)
-        if: github.event_name != 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-docs-build
+          path: build/api-nexus
+          retention-days: 1
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: prod
+
+    permissions:
+      contents: read
+      deployments: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: api-docs-build
+          path: build/api-nexus
+
+      - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy build/api-nexus --project-name=nexus-api --branch=main
-
-      - name: Deploy to Cloudflare Pages (Preview)
-        if: github.event_name == 'pull_request' && vars.CLOUDFLARE_ACCOUNT_ID != ''
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy build/api-nexus --project-name=nexus-api --branch=pr-${{ github.event.number }}
