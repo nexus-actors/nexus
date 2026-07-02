@@ -14,6 +14,7 @@ use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Doctrine\Orm\Exception\EntityConflictException;
 use RuntimeException;
+use Throwable;
 
 /**
  * @psalm-internal Monadial\Nexus\Doctrine\Orm
@@ -88,7 +89,27 @@ final class EntityBehaviorRunner
                                 EntityEffectKind::Stash   => $innerCtx->stash(),
                             };
                         } catch (OptimisticLockException $e) {
-                            throw new EntityConflictException($builder->entityClass, $builder->id, $e);
+                            // Concurrent write lost the version race. Notify the
+                            // failure-reply targets with the domain conflict, then
+                            // stop: the caller learns the write failed instead of
+                            // hanging on its ask timeout, and the actor tears down
+                            // its now-suspect EM/Connection via PostStop so of()
+                            // prunes the dead ref and respawns a fresh actor.
+                            self::fireFailureHooks(
+                                $effect,
+                                new EntityConflictException($builder->entityClass, $builder->id, $e),
+                            );
+
+                            return BehaviorWithState::stopped();
+                        } catch (Throwable $e) {
+                            // Any other infra failure (dead connection, driver
+                            // error, ...): reply to the failure targets so the
+                            // caller does not hang, then stop instead of lingering
+                            // as a zombie holding a stale EntityManager / dead
+                            // Connection. of() respawns on the next message.
+                            self::fireFailureHooks($effect, $e);
+
+                            return BehaviorWithState::stopped();
                         }
 
                         if ($effect->kind !== EntityEffectKind::Stop && $effect->kind !== EntityEffectKind::Remove) {
@@ -140,5 +161,12 @@ final class EntityBehaviorRunner
     {
         $em->remove($entity);
         $em->flush();
+    }
+
+    private static function fireFailureHooks(EntityEffect $effect, Throwable $cause): void
+    {
+        foreach ($effect->failureHooks as $failure) {
+            $failure['ref']->tell(($failure['build'])($cause));
+        }
     }
 }

@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Throwable;
 
 #[CoversClass(EntityEffect::class)]
 #[CoversClass(EntityEffectKind::class)]
@@ -84,6 +85,44 @@ final class EntityEffectTest extends TestCase
         $effect = EntityEffect::persist()->thenReply($ref, static fn(object $e): object => new stdClass());
         self::assertCount(1, $effect->replyHooks);
         self::assertSame($ref, $effect->replyHooks[0]['ref']);
+    }
+
+    #[Test]
+    public function thenReplyOnFailureAppendsHookAndReturnsNewInstance(): void
+    {
+        $ref = $this->createStub(ActorRef::class);
+        $base = EntityEffect::persist();
+        /** @psalm-suppress UnusedClosureParam */
+        $composed = $base->thenReplyOnFailure($ref, static fn(Throwable $e): object => new stdClass());
+
+        self::assertNotSame($base, $composed);
+        self::assertCount(0, $base->failureHooks);
+        self::assertCount(1, $composed->failureHooks);
+        self::assertSame($ref, $composed->failureHooks[0]['ref']);
+        self::assertSame(EntityEffectKind::Persist, $composed->kind);
+    }
+
+    #[Test]
+    public function failureHooksCoexistWithSuccessReplyHooks(): void
+    {
+        $successRef = $this->createStub(ActorRef::class);
+        $failureRef = $this->createStub(ActorRef::class);
+        /** @psalm-suppress UnusedClosureParam */
+        $effect = EntityEffect::persist()
+            ->thenReply($successRef, static fn(object $e): object => new stdClass())
+            ->thenReplyOnFailure($failureRef, static fn(Throwable $e): object => new stdClass());
+
+        self::assertCount(1, $effect->replyHooks);
+        self::assertCount(1, $effect->failureHooks);
+        self::assertSame($successRef, $effect->replyHooks[0]['ref']);
+        self::assertSame($failureRef, $effect->failureHooks[0]['ref']);
+    }
+
+    #[Test]
+    public function terminalEffectsHaveEmptyFailureHooks(): void
+    {
+        self::assertEmpty(EntityEffect::persist()->failureHooks);
+        self::assertEmpty(EntityEffect::same()->failureHooks);
     }
 
     #[Test]

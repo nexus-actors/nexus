@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Doctrine\Orm\Behavior;
 
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Throwable;
 
 /**
  * @template T of object
@@ -15,8 +16,12 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 final readonly class EntityEffect
 {
     /**
-     * @param list<Closure(T): void>                                 $runHooks
-     * @param list<array{ref: ActorRef, build: Closure(T): object}>  $replyHooks
+     * @param list<Closure(T): void>                                         $runHooks
+     * @param list<array{ref: ActorRef, build: Closure(T): object}>          $replyHooks
+     * @param list<array{ref: ActorRef, build: Closure(Throwable): object}>  $failureHooks
+     *        Fired by the runner when the flush (or remove) fails — either an
+     *        optimistic-lock conflict or any other infra error — so the caller
+     *        gets a reply instead of hanging on its ask timeout.
      */
     private function __construct(
         public EntityEffectKind $kind,
@@ -24,6 +29,7 @@ final readonly class EntityEffect
         public ?object $immediateReplyMessage = null,
         public array $runHooks = [],
         public array $replyHooks = [],
+        public array $failureHooks = [],
     ) {}
 
     /**
@@ -92,6 +98,7 @@ final readonly class EntityEffect
             immediateReplyMessage: $this->immediateReplyMessage,
             runHooks: [...$this->runHooks, $hook],
             replyHooks: $this->replyHooks,
+            failureHooks: $this->failureHooks,
         );
     }
 
@@ -106,6 +113,26 @@ final readonly class EntityEffect
             immediateReplyMessage: $this->immediateReplyMessage,
             runHooks: $this->runHooks,
             replyHooks: [...$this->replyHooks, ['ref' => $to, 'build' => $build]],
+            failureHooks: $this->failureHooks,
+        );
+    }
+
+    /**
+     * Register a reply to fire when the flush (or remove) fails. The runner
+     * passes the caught throwable to `$build` so the caller learns the command
+     * failed instead of silently waiting out its ask timeout.
+     *
+     * @param Closure(Throwable): object $build
+     */
+    public function thenReplyOnFailure(ActorRef $to, Closure $build): self
+    {
+        return new self(
+            kind: $this->kind,
+            immediateReplyRef: $this->immediateReplyRef,
+            immediateReplyMessage: $this->immediateReplyMessage,
+            runHooks: $this->runHooks,
+            replyHooks: $this->replyHooks,
+            failureHooks: [...$this->failureHooks, ['ref' => $to, 'build' => $build]],
         );
     }
 }
