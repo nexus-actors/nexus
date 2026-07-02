@@ -30,3 +30,8 @@ tests/Performance/HttpSwoole/.results/
 # Local agent tooling
 .claude/
 .claire/
+
+# Astro landing
+landing/node_modules/
+landing/dist/
+landing/.astro/

@@ -1,10 +1,11 @@
 name: Deploy Documentation
 
 on:
-  workflow_run:
-    workflows: [Split Packages]
-    types: [completed]
+  push:
     branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-docs.yml'
   pull_request:
     branches: [main]
     paths:
@@ -14,10 +15,7 @@ on:
 jobs:
   build:
     name: Build
-    if: >
-      github.event_name == 'pull_request' ||
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    if: true
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -88,8 +86,7 @@ jobs:
     needs: build
     if: >
       vars.CLOUDFLARE_ACCOUNT_ID != '' &&
-      (github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: prod
 
