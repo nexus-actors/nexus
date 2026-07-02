@@ -1,9 +1,9 @@
 # api.nexusactors.com — phpDocumentor API reference deploy.
 #
-# Builds with the official phpDocumentor image (vanilla templates; 3.4 — the
-# :3 tag is currently broken upstream). Deploys use the `prod` environment,
-# which holds CLOUDFLARE_API_TOKEN (secret) and CLOUDFLARE_ACCOUNT_ID (var).
-# Swap the build step for the phpdoc-templates-plugin image once published.
+# Builds with phpDocumentor from the nexus-actors/phpDocumentor fork, whose
+# default template carries the Nexus branding (emerald palette, navy header,
+# logo). Deploys use the `prod` environment, which holds CLOUDFLARE_API_TOKEN
+# (secret) and CLOUDFLARE_ACCOUNT_ID (var).
 
 name: pages — api
 
@@ -32,17 +32,30 @@ jobs:
       - name: Checkout Nexus
         uses: actions/checkout@v4
 
+      - name: Checkout phpDocumentor fork (Nexus-branded template)
+        uses: actions/checkout@v4
+        with:
+          repository: nexus-actors/phpDocumentor
+          ref: master
+          path: .phpdocumentor
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install phpDocumentor
+        run: composer install --no-dev --no-interaction --no-progress --working-dir=.phpdocumentor
+
       - name: Build API docs (phpDocumentor)
-        run: |
-          docker run --rm \
-            -v "${{ github.workspace }}":/data \
-            -w /data \
-            phpdoc/phpdoc:3.4 \
-            --config=phpdoc.dist.xml --target=build/api-nexus --force
+        run: php .phpdocumentor/bin/phpdoc --config=phpdoc.dist.xml --target=build/api-nexus --force
 
       - name: Verify output
         run: |
           test -f build/api-nexus/index.html
+          grep -q nexus-logo.svg build/api-nexus/index.html
 
       - uses: actions/upload-artifact@v4
         with:
