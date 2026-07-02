@@ -207,47 +207,115 @@
     // the connection.
     const tokenKey = (gameId) => `tictactoe.token.${gameId}`;
 
+    // How long to wait for a server snapshot after a move/forfeit before
+    // telling the player the server is unresponsive and forcing a reconnect.
+    // The server flushes to Postgres on every move, so a healthy round-trip is
+    // well under a second; 6s only trips on a real stall (dead connection,
+    // actor fault) rather than a silent forever-hang.
+    const MOVE_TIMEOUT_MS = 6000;
+    const RECONNECT_MIN_MS = 500;
+    const RECONNECT_MAX_MS = 5000;
+
     function useGameSocket(gameId, playerName, onSnapshot, onWelcome, onError) {
         const wsRef = useRef(null);
+        const closedRef = useRef(false);     // set on unmount — suppress reconnect
+        const attemptRef = useRef(0);         // reconnect backoff counter
+        const reconnectRef = useRef(null);    // pending reconnect timer
+        const moveTimerRef = useRef(null);    // pending move-response watchdog
+
+        // Keep the latest callbacks without re-running the connect effect on
+        // every parent render (which would thrash the socket).
+        const cbRef = useRef({ onSnapshot, onWelcome, onError });
+        cbRef.current = { onSnapshot, onWelcome, onError };
 
         useEffect(() => {
             if (!gameId) return;
-            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${proto}//${location.host}/ws/games/${gameId}`);
-            wsRef.current = ws;
+            closedRef.current = false;
 
-            ws.onopen = () => {
-                const token = localStorage.getItem(tokenKey(gameId));
-                ws.send(JSON.stringify(
-                    token
-                        ? { type: 'join', name: playerName, token }
-                        : { type: 'join', name: playerName },
-                ));
-            };
-
-            ws.onmessage = (ev) => {
-                try {
-                    const msg = JSON.parse(ev.data);
-                    if (msg.type === 'snapshot') onSnapshot(msg.data);
-                    else if (msg.type === 'welcome') {
-                        localStorage.setItem(tokenKey(gameId), msg.data.token);
-                        onWelcome(msg.data.mark);
-                    }
-                    else if (msg.type === 'error') onError(msg.data?.message ?? 'error');
-                } catch (e) {
-                    onError('bad server message');
+            const clearMoveTimer = () => {
+                if (moveTimerRef.current) {
+                    clearTimeout(moveTimerRef.current);
+                    moveTimerRef.current = null;
                 }
             };
 
-            ws.onerror = () => onError('connection error');
+            const connect = () => {
+                const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const ws = new WebSocket(`${proto}//${location.host}/ws/games/${gameId}`);
+                wsRef.current = ws;
 
-            return () => { ws.close(); };
+                ws.onopen = () => {
+                    attemptRef.current = 0; // healthy connect resets backoff
+                    const token = localStorage.getItem(tokenKey(gameId));
+                    ws.send(JSON.stringify(
+                        token
+                            ? { type: 'join', name: playerName, token }
+                            : { type: 'join', name: playerName },
+                    ));
+                };
+
+                ws.onmessage = (ev) => {
+                    try {
+                        const msg = JSON.parse(ev.data);
+                        if (msg.type === 'snapshot') {
+                            clearMoveTimer(); // the server answered — clear the watchdog
+                            cbRef.current.onSnapshot(msg.data);
+                        } else if (msg.type === 'welcome') {
+                            localStorage.setItem(tokenKey(gameId), msg.data.token);
+                            cbRef.current.onWelcome(msg.data.mark);
+                        } else if (msg.type === 'error') {
+                            clearMoveTimer();
+                            cbRef.current.onError(msg.data?.message ?? 'error');
+                        }
+                    } catch (e) {
+                        cbRef.current.onError('bad server message');
+                    }
+                };
+
+                // Reconnect on any unexpected close with capped backoff, so an
+                // actor restart, worker recycle, or dropped socket recovers on
+                // its own instead of leaving a dead board. The stored token is
+                // replayed on reconnect, reclaiming the same seat.
+                ws.onclose = () => {
+                    clearMoveTimer();
+                    if (closedRef.current) return;
+                    const delay = Math.min(
+                        RECONNECT_MAX_MS,
+                        RECONNECT_MIN_MS * 2 ** attemptRef.current,
+                    );
+                    attemptRef.current += 1;
+                    cbRef.current.onError('connection lost — reconnecting…');
+                    reconnectRef.current = setTimeout(connect, delay);
+                };
+
+                ws.onerror = () => { /* surfaced via onclose, which always follows */ };
+            };
+
+            connect();
+
+            return () => {
+                closedRef.current = true;
+                clearMoveTimer();
+                if (reconnectRef.current) clearTimeout(reconnectRef.current);
+                if (wsRef.current) wsRef.current.close();
+            };
         }, [gameId, playerName]);
 
         const send = useCallback((payload) => {
             const ws = wsRef.current;
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify(payload));
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(JSON.stringify(payload));
+
+            // Arm a watchdog on mutating intents: if no snapshot/error comes
+            // back in time the server is stalled, so surface it and drop the
+            // socket — onclose then reconnects and replays the join.
+            if (payload.type === 'move' || payload.type === 'forfeit') {
+                if (moveTimerRef.current) clearTimeout(moveTimerRef.current);
+                moveTimerRef.current = setTimeout(() => {
+                    moveTimerRef.current = null;
+                    cbRef.current.onError('server not responding — reconnecting…');
+                    if (wsRef.current) wsRef.current.close();
+                }, MOVE_TIMEOUT_MS);
             }
         }, []);
 

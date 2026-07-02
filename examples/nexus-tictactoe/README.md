@@ -163,6 +163,38 @@ public/
   of concurrent WS connections in a single process. The interesting
   scaling story here is per-actor (single-writer per game id, passivate
   when idle) — not per-CPU.
+- **Connection-per-live-game.** Each live game actor owns a *dedicated*
+  Doctrine connection for its lifetime (single-writer isolation) — it does
+  not borrow from the HTTP pool. So the passivation window caps concurrent
+  connections: an idle game holds its connection until `withReceiveTimeout`
+  (30s here) fires. Size Postgres `max_connections` for your peak of
+  *simultaneously active* games, and shorten the timeout if that peak is
+  high. The row is the source of truth, so passivation is invisible —
+  the next move re-spawns and re-reads.
+
+## Resilience notes
+
+The demo keeps failure handling deliberately small; a few gaps are worth
+naming so you know where the edges are:
+
+- **Client self-heals.** The SPA reconnects with capped backoff on any
+  socket close and replays its stored token to reclaim the seat, and a
+  per-move watchdog surfaces "server not responding" and forces a
+  reconnect if a move goes unanswered — so an actor restart, worker
+  recycle, or dropped connection recovers on its own instead of leaving a
+  dead board.
+- **A mid-move DB fault is not yet self-healing server-side.** The
+  `EntityBehavior` reply hooks fire only after a successful flush, and
+  nexus-core supervision does not currently re-instantiate an actor that
+  faults on its held connection. If Postgres blips mid-move the actor can
+  keep a dead connection; the client watchdog turns that into a visible
+  "reconnecting…" rather than a silent hang, but true server-side recovery
+  (reply-on-failure + restart-on-infra-error) is a framework concern, not
+  something this example papers over.
+- **Optimistic locking is per-game, single-writer.** With one worker there
+  is exactly one writer per game id, so the `#[Version]` column never
+  conflicts. Across workers (see above) a losing write would surface as a
+  conflict the client retries via reconnect.
 
 ## Extend it
 

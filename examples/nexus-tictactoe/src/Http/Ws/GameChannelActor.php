@@ -128,6 +128,11 @@ final class GameChannelActor extends WebSocketChannelActor
         }
 
         if (strlen($frame->text) > self::MAX_FRAME_BYTES) {
+            $this->log->debug('dropping oversized frame', [
+                'bytes' => strlen($frame->text),
+                'fd' => $conn->id(),
+                'gameId' => $gameId,
+            ]);
             $conn->send($this->codec->encodeError('frame too large'));
 
             return BehaviorWithState::same();
@@ -136,6 +141,10 @@ final class GameChannelActor extends WebSocketChannelActor
         $intent = $this->codec->decode($frame->text);
 
         if ($intent === null) {
+            $this->log->debug('dropping unparseable frame', [
+                'fd' => $conn->id(),
+                'gameId' => $gameId,
+            ]);
             $conn->send($this->codec->encodeError('invalid message'));
 
             return BehaviorWithState::same();
@@ -173,7 +182,7 @@ final class GameChannelActor extends WebSocketChannelActor
             return BehaviorWithState::same();
         }
 
-        $this->log->info('state changed — broadcasting', [
+        $this->log->debug('state changed — broadcasting', [
             'attached' => count($this->connections()),
             'gameId' => $message->gameId,
             'nextTurn' => $message->nextTurn?->value,
@@ -270,6 +279,10 @@ final class GameChannelActor extends WebSocketChannelActor
         $token = $this->seats[$fd] ?? null;
 
         if ($token === null) {
+            $this->log->debug('rejecting play before join', [
+                'fd' => $fd,
+                'intent' => $intent::class,
+            ]);
             $conn->send($this->codec->encodeError('join before playing'));
 
             return null;

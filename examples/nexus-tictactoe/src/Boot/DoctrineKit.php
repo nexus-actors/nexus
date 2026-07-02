@@ -60,13 +60,22 @@ final readonly class DoctrineKit
                 ormSetup: $ormConfig,
                 config: new EmPoolConfig(max: 8, minIdle: 1),
             ),
+            // Each live game actor owns a DEDICATED Doctrine connection for its
+            // whole lifetime (single-writer isolation) — it does NOT borrow from
+            // $connPool/$emPool, which serve the stateless HTTP lobby. That makes
+            // the passivation window a hard cap on concurrent connections:
+            // ~max_idle_games ≈ receiveTimeout × moves_per_second. Keep it short
+            // (30s, not minutes) so an idle game frees its connection quickly and
+            // Postgres max_connections is not the ceiling on concurrent games.
+            // The row is the source of truth, so the next move transparently
+            // re-spawns and re-reads — passivation is invisible to players.
             gameFactory: EntityRefFactory::for(new ActorSystemSpawner($system), GameSession::class)
                 ->using(new DefaultEntityManagerFactory($ormConfig))
                 ->withConnectionSource(static fn(): Connection => DriverManager::getConnection($connParams))
                 ->withReplayPolicy(new CreateIfMissing(
                     static fn(string $gameId): GameSession => new GameSession($gameId),
                 ))
-                ->withReceiveTimeout(Duration::seconds(300))
+                ->withReceiveTimeout(Duration::seconds(30))
                 ->handle(GameActor::handler($log))
                 ->build(),
         );

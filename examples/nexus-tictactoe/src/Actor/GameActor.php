@@ -50,7 +50,7 @@ final class GameActor
                 $replyTo = $env->replyTo;
                 $fd = $env->originFd;
 
-                $log->info('game command received', [
+                $log->debug('game command received', [
                     'gameId' => $game->id(),
                     'command' => $cmd::class,
                     'fd' => $fd,
@@ -78,7 +78,7 @@ final class GameActor
                         default => throw new LogicException('unhandled GameCommand: ' . $cmd::class),
                     };
 
-                    $log->info('game command applied', [
+                    $log->debug('game command applied', [
                         'command' => $cmd::class,
                         'gameId' => $game->id(),
                         'statusAfter' => $game->status()->value,

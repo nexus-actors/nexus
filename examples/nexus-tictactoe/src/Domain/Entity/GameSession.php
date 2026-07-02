@@ -229,6 +229,9 @@ final class GameSession
             return PlayerMark::O;
         }
 
-        throw new UnknownPlayerException("player '{$playerId}' is not seated in this game");
+        // Deliberately token-free: $playerId is the server-issued capability
+        // token. Embedding it here would leak the secret into logs and the
+        // client error frame. The message names the rule, not the token.
+        throw new UnknownPlayerException('player is not seated in this game');
     }
 }
