@@ -1,0 +1,151 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import ComparisonMatrix from '../components/ComparisonMatrix.tsx';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+---
+<Marketing
+  title="Nexus vs alternatives — PHP concurrency comparison"
+  description="Side-by-side comparison of Nexus, Amphp, Spiral RoadRunner, raw Swoole, and queue+cron+workers across 15 capabilities including actor model, event sourcing, type safety, and multi-worker scaling."
+>
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <h1 class="text-4xl md:text-5xl font-extrabold mb-6">Nexus vs alternatives</h1>
+    <p class="text-lg text-slate-600 dark:text-slate-300 mb-12 max-w-3xl">
+      PHP has several concurrent-I/O libraries and frameworks. This matrix compares Nexus
+      with the most common alternatives across capabilities that matter for production
+      service development — from actor-model fundamentals to type safety, persistence,
+      and multi-worker scaling. Cells marked "planned — see roadmap" reflect capabilities
+      not yet shipped in a stable release; no aspirational ticks.
+    </p>
+
+    <ComparisonMatrix client:load />
+  </section>
+
+  <!-- Prose: row-by-row explanation -->
+  <section class="max-w-4xl mx-auto px-4 py-16">
+    <h2 class="text-3xl font-bold mb-6">Reading the matrix</h2>
+
+    <div class="space-y-10">
+      <div>
+        <h3 class="text-xl font-bold mb-3">Actor model and supervision</h3>
+        <p class="text-slate-600 dark:text-slate-300 mb-3">
+          Nexus is the only PHP library in this comparison with a full actor model — typed message
+          passing, parent-supervised children, configurable restart strategies, and death watch.
+          Amphp has coroutines and channels but no actor abstraction or supervision tree;
+          crashes propagate as PHP exceptions up the call stack rather than being handled
+          by a policy-driven parent. Swoole provides coroutines but leaves concurrency
+          structure entirely to the application. RoadRunner is a process model (workers
+          share nothing) rather than a structured-concurrency model.
+        </p>
+        <p class="text-slate-600 dark:text-slate-300">
+          The actor model is not a performance feature — it is a structural one. The
+          benefit is that failure handling is centralised, testable, and visible in the
+          code rather than scattered across try/catch blocks.
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-bold mb-3">Type safety and static analysis</h3>
+        <p class="text-slate-600 dark:text-slate-300 mb-3">
+          <code class="font-mono text-primary">ActorRef&lt;T&gt;</code> carries the message
+          type as a Psalm generic. You cannot send the wrong type without Psalm flagging it
+          at analysis time. No other library in this comparison enforces message types at
+          the compiler level — Amphp and Swoole are dynamically typed at message boundaries.
+        </p>
+        <p class="text-slate-600 dark:text-slate-300">
+          The <code class="font-mono">nexus-psalm</code> plugin adds seven additional rules
+          specific to actor code: message immutability, mutable closure capture, blocking I/O
+          inside handlers, and generic type inference for factory methods. These rules are
+          unique to Nexus; no other PHP concurrency tool ships a comparable static-analysis extension.
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-bold mb-3">Persistence and event sourcing</h3>
+        <p class="text-slate-600 dark:text-slate-300 mb-3">
+          Nexus ships first-party event sourcing and durable state persistence in
+          <code class="font-mono">nexus-persistence</code>. Event replay, snapshots,
+          retention policies, and writer-conflict detection are all built in.
+          Alternatives in this comparison either have no built-in persistence story
+          (Amphp, raw Swoole) or depend on external event-store integrations.
+        </p>
+        <p class="text-slate-600 dark:text-slate-300">
+          The DBAL and Doctrine ORM backends mean you can use your existing database
+          and schema tooling. There is no separate event-store service to run.
+        </p>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-bold mb-3">Multi-worker scaling</h3>
+        <p class="text-slate-600 dark:text-slate-300">
+          The worker pool scales actor systems across CPU cores via Swoole threads.
+          A consistent hash ring ensures that actors with the same name always route
+          to the same worker, so there is no cross-worker state sharing.
+          RoadRunner also scales across workers but uses a process-per-worker model
+          with no shared memory or actor routing; each worker is a fresh PHP process
+          with no awareness of actors running in other workers.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What we don't compete with -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">What Nexus does not compete with.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Some tools occupy a different position in the stack and are better treated as
+        complements than competitors.
+      </p>
+      <div class="space-y-6">
+        <div>
+          <h3 class="font-bold text-lg mb-2">Symfony Messenger</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            Symfony Messenger is an excellent choice for simple, stateless background
+            jobs dispatched from a PHP-FPM application — send an email, resize an image,
+            update a search index. If that covers your needs, Messenger is the right tool.
+            Nexus becomes relevant when you need long-lived stateful workers, supervision,
+            event sourcing, or concurrent request handling inside a single process.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Laravel Queues / Horizon</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            The same logic applies. Laravel Queues excel at distributed, retryable job
+            processing with Redis or SQS as the broker. Nexus is not a job queue — it
+            is a structured-concurrency runtime for long-lived processes. The two can
+            coexist: a Laravel application can dispatch a job that hands work off to a
+            Nexus service, which processes it in an actor.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">ReactPHP</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            ReactPHP gives you a raw event loop — great for building custom protocols,
+            proxies, or network tools where you want full control. Nexus builds on top of
+            the async-I/O model ReactPHP pioneered but adds the actor abstraction layer.
+            If you want the event loop without the structure, ReactPHP is lighter.
+            If you want structure, supervision, and typed message passing, Nexus is the answer.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-bold text-lg mb-2">Doctrine ORM alone</h3>
+          <p class="text-slate-600 dark:text-slate-400 text-sm">
+            Nexus integrates with Doctrine, it does not replace it. If your persistence
+            requirements are straightforward — save a record, load a record, run a query —
+            Doctrine ORM with PHP-FPM is the lowest-friction approach. Nexus persistence
+            becomes valuable when you need event sourcing, audit trails, replay, or
+            actor-per-aggregate ownership semantics.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Ready to see it in code?"
+    subtitle="The Quick Start guide has you running an actor in under five minutes."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start' }}
+    secondary={{ href: '/stability', label: 'Package stability' }}
+  />
+</Marketing>

@@ -1,0 +1,409 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+---
+<Marketing
+  title="Adoption — Nexus"
+  description="License, governance, support model, and project continuity. Everything you need to evaluate Nexus for production use."
+>
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-4 py-16 md:py-24 text-center">
+    <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Adoption</p>
+    <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+      What adopting Nexus actually means.
+    </h1>
+    <p class="text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
+      License terms, governance structure, support channels, and what happens if the
+      project changes direction. Honest answers before you commit production systems.
+    </p>
+  </section>
+
+  <!-- 1. License & IP -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">⚖️</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">License &amp; IP</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Nexus is released under the <strong>MIT License</strong>. Every package under
+            <code class="font-mono">packages/</code> is published independently to Packagist
+            under the same terms. You can use, modify, fork, and distribute Nexus in
+            commercial products without a licensing agreement.
+          </p>
+        </div>
+      </div>
+      <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-3">
+          <span class="text-green-600 font-bold mt-0.5">✓</span>
+          <span>Commercial use — no fee, no notice required beyond the MIT attribution line</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-green-600 font-bold mt-0.5">✓</span>
+          <span>Modification and redistribution — fork the monorepo or any individual package</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-green-600 font-bold mt-0.5">✓</span>
+          <span>No CLA required — contributors retain copyright on their patches</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-green-600 font-bold mt-0.5">✓</span>
+          <span>Sublicensing — you can ship Nexus inside a proprietary product without open-sourcing your code</span>
+        </li>
+      </ul>
+      <p class="mt-6 text-xs text-slate-500">
+        The full text lives at <a href="https://github.com/nexus-actors/nexus/blob/main/LICENSE" class="text-primary hover:underline">github.com/nexus-actors/nexus/blob/main/LICENSE</a>.
+      </p>
+    </div>
+  </section>
+
+  <!-- 2. Maintainers & Governance -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">🏛️</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Maintainers &amp; Governance</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Nexus is developed under the <a href="https://github.com/nexus-actors" class="text-primary hover:underline">nexus-actors</a> GitHub organisation.
+            The project is small and honest about it: a core maintainer team
+            makes architectural decisions; external contributions are reviewed and merged
+            via pull request.
+          </p>
+        </div>
+      </div>
+      <ul class="space-y-3 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5">→</span>
+          <span>Architecture and roadmap decisions are made by the core maintainer(s) and documented in GitHub Discussions</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5">→</span>
+          <span>Breaking changes follow semver and ship in major versions — with a CHANGELOG entry and migration notes</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5">→</span>
+          <span>Security reports: open a <a href="https://github.com/nexus-actors/nexus/discussions" class="text-primary hover:underline">GitHub Discussion</a> — do not file public issues for vulnerabilities</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5">→</span>
+          <span>Contributions welcome — the easiest entry points are test coverage, documentation, and compatibility packages</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. Support tiers -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">💬</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Support</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            V1 ships with community-tier support only. There is no paid support tier yet —
+            that will be evaluated based on adoption. Here is what you can rely on:
+          </p>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-6 mt-4">
+        <div class="p-5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+          <h3 class="font-bold mb-2">Community (available now)</h3>
+          <ul class="text-sm text-slate-600 dark:text-slate-400 space-y-1 list-disc list-inside">
+            <li><a href="https://github.com/nexus-actors/nexus/discussions" class="text-primary hover:underline">GitHub Discussions</a> — questions, design feedback, RFCs</li>
+            <li><a href="https://github.com/nexus-actors/nexus/issues" class="text-primary hover:underline">GitHub Issues</a> — bug reports with reproduction steps</li>
+            <li>Docs at <a href={docsUrl()} class="text-primary hover:underline">docs.nexusactors.com</a> covering all stable APIs</li>
+            <li>Runnable examples in the monorepo under <code class="font-mono">examples/</code></li>
+          </ul>
+        </div>
+        <div class="p-5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+          <h3 class="font-bold mb-2">Commercial (not yet)</h3>
+          <p class="text-sm text-slate-500 dark:text-slate-400">
+            Priority response, private channels, and SLA-backed support are planned for
+            a future release. If your team needs this today, open a GitHub Discussion
+            thread — early conversations shape the offering.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Adoption curve -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">📈</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Is Nexus ready for production?</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            The stability matrix at <a href="/stability" class="text-primary hover:underline">/stability</a> gives
+            the per-package answer. The short version: core actor system, FiberRuntime,
+            SwooleRuntime, persistence, and HTTP are all Stable.
+            <code class="font-mono">nexus-cluster</code> (multi-machine routing) is Experimental.
+          </p>
+        </div>
+      </div>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        If you are evaluating Nexus for a new service, the right question is not
+        "is it stable?" but "does it match the problem?" The
+        <a href={docsUrl('/best-practices/when-to-use-actors')} class="text-primary hover:underline">When to use actors</a>
+        guide gives an honest answer based on workload characteristics — not marketing claims.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Nexus is a V1 release. The API surface is intentionally narrow. Packages that
+        are not ready are not shipped — the monorepo has not-yet-published packages
+        behind feature flags. What is in the stable set is there because it has
+        test coverage, Psalm level-1 analysis, and integration tests across both
+        FiberRuntime and SwooleRuntime.
+      </p>
+    </div>
+  </section>
+
+  <!-- 5. Project continuity -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">🔁</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Project continuity</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            What happens if the maintainers change direction, hand off the project,
+            or stop actively developing it?
+          </p>
+        </div>
+      </div>
+      <ul class="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-3">
+          <span class="text-primary font-bold mt-0.5">→</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">MIT = forkable by anyone.</strong>
+            If development stalls, any team can fork the monorepo and continue. No relicensing,
+            no CLA, no negotiation required.
+          </span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-primary font-bold mt-0.5">→</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Individually published packages.</strong>
+            Each of the 25 packages under <code class="font-mono">packages/</code> is split to its own
+            GitHub repo via <code class="font-mono">splitsh-lite</code> and published to Packagist independently.
+            A monorepo restructure does not break <code class="font-mono">composer require nexus-actors/core</code>.
+          </span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-primary font-bold mt-0.5">→</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Semver with a CHANGELOG.</strong>
+            Breaking changes are gated to major versions. The CHANGELOG documents
+            what changed and why. Migration guides ship alongside breaking releases.
+            The criteria for a major bump are defined in the
+            <a href={docsUrl('/contributing/release-process')} class="text-primary hover:underline">versioning policy</a>.
+          </span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-primary font-bold mt-0.5">→</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Be the first production user.</strong>
+            Nexus has no "used by X" list yet. Early adopters shape the roadmap directly —
+            open a GitHub Discussion and it gets read by the people who write the code.
+          </span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6. Evaluation checklist -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">✅</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Evaluation checklist</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Work through these questions before committing Nexus to a production service.
+            None of them are blockers — they are context that helps you set realistic expectations.
+          </p>
+        </div>
+      </div>
+      <div class="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+        <div class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5 shrink-0">□</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Do you need long-lived state?</strong>
+            If your service is stateless request-response with no shared mutable state, the actor model adds complexity without benefit. Actors shine when state lives longer than a single request.
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5 shrink-0">□</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Can your team run Psalm Level 1?</strong>
+            Nexus relies heavily on Psalm generics for type safety. If your existing codebase has significant Psalm violations, plan time to clean those up before introducing <code class="font-mono">ActorRef&lt;T&gt;</code> generics.
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5 shrink-0">□</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Do you need PHP-FPM compatibility?</strong>
+            FiberRuntime requires PHP 8.5+. SwooleRuntime requires the Swoole extension. If your deployment environment cannot run either, Nexus is not yet the right fit.
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5 shrink-0">□</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Have you scoped the PoC?</strong>
+            Pick one isolated service with a clear bounded context — not the most critical system you run. Implement it in Nexus, run it in production for a few weeks, and evaluate before expanding.
+          </span>
+        </div>
+        <div class="flex gap-3">
+          <span class="text-slate-400 font-bold mt-0.5 shrink-0">□</span>
+          <span>
+            <strong class="text-slate-700 dark:text-slate-200">Do you have a monitoring strategy?</strong>
+            Actors are long-lived processes. You need process supervision at the OS level (systemd, Docker restart policy) on top of Nexus's own supervision. PSR-3 logging and PSR-14 event dispatching are the integration points for your existing observability stack.
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Proof-of-concept scope -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">🔬</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Scoping a proof of concept</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            The fastest path to a useful evaluation is a small, isolated service that
+            exercises the specific properties you care about — not a port of your entire backend.
+          </p>
+        </div>
+      </div>
+      <div class="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Good PoC candidates</h3>
+          <ul class="space-y-1 list-disc list-inside">
+            <li>A wallet or balance service with audit-log requirements — exercises event sourcing and single-writer guarantees</li>
+            <li>A WebSocket notification service — exercises actor-per-connection and pub/sub channels</li>
+            <li>A device telemetry ingestor — exercises passivation and bounded mailboxes under high volume</li>
+            <li>A multi-step approval workflow — exercises Saga actors and durable state</li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">PoC scope: keep it narrow</h3>
+          <ul class="space-y-1 list-disc list-inside">
+            <li>One bounded context, one actor tree, one persistence backend</li>
+            <li>Integration tests using StepRuntime — they run in CI without Swoole</li>
+            <li>FiberRuntime in development; SwooleRuntime in staging/production</li>
+            <li>Measure: latency, memory stability under load, restart-recovery time</li>
+          </ul>
+        </div>
+      </div>
+      <a
+        href={docsUrl('/getting-started/quick-start')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Quick Start — working actor in 5 minutes →
+      </a>
+    </div>
+  </section>
+
+  <!-- 8. Incremental adoption path -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">📈</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Incremental adoption path</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            You do not need to rewrite your existing application to use Nexus.
+            The typical adoption curve looks like this:
+          </p>
+        </div>
+      </div>
+      <ol class="space-y-5 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-4">
+          <span class="shrink-0 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">1</span>
+          <div>
+            <strong class="text-slate-700 dark:text-slate-200">New service, isolated</strong> — Start Nexus in a new service that does not share code with your existing application. Pick a bounded context where the actor model has a clear advantage (state, concurrency, event sourcing). Ship it, observe it.
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="shrink-0 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">2</span>
+          <div>
+            <strong class="text-slate-700 dark:text-slate-200">Extract a stateful subsystem</strong> — Identify a part of your existing application that is already stateful but clunky (a Redis-backed counter, a cron-driven processor). Replace it with an actor behind a thin adapter. Your existing code still calls the adapter — the actor is invisible to it.
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="shrink-0 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">3</span>
+          <div>
+            <strong class="text-slate-700 dark:text-slate-200">Add Nexus HTTP to one route group</strong> — If your application handles WebSockets or high-concurrency reads, migrate that route group to Nexus HTTP while leaving the rest on PHP-FPM. Use a reverse proxy to split traffic.
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="shrink-0 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">4</span>
+          <div>
+            <strong class="text-slate-700 dark:text-slate-200">Evaluate full migration</strong> — Once your team is fluent with the actor model and you have observability in place, assess whether migrating the rest of the application delivers enough value to justify the cost.
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 9. Common gotchas -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10 rounded-2xl p-8">
+      <div class="flex items-start gap-4 mb-6">
+        <span class="text-3xl">⚠️</span>
+        <div>
+          <h2 class="text-2xl font-bold mb-2">Common gotchas</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Things teams most often trip over in their first Nexus project.
+          </p>
+        </div>
+      </div>
+      <div class="space-y-5 text-sm text-slate-600 dark:text-slate-400">
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Blocking I/O inside handlers</h3>
+          <p>
+            <code class="font-mono">sleep()</code>, <code class="font-mono">file_get_contents()</code>, and
+            synchronous database calls block the Fiber or coroutine. The <code class="font-mono">nexus-psalm</code>
+            plugin catches the most common cases at analysis time. For HTTP clients and DB access, use
+            async-aware libraries (Swoole coroutine-native clients) or route the I/O through a dedicated actor.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Shared mutable state in closures</h3>
+          <p>
+            Props factory closures captured by reference (<code class="font-mono">&$var</code>) break the
+            single-writer guarantee. The Psalm plugin catches this. Keep all actor state inside the actor —
+            if you need to share state between actors, pass messages.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Asking from inside a handler without a timeout</h3>
+          <p>
+            An <code class="font-mono">ask()</code> without a bounded timeout can deadlock two actors waiting
+            on each other. Always supply a <code class="font-mono">Duration</code> timeout. Keep ask chains
+            short — deep ask chains amplify latency and increase the risk of timeout cascades.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-slate-700 dark:text-slate-200 mb-1">Spawning too many actors</h3>
+          <p>
+            Each actor allocates a mailbox and a Fiber/coroutine. For workloads with millions of entities,
+            use passivation — actors that are not actively receiving messages write state to persistence
+            and stop. The passivation guide covers the EntityRefFactory pattern for transparent reactivation.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Start evaluating Nexus today."
+    subtitle="The quick-start takes five minutes. The stability matrix answers the per-package readiness question."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start' }}
+    secondary={{ href: '/stability', label: 'Stability matrix' }}
+  />
+</Marketing>

@@ -1,0 +1,17 @@
+---
+import Base from './Base.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+}
+const { title, description, ogImage } = Astro.props;
+const fullOgImage = ogImage
+  ? new URL(ogImage, Astro.site).toString()
+  : new URL('/og-default.svg', Astro.site).toString();
+---
+<Base title={title} description={description}>
+  <meta property="og:image" content={fullOgImage} slot="head" />
+  <slot />
+</Base>

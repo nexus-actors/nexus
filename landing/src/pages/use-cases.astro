@@ -1,0 +1,174 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const cases = [
+  {
+    title: 'Event-driven microservices',
+    body: `Each service owns an actor tree. Services communicate through typed messages, not raw HTTP JSON. Event-sourced aggregates produce a full audit trail with zero extra code — every state change is already a persisted event. Adding a new subscriber is one actor spawn — no schema migration, no queue topology change, no broker configuration. When a subscriber crashes, its supervisor restarts it and it replays missed events from the store.`,
+    link: { label: 'Persistence + event sourcing docs', href: docsUrl('/persistence/event-sourcing') },
+    icon: '⚡',
+  },
+  {
+    title: 'Real-time data pipelines',
+    body: `Ingestion actors receive raw events; transformation actors reshape them; sink actors write to Doctrine or a downstream API. The pipeline is a supervision tree: one stage crashes and restarts without dropping the stages upstream or downstream. Backpressure propagates naturally through bounded mailboxes — a slow sink slows the upstream transformation actors rather than allowing unbounded memory growth. Under Swoole, each stage runs as a coroutine; there is no blocking I/O.`,
+    link: { label: 'Scaling + worker pool docs', href: docsUrl('/scaling/overview') },
+    icon: '🔄',
+  },
+  {
+    title: 'Task orchestration',
+    body: `Long-running workflows — multi-step checkouts, document processing pipelines, asynchronous approvals — are Saga actors. Each step is a typed message. Compensations are explicit Behavior branches that Psalm statically analyses alongside the happy path. The saga persists its own state, so a server restart continues from the last committed step with no loss of progress. There is no external workflow engine to deploy or monitor.`,
+    link: { label: 'Saga pattern guide', href: docsUrl('/guides/saga') },
+    icon: '📋',
+  },
+  {
+    title: 'IoT and device management',
+    body: `One actor per device. The actor holds live device state — connection status, last telemetry, pending commands — without a database read on every interaction. Direct message dispatch replaces polling loops; the actor responds to commands in microseconds. Passivation writes state to persistence and stops the actor when the device goes offline; reactivation replays state when it reconnects, typically in under a millisecond for recent snapshots.`,
+    link: { label: 'Passivation docs', href: docsUrl('/core-concepts/passivation') },
+    icon: '📡',
+  },
+  {
+    title: 'Financial transaction processing',
+    body: `Accounts, wallets, and ledgers are EntityBehavior actors. Each aggregate has exactly one writer by construction — no optimistic lock retries, no phantom reads, no competing UPDATE+version transactions. Commands produce events; events are persisted atomically before the actor state changes. Every transaction is replayable from the event log for audit, reconciliation, or disaster recovery. The DBAL backend keeps insert throughput high under volume.`,
+    link: { label: 'EntityBehavior reference', href: docsUrl('/doctrine/entity-behavior') },
+    icon: '💰',
+  },
+  {
+    title: 'Game servers and simulations',
+    body: `Game rooms, match state, and player sessions each live in a dedicated actor. Tick-driven simulations use scheduled messages at a fixed interval — no busy-wait loop needed. The worker pool scales game room actors across CPU cores via the consistent hash ring — each room always routes to the same worker, so state never crosses a thread boundary. Under Swoole, thousands of concurrent WebSocket connections (one per player) run as lightweight coroutines with no thread-per-connection overhead.`,
+    link: { label: 'Cross-worker ask + scaling', href: docsUrl('/scaling/cross-worker-ask') },
+    icon: '🎮',
+  },
+];
+---
+<Marketing
+  title="Use Cases — Nexus"
+  description="Event-driven microservices, real-time pipelines, task orchestration, IoT, financial processing, and game servers. Workloads where the actor model delivers structural advantages."
+>
+  <!-- Hero -->
+  <section class="max-w-4xl mx-auto px-4 py-16 md:py-24 text-center">
+    <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Use Cases</p>
+    <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+      Where actors change the equation.
+    </h1>
+    <p class="text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
+      The actor model is not a universal solution. These are the workloads where
+      its structural properties — isolated state, supervised failures, message-driven
+      concurrency — deliver concrete advantages over queue-based or thread-based alternatives.
+    </p>
+  </section>
+
+  <!-- Cards -->
+  <section class="max-w-6xl mx-auto px-4 py-8 pb-16">
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {cases.map(c => (
+        <div class="flex flex-col p-6 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition">
+          <div class="text-4xl mb-4">{c.icon}</div>
+          <h2 class="text-xl font-bold mb-3">{c.title}</h2>
+          <p class="text-slate-600 dark:text-slate-400 text-sm flex-1 mb-6">
+            {c.body}
+          </p>
+          <a
+            href={c.link.href}
+            class="text-primary hover:underline font-semibold text-sm mt-auto"
+          >
+            {c.link.label} →
+          </a>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <!-- When NOT to use actors -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">When actors are not the right tool.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Actors add structural overhead. For a simple CRUD application with no
+        concurrency requirements, a traditional PHP-FPM + ORM stack is faster to
+        build and easier to maintain. The actor model earns its keep when you have
+        long-lived state, concurrent workflows, or failure isolation requirements
+        that a stateless request handler cannot provide.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        If your use case is primarily background job processing with no shared state
+        between jobs, Symfony Messenger or Laravel Queues are simpler — they solve
+        a narrower problem with less setup. Nexus is the right tool when you need
+        the jobs themselves to be stateful, coordinated, or supervised.
+      </p>
+      <a
+        href={docsUrl('/best-practices/when-to-use-actors')}
+        class="text-primary hover:underline font-semibold"
+      >
+        Read the "when to use actors" decision guide →
+      </a>
+    </div>
+  </section>
+
+  <!-- Pick your starting point -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <h2 class="text-3xl font-bold mb-6">Pick your starting point.</h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-8">
+      Each use case maps to a specific area of the documentation. Skip the general
+      overview and jump directly to the pattern you need.
+    </p>
+    <div class="grid md:grid-cols-2 gap-4">
+      <a
+        href={docsUrl('/persistence/event-sourcing')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">⚡</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">Event sourcing from scratch</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Start here for microservices, audit trails, and CQRS architectures.</span>
+      </a>
+      <a
+        href={docsUrl('/guides/saga')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">📋</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">Saga pattern guide</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Multi-step workflows, distributed transactions, and compensation logic.</span>
+      </a>
+      <a
+        href={docsUrl('/doctrine/entity-behavior')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">💰</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">EntityBehavior reference</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Financial aggregates, wallets, and ledgers with Doctrine persistence.</span>
+      </a>
+      <a
+        href={docsUrl('/core-concepts/passivation')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">📡</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">Passivation + IoT patterns</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Device shadow actors, passivation, and reactivation on reconnect.</span>
+      </a>
+      <a
+        href={docsUrl('/scaling/overview')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">🔄</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">Scaling + worker pool</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Multi-core pipelines, consistent hash routing, and backpressure.</span>
+      </a>
+      <a
+        href={docsUrl('/http/getting-started')}
+        class="flex flex-col p-5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-primary transition group"
+      >
+        <span class="text-2xl mb-2">🌐</span>
+        <span class="font-bold mb-1 group-hover:text-primary transition">HTTP + WebSocket quick start</span>
+        <span class="text-sm text-slate-500 dark:text-slate-400">Real-time APIs, typed handlers, and actor-backed WebSocket connections.</span>
+      </a>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Find your use case in the docs."
+    subtitle="Each pattern above links to the relevant documentation section with runnable examples."
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start' }}
+    secondary={{ href: docsUrl(), label: 'Browse all docs' }}
+  />
+</Marketing>

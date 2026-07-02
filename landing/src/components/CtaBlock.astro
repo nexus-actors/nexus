@@ -1,0 +1,98 @@
+---
+// landing/src/components/CtaBlock.astro
+interface Props {
+  title: string;
+  subtitle?: string;
+  installLine?: string;
+  primary: { href: string; label: string };
+  secondary?: { href: string; label: string };
+}
+const {
+  title,
+  subtitle,
+  installLine = 'composer require nexus-actors/nexus',
+  primary,
+  secondary,
+} = Astro.props;
+---
+<section class="cta-section">
+  <div class="nx-dot-grid"></div>
+  <div class="cta-inner">
+    <h2 class="cta-title">{title}</h2>
+    {subtitle && <p class="cta-sub">{subtitle}</p>}
+    <div class="cta-code">
+      <code>{installLine}</code>
+    </div>
+    <div class="cta-buttons">
+      <a class="nx-btn-primary" href={primary.href}>{primary.label}</a>
+      {secondary && (
+        <a class="nx-btn-ghost" href={secondary.href}>{secondary.label}</a>
+      )}
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta-section {
+    position: relative;
+    overflow: hidden;
+    padding: 7rem 2rem;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .cta-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .cta-title {
+    font-family: var(--nx-font-mono);
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--nx-text);
+    margin: 0;
+    line-height: 1.2;
+  }
+
+  .cta-sub {
+    font-size: 1.1rem;
+    color: var(--nx-text-muted);
+    margin: 0;
+  }
+
+  .cta-code {
+    font-family: var(--nx-font-mono);
+    font-size: 0.9rem;
+    color: var(--nx-accent);
+    background: var(--nx-bg-raised);
+    border: 1px solid var(--nx-border);
+    border-radius: 8px;
+    padding: 0.85rem 1.75rem;
+    margin: 0.5rem 0;
+  }
+
+  .cta-buttons {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 0.5rem;
+  }
+
+  @media (max-width: 996px) {
+    .cta-section { padding: 4rem 1.5rem; }
+    .cta-title { font-size: 2rem; }
+  }
+
+  @media (max-width: 640px) {
+    .cta-section { padding: 3rem 1rem; }
+    .cta-title { font-size: 1.5rem; }
+    .cta-sub { font-size: 0.95rem; }
+    .cta-code { font-size: 0.75rem; word-break: break-all; padding: 0.65rem 1rem; }
+    .cta-buttons { flex-direction: column; width: 100%; }
+  }
+</style>

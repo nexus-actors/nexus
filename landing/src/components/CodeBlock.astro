@@ -1,0 +1,38 @@
+---
+// landing/src/components/CodeBlock.astro
+// Always renders dark-themed code block with styled title bar.
+import { codeToHtml } from 'shiki';
+
+interface Props {
+  code: string;
+  lang: string;
+  title?: string;
+  class?: string;
+}
+const { code, lang, title, class: className = '' } = Astro.props;
+
+const html = await codeToHtml(code, {
+  lang,
+  theme: 'github-dark',
+});
+---
+<div class={`nx-code-block ${className}`}>
+  {title && (
+    <div class="nx-code-block-title">{title}</div>
+  )}
+  <div set:html={html} />
+</div>
+
+<style>
+  .nx-code-block :global(pre) {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: 1.25rem 1.5rem !important;
+    font-size: 0.85rem !important;
+    line-height: 1.65 !important;
+    overflow-x: auto;
+  }
+  .nx-code-block :global(.shiki) {
+    background: #0d1117 !important;
+  }
+</style>

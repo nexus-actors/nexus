@@ -1,0 +1,447 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const routingCode = `<?php
+// Declare routes with positional #[Route(method, path)] — no magic strings.
+use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
+use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromBody;
+
+#[Route('POST', '/wallets/{id}/deposit')]
+final class DepositHandler
+{
+    public function __construct(
+        private readonly EntityRefFactory $factory,
+    ) {}
+
+    public function __invoke(
+        string $id,                        // path param resolved by name
+        #[FromBody] DepositRequest $req,   // deserialized from request body
+    ): DepositResponse {
+        $ref = $this->factory->of($id);
+        /** @var WalletState $state */
+        $state = $ref->ask(new Deposit($req->amount), Duration::seconds(2))->await();
+        return new DepositResponse(balance: $state->balance);
+    }
+}`;
+
+const middlewareCode = `<?php
+// Middleware pipeline: stack PSR-15 middleware, then compile.
+// Each layer is a named type — composable, independently testable.
+use Monadial\\Nexus\\Http\\Dsl\\HttpApp;
+
+$compiled = HttpApp::create($system)
+    ->middleware(new AuthenticationMiddleware($jwtVerifier))
+    ->post('/wallets/{id}/deposit', DepositHandler::class)
+    ->compile();
+
+// Hand $compiled to SwooleHttpServerAdapter or any PSR-15-compatible server.`;
+
+const fromActorCode = `<?php
+// Inject live actor state directly into a handler parameter.
+// #[FromActor] resolves the named ref and awaits the ask — zero boilerplate.
+use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
+use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromActor;
+
+#[Route('GET', '/wallets/{id}')]
+final class WalletStateHandler
+{
+    public function __invoke(
+        string $id,
+        #[FromActor('wallets')] WalletState $state,  // actor registered as 'wallets'
+    ): WalletState {
+        return $state; // already resolved; serialized to JSON by the framework
+    }
+}`;
+
+const wsCode = `<?php
+// WebSocket handler — extend WebSocketHandler, inject context via #[FromContext].
+use Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketHandler;
+use Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketFrame;
+use Monadial\\Nexus\\Http\\Ws\\WebSocket\\WebSocketContext;
+use Monadial\\Nexus\\Http\\Ws\\WebSocket\\Attribute\\FromContext;
+
+final class PriceStreamHandler extends WebSocketHandler
+{
+    public function __construct(
+        #[FromContext] private readonly WebSocketContext $ctx,
+    ) {}
+
+    public function onMessage(WebSocketFrame $frame): void
+    {
+        // Echo the frame back to the client.
+        $this->ctx->send($frame->data);
+    }
+
+    public function onClose(int $code): void
+    {
+        // Cleanup on disconnect.
+    }
+}
+
+// Register with WsApplication:
+// $app->ws('/prices', PriceStreamHandler::class);`;
+
+const errorHandlingCode = `<?php
+// Uncaught handler exceptions produce structured RFC 9457 Problem Details.
+// AskTimeoutException automatically becomes HTTP 504.
+// Map domain exceptions to HTTP status codes with onException().
+use Monadial\\Nexus\\Http\\Dsl\\HttpApp;
+use Monadial\\Nexus\\Http\\Response\\JsonResponse;
+
+$compiled = HttpApp::create($system)
+    ->middleware(new AuthenticationMiddleware($jwtVerifier))
+    ->post('/wallets/{id}/deposit', DepositHandler::class)
+    ->onException(InsufficientFundsException::class,
+        static fn (InsufficientFundsException $e, ServerRequestInterface $r): ResponseInterface =>
+            JsonResponse::ok(['error' => $e->getMessage()])->withStatus(422)
+    )
+    ->onException(AccountFrozenException::class,
+        static fn (AccountFrozenException $e, ServerRequestInterface $r): ResponseInterface =>
+            JsonResponse::ok(['error' => 'Account frozen'])->withStatus(403)
+    )
+    ->compile();`;
+
+const psr15Code = `<?php
+// Nexus HTTP is a first-class PSR-15 application.
+// Drop it into any PSR-15-compatible server or use the bundled Swoole adapter.
+
+use Monadial\\Nexus\\Http\\Dsl\\HttpApp;
+use Monadial\\Nexus\\Http\\Server\\Swoole\\Server\\SwooleHttpServerAdapter;
+use Swoole\\Http\\Server;
+
+$compiled = HttpApp::create($system)
+    ->middleware(new AuthenticationMiddleware($jwtVerifier))  // any PSR-15 middleware
+    ->get('/orders/{id}', OrderController::class)
+    ->compile();
+
+// Swoole adapter — long-lived process, coroutine-per-request
+$server = new Server('0.0.0.0', 8080);
+(new SwooleHttpServerAdapter($server))->serve($compiled);
+
+// Or hand the PSR-15 compiled app to any compatible server:
+// $handler->handle($request); // works with any PSR-15 dispatcher`;
+
+const timeoutCode = `<?php
+// Per-route ask timeouts prevent slow actors from stalling the HTTP layer.
+// AskTimeoutException is caught by the framework and turned into a 504.
+use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
+use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromActor;
+
+#[Route('GET', '/orders/{id}')]
+final class OrderStatusHandler
+{
+    public function __invoke(
+        string $id,                           // path param resolved by name
+        #[FromActor('orders')] OrderState $state,  // ask with actor's default timeout
+    ): OrderState {
+        return $state; // resolved via ask(); 504 if the actor doesn't respond in time
+    }
+}`;
+---
+<Marketing
+  title="HTTP + WebSockets — Nexus"
+  description="Typed HTTP handlers, a composable middleware pipeline, actor-backed WebSockets, and production-ready Swoole concurrency. One stack for every I/O pattern."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">HTTP + WebSockets</p>
+      <h1 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight">
+        Every request is a typed actor message.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        Nexus HTTP is not a framework bolted onto an actor system. Handlers <em>are</em> actors.
+        A route resolves to a typed closure, processes one request atomically, and
+        returns a value object — serialized, validated, and traced end-to-end.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/http/getting-started')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          HTTP Quick Start
+        </a>
+        <a
+          href={docsUrl('/http/overview')}
+          class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+        >
+          Read the docs
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={routingCode} lang="php" title="src/Http/DepositHandler.php" />
+  </section>
+
+  <!-- Routing + Handlers -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">Routing that types itself.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        Routes are PHP attributes on handler classes. Path parameters, query strings,
+        and request bodies are injected by name — resolved and cast by the framework,
+        validated before your handler ever runs. No router array, no magic strings.
+        If the types don't match, Psalm catches it at analysis time.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Attribute-driven routes</h3>
+        <p class="text-slate-600 dark:text-slate-400 text-sm">
+          <code class="font-mono">#[Route(method, path)]</code>, <code class="font-mono">#[FromBody]</code>,
+          <code class="font-mono">#[FromActor]</code>, <code class="font-mono">#[FromService]</code>.
+          Path parameters are resolved positionally by name. The container resolves handler
+          dependencies; Psalm verifies the types.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Validation layer</h3>
+        <p class="text-slate-600 dark:text-slate-400 text-sm">
+          Request DTOs are validated before dispatch. Constraint violations become
+          structured 422 responses — no try/catch scaffolding in handlers.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Return-type serialization</h3>
+        <p class="text-slate-600 dark:text-slate-400 text-sm">
+          Return a <code class="font-mono">readonly</code> value object. The
+          framework serializes it to JSON (or your negotiated format) based on
+          the declared return type. No manual <code class="font-mono">json_encode</code>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Middleware pipeline -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Middleware as a typed pipeline.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Authentication, rate limiting, validation, and tracing are composable
+        pipeline stages — each a named type, each testable in isolation.
+        The runtime short-circuits at the first rejection; your handler never
+        executes with invalid input.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">AuthenticationMiddleware</code> — plug in any Bearer JWT, API key, or custom resolver</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any PSR-15 middleware drops in without modification — CORS, rate limiting, tracing</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">ExceptionHandlerMiddleware</code> — converts uncaught exceptions to RFC 9457 Problem Details</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">RouterMiddleware</code> — final pipeline stage dispatches to the matched handler</li>
+      </ul>
+    </div>
+    <CodeBlock code={middlewareCode} lang="php" title="bootstrap.php" />
+  </section>
+
+  <!-- #[FromActor] integration -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={fromActorCode} lang="php" title="src/Http/WalletStateHandler.php" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Ask an actor from inside a handler.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">#[FromActor]</code> bridges HTTP and the
+        actor graph. The framework resolves the actor reference from the route parameters,
+        issues a typed <code class="font-mono">ask()</code>, awaits the response within
+        your declared timeout, and injects the result as a handler parameter.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        The actor runs concurrently with other requests. Backpressure, mailbox bounds,
+        and supervision are the same as any other actor — the HTTP surface is just
+        another message source.
+      </p>
+      <a
+        href={docsUrl('/http/actors-in-http')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Handler + actor integration docs →
+      </a>
+    </div>
+  </section>
+
+  <!-- WebSockets -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">WebSockets: persistent connections, actor semantics.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Each WebSocket connection spawns an actor. Your handler declares a
+        <code class="font-mono">Behavior</code> — the same model as every other actor
+        in the system. Pub/sub channels are actor-backed. A dropped connection sends
+        <code class="font-mono">PostStop</code>; the actor cleans up and terminates.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Under Swoole, thousands of connections run as coroutines. No threads, no
+        polling loop, no external message broker required for local fan-out.
+      </p>
+      <a
+        href={docsUrl('/http/websockets')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        WebSocket handler docs →
+      </a>
+    </div>
+    <CodeBlock code={wsCode} lang="php" title="src/Http/PriceStreamHandler.php" />
+  </section>
+
+  <!-- Error handling -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Error handling without boilerplate.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Uncaught exceptions in handlers are caught by <code class="font-mono text-primary">ExceptionHandlerMiddleware</code>
+        and converted to RFC 9457 Problem Details responses. Your handlers never need a
+        <code class="font-mono">try/catch</code> for infrastructure errors — only for
+        domain logic you intend to surface to callers.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Domain exceptions map to HTTP status codes via a one-line declaration.
+        <code class="font-mono text-primary">AskTimeoutException</code> always produces a
+        <strong>504 Gateway Timeout</strong> — the actor took too long and the framework tells
+        the caller exactly why. No silent 500s.
+      </p>
+      <a
+        href={docsUrl('/http/error-handling')}
+        class="inline-block mt-2 text-primary hover:underline font-semibold"
+      >
+        Error handling reference →
+      </a>
+    </div>
+    <CodeBlock code={errorHandlingCode} lang="php" title="bootstrap.php — error mapping" />
+  </section>
+
+  <!-- PSR-15 integration -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <CodeBlock code={psr15Code} lang="php" title="bootstrap.php — PSR-15 setup" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">First-class PSR-15 application.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Nexus HTTP implements the PSR-15 <code class="font-mono">RequestHandlerInterface</code>.
+        You can pass it to any PSR-15-compatible server, embed it in a larger middleware
+        stack, or run it standalone with the bundled Swoole adapter.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The Swoole adapter wraps each request in a coroutine. Thousands of concurrent
+        requests share a tiny number of worker threads — no PHP-FPM process pool
+        needed, no cold-start cost per request.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Standard PSR-15 middleware — CORS, request IDs, structured logging — drops in
+        without modification. If you already have PSR-15 middleware from other packages,
+        it works out of the box.
+      </p>
+    </div>
+  </section>
+
+  <!-- Ask timeouts under load -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Ask timeouts under load.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Every HTTP handler that reads actor state uses <code class="font-mono">ask()</code>
+        internally — and every <code class="font-mono">ask()</code> has a deadline. Under load,
+        when an actor's mailbox is full and it cannot process your request within the
+        declared timeout, the framework returns a <strong>504</strong> rather than letting
+        the connection hang indefinitely.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        You set the timeout at the route level or at the
+        <code class="font-mono">#[FromActor]</code> parameter level. The framework
+        enforces it. No manual <code class="font-mono">Promise::timeout()</code> wiring.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Backpressure from the actor's bounded mailbox propagates cleanly to HTTP callers
+        as 503 or 504 responses — before your database or downstream services are saturated.
+      </p>
+      <a
+        href={docsUrl('/http/error-handling')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Error handling →
+      </a>
+    </div>
+    <CodeBlock code={timeoutCode} lang="php" title="src/Http/OrderStatusHandler.php" />
+  </section>
+
+  <!-- Production posture -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">Ready for production on day one.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        Nexus HTTP runs on Swoole — the same runtime as the rest of your actor system.
+        There is no impedance mismatch between your HTTP layer and your worker pool.
+        The same supervision tree covers both. One process. One deployment. One place
+        to look when something goes wrong.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-4 gap-6">
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Graceful shutdown</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">In-flight requests drain before workers stop. No forced terminations.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Structured error responses</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Uncaught exceptions produce RFC 9457 Problem Details — never a stack trace in production.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Configurable timeouts</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Per-route and per-ask timeouts. <code class="font-mono">AskTimeoutException</code> becomes a 504 automatically.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">PSR-3 logging</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Request IDs propagated to actor context. Every log line is traceable back to its HTTP origin.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What HTTP does not replace -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">What Nexus HTTP is not.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Nexus HTTP is purpose-built for actor-integrated services. It is not a general-purpose
+        MVC framework. If your application is a standard CRUD service with no concurrency
+        requirements, Symfony or Laravel will be faster to build and easier to staff.
+        Nexus HTTP earns its complexity when your handlers need to talk to long-lived
+        actors — for state reads, command dispatch, or real-time subscriptions.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Similarly, Nexus HTTP does not replace a reverse proxy. Run Nginx or Caddy in
+        front for TLS termination, static assets, and connection pooling at the edge.
+        Nexus HTTP handles the application tier — fast, typed, and actor-aware.
+      </p>
+    </div>
+  </section>
+
+  <!-- Security at the request boundary -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <h2 class="text-3xl font-bold mb-4">Security at the request boundary.</h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-6">
+      The <code class="font-mono">ask()</code> timeout on every handler call is a
+      security control as much as a reliability one. A flood of slow or malicious
+      requests cannot saturate the actor indefinitely — each request has a deadline,
+      and <code class="font-mono">AskTimeoutException</code> becomes a 504 before
+      upstream connections are exhausted. Pair this with a bounded mailbox on the
+      actor to cap the queue depth: backpressure propagates cleanly to HTTP callers
+      as 503 or 504 responses before your database or downstream services are
+      saturated.
+    </p>
+    <p class="text-slate-600 dark:text-slate-300 mb-6">
+      PSR-15 middleware handles authentication, CSRF validation, and input sanitisation
+      <em>before</em> the request becomes an actor message. Keep the validation layer
+      outside the actor topology — the actor should receive only well-formed, already-authenticated
+      commands. Each request handler should hold its own <code class="font-mono">ActorRef</code>;
+      do not share controller instances across requests that need different actor scopes,
+      as this risks leaking context between callers.
+    </p>
+    <a href="/security" class="inline-block text-primary hover:underline font-semibold">
+      Full security model →
+    </a>
+  </section>
+
+  <CtaBlock
+    title="Build your first typed HTTP handler."
+    subtitle="The quick-start covers routing, validation, and actor integration in under ten minutes."
+    primary={{ href: docsUrl('/http/getting-started'), label: 'HTTP Quick Start' }}
+    secondary={{ href: docsUrl('/http/overview'), label: 'Browse HTTP docs' }}
+  />
+</Marketing>

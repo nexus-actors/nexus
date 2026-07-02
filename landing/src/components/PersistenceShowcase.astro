@@ -1,0 +1,135 @@
+---
+import IDEEditor from './IDEEditor';
+import { docsUrl } from '../lib/urls';
+
+const files = [
+  {
+    name: 'OrderActor.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+namespace App\\Order\\Actor;
+
+use App\\Order\\Event\\OrderPlaced;
+use App\\Order\\Event\\OrderShipped;
+use App\\Order\\Message\\PlaceOrder;
+use App\\Order\\Message\\ShipOrder;
+use App\\Order\\State\\OrderState;
+use Monadial\\Nexus\\Core\\Actor\\ActorContext;
+use Monadial\\Nexus\\Persistence\\PersistenceId;
+use Monadial\\Nexus\\Persistence\\EventSourced\\EventSourcedBehavior;
+use Monadial\\Nexus\\Persistence\\EventSourced\\Effect;
+use Monadial\\Nexus\\Persistence\\EventSourced\\SnapshotStrategy;
+
+final class OrderActor
+{
+    public static function behavior(string $orderId): EventSourcedBehavior
+    {
+        return EventSourcedBehavior::create(
+            persistenceId: PersistenceId::of('Order', $orderId),
+            emptyState: OrderState::empty(),
+            commandHandler: static function (OrderState $state, ActorContext $ctx, object $cmd): Effect {
+                return match (true) {
+                    $cmd instanceof PlaceOrder => Effect::persist(
+                        new OrderPlaced($cmd->orderId, $cmd->items),
+                    ),
+                    $cmd instanceof ShipOrder => Effect::persist(
+                        new OrderShipped($cmd->orderId, $cmd->tracking),
+                    ),
+                };
+            },
+            eventHandler: static fn (OrderState $state, object $event): OrderState => match (true) {
+                $event instanceof OrderPlaced => $state->placed($event->items),
+                $event instanceof OrderShipped => $state->shipped($event->tracking),
+            },
+        )->withSnapshotStrategy(SnapshotStrategy::everyN(50));
+    }
+}`,
+  },
+  {
+    name: 'OrderEvents.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+namespace App\\Order\\Event;
+
+readonly class OrderPlaced
+{
+    public function __construct(
+        public string $orderId,
+        public array $items,
+    ) {}
+}
+
+readonly class OrderShipped
+{
+    public function __construct(
+        public string $orderId,
+        public string $tracking,
+    ) {}
+}`,
+  },
+  {
+    name: 'stores.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+use Doctrine\\DBAL\\DriverManager;
+use Monadial\\Nexus\\Persistence\\Dbal\\DbalEventStore;
+use Monadial\\Nexus\\Persistence\\Dbal\\DbalSnapshotStore;
+
+$dsnParser  = new DsnParser(['mysql' => 'pdo_mysql', 'postgres' => 'pdo_pgsql', 'sqlite' => 'pdo_sqlite']);
+$connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));
+
+$eventStore = new DbalEventStore($connection);
+$snapshotStore = new DbalSnapshotStore($connection);
+
+// Swap to Doctrine ORM stores with one line:
+// $eventStore = new DoctrineEventStore($entityManager);`,
+  },
+];
+---
+
+<section class="ps-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">Event sourcing, built in.</h2>
+    <p class="nx-section-sub">
+      Persist events, not state. Recovery is automatic. Snapshots and retention are policy, not boilerplate.
+    </p>
+    <IDEEditor client:load files={files} defaultIndex={0} />
+    <p class="ps-cta">
+      <a href={docsUrl('/persistence/overview')}>→ See persistence patterns</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .ps-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .ps-cta {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  .ps-cta a {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+
+  .ps-cta a:hover {
+    opacity: 0.75;
+    text-decoration: underline;
+  }
+</style>

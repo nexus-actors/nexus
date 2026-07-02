@@ -1,0 +1,205 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import StabilityMatrix from '../components/StabilityMatrix.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+---
+<Marketing
+  title="Package stability matrix — Nexus"
+  description="Stability status for all 25 Nexus packages. All packages are Stable except nexus-cluster (Experimental API preview). ZTS-dependent packages require PHP compiled with Zend Thread Safety."
+>
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <h1 class="text-4xl md:text-5xl font-extrabold mb-6">Package stability matrix</h1>
+    <p class="text-lg text-slate-600 dark:text-slate-300 mb-10 max-w-3xl">
+      All 25 packages follow a two-tier stability model. "Stable" means the public API
+      is frozen for the current major version — breaking changes require a semver major
+      bump and a migration guide. "Experimental" means the API is a preview subject to
+      breaking changes in minor releases; use only if you can absorb churn.
+    </p>
+
+    <div class="mb-10 grid sm:grid-cols-2 gap-6 max-w-3xl">
+      <div class="rounded-lg border border-slate-200 dark:border-slate-700 p-5">
+        <h2 class="text-base font-bold mb-3 text-slate-800 dark:text-slate-200">Process criteria for Stable</h2>
+        <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Public API documented and reviewed</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>90 %+ method coverage in CI</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Psalm Level 1 strict with targeted suppressions documented</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Breaking changes require a semver major + migration guide</span>
+          </li>
+        </ul>
+      </div>
+      <div class="rounded-lg border border-slate-200 dark:border-slate-700 p-5">
+        <h2 class="text-base font-bold mb-3 text-slate-800 dark:text-slate-200">API maturity criteria for Stable</h2>
+        <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>All public interfaces, classes, and methods documented</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Generic type parameters fully annotated (Psalm templates)</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Integration tests covering primary usage paths</span>
+          </li>
+          <li class="flex gap-2">
+            <span class="text-emerald-600 dark:text-emerald-400 mt-0.5">✓</span>
+            <span>Changelog entry for every shipped change</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <StabilityMatrix />
+
+    <p class="mt-4 text-xs text-slate-500 dark:text-slate-500">
+      ZTS-dependent packages require PHP 8.5+ compiled with Zend Thread Safety and Swoole 6.2.1+ built with
+      <code class="font-mono">--enable-swoole-thread</code>. See
+      <a href={docsUrl('/operations/zts-php-setup')} class="underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-300">
+        ZTS PHP setup guide
+      </a> for environment configuration.
+    </p>
+  </section>
+
+  <!-- Semver promise -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">The semver promise.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Nexus follows <a href="https://semver.org" class="text-primary hover:underline">Semantic Versioning 2.0</a>
+        strictly across all stable packages. A <strong>major version bump</strong> (e.g. 1.x → 2.x)
+        means at least one public API has changed in a backward-incompatible way.
+        Every major release ships with a migration guide explaining what changed and how
+        to update. A <strong>minor version bump</strong> adds new public API in a
+        backward-compatible manner — existing code continues to work without changes.
+        A <strong>patch version bump</strong> fixes bugs without changing the public API.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Internal implementation classes (marked <code class="font-mono">@internal</code>
+        in docblocks and prefixed <code class="font-mono">Internal\</code> by convention)
+        are <em>not</em> covered by the semver promise. If you depend on
+        <code class="font-mono">@internal</code> APIs, you accept the risk of breakage
+        in minor releases. Public interfaces, abstract classes, and all documented
+        methods are protected.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Experimental packages (currently only <code class="font-mono">nexus-cluster</code>)
+        explicitly do not follow the semver API-stability promise for minor releases.
+        The <code class="font-mono">CHANGELOG</code> entry for each release marks whether
+        the change is semver-breaking or not.
+      </p>
+    </div>
+  </section>
+
+  <!-- Deprecation policy -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">Deprecation policy.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Public API that needs to change is first deprecated in a minor release — it remains
+        fully functional but emits a <code class="font-mono">@deprecated</code> Psalm annotation
+        that tools can surface as a warning. Deprecated API is removed only in the next
+        major version, giving at least one full minor version cycle for migration.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        When an API is deprecated, the release notes include:
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400 mb-4">
+        <li class="flex gap-3">
+          <span class="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>The exact method or class being deprecated</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>The recommended replacement API</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>A code example showing before and after</span>
+        </li>
+        <li class="flex gap-3">
+          <span class="text-emerald-600 dark:text-emerald-400 font-bold mt-0.5">✓</span>
+          <span>The target major version in which the deprecated API will be removed</span>
+        </li>
+      </ul>
+      <p class="text-slate-600 dark:text-slate-300">
+        No API is ever removed without first going through a deprecation cycle,
+        except in the case of a security vulnerability requiring an immediate fix.
+      </p>
+    </div>
+  </section>
+
+  <!-- What "stable" means per tier -->
+  <section class="max-w-4xl mx-auto px-4 py-12">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">What "stable" means in practice.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The stability tier in the matrix above is not a quality judgement — it is a
+        compatibility promise. A package marked Stable has met the criteria listed
+        above: documented API, 90%+ method coverage, Psalm level 1, integration tests
+        across both FiberRuntime and SwooleRuntime. You can add it to a
+        <code class="font-mono">composer.json</code> with a caret constraint
+        (<code class="font-mono">^1.0</code>) and rely on Composer's range resolver
+        to keep you on compatible releases.
+      </p>
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="p-5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+          <h3 class="font-bold mb-2 text-emerald-800 dark:text-emerald-300">Stable</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">
+            Public API is frozen for the current major. Breaking changes require a semver
+            major bump and a migration guide. Use with a caret constraint in Composer.
+            Suitable for production use.
+          </p>
+        </div>
+        <div class="p-5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <h3 class="font-bold mb-2 text-amber-800 dark:text-amber-300">Experimental</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">
+            API is a preview. Breaking changes may ship in minor releases.
+            Use with an exact version constraint in Composer. Suitable for evaluation
+            and early adoption if you can absorb churn. Currently only
+            <code class="font-mono">nexus-cluster</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How to follow changes -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">Following changes.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        The easiest way to track Nexus releases is to watch the
+        <a href="https://github.com/nexus-actors/nexus/releases" class="text-primary hover:underline">GitHub Releases</a>
+        page — every release has a CHANGELOG excerpt and a link to the full migration notes
+        if the release is a major version. You can also subscribe to release notifications
+        on GitHub by watching the repository with "Releases only" selected.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        Individual packages split to their own GitHub repositories via
+        <code class="font-mono">splitsh-lite</code>. If you only use
+        <code class="font-mono">nexus-actors/nexus-core</code>, you can watch the split
+        repository to get per-package release notifications without noise from unrelated packages.
+      </p>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Questions about package status?"
+    subtitle="Open an issue or start a discussion on GitHub — the maintainers respond within one business day."
+    primary={{ href: 'https://github.com/nexus-actors/nexus/issues', label: 'Open an issue' }}
+    secondary={{ href: 'https://github.com/nexus-actors/nexus/discussions', label: 'GitHub Discussions' }}
+  />
+</Marketing>

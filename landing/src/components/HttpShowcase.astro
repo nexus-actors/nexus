@@ -1,0 +1,105 @@
+---
+import IDEEditor from './IDEEditor';
+
+const files = [
+  {
+    name: 'OrderController.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+namespace App\\Order;
+
+use App\\Order\\Message\\PlaceOrder;
+use App\\Order\\Message\\OrderPlaced;
+use Monadial\\Nexus\\Core\\Actor\\ActorRef;
+use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromBody;
+use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
+use Monadial\\Nexus\\Runtime\\Duration;
+use Monadial\\Nexus\\Http\\Response\\JsonResponse;
+
+#[Route('POST', '/orders')]
+final readonly class OrderController
+{
+    public function __construct(
+        private ActorRef $orders,
+    ) {}
+
+    public function __invoke(
+        #[FromBody] PlaceOrderRequest $body,
+    ): JsonResponse {
+        /** @var OrderPlaced $result */
+        $result = $this->orders->ask(
+            new PlaceOrder(orderId: $body->id, items: $body->items),
+            Duration::seconds(2),
+        )->await();
+
+        return JsonResponse::ok(['status' => 'placed', 'id' => $result->orderId]);
+    }
+}`,
+  },
+  {
+    name: 'bootstrap.php',
+    language: 'php',
+    code: `<?php
+
+declare(strict_types=1);
+
+use App\\Order\\OrderActor;
+use Monadial\\Nexus\\App\\NexusApp;
+use Monadial\\Nexus\\Http\\Dsl\\HttpApp;
+use Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime;
+
+$app = NexusApp::create('orders-api')
+    ->actor('orders', OrderActor::props());
+
+$system = $app->start(new SwooleRuntime());
+
+// Build the HTTP app — routes discovered via #[Route] attributes.
+$compiled = HttpApp::create($system)
+    ->discover(__DIR__ . '/src')
+    ->compile();
+
+// Hand $compiled to SwooleHttpServerAdapter or your adapter of choice.`,
+  },
+];
+---
+
+<section class="hs-section">
+  <div class="nx-section-inner">
+    <h2 class="nx-section-title">HTTP, the actor way.</h2>
+    <p class="nx-section-sub">
+      Plug an actor system into PSR-15. Requests become messages; responses come back through ask.
+    </p>
+    <IDEEditor client:load files={files} defaultIndex={0} />
+    <p class="hs-cta">
+      <a href="/http">→ See the full HTTP guide</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .hs-section {
+    padding: 3rem 0;
+    border-top: 1px solid var(--nx-border);
+  }
+
+  .hs-cta {
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  .hs-cta a {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--nx-accent);
+    text-decoration: none;
+    transition: opacity 0.15s;
+  }
+
+  .hs-cta a:hover {
+    opacity: 0.75;
+    text-decoration: underline;
+  }
+</style>

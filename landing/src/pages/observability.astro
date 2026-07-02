@@ -1,0 +1,290 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const heroCode = `<?php
+// One call wires traces, metrics, and logs into every actor.
+use Monadial\\Nexus\\App\\NexusApp;
+use Monadial\\Nexus\\Observability\\Config\\ObservabilityConfig;
+use Monadial\\Nexus\\Observability\\Otel\\ObservabilityFactory;
+
+NexusApp::create('payments')
+    ->withObservability(ObservabilityFactory::fromConfig(
+        ObservabilityConfig::fromEnv($_SERVER),
+    ))
+    ->actor('payments', Props::fromBehavior($paymentBehavior))
+    ->run(new SwooleRuntime());
+
+// No call to withObservability()? Defaults to a no-op provider — zero overhead.`;
+
+const tracingCode = `<?php
+// W3C traceparent propagates through every tell() and ask().
+// Spans nest automatically: HTTP request → actor handler → persistence write.
+
+$behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+    if ($msg instanceof ProcessOrder) {
+        // Both calls carry the incoming trace context — no manual wiring.
+        $inventoryRef->tell(new ReserveStock($msg->orderId));
+        $persistenceRef->tell(new SaveOrder($msg));
+    }
+    return Behavior::same();
+});
+
+// Resulting trace:
+//   POST /orders          [200ms]
+//   └─ payments.handle    [180ms]
+//      ├─ inventory.tell  [40ms]
+//      └─ persistence.tell [60ms]`;
+
+const metricsCode = `<?php
+// RED metrics emitted per actor — no instrumentation code in handlers.
+// Export to any OTLP collector: Prometheus, Tempo, Honeycomb, Datadog.
+
+// Emitted automatically as OpenTelemetry instruments:
+//   nexus.actor.messages.processed           {nexus.message.type}  // counter
+//   nexus.actor.message.processing.duration                        // histogram
+//   http.server.request.duration             {method, status}      // histogram
+//   http.server.active_requests                                    // up/down counter
+
+// Cross-worker transport + Doctrine pools:
+//   nexus.worker_pool.messages.sent          {nexus.worker.target}
+//   nexus.dbal.pool.acquire.wait             {pool.name}           // histogram
+
+// Swoole + actor-system observable gauges:
+//   swoole.coroutine.count, swoole.server.connections
+//   nexus.actor_system.live_actors, nexus.actor_system.dead_letters`;
+
+const logsCode = `<?php
+// Add one RecordProcessor; every log record then carries the active span's ids.
+use Monadial\\Nexus\\Observability\\Logger\\TraceCorrelationProcessor;
+
+// register new TraceCorrelationProcessor($observability) in your nexus-logger pipeline
+
+$behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+    $ctx->log()->info('Processing payment', ['order_id' => $msg->orderId]);
+    // → record now includes trace_id + span_id from the active span
+    return Behavior::same();
+});
+
+// Result: every log line is clickable in Grafana — jump straight to the trace.`;
+
+const collectorCode = `<?php
+// Point Nexus at any OTLP endpoint via standard OpenTelemetry env vars.
+// Works with the OpenTelemetry Collector, Tempo, Jaeger, Honeycomb, Datadog.
+use Monadial\\Nexus\\Observability\\Config\\ObservabilityConfig;
+use Monadial\\Nexus\\Observability\\Otel\\ObservabilityFactory;
+
+// OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318
+// OTEL_SERVICE_NAME=payments
+// OTEL_TRACES_SAMPLER=parentbased_always_on
+
+$observability = ObservabilityFactory::fromConfig(
+    ObservabilityConfig::fromEnv($_SERVER),
+);
+// Disabled by default: unset OTEL vars ⇒ a no-op provider (zero overhead).`;
+---
+<Marketing
+  title="Observability — Nexus"
+  description="Distributed tracing, RED metrics, and structured logs via OpenTelemetry. W3C trace propagation across every actor boundary. Zero overhead when disabled."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Observability</p>
+      <h1 class="text-5xl font-extrabold mb-6 leading-tight">
+        Traces, metrics, and logs in one call.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        Nexus emits OpenTelemetry spans, RED metrics, and structured logs across
+        every actor boundary — automatically. One
+        <code class="font-mono text-primary">withObservability()</code> call and your entire
+        actor graph is observable. No instrumentation code inside handlers.
+        No overhead when disabled.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/observability/overview')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          Observability docs
+        </a>
+        <a
+          href={docsUrl('/observability/quick-start')}
+          class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+        >
+          Quick Start
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={heroCode} lang="php" title="bootstrap.php" />
+  </section>
+
+  <!-- Distributed tracing -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">W3C trace propagation across every actor boundary.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Every <code class="font-mono">tell()</code> and <code class="font-mono">ask()</code>
+        carries the current W3C <code class="font-mono">traceparent</code> in the message
+        envelope. When the handler runs, Nexus opens a child span automatically — no
+        manual context propagation, no thread-local hacks.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The full call chain is visible in one trace: HTTP request → actor handler →
+        child actor → persistence write. Dead letters and supervision restarts appear
+        as span events, not silent gaps.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> W3C <code class="font-mono">traceparent</code> / <code class="font-mono">tracestate</code> in every envelope</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Spans nest: HTTP → actor → child actors → persistence</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Dead letters and restarts surface as span events, not silent gaps</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Worker pool cross-thread hops visible as linked spans</li>
+      </ul>
+    </div>
+    <CodeBlock code={tracingCode} lang="php" title="src/Actor/OrderProcessor.php" />
+  </section>
+
+  <!-- Metrics -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={metricsCode} lang="php" title="metrics exported automatically" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">RED metrics per actor, no handler code.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Rate, error rate, and duration histograms are emitted for every actor
+        automatically. Mailbox depth gauges let you spot backpressure before it
+        becomes a 503. Worker pool metrics give per-thread visibility under Swoole.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        All metrics are exported via OTLP — point the collector at Prometheus,
+        Tempo, Honeycomb, or Datadog with a single environment variable. Swoole
+        server and coroutine stats are exposed as OpenTelemetry observable gauges
+        alongside the actor metrics.
+      </p>
+      <a
+        href={docsUrl('/observability/metrics')}
+        class="inline-block mt-2 text-primary hover:underline font-semibold"
+      >
+        Full metrics reference →
+      </a>
+    </div>
+  </section>
+
+  <!-- Logs correlation -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Logs correlated to traces by default.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">$ctx->log()</code> injects the current
+        <code class="font-mono">trace_id</code> and <code class="font-mono">span_id</code>
+        into every log record — no extra adapter, no middleware. The PSR-3 logger you
+        already pass to <code class="font-mono">ActorSystem::create()</code> receives
+        the enriched context automatically.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        In Grafana, every log line becomes a clickable link to the corresponding trace.
+        Debugging a slow actor means one click from the log panel to the full
+        distributed trace — not a manual correlation of log timestamps and trace IDs.
+      </p>
+      <a
+        href={docsUrl('/observability/logs')}
+        class="inline-block mt-2 text-primary hover:underline font-semibold"
+      >
+        Logs correlation guide →
+      </a>
+    </div>
+    <CodeBlock code={logsCode} lang="php" title="src/Actor/PaymentActor.php" />
+  </section>
+
+  <!-- What you get out of the box -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">Everything included. Nothing required.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        The <code class="font-mono">nexus-observability-otel</code> bridge uses the
+        OpenTelemetry SDK — the same SDK your other services already export. No Nexus-specific
+        agent, no sidecar, no proprietary format. Disabled by default: if you don't call
+        <code class="font-mono">withObservability()</code>, Nexus uses a no-op provider
+        with zero allocations on the hot path.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Zero overhead when disabled</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          No call to <code class="font-mono">withObservability()</code>? Nexus uses a no-op
+          provider. No span allocations, no context propagation, no performance
+          cost on the message hot path.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">OTLP to any collector</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Export spans and metrics to the OpenTelemetry Collector, Tempo, Jaeger,
+          Honeycomb, or Datadog Agent via OTLP/HTTP. One environment variable
+          controls the endpoint.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Supervision events in spans</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          Actor restarts, escalations, and dead-letter deliveries appear as span
+          events on the relevant trace — not silent gaps in your observability data.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- OTLP collector wiring -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Wire any OTLP collector in minutes.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">ObservabilityFactory::fromConfig()</code> reads
+        the standard OpenTelemetry env vars and builds an OTLP-backed provider. Set your
+        endpoint once, pass the provider to <code class="font-mono">withObservability()</code>,
+        and Nexus handles the rest.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Uses the same <code class="font-mono">open-telemetry/sdk</code> and
+        <code class="font-mono">open-telemetry/exporter-otlp</code> packages your other
+        PHP services already depend on. No Nexus-specific exporter or agent.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> gRPC and HTTP OTLP exporters both supported</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Batch span processor for low-overhead export</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with OpenTelemetry Collector, Tempo, Jaeger, Honeycomb, Datadog</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">OTEL_EXPORTER_OTLP_ENDPOINT</code> environment variable controls the endpoint</li>
+      </ul>
+    </div>
+    <CodeBlock code={collectorCode} lang="php" title="bootstrap.php — OTLP setup" />
+  </section>
+
+  <!-- Production posture -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-slate-200 dark:border-slate-700 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">Observability that covers the whole system.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        Actor systems can be opaque: a message enters, something happens inside a mailbox,
+        a reply comes out — or doesn't. Nexus makes every step visible. Span nesting shows
+        exactly which actor handled a message and how long it took. Mailbox depth gauges
+        show where backpressure is building before requests time out. Supervision events
+        in traces show when and why an actor restarted.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        This works across the worker pool too. A cross-thread message hop via
+        <code class="font-mono">WorkerActorRef</code> appears as a linked span in the
+        same trace — the trace context crosses thread boundaries inside the envelope,
+        just like it does with local actor refs.
+      </p>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Add observability to your actor system."
+    subtitle="The getting-started guide wires traces, metrics, and logs into a running Nexus app in under ten minutes."
+    primary={{ href: docsUrl('/observability/overview'), label: 'Observability docs' }}
+    secondary={{ href: docsUrl('/observability/quick-start'), label: 'Quick Start' }}
+  />
+</Marketing>
