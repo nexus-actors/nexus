@@ -47,8 +47,8 @@ WS /ws/games/{id}       ──▶  GameChannelActor   ──▶  GameActor (ES) 
                                      │               persist to log     │
                                      │               EVOLVE → state ────┘  project
                                      ▼                    │
-                              broadcast snapshot     Event log
-                              to all attached        (InMemory → Dbal)
+                              broadcast snapshot     Event log (Doctrine)
+                              to all attached        nexus_event_journal
                               sockets
 ```
 
@@ -149,7 +149,7 @@ private static function onMutation(GameState $state, GameDecision $decision, Act
 
 The reply target and the originating fd are transport concerns, so they ride an actor-layer `GameEnvelope` — never the domain command. The domain commands (`JoinGame`, `MakeMove`, `Forfeit`, `GetSnapshot`) are pure data with no `ActorRef` and no fd. Events persist *before* the reply and the projection fire, so a snapshot is never sent for a move that wasn't recorded.
 
-The journal itself is pluggable. The example wires a per-worker `InMemoryEventStore`; swap it for `DbalEventStore` (from `nexus-persistence-dbal`) to make the log durable — `GameActor` does not change.
+The journal itself is pluggable — `GameActor` only depends on the `EventStore` interface. The example wires a `PooledDoctrineEventStore` that appends events to the `nexus_event_journal` table, borrowing a pooled `EntityManager` per operation so no connection is pinned per game. Point it at a different `EventStore` (in-memory for tests, `DbalEventStore` for a raw-DBAL setup) and the actor does not change.
 
 ## The channel actor: server-owned identity
 
@@ -237,7 +237,7 @@ $app->paramResolver(new EntityManagerResolver());
 Routes::register($app, $doctrine->gameFactory, $serializer, $indexHandler, $log);
 ```
 
-`DoctrineKit` builds the persistence side: the pooled connections for the lobby, the `InMemoryEventStore`, the `DoctrineGameReadModel` projection, and the `GameRefFactory` that ties them to the game actor. The channel factory closure is how the channel actor receives its collaborators at spawn time — the `GameRefFactory`, the `ClientFrameCodec`, and a logger:
+`DoctrineKit` builds the persistence side: the pooled connections for the lobby, the `PooledDoctrineEventStore` (durable event journal), the `DoctrineGameReadModel` projection, and the `GameRefFactory` that ties them to the game actor. The channel factory closure is how the channel actor receives its collaborators at spawn time — the `GameRefFactory`, the `ClientFrameCodec`, and a logger:
 
 ```php title="src/Http/Routes.php"
 $codec = new ClientFrameCodec($serializer);

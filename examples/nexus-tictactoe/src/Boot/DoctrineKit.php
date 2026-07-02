@@ -13,9 +13,13 @@ use Monadial\Nexus\Doctrine\Orm\DoctrineEmPool;
 use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
 use Monadial\Nexus\Example\TicTacToe\Actor\GameRefFactory;
+use Monadial\Nexus\Example\TicTacToe\Persistence\PooledDoctrineEventStore;
 use Monadial\Nexus\Example\TicTacToe\ReadModel\DoctrineGameReadModel;
-use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
+use Monadial\Nexus\Persistence\Doctrine\Entity\EventEntry;
 use Psr\Log\LoggerInterface;
+use ReflectionClass;
+
+use function dirname;
 
 /**
  * Per-worker persistence wiring — the only place persistence config touches
@@ -27,10 +31,10 @@ use Psr\Log\LoggerInterface;
  *  - `gameFactory` — the event-sourced write side: one {@see GameRefFactory}
  *    spawning a per-id game actor whose events are the source of truth.
  *
- * The journal is a per-worker {@see InMemoryEventStore} for the demo. Swap it
- * for `DbalEventStore` (nexus-persistence-dbal) to persist events durably —
- * the actor code is identical either way. The `games` table remains the
- * lobby read model, kept current by the actor's projection.
+ * The journal is durable: a {@see PooledDoctrineEventStore} writes events to
+ * the `nexus_event_journal` table (borrowing a pooled EM per operation, so no
+ * connection is pinned per game). The `games` table remains the lobby read
+ * model, kept current by the actor's projection. Both share the one EM pool.
  */
 final readonly class DoctrineKit
 {
@@ -44,8 +48,15 @@ final readonly class DoctrineKit
     {
         $connParams = $db->toDbalParams();
 
+        // Map both the app's read-model entity (GameSession) AND the framework's
+        // event-journal entity (EventEntry), so SchemaBootstrap creates the
+        // `games` table and the `nexus_event_journal` table in one pass. The
+        // journal path is resolved by reflection to stay independent of where
+        // the package is mounted.
+        $journalPath = dirname((string) new ReflectionClass(EventEntry::class)->getFileName());
+
         $ormConfig = ORMSetup::createAttributeMetadataConfig(
-            paths: [dirname(__DIR__) . '/Domain/Entity'],
+            paths: [dirname(__DIR__) . '/Domain/Entity', $journalPath],
         );
         $ormConfig->enableNativeLazyObjects(true);
 
@@ -69,7 +80,7 @@ final readonly class DoctrineKit
             emPool: $emPool,
             gameFactory: new GameRefFactory(
                 $system,
-                new InMemoryEventStore(),
+                new PooledDoctrineEventStore($emPool),
                 new DoctrineGameReadModel($emPool),
                 $log,
             ),

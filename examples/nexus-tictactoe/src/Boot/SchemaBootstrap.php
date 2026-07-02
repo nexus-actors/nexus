@@ -11,6 +11,7 @@ use Doctrine\ORM\Configuration;
 use Doctrine\ORM\Tools\SchemaTool;
 use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
 use Monadial\Nexus\Example\TicTacToe\Domain\Entity\GameSession;
+use Monadial\Nexus\Persistence\Doctrine\Entity\EventEntry;
 
 /**
  * Idempotent schema sync — production would use a migration tool. Every
@@ -40,6 +41,7 @@ final class SchemaBootstrap
             try {
                 new SchemaTool($em)->updateSchema([
                     $em->getClassMetadata(GameSession::class),
+                    $em->getClassMetadata(EventEntry::class),
                 ]);
             } catch (DatabaseObjectExistsException | UniqueConstraintViolationException) {
                 // Lost the race with another worker; the winner already

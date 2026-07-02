@@ -58,8 +58,8 @@ Browser (React SPA)                Nexus worker thread
                                       │       persist to log    │
                                       │       EVOLVE → state ───┘  project
                                       ▼            │
-                                  broadcast    Event log
-                                  snapshot     (InMemory → Dbal)
+                                  broadcast    Event log (Doctrine)
+                                  snapshot     nexus_event_journal
                                   to all
                                   attached sockets
 ```
@@ -73,9 +73,9 @@ Browser (React SPA)                Nexus worker thread
   stamps identity from the connection, forwards a command to the game actor
   with itself as the reply target, then caches and broadcasts each
   `GameSnapshot` that comes back.
-- The journal is a per-worker `InMemoryEventStore` for the demo. Swap it for
-  `DbalEventStore` (nexus-persistence-dbal) to persist events durably — the
-  actor code does not change.
+- The journal is durable: a `PooledDoctrineEventStore` appends events to the
+  `nexus_event_journal` table (borrowing a pooled EntityManager per operation,
+  so no connection is pinned per game). A worker restart replays the real log.
 
 ## Wire protocol
 
@@ -177,12 +177,13 @@ public/
   scaling story here is per-actor (single-writer per game id) — not per-CPU.
 - **No connection is pinned per game.** Unlike the state-stored
   `EntityBehavior`, the event-sourced actor holds no dedicated Doctrine
-  connection: the event journal is an in-memory store, and the read-model
-  projection borrows a pooled EntityManager only for the duration of one
-  upsert (`EntityManagerPool::withEntityManager`). Swap the journal to
-  `DbalEventStore` for durability; the write side then appends to
-  `nexus_event_journal` and the per-id sequence column rejects a concurrent
-  cross-worker append (`ConcurrentModificationException`).
+  connection. Both the durable event store (`PooledDoctrineEventStore`) and
+  the read-model projection (`DoctrineGameReadModel`) borrow a pooled
+  EntityManager only for the duration of one operation
+  (`EntityManagerPool::withEntityManager`) — an idle game keeps its state in
+  memory but ties up nothing in the pool. The `nexus_event_journal`'s per-id
+  sequence column rejects a concurrent cross-worker append
+  (`ConcurrentModificationException`).
 
 ## Resilience notes
 

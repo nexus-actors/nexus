@@ -46,6 +46,7 @@
             "Monadial\\Nexus\\Http\\Ws\\": "/nexus-packages/nexus-http-ws/src/",
             "Monadial\\Nexus\\Logger\\": "/nexus-packages/nexus-logger/src/",
             "Monadial\\Nexus\\Persistence\\": "/nexus-packages/nexus-persistence/src/",
+            "Monadial\\Nexus\\Persistence\\Doctrine\\": "/nexus-packages/nexus-persistence-doctrine/src/",
             "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Swoole\\": "/nexus-packages/nexus-runtime-swoole/src/",
             "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/",
