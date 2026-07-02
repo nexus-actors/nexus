@@ -1,0 +1,81 @@
+# nexusactors.com — Astro landing site deploy.
+#
+# Deploys landing/ to the Cloudflare Pages project `nexus-website`.
+# Path-filtered: dormant until landing/ exists on the triggering ref
+# (the landing source currently lives on the astro-landing-1 lineage).
+
+name: landing — nexusactors.com deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/landing-deploy.yml'
+  pull_request:
+    paths:
+      - 'landing/**'
+  workflow_dispatch:
+
+concurrency:
+  group: landing-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      deployments: write
+
+    defaults:
+      run:
+        working-directory: landing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if landing/ absent on this ref
+        id: has-landing
+        working-directory: .
+        run: |
+          if [ -f landing/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "landing/ not on this ref — nothing to deploy"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.has-landing.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: landing/package-lock.json
+
+      - name: Install
+        if: steps.has-landing.outputs.present == 'true'
+        run: npm ci
+
+      - name: Build
+        if: steps.has-landing.outputs.present == 'true'
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages (Production)
+        if: steps.has-landing.outputs.present == 'true' && github.event_name != 'pull_request'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: landing
+          command: pages deploy dist --project-name=nexus-website --branch=main
+
+      - name: Deploy to Cloudflare Pages (Preview)
+        if: steps.has-landing.outputs.present == 'true' && github.event_name == 'pull_request'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: landing
+          command: pages deploy dist --project-name=nexus-website --branch=pr-${{ github.event.number }}
