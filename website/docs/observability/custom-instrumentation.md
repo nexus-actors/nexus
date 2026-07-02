@@ -7,18 +7,18 @@ title: Custom Instrumentation
 
 Inside any actor handler, three observability access points are available through `ActorContext`:
 
-1. **`$ctx->tracer()`** → `\OpenTelemetry\API\Trace\TracerInterface` — create child spans for sub-operations
-2. **`$ctx->meter()`** → `\OpenTelemetry\API\Metrics\MeterInterface` — create custom counters, histograms, and gauges
-3. **`$ctx->currentSpan()`** → `\OpenTelemetry\API\Trace\SpanInterface` — the span for the message currently being processed
+1. **`$ctx->tracer()`** → `Monadial\Nexus\Observability\Trace\Tracer` — create child spans for sub-operations
+2. **`$ctx->meter()`** → `Monadial\Nexus\Observability\Metric\Meter` — create custom counters, histograms, and gauges
+3. **`$ctx->currentSpan()`** → `Monadial\Nexus\Observability\Trace\Span` — the span for the message currently being processed
 
-All three return OTel no-op objects when observability is not wired in. No guard is needed.
+These are Nexus's vendor-neutral telemetry interfaces from `nexus-observability` — actor code never touches OTel types directly. All three return built-in no-op objects when observability is not wired in. No guard is needed.
 
 ## Complete example
 
 ```php title="order-actor.php" verify:lint-only
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use OpenTelemetry\API\Trace\StatusCode;
+use Monadial\Nexus\Observability\Trace\StatusCode;
 
 $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
     // 1. Access the current message span (automatically created by Nexus).
@@ -28,25 +28,23 @@ $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): 
 
     // 2. Create a child span for an expensive sub-operation.
     $tracer = $ctx->tracer();
-    $childSpan = $tracer->spanBuilder('validate-order')->startSpan();
-    $scope = $childSpan->activate();
+    $childSpan = $tracer->startSpan('validate-order');
 
     try {
         // ... expensive operation ...
         $childSpan->setAttribute('validation.result', 'passed');
-        $childSpan->setStatus(StatusCode::STATUS_OK);
+        $childSpan->setStatus(StatusCode::Ok);
     } catch (\Throwable $e) {
         $childSpan->recordException($e);
-        $childSpan->setStatus(StatusCode::STATUS_ERROR, $e->getMessage());
+        $childSpan->setStatus(StatusCode::Error, $e->getMessage());
         throw $e;
     } finally {
-        $scope->detach();
         $childSpan->end();
     }
 
     // 3. Record a custom metric counter.
     $meter = $ctx->meter();
-    $counter = $meter->createCounter(
+    $counter = $meter->counter(
         'order.validations',
         '{validation}',
         'Number of order validations performed',
@@ -57,24 +55,24 @@ $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): 
 });
 ```
 
-### Why `$scope->detach()` before `$childSpan->end()`
+### Why `$childSpan->end()` goes in a `finally` block
 
-OTel context is a stack. `$childSpan->activate()` pushes the child span as the active context; `$scope->detach()` pops it. Always detach before ending the span, and always do both in a `finally` block so a thrown exception does not leave a dangling context entry.
+`startSpan()` activates the new span so any spans started while it is open become its children; `end()` closes the span and restores the previous active context. Always call `end()` in a `finally` block so a thrown exception does not leave a dangling active span.
 
 ## Creating instruments once, not per-message
 
-Creating a counter or histogram inside the handler closure is safe — the OTel SDK caches instruments by name and returns the same instance on repeated calls. For hot paths, store the instrument in a closure variable to avoid the lookup:
+Creating a counter or histogram inside the handler closure is safe — the underlying SDK caches instruments by name and returns the same instance on repeated calls. For hot paths, store the instrument in a closure variable to avoid the lookup:
 
 ```php title="cached-instrument.php" verify:lint-only
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use OpenTelemetry\API\Metrics\CounterInterface;
+use Monadial\Nexus\Observability\Metric\Counter;
 
 $counter = null;
 
 $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg) use (&$counter): Behavior {
     if ($counter === null) {
-        $counter = $ctx->meter()->createCounter(
+        $counter = $ctx->meter()->counter(
             'order.validations',
             '{validation}',
             'Number of order validations performed',
@@ -88,18 +86,18 @@ $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg) u
 ```
 
 :::note
-`CounterInterface` is imported from `OpenTelemetry\API\Metrics\CounterInterface`. The `use (&$counter)` closure capture by reference is intentional here — it is the variable holding the instrument that is mutated (from `null` to the counter), not the counter itself.
+`Counter` is imported from `Monadial\Nexus\Observability\Metric\Counter`. The `use (&$counter)` closure capture by reference is intentional here — it is the variable holding the instrument that is mutated (from `null` to the counter), not the counter itself.
 :::
 
 ## Zero cost when disabled
 
-When `withObservability()` is NOT called on `NexusApp`, all three context methods return OTel SDK no-op objects:
+When `withObservability()` is NOT called on `NexusApp`, all three context methods return Nexus's built-in no-op objects from `nexus-observability`:
 
-- `$ctx->tracer()` → `\OpenTelemetry\API\Trace\NoopTracer`
-- `$ctx->meter()` → `\OpenTelemetry\API\Metrics\Noop\NoopMeter`
-- `$ctx->currentSpan()` → `\OpenTelemetry\API\Trace\NonRecordingSpan`
+- `$ctx->tracer()` → `Monadial\Nexus\Observability\Trace\NoopTracer`
+- `$ctx->meter()` → `Monadial\Nexus\Observability\Metric\NoopMeter`
+- `$ctx->currentSpan()` → `Monadial\Nexus\Observability\Trace\NoopSpan`
 
-These objects accept all method calls and discard data. PHP's JIT compiler eliminates them. There are no memory allocations, no lock contention, and no overhead in the actor processing path.
+These objects accept all method calls and discard data — no OTel classes are ever loaded. There are no memory allocations, no lock contention, and no overhead in the actor processing path.
 
 ## Outside actors
 

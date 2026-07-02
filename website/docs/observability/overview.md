@@ -33,7 +33,7 @@ If you do not call `withObservability()` on `NexusApp`, no tracer or meter is cr
 
 ### 2. Zero actor-code change
 
-Inside actor handlers, `$ctx->tracer()` and `$ctx->meter()` always return valid objects. When observability is disabled they return the OTel SDK's built-in no-op implementations. Your actor code does not need `if ($observabilityEnabled)` guards — the same handler works with or without observability wired in.
+Inside actor handlers, `$ctx->tracer()` and `$ctx->meter()` always return valid objects. When observability is disabled they return the built-in no-op implementations from `nexus-observability` (`NoopTracer`, `NoopMeter`) — no OTel SDK classes are involved. Your actor code does not need `if ($observabilityEnabled)` guards — the same handler works with or without observability wired in.
 
 ### 3. Fail isolation
 

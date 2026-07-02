@@ -38,7 +38,7 @@ $behavior = Behavior::receive(static function (ActorContext $ctx, object $msg): 
 });
 ```
 
-`$ctx->currentSpan()` never returns `null`. When observability is disabled it returns the OTel SDK's no-op span, so your code is safe with no guard needed.
+`$ctx->currentSpan()` never returns `null`. When observability is disabled it returns the built-in `NoopSpan` from `nexus-observability`, so your code is safe with no guard needed.
 
 :::note
 Only add **low-cardinality** attributes to spans. Good candidates: `order.status`, `payment.method`, `actor.shard`. Avoid user IDs, request IDs, or other high-cardinality values as span attributes — use baggage or log events instead. High-cardinality span attributes cause index bloat in trace backends.

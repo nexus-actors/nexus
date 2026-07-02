@@ -37,8 +37,8 @@ no-ops by default, so you only override what you need.
 ## Example
 
 ```php title="src/WebSocket/ChatHandler.php"
-use Monadial\Nexus\Http\Ws\Attribute\FromActor;
-use Monadial\Nexus\Http\Ws\Attribute\FromContext;
+use Monadial\Nexus\Http\Handler\Attribute\FromActor;
+use Monadial\Nexus\Http\Ws\WebSocket\Attribute\FromContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketHandler;

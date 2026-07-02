@@ -201,6 +201,8 @@ const config = async () => {
           src: 'img/logo.svg',
           width: 48,
           height: 48,
+          href: 'https://nexusactors.com',
+          target: '_self',
         },
         items: [
           {
