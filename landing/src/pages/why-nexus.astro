@@ -37,7 +37,7 @@ $walletRef->tell(new WithdrawalRequest(...)); // ← Psalm ERROR: wrong message 
 
 // nexus-psalm rules enforce:
 // • Messages to tell() must be readonly classes
-// • #[FromActor] parameter types must match actor reply types
+// • Cross-worker messages must carry a #[MessageType] attribute
 // • Props::fromFactory() closures must not capture by reference
 // • Blocking I/O calls (sleep, file_get_contents) are banned inside handlers`;
 

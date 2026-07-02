@@ -40,19 +40,22 @@ $compiled = HttpApp::create($system)
 // Hand $compiled to SwooleHttpServerAdapter or any PSR-15-compatible server.`;
 
 const fromActorCode = `<?php
-// Inject live actor state directly into a handler parameter.
-// #[FromActor] resolves the named ref and awaits the ask — zero boilerplate.
+// Inject the actor reference registered with HttpApp — then ask it.
+// #[FromActor] resolves the ref; the ask stays explicit in your handler.
+use Monadial\\Nexus\\Core\\Actor\\ActorRef;
 use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
 use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromActor;
+use Monadial\\Nexus\\Runtime\\Duration;
 
 #[Route('GET', '/wallets/{id}')]
-final class WalletStateHandler
+final readonly class WalletStateHandler
 {
     public function __invoke(
         string $id,
-        #[FromActor('wallets')] WalletState $state,  // actor registered as 'wallets'
+        #[FromActor('wallets')] ActorRef $wallets,  // actor registered as 'wallets'
     ): WalletState {
-        return $state; // already resolved; serialized to JSON by the framework
+        /** @var WalletState — serialized to JSON by the framework */
+        return $wallets->ask(new GetWalletState($id), Duration::seconds(2))->await();
     }
 }`;
 
@@ -125,19 +128,22 @@ $server = new Server('0.0.0.0', 8080);
 // $handler->handle($request); // works with any PSR-15 dispatcher`;
 
 const timeoutCode = `<?php
-// Per-route ask timeouts prevent slow actors from stalling the HTTP layer.
-// AskTimeoutException is caught by the framework and turned into a 504.
+// Every ask() carries a deadline. If the actor can't reply in time,
+// AskTimeoutException surfaces — the framework maps it to HTTP 504.
+use Monadial\\Nexus\\Core\\Actor\\ActorRef;
 use Monadial\\Nexus\\Http\\Routing\\Attribute\\Route;
 use Monadial\\Nexus\\Http\\Handler\\Attribute\\FromActor;
+use Monadial\\Nexus\\Runtime\\Duration;
 
 #[Route('GET', '/orders/{id}')]
-final class OrderStatusHandler
+final readonly class OrderStatusHandler
 {
     public function __invoke(
-        string $id,                           // path param resolved by name
-        #[FromActor('orders')] OrderState $state,  // ask with actor's default timeout
+        string $id,                              // path param resolved by name
+        #[FromActor('orders')] ActorRef $orders,
     ): OrderState {
-        return $state; // resolved via ask(); 504 if the actor doesn't respond in time
+        // The deadline lives where the call happens — no hidden config.
+        return $orders->ask(new GetOrderStatus($id), Duration::millis(500))->await();
     }
 }`;
 ---
@@ -241,9 +247,10 @@ final class OrderStatusHandler
       <h2 class="text-3xl font-bold mb-4">Ask an actor from inside a handler.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
         <code class="font-mono text-primary">#[FromActor]</code> bridges HTTP and the
-        actor graph. The framework resolves the actor reference from the route parameters,
-        issues a typed <code class="font-mono">ask()</code>, awaits the response within
-        your declared timeout, and injects the result as a handler parameter.
+        actor graph. The framework injects the <code class="font-mono">ActorRef</code>
+        registered under that name — a shared singleton, or an actor spawned just for
+        this request. Your handler issues a typed <code class="font-mono">ask()</code>
+        with an explicit deadline and returns the reply.
       </p>
       <p class="text-slate-600 dark:text-slate-300">
         The actor runs concurrently with other requests. Backpressure, mailbox bounds,
@@ -344,9 +351,10 @@ final class OrderStatusHandler
         the connection hang indefinitely.
       </p>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
-        You set the timeout at the route level or at the
-        <code class="font-mono">#[FromActor]</code> parameter level. The framework
-        enforces it. No manual <code class="font-mono">Promise::timeout()</code> wiring.
+        The timeout is the <code class="font-mono">Duration</code> you pass to each
+        <code class="font-mono">ask()</code> — the deadline lives next to the call that
+        needs it. <code class="font-mono">AskTimeoutException</code> is mapped to 504
+        by the framework. No manual <code class="font-mono">Promise::timeout()</code> wiring.
       </p>
       <p class="text-slate-600 dark:text-slate-300">
         Backpressure from the actor's bounded mailbox propagates cleanly to HTTP callers
