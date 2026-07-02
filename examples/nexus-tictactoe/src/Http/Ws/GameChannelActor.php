@@ -77,9 +77,9 @@ final class GameChannelActor extends WebSocketChannelActor
     #[Override]
     public function onOpened(ActorContext $ctx, WebSocketContext $conn, mixed $state): BehaviorWithState
     {
-        $id = $conn->request()->getAttribute('id');
+        $gameId = self::gameIdFrom($conn);
 
-        if (!is_string($id) || !Ulid::isValid($id)) {
+        if ($gameId === null) {
             $this->log->warning('rejecting ws upgrade — game id not a ULID', ['fd' => $conn->id()]);
             $conn->close(1008, 'invalid game id');
 
@@ -100,7 +100,7 @@ final class GameChannelActor extends WebSocketChannelActor
         }
 
         // Cold (re)spawn: read the aggregate to populate the cache.
-        $this->forward($ctx, $conn, new GetSnapshot());
+        $this->forward($ctx, $conn, $gameId, new GetSnapshot());
 
         return BehaviorWithState::same();
     }
@@ -117,6 +117,16 @@ final class GameChannelActor extends WebSocketChannelActor
         WebSocketFrame $frame,
         mixed $state,
     ): BehaviorWithState {
+        $gameId = self::gameIdFrom($conn);
+
+        if ($gameId === null) {
+            // Belt-and-suspenders: onOpened already closes non-ULID upgrades.
+            // A frame racing that close still can't reach the aggregate.
+            $conn->close(1008, 'invalid game id');
+
+            return BehaviorWithState::same();
+        }
+
         if (strlen($frame->text) > self::MAX_FRAME_BYTES) {
             $conn->send($this->codec->encodeError('frame too large'));
 
@@ -134,7 +144,7 @@ final class GameChannelActor extends WebSocketChannelActor
         $command = $this->toCommand($conn, $intent, $state);
 
         if ($command !== null) {
-            $this->forward($ctx, $conn, $command);
+            $this->forward($ctx, $conn, $gameId, $command);
         }
 
         return BehaviorWithState::same();
@@ -279,9 +289,9 @@ final class GameChannelActor extends WebSocketChannelActor
     /**
      * @param ActorContext<object> $ctx
      */
-    private function forward(ActorContext $ctx, WebSocketContext $conn, GameCommand $command): void
+    private function forward(ActorContext $ctx, WebSocketContext $conn, string $gameId, GameCommand $command): void
     {
-        $this->games->of(self::gameIdFrom($conn))->tell(
+        $this->games->of($gameId)->tell(
             new GameEnvelope($command, $ctx->self(), $conn->id()),
         );
     }
@@ -295,16 +305,18 @@ final class GameChannelActor extends WebSocketChannelActor
         };
     }
 
-    private static function gameIdFrom(WebSocketContext $conn): string
+    /**
+     * The validated ULID from the upgrade's `{id}` path param, or `null` if
+     * absent/malformed. Returning null (never throwing) keeps the actor
+     * receive loop from dying on a hand-crafted frame — the caller closes
+     * the connection instead.
+     */
+    private static function gameIdFrom(WebSocketContext $conn): ?string
     {
         $id = $conn->request()->getAttribute('id');
 
-        if (!is_string($id) || !Ulid::isValid($id)) {
-            // onOpened already rejected non-ULID ids; this is belt-and-suspenders
-            // for any frame that somehow arrives on an unvalidated connection.
-            throw new InvalidGameIdException('game id must be a ULID');
-        }
-
-        return $id;
+        return is_string($id) && Ulid::isValid($id)
+            ? $id
+            : null;
     }
 }

@@ -57,31 +57,35 @@ final class SwooleThreadServer
         // init_arguments.
         $shutdownSignal = new Atomic(0);
 
-        // See SwooleWorkerServer for the `websocket_compression` rationale —
-        // outbound WS frames are silently dropped when Swoole was built
-        // without zlib.
-        $server->set([
-            ...$config->swooleSettings,
-            'max_request' => $config->maxRequest,
-            'websocket_compression' => false,
-            'worker_num' => $threads,
-            /**
-             * Thread\ArrayList stubs constrain offsetSet to ArrayAccess values;
-             * Swoole 6 actually accepts any thread-safe type including Queue.
-             *
-             * @psalm-suppress InvalidArgument
-             */
-            'init_arguments' => static function () use ($threads, $config, $shutdownSignal): array {
-                $directory = new Map();
-                $queues = new ArrayList();
+        /**
+         * @psalm-suppress InvalidArgument Thread\ArrayList stubs constrain
+         * offsetSet to ArrayAccess values; Swoole 6 accepts any thread-safe
+         * type including Queue.
+         */
+        $initArguments = static function () use ($threads, $config, $shutdownSignal): array {
+            $directory = new Map();
+            $queues = new ArrayList();
 
-                for ($i = 0; $i < $threads; $i++) {
-                    $queues[] = new Queue();
-                }
+            for ($i = 0; $i < $threads; $i++) {
+                $queues[] = new Queue();
+            }
 
-                return [$directory, $queues, $threads, $config->logQueue, $shutdownSignal];
-            },
-        ]);
+            return [$directory, $queues, $threads, $config->logQueue, $shutdownSignal];
+        };
+
+        // Precedence, low to high: framework default -> user overrides -> framework
+        // core keys. `websocket_compression` defaults off (see SwooleWorkerServer for
+        // the zlib rationale) but stays overridable via `withSwooleSetting()`; the
+        // core keys are assigned after the spread so they always win. Assigning them
+        // individually keeps the alphabetical-array sniff from reordering the default
+        // back before the spread and silently making it non-overridable.
+        $settings = ['websocket_compression' => false];
+        $settings = [...$settings, ...$config->swooleSettings];
+        $settings['init_arguments'] = $initArguments;
+        $settings['max_request'] = $config->maxRequest;
+        $settings['worker_num'] = $threads;
+
+        $server->set($settings);
 
         $server->on(
             'WorkerStart',

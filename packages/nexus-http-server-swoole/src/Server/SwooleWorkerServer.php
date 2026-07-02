@@ -38,22 +38,24 @@ final class SwooleWorkerServer
             ? new WebSocketServer($config->host, $config->port)
             : new HttpServer($config->host, $config->port);
 
-        // User-supplied settings are spread AFTER `websocket_compression` (so a
-        // zlib-enabled deploy can re-enable it) but BEFORE the framework's core
-        // keys (so those win). Rationale for the default: Swoole advertises
-        // `permessage-deflate`, and on a build without zlib (our official image)
-        // every outbound frame is silently dropped with `FrameObject::pack():
-        // Unable to compress`. Off is the portable default; opt back in via
-        // `SwooleWorkerConfig::withSwooleSetting(['websocket_compression' => true])`.
-        $settings = [
-            ...$config->swooleSettings,
-            'dispatch_mode' => $config->dispatchMode,
-            'max_conn' => $config->maxConn,
-            'max_request' => $config->maxRequest,
-            'reactor_num' => $config->reactorThreads,
-            'websocket_compression' => false,
-            'worker_num' => $config->workers,
-        ];
+        // Precedence, low to high: framework default -> user overrides -> framework
+        // core keys. `websocket_compression` is a DEFAULT (overridable), so it goes
+        // in first and the user spread can flip it; the core keys are assigned after
+        // the spread so they always win. (Assigning core keys one by one rather than
+        // in a second literal keeps the alphabetical-array sniff from reordering them
+        // back before the spread, which is what silently made this non-overridable.)
+        //
+        // Why default off: Swoole advertises `permessage-deflate`, and on a build
+        // without zlib (our official image) every outbound frame is silently dropped
+        // with `FrameObject::pack(): Unable to compress`. A zlib-enabled deploy opts
+        // back in via `SwooleWorkerConfig::withSwooleSetting(['websocket_compression' => true])`.
+        $settings = ['websocket_compression' => false];
+        $settings = [...$settings, ...$config->swooleSettings];
+        $settings['dispatch_mode'] = $config->dispatchMode;
+        $settings['max_conn'] = $config->maxConn;
+        $settings['max_request'] = $config->maxRequest;
+        $settings['reactor_num'] = $config->reactorThreads;
+        $settings['worker_num'] = $config->workers;
 
         if ($config->logFile !== '') {
             $settings['log_file'] = $config->logFile;

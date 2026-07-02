@@ -142,7 +142,7 @@ src/
       SnapshotPayload.php       # broadcast wire shape — name-only seats (no tokens)
       WelcomePayload.php        # private: {mark, token}
       WireEnvelope.php          # {type, data} wrapper for every outbound frame
-      SeatView.php / ErrorPayload.php / InvalidGameIdException.php
+      SeatView.php / ErrorPayload.php
     Routes.php                  # single place all routes are declared
     JsonExceptionRenderer.php
 public/

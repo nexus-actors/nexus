@@ -133,8 +133,10 @@ One actor per game id, holding two collaborators — an `EntityRefFactory` and a
 ```php title="src/Http/Ws/GameChannelActor.php"
 public function onMessage(ActorContext $ctx, WebSocketContext $conn, WebSocketFrame $frame, mixed $state): BehaviorWithState
 {
-    if (strlen($frame->text) > self::MAX_FRAME_BYTES) {
-        $conn->send($this->codec->encodeError('frame too large'));
+    $gameId = self::gameIdFrom($conn);   // ?string — validated ULID, never throws
+
+    if ($gameId === null || strlen($frame->text) > self::MAX_FRAME_BYTES) {
+        $conn->send($this->codec->encodeError('invalid message'));
         return BehaviorWithState::same();
     }
 
@@ -148,7 +150,7 @@ public function onMessage(ActorContext $ctx, WebSocketContext $conn, WebSocketFr
     $command = $this->toCommand($conn, $intent, $state);   // stamps identity from $this->seats[fd]
 
     if ($command !== null) {
-        $this->games->of(self::gameIdFrom($conn))->tell(
+        $this->games->of($gameId)->tell(
             new GameEnvelope($command, $ctx->self(), $conn->id()),
         );
     }
@@ -156,6 +158,8 @@ public function onMessage(ActorContext $ctx, WebSocketContext $conn, WebSocketFr
     return BehaviorWithState::same();
 }
 ```
+
+`gameIdFrom` returns `?string` rather than throwing — a hand-crafted frame with a bad `{id}` can never take down the actor's receive loop; the connection is simply refused.
 
 Identity is issued by the server, not chosen by the client:
 

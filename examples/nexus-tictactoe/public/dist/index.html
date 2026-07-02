@@ -194,6 +194,12 @@
     <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
+    // Note: the token is persisted only when the `welcome` frame arrives. If a
+    // player refreshes in the sub-second window before that, the reconnect has
+    // no token and the server seats them fresh (possibly the other side). This
+    // is inherent to mint-on-server + persist-on-welcome and is acceptable for
+    // the demo; a production app would ack the token before enabling the board.
+    //
     // The server owns identity. On first join it mints an unguessable seat
     // token and hands it to THIS connection privately (a `welcome` frame);
     // we stash it per-game so a refresh can reclaim the same seat. We never
