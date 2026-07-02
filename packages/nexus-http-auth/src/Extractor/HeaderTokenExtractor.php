@@ -14,9 +14,9 @@ use Psr\Http\Message\ServerRequestInterface;
  * Reads the raw value of a configurable header. Useful for X-Api-Key /
  * X-Auth-Token style schemes where there's no scheme prefix.
  */
-final class HeaderTokenExtractor implements TokenExtractor
+final readonly class HeaderTokenExtractor implements TokenExtractor
 {
-    public function __construct(private readonly string $headerName) {}
+    public function __construct(private string $headerName) {}
 
     #[Override]
     public function extract(ServerRequestInterface $request): ?string

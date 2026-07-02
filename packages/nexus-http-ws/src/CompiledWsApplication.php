@@ -13,13 +13,13 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 
 /** @psalm-api */
-final class CompiledWsApplication implements CompiledApplication
+final readonly class CompiledWsApplication implements CompiledApplication
 {
     public function __construct(
-        private readonly CompiledHttpApp $http,
-        private readonly WebSocketRouter $router,
-        private readonly WebSocketDispatcher $dispatcher,
-        private readonly ContainerInterface $container,
+        private CompiledHttpApp $http,
+        private WebSocketRouter $router,
+        private WebSocketDispatcher $dispatcher,
+        private ContainerInterface $container,
     ) {}
 
     #[Override]

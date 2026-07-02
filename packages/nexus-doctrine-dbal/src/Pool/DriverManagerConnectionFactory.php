@@ -10,12 +10,12 @@ use Doctrine\DBAL\DriverManager;
 use Override;
 
 /** @psalm-api */
-final class DriverManagerConnectionFactory implements ConnectionFactory
+final readonly class DriverManagerConnectionFactory implements ConnectionFactory
 {
     /**
      * @param array<string, mixed> $params
      */
-    public function __construct(private readonly array $params, private readonly ?Configuration $config = null) {}
+    public function __construct(private array $params, private ?Configuration $config = null) {}
 
     #[Override]
     public function create(): Connection

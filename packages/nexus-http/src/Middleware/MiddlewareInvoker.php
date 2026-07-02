@@ -17,17 +17,13 @@ use Psr\Http\Server\RequestHandlerInterface;
  * Internal PSR-15 RequestHandlerInterface that walks a list of middlewares
  * and ends in a tail closure. Each next() call advances the index.
  */
-final class MiddlewareInvoker implements RequestHandlerInterface
+final readonly class MiddlewareInvoker implements RequestHandlerInterface
 {
     /**
      * @param list<MiddlewareInterface> $middlewares
      * @param Closure(ServerRequestInterface): ResponseInterface $tail
      */
-    public function __construct(
-        private readonly array $middlewares,
-        private readonly Closure $tail,
-        private readonly int $index = 0,
-    ) {}
+    public function __construct(private array $middlewares, private Closure $tail, private int $index = 0) {}
 
     #[Override]
     public function handle(ServerRequestInterface $request): ResponseInterface

@@ -40,7 +40,7 @@ use Psr\Log\NullLogger;
  *
  * @psalm-api
  */
-final class AuthenticationMiddleware implements MiddlewareInterface
+final readonly class AuthenticationMiddleware implements MiddlewareInterface
 {
     /**
      * Request attribute set unconditionally on every passage through this middleware.
@@ -52,8 +52,8 @@ final class AuthenticationMiddleware implements MiddlewareInterface
     public const string CHECKED_ATTRIBUTE = 'nexus.auth.checked';
 
     public function __construct(
-        private readonly Authenticator $authenticator,
-        private readonly LoggerInterface $logger = new NullLogger(),
+        private Authenticator $authenticator,
+        private LoggerInterface $logger = new NullLogger(),
     ) {}
 
     /**

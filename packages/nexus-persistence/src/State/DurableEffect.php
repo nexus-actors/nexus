@@ -8,17 +8,17 @@ use Closure;
 use Monadial\Nexus\Core\Actor\ActorRef;
 
 /** @psalm-api */
-final class DurableEffect
+final readonly class DurableEffect
 {
     /**
      * @param array<Closure> $sideEffects
      */
     private function __construct(
-        public readonly DurableEffectType $type,
-        public readonly ?object $state = null,
-        public readonly ?ActorRef $replyTo = null,
-        public readonly mixed $replyMsg = null,
-        public readonly array $sideEffects = [],
+        public DurableEffectType $type,
+        public ?object $state = null,
+        public ?ActorRef $replyTo = null,
+        public mixed $replyMsg = null,
+        public array $sideEffects = [],
     ) {}
 
     public static function persist(object $newState): self

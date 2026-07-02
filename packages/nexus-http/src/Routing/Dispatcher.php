@@ -16,10 +16,10 @@ use function FastRoute\simpleDispatcher;
  * matched id can be resolved back to the Route. (FastRoute returns the
  * handler payload — we pass the route id and look up by id.)
  */
-final class Dispatcher
+final readonly class Dispatcher
 {
     /** @param array<int, Route> $routes */
-    private function __construct(private readonly FastRouteDispatcher $delegate, private readonly array $routes) {}
+    private function __construct(private FastRouteDispatcher $delegate, private array $routes) {}
 
     /** @param list<Route> $routes */
     public static function build(array $routes): self

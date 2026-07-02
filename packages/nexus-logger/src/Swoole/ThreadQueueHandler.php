@@ -25,9 +25,9 @@ use Swoole\Thread\Queue;
  * The queue is unbounded for the prototype; production would add a max
  * length + drop-on-overflow policy.
  */
-final class ThreadQueueHandler implements Handler
+final readonly class ThreadQueueHandler implements Handler
 {
-    public function __construct(private readonly Queue $queue, private readonly Formatter $formatter) {}
+    public function __construct(private Queue $queue, private Formatter $formatter) {}
 
     #[Override]
     public function handle(Record $record): void

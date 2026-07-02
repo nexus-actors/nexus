@@ -21,9 +21,9 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\SimpleCache\CacheInterface;
 
 /** @psalm-api */
-final class HttpApplication implements Application
+final readonly class HttpApplication implements Application
 {
-    private function __construct(private readonly HttpApp $http) {}
+    private function __construct(private HttpApp $http) {}
 
     public static function create(ActorSystem $system): self
     {

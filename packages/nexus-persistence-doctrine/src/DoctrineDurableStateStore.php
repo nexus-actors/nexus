@@ -17,11 +17,11 @@ use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
-final class DoctrineDurableStateStore implements DurableStateStore
+final readonly class DoctrineDurableStateStore implements DurableStateStore
 {
     public function __construct(
-        private readonly EntityManagerInterface $em,
-        private readonly MessageSerializer $serializer = new PhpNativeSerializer(),
+        private EntityManagerInterface $em,
+        private MessageSerializer $serializer = new PhpNativeSerializer(),
     ) {}
 
     #[Override]

@@ -34,11 +34,11 @@ use function round;
  *     {"method":"GET","path":"/orders/42","status":200,"sizeBytes":312,
  *      "latencyMs":12.41,"requestId":"a1b2c3d4"}
  */
-final class AccessLogMiddleware implements MiddlewareInterface
+final readonly class AccessLogMiddleware implements MiddlewareInterface
 {
     public function __construct(
-        private readonly LoggerInterface $logger = new NullLogger(),
-        private readonly string $messageTemplate = '{method} {path} {status} ({latencyMs}ms)',
+        private LoggerInterface $logger = new NullLogger(),
+        private string $messageTemplate = '{method} {path} {status} ({latencyMs}ms)',
     ) {}
 
     #[Override]

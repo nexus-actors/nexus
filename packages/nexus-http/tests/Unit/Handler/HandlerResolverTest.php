@@ -106,10 +106,10 @@ final class _PsrInterfaceHandler implements RequestHandlerInterface
 }
 
 /** Minimal PSR-11 container that returns pre-registered services by string id and class name. */
-final class _ArrayContainer implements ContainerInterface
+final readonly class _ArrayContainer implements ContainerInterface
 {
     /** @param array<string, object> $services */
-    public function __construct(private readonly array $services) {}
+    public function __construct(private array $services) {}
 
     public function get(string $id): object
     {

@@ -15,9 +15,9 @@ use Psr\Http\Server\MiddlewareInterface;
  * Used by both HttpApp::compile() (to pre-resolve route middlewares) and
  * MiddlewarePipeline::process() (to lazily resolve global middlewares).
  */
-final class MiddlewareResolver
+final readonly class MiddlewareResolver
 {
-    public function __construct(private readonly ?ContainerInterface $container) {}
+    public function __construct(private ?ContainerInterface $container) {}
 
     /** @param class-string $class */
     public function resolve(string $class): MiddlewareInterface

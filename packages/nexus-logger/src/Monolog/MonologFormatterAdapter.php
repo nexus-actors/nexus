@@ -29,9 +29,9 @@ use function rtrim;
  *
  * Soft-depends on monolog/monolog ^3.0; install separately when used.
  */
-final class MonologFormatterAdapter implements Formatter
+final readonly class MonologFormatterAdapter implements Formatter
 {
-    public function __construct(private readonly FormatterInterface $delegate) {}
+    public function __construct(private FormatterInterface $delegate) {}
 
     /**
      * @psalm-suppress InvalidOperand, MixedAssignment

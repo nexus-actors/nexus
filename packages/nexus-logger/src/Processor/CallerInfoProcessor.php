@@ -38,7 +38,7 @@ use const DEBUG_BACKTRACE_IGNORE_ARGS;
  * Pair with a Monolog LineFormatter template like:
  *   "%channel%.%level_name% %extra.class%::%extra.function%:%extra.line% — %message%"
  */
-final class CallerInfoProcessor implements RecordProcessor
+final readonly class CallerInfoProcessor implements RecordProcessor
 {
     private const array SKIP_PREFIXES = [
         'Monadial\\Nexus\\Logger\\Logger',
@@ -54,7 +54,7 @@ final class CallerInfoProcessor implements RecordProcessor
      *   but want to skip the debug_backtrace() cost on high-volume
      *   info-level messages.
      */
-    public function __construct(private readonly ?array $levels = null) {}
+    public function __construct(private ?array $levels = null) {}
 
     /**
      * Restrict the processor to the given levels. Equivalent to

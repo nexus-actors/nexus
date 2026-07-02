@@ -23,15 +23,15 @@ use Throwable;
  * resolves channel actors via the registry, and maintains the
  * ConnectionTable.
  */
-final class WebSocketDispatcher
+final readonly class WebSocketDispatcher
 {
-    private readonly LoggerInterface $logger;
+    private LoggerInterface $logger;
 
     public function __construct(
-        private readonly WebSocketRouter $router,
-        private readonly ConnectionTable $table,
-        private readonly ChannelActorRegistry $registry,
-        private readonly HandlerInstantiator $instantiator,
+        private WebSocketRouter $router,
+        private ConnectionTable $table,
+        private ChannelActorRegistry $registry,
+        private HandlerInstantiator $instantiator,
         ?LoggerInterface $logger = null,
     ) {
         $this->logger = $logger ?? new NullLogger();

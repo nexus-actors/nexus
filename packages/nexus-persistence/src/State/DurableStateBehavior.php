@@ -46,15 +46,15 @@ use Symfony\Component\Uid\Ulid;
  *
  * @psalm-api
  */
-final class DurableStateBehavior
+final readonly class DurableStateBehavior
 {
     /** @psalm-suppress UnusedConstructor Called by create() */
     private function __construct(
-        private readonly PersistenceId $persistenceId,
-        private readonly object $emptyState,
-        private readonly Closure $commandHandler,
-        private readonly ?DurableStateStore $stateStore = null,
-        private readonly Ulid $writerId = new Ulid(),
+        private PersistenceId $persistenceId,
+        private object $emptyState,
+        private Closure $commandHandler,
+        private ?DurableStateStore $stateStore = null,
+        private Ulid $writerId = new Ulid(),
     ) {}
 
     /**

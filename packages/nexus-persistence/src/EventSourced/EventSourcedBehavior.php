@@ -59,20 +59,20 @@ use Symfony\Component\Uid\Ulid;
  *
  * @psalm-api
  */
-final class EventSourcedBehavior
+final readonly class EventSourcedBehavior
 {
     /** @psalm-suppress UnusedConstructor Called by create() */
     private function __construct(
-        private readonly PersistenceId $persistenceId,
-        private readonly object $emptyState,
-        private readonly Closure $commandHandler,
-        private readonly Closure $eventHandler,
-        private readonly ?EventStore $eventStore = null,
-        private readonly ?SnapshotStore $snapshotStore = null,
-        private readonly ?SnapshotStrategy $snapshotStrategy = null,
-        private readonly ?RetentionPolicy $retentionPolicy = null,
-        private readonly Ulid $writerId = new Ulid(),
-        private readonly ?ReplayFilter $replayFilter = null,
+        private PersistenceId $persistenceId,
+        private object $emptyState,
+        private Closure $commandHandler,
+        private Closure $eventHandler,
+        private ?EventStore $eventStore = null,
+        private ?SnapshotStore $snapshotStore = null,
+        private ?SnapshotStrategy $snapshotStrategy = null,
+        private ?RetentionPolicy $retentionPolicy = null,
+        private Ulid $writerId = new Ulid(),
+        private ?ReplayFilter $replayFilter = null,
     ) {}
 
     /**

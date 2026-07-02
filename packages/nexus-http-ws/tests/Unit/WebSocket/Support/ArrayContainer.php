@@ -8,10 +8,10 @@ use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use RuntimeException;
 
-final class ArrayContainer implements ContainerInterface
+final readonly class ArrayContainer implements ContainerInterface
 {
     /** @param array<string, mixed> $entries */
-    public function __construct(private readonly array $entries = []) {}
+    public function __construct(private array $entries = []) {}
 
     public function get(string $id): mixed
     {

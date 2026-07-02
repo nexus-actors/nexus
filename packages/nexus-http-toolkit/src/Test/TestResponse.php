@@ -27,9 +27,9 @@ use const JSON_THROW_ON_ERROR;
  * All assertions use PHPUnit\Framework\Assert directly, so failures
  * appear in the test output like any other PHPUnit assertion.
  */
-final class TestResponse
+final readonly class TestResponse
 {
-    public function __construct(private readonly ResponseInterface $response) {}
+    public function __construct(private ResponseInterface $response) {}
 
     public function psr(): ResponseInterface
     {
