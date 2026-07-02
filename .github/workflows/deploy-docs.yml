@@ -84,9 +84,7 @@ jobs:
   deploy-production:
     name: Deploy Production
     needs: build
-    if: >
-      vars.CLOUDFLARE_ACCOUNT_ID != '' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: prod
 
