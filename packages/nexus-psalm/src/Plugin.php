@@ -21,6 +21,7 @@ use Monadial\Nexus\Psalm\Hook\PooledConnectionInActorPropertyRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
 use Monadial\Nexus\Psalm\Hook\UntypedActorRefInjectionRule;
+use Monadial\Nexus\Psalm\Hook\UntypedActorRefPropertyRule;
 use Override;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -44,6 +45,7 @@ final class Plugin implements PluginEntryPointInterface
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
             UntypedActorRefInjectionRule::class,
+            UntypedActorRefPropertyRule::class,
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
             AskReturnTypeProvider::class,

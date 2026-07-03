@@ -593,10 +593,12 @@ final class PluginTest extends TestCase
         $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
         $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
 
-        // 6 issues: UarBareParamService::setSink, UarObjectParamService::route,
+        // 9 issues: UarBareParamService::setSink, UarObjectParamService::route,
         // UarSubtypeBypassService::connect, UarClosureHost closure param,
-        // UarContainerService::setBare, UarContainerService::setErased
-        self::assertCount(6, $lines, "Expected 6 UntypedActorRefInjection issues:\n" . implode("\n", $lines));
+        // UarContainerService::setBare, UarContainerService::setErased,
+        // UarBarePromotedService promoted property, UarObjectPropertyService @var property,
+        // UarSinkRegistry::register interface param
+        self::assertCount(9, $lines, "Expected 9 UntypedActorRefInjection issues:\n" . implode("\n", $lines));
         self::assertStringContains('setSink', $output);
         self::assertStringContains('UarObjectParamService', $output);
         self::assertStringContains('UarSubtypeBypassService', $output);
@@ -615,6 +617,27 @@ final class PluginTest extends TestCase
             foreach (['UarTypedParamService', 'UarTemplatedService', 'UarNullableTypedService', 'UarSuppressedService', 'UarUnrelatedService'] as $clean) {
                 self::assertStringNotContains($clean, $line);
             }
+        }
+    }
+
+    #[Test]
+    public function untypedActorRefRuleFlagsPropertiesAndPromotedParams(): void
+    {
+        $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
+        $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
+
+        // Promoted constructor property must fire.
+        self::assertStringContains('UarBarePromotedService', $output);
+        // @var ActorRef<object> property must fire.
+        self::assertStringContains('UarObjectPropertyService', $output);
+        // Bodyless interface method param must fire.
+        self::assertStringContains('UarSinkRegistry', $output);
+
+        foreach ($lines as $line) {
+            // Promoted property with concrete generic must stay silent.
+            self::assertStringNotContains('UarTypedPromotedService', $line);
+            // @psalm-suppress on the property must silence the issue.
+            self::assertStringNotContains('UarSuppressedPropertyService', $line);
         }
     }
 
