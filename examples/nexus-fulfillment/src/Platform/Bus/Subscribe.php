@@ -11,8 +11,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
  * plain tell($event) and filter for themselves — topics arrive when a
  * second context needs them (YAGNI).
  *
- * @psalm-suppress UntypedActorRefInjection -- the bus is intentionally
- * heterogeneous; see psalm.xml if the plugin flags this instead.
+ * The bus is intentionally heterogeneous; see psalm.xml if the plugin flags this instead.
  */
 final readonly class Subscribe
 {

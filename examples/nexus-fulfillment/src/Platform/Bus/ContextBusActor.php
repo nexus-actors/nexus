@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Bus;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 
@@ -18,14 +19,19 @@ final class ContextBusActor
     /**
      * @psalm-suppress InvalidArgument -- heterogeneous subscriber array; S infers as mixed-array union from same()/next() branches
      * @psalm-suppress MixedArgumentTypeCoercion -- same cause: S resolves to array|non-empty-array across branches
-     * @psalm-suppress MixedAssignment -- $subscriber from untyped list<ActorRef<object>>
-     * @psalm-suppress MixedMethodCall -- $subscriber is ActorRef<object> at runtime; type erased by design
      */
     public static function behavior(): Behavior
     {
+        /** @var list<ActorRef<object>> $empty */
+        $empty = [];
+
         return Behavior::withState(
-            [],
-            static function (ActorContext $ctx, object $msg, array $subscribers): BehaviorWithState {
+            $empty,
+            /**
+             * @param list<ActorRef<object>> $subscribers
+             * @psalm-suppress UntypedActorRefInjection -- the bus is intentionally heterogeneous
+             */
+            static function (ActorContext $ctx, object $msg, $subscribers): BehaviorWithState {
                 if ($msg instanceof Subscribe) {
                     $subscribers[] = $msg->subscriber;
 
