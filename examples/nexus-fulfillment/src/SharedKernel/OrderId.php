@@ -7,16 +7,22 @@ namespace Monadial\Nexus\Example\Fulfillment\SharedKernel;
 use InvalidArgumentException;
 use Symfony\Component\Uid\Ulid;
 
+use function strtoupper;
+
 /**
  * Order identity — a ULID string, sortable by creation time.
  */
 final readonly class OrderId
 {
-    public function __construct(public string $value)
+    public string $value;
+
+    public function __construct(string $value)
     {
         if (!Ulid::isValid($value)) {
             throw new InvalidArgumentException("Invalid order id: '{$value}'");
         }
+
+        $this->value = strtoupper($value);
     }
 
     public static function generate(): self

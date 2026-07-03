@@ -1,0 +1,11 @@
+vendor/
+.git/
+.github/
+.idea/
+.vscode/
+tests/
+*.md
+composer.lock
+.phpunit.cache/
+.php-cs-fixer.cache
+.superpowers/

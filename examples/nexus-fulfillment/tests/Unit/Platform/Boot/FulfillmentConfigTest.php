@@ -29,7 +29,7 @@ final class FulfillmentConfigTest extends TestCase
         self::assertSame(8080, $config->http->port);
         self::assertSame(1, $config->http->workers);
         self::assertSame('db', $config->db->host);
-        self::assertSame('pgsql:host=db;port=5432;dbname=fulfillment', $config->db->pdoDsn());
+        self::assertSame('pgsql:host=db;port=5432;dbname=fulfillment;connect_timeout=2', $config->db->pdoDsn());
     }
 
     #[Test]

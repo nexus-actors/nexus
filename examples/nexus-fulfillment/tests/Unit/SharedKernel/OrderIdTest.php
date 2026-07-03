@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function strtolower;
+
 #[CoversClass(OrderId::class)]
 final class OrderIdTest extends TestCase
 {
@@ -33,5 +35,14 @@ final class OrderIdTest extends TestCase
     public function generatedIdsAreUnique(): void
     {
         self::assertFalse(OrderId::generate()->equals(OrderId::generate()));
+    }
+
+    #[Test]
+    public function normalizesLowercaseUlidToUppercase(): void
+    {
+        $id = OrderId::generate();
+        $fromLower = OrderId::fromString(strtolower($id->value));
+
+        self::assertTrue($id->equals($fromLower));
     }
 }

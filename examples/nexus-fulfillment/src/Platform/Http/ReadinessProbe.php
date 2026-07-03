@@ -23,7 +23,6 @@ final readonly class ReadinessProbe
         try {
             $pdo = new PDO($this->db->pdoDsn(), $this->db->user, $this->db->password, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_TIMEOUT => 2,
             ]);
             $pdo->query('SELECT 1');
 

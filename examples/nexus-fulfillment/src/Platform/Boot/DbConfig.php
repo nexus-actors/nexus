@@ -27,6 +27,6 @@ final readonly class DbConfig
 
     public function pdoDsn(): string
     {
-        return "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname}";
+        return "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname};connect_timeout=2";
     }
 }

@@ -21,5 +21,9 @@ health probes, quality gates (PHPUnit, Psalm, Deptrac, CS).
 
     make ci         # phpunit + psalm + deptrac + php-cs-fixer + phpcs
 
-This is a standalone Composer project inside the Nexus monorepo — copy
-the folder out and `git init` it to use as a starter.
+This is a standalone Composer project inside the Nexus monorepo. To use it
+as a starter outside the monorepo, copy the folder out and either keep a
+sibling checkout of the Nexus `packages/` tree (adjusting the
+`../../packages` mount in `compose.yaml`) or replace the `/nexus-packages`
+autoload paths in `composer.json` with the published `nexus-actors/*`
+Packagist packages.
