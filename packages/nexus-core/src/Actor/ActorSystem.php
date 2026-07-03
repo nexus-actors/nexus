@@ -205,10 +205,12 @@ final class ActorSystem
      * the PoisonPill, then delivers PostStop and stops its children. This method
      * returns immediately; the stop happens asynchronously.
      *
-     * @param ActorRef<object> $ref The actor to stop.
+     * @template W of object
+     * @param ActorRef<W> $ref The actor to stop.
      */
     public function stop(ActorRef $ref): void
     {
+        /** @psalm-suppress InvalidArgument — PoisonPill rides the user channel; the system-message path is type-erased by design. */
         $ref->tell(new PoisonPill());
     }
 
