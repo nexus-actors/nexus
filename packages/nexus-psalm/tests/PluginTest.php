@@ -69,6 +69,24 @@ final class PluginTest extends TestCase
     }
 
     #[Test]
+    public function messengerMessageRuleDetectsUnregisteredMessage(): void
+    {
+        $output = $this->runPsalmOnFixture('MessengerMessageFixture.php');
+        $lines = $this->filterIssueLines($output, 'NonSerializableRemoteMessage');
+
+        self::assertCount(1, $lines, 'Expected exactly 1 NonSerializableRemoteMessage issue');
+        self::assertStringContains('UnregisteredMessengerMessage', $lines[0]);
+    }
+
+    #[Test]
+    public function messengerMessageRuleAllowsRegisteredMessage(): void
+    {
+        $output = $this->runPsalmOnFixture('MessengerMessageFixture.php');
+
+        self::assertStringNotContains('RegisteredMessengerMessage', $output);
+    }
+
+    #[Test]
     public function blockingCallRuleDetectsBlockingInHandler(): void
     {
         $output = $this->runPsalmOnFixture('BlockingCallFixture.php');

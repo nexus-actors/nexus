@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Psalm\Hook;
 
+use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Psalm\Issue\NonSerializableRemoteMessage;
 use Monadial\Nexus\Serialization\MessageType;
 use Monadial\Nexus\WorkerPool\WorkerActorRef;
@@ -23,6 +24,7 @@ final class NonSerializableRemoteMessageRule implements AfterMethodCallAnalysisI
 {
     private const array CHECKED_METHODS = [
         'monadial\nexus\core\actor\actorref::tell' => 0,
+        'monadial\nexus\messenger\producer\messengeractorref::tell' => 0,
         'monadial\nexus\workerpool\workeractorref::tell' => 0,
     ];
 
@@ -89,7 +91,15 @@ final class NonSerializableRemoteMessageRule implements AfterMethodCallAnalysisI
         }
 
         foreach ($callerType->getAtomicTypes() as $atomic) {
-            if ($atomic instanceof TNamedObject && strcasecmp($atomic->value, WorkerActorRef::class) === 0) {
+            if (!$atomic instanceof TNamedObject) {
+                continue;
+            }
+
+            if (strcasecmp($atomic->value, MessengerActorRef::class) === 0) {
+                return true;
+            }
+
+            if (strcasecmp($atomic->value, WorkerActorRef::class) === 0) {
                 return true;
             }
         }
