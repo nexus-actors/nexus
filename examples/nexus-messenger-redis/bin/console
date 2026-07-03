@@ -19,12 +19,16 @@
 
 declare(strict_types=1);
 
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Example\MessengerRedis\Actor\OrderProcessor;
 use Monadial\Nexus\Example\MessengerRedis\Event\StdoutDispatcher;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Monadial\Nexus\Messenger\Console\CallbackConsumerSetup;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Console\ProduceCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\MessageRouter;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
@@ -67,24 +71,23 @@ $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 $events = new StdoutDispatcher();
 
 // ---------------------------------------------------------------------------
-// 4. Router — OrderPlaced → OrderProcessor actor
-//    The actor is spawned inside ConsumeCommand; DeadLetterRef is used here
-//    as a placeholder that accepts any message in the router for the console
-//    wiring. In production, wire to a pre-spawned actor or use a lazy ref.
-// ---------------------------------------------------------------------------
-$router = new MapMessageRouter([
-    OrderPlaced::class => new Monadial\Nexus\Core\Actor\DeadLetterRef(),
-]);
-
-// ---------------------------------------------------------------------------
-// 5. Console application
+// 4. Console application — ConsumeCommand boots the ActorSystem, so the
+//    OrderProcessor actor is spawned inside the CallbackConsumerSetup
+//    callback where the live system is available.
 // ---------------------------------------------------------------------------
 $app = new Application('nexus-messenger-redis', '1.0.0');
 
 $app->add(new ConsumeCommand(
     new FiberRuntime(),
     $transport,
-    $router,
+    new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
+        $processorRef = $system->spawn(
+            Props::fromFactory(fn () => new OrderProcessor()),
+            'order-processor',
+        );
+
+        return new MapMessageRouter([OrderPlaced::class => $processorRef]);
+    }),
     logger: $logger,
     events: $events,
 ));

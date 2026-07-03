@@ -4,9 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Console\Tests\Unit;
 
+use ArrayObject;
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Console\CallbackConsumerSetup;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\MessageRouter;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -17,6 +24,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 
+#[CoversClass(CallbackConsumerSetup::class)]
 #[CoversClass(ConsumeCommand::class)]
 final class ConsumeCommandTest extends TestCase
 {
@@ -103,5 +111,46 @@ final class ConsumeCommandTest extends TestCase
         ]);
 
         self::assertStringContainsString('1 receiver', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function callbackConsumerSetupSpawnsActorOnBootedSystem(): void
+    {
+        $transport = new InMemoryTransport();
+        $transport->send(new Envelope(new stdClass()));
+        $transport->send(new Envelope(new stdClass()));
+
+        /** @var ArrayObject<int, object> $received */
+        $received = new ArrayObject();
+
+        $command = new ConsumeCommand(
+            new FiberRuntime(),
+            $transport,
+            new CallbackConsumerSetup(static function (ActorSystem $system) use ($received): MessageRouter {
+                $ref = $system->spawn(
+                    Props::fromBehavior(Behavior::receive(
+                        static function (ActorContext $ctx, object $msg) use ($received): Behavior {
+                            $received->append($msg);
+
+                            return Behavior::same();
+                        },
+                    )),
+                    'handler',
+                );
+
+                return new MapMessageRouter([stdClass::class => $ref]);
+            }),
+        );
+
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute([
+            '--limit' => '2',
+            '--poll-interval' => '20',
+        ]);
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+        self::assertCount(2, $received);
+        self::assertCount(2, $transport->getAcknowledged());
     }
 }

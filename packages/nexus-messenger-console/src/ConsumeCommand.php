@@ -45,10 +45,16 @@ use function sprintf;
  * $app->add(new ConsumeCommand(
  *     new FiberRuntime(),
  *     $transport,
- *     new MapMessageRouter([OrderPlaced::class => $ordersRef]),
+ *     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
+ *         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
+ *
+ *         return new MapMessageRouter([OrderPlaced::class => $ref]);
+ *     }),
  * ));
  * $app->run();
  * ```
+ *
+ * A plain {@see MessageRouter} is also accepted when actor refs are already available at wiring time.
  *
  * @psalm-api
  */
@@ -63,7 +69,7 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
     public function __construct(
         private readonly Runtime $runtime,
         private readonly ReceiverInterface $receiver,
-        private readonly MessageRouter $router,
+        private readonly MessageRouter|ConsumerSetup $routing,
         private readonly ?Observability $observability = null,
         private readonly ?LoggerInterface $logger = null,
         private readonly ?EventDispatcherInterface $events = null,
@@ -153,6 +159,10 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
             observability: $this->observability,
         );
 
+        $router = $this->routing instanceof ConsumerSetup
+            ? $this->routing->setup($this->system)
+            : $this->routing;
+
         $watchdogRef = null;
         $hasLimits = $limit !== null || $memoryLimitBytes !== null || $timeLimit !== null;
 
@@ -196,7 +206,7 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
             $receiverCount,
             'receiver',
             $this->receiver,
-            $this->router,
+            $router,
             $config,
             $deadLettersRef,
             $watchdogRef,

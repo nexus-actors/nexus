@@ -18,6 +18,8 @@ Keeping `nexus-messenger` free of `symfony/console` is intentional: the bridge h
 - `ConsumeCommand` (`nexus:messenger:consume`) — boots a Nexus `ActorSystem`, spawns N competing `ReceiverActor`s, and optionally wires a `LifecycleWatchdog` for limit-based recycling
 - `ProduceCommand` (`nexus:messenger:produce`) — resolves a type name from a `TypeRegistry`, deserializes a JSON body, and publishes one or more messages via `MessengerBridge::gateway()`
 - `MemoryLimit` — parses human-readable memory strings (`128M`, `1G`, K/M/G suffixes) to bytes; used internally by `ConsumeCommand`
+- `ConsumerSetup` — interface for wiring handler actors after the `ActorSystem` boots; implement when actor refs must be created on the system that `ConsumeCommand` boots
+- `CallbackConsumerSetup` — closure-based implementation of `ConsumerSetup`
 
 ## Install
 
@@ -29,7 +31,7 @@ Requires `nexus-actors/messenger`, `nexus-actors/core`, `nexus-actors/runtime`, 
 
 ## Wiring a Console Application
 
-Register both commands in a standard Symfony `Application`:
+Register both commands in a standard Symfony `Application`. Because `ConsumeCommand` boots its own `ActorSystem`, use `CallbackConsumerSetup` to spawn handler actors inside the callback where the live system is available:
 
 ```php title="bin/console"
 #!/usr/bin/env php
@@ -37,9 +39,13 @@ Register both commands in a standard Symfony `Application`:
 
 declare(strict_types=1);
 
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Console\CallbackConsumerSetup;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Console\ProduceCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\MessageRouter;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Monadial\Nexus\Serialization\ValinorMessageSerializer;
@@ -57,11 +63,17 @@ $app = new Application('nexus-worker', '1.0.0');
 $app->add(new ConsumeCommand(
     $runtime,
     $transport,
-    new MapMessageRouter([OrderPlaced::class => $ordersRef]),
+    new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
+        $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
+
+        return new MapMessageRouter([OrderPlaced::class => $ref]);
+    }),
 ));
 $app->add(new ProduceCommand($transport, $serializer, $registry));
 $app->run();
 ```
+
+A plain `MessageRouter` is accepted as the third argument when actor refs are already available at wiring time (for example, refs obtained from a pre-existing system or a DI container that owns its own actor system).
 
 ## nexus:messenger:consume
 
