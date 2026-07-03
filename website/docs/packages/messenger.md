@@ -116,7 +116,7 @@ All counters carry a `nexus.message.type` attribute with the message class name.
 | `messenger.send` | Producer | `messaging.system`, `nexus.message.type`, `nexus.messenger.sender` |
 | `messenger.receive` | Consumer | `messaging.system`, `nexus.message.type`, `nexus.messenger.outcome` |
 
-`nexus.messenger.outcome` values: `consumed`, `rejected`, `dead_lettered`, `backpressured`, `acked`.
+`nexus.messenger.outcome` values: `acked`, `backpressured`, `dead_lettered`, `dropped`, `rejected`.
 
 ### PSR-14 events
 
