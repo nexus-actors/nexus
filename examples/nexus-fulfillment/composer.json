@@ -1,0 +1,78 @@
+{
+    "name": "nexus-actors/example-fulfillment",
+    "description": "Order-fulfillment reference application: event-sourced entity actors, a saga with compensation, WebSockets, and full OTel observability on the Nexus actor system.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-pdo_pgsql": "*",
+        "ext-pdo_sqlite": "*",
+        "ext-swoole": "^6.0",
+        "cuyz/valinor": "^2.3",
+        "nikic/fast-route": "^1.3",
+        "nyholm/psr7": "^1.8",
+        "opis/closure": "^4.0",
+        "psr/clock": "^1.0",
+        "psr/container": "^2.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/http-factory": "^1.1",
+        "psr/http-message": "^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/log": "^3.0",
+        "psr/simple-cache": "^3.0",
+        "symfony/cache": "^8.0.12",
+        "symfony/uid": "^8.0"
+    },
+    "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "deptrac/deptrac": "^4.6",
+        "friendsofphp/php-cs-fixer": "^3.0",
+        "phpunit/phpunit": "^13.0",
+        "slevomat/coding-standard": "^8.0",
+        "squizlabs/php_codesniffer": "^4.0",
+        "vimeo/psalm": "^6.0"
+    },
+    "autoload": {
+        "files": [
+            "/nexus-packages/nexus-core/src/Actor/Functions/functions.php"
+        ],
+        "psr-4": {
+            "Monadial\\Nexus\\App\\": "/nexus-packages/nexus-app/src/",
+            "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Example\\Fulfillment\\": "src/",
+            "Monadial\\Nexus\\Http\\": "/nexus-packages/nexus-http/src/",
+            "Monadial\\Nexus\\Http\\Auth\\": "/nexus-packages/nexus-http-auth/src/",
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\": "/nexus-packages/nexus-http-server-swoole/src/",
+            "Monadial\\Nexus\\Http\\Server\\Swoole\\Threads\\": "/nexus-packages/nexus-http-server-swoole-threads/src/",
+            "Monadial\\Nexus\\Http\\Ws\\": "/nexus-packages/nexus-http-ws/src/",
+            "Monadial\\Nexus\\Logger\\": "/nexus-packages/nexus-logger/src/",
+            "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
+            "Monadial\\Nexus\\Persistence\\": "/nexus-packages/nexus-persistence/src/",
+            "Monadial\\Nexus\\Persistence\\Dbal\\": "/nexus-packages/nexus-persistence-dbal/src/",
+            "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
+            "Monadial\\Nexus\\Runtime\\Fiber\\": "/nexus-packages/nexus-runtime-fiber/src/",
+            "Monadial\\Nexus\\Runtime\\Step\\": "/nexus-packages/nexus-runtime-step/src/",
+            "Monadial\\Nexus\\Runtime\\Swoole\\": "/nexus-packages/nexus-runtime-swoole/src/",
+            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Example\\Fulfillment\\Tests\\": "tests/",
+            "Monadial\\Nexus\\Psalm\\": "/nexus-packages/nexus-psalm/src/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "serve": "php public/server.php",
+        "test": "vendor/bin/phpunit"
+    }
+}

@@ -1,0 +1,63 @@
+# Self-contained runtime for the fulfillment example — independent of the
+# parent Nexus monorepo's compose.yaml.
+#
+#   make up      # start the server on :9090
+#   make logs    # tail server logs
+
+services:
+  app:
+    build: .
+    image: nexus-fulfillment:dev
+    container_name: nexus-fulfillment
+    ports:
+      - "9090:8080"
+    sysctls:
+      net.core.somaxconn: 65535
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    environment:
+      FULFILLMENT_DB_HOST: "db"
+      FULFILLMENT_DB_NAME: "fulfillment"
+      FULFILLMENT_DB_PASS: "fulfillment"
+      FULFILLMENT_DB_PORT: "5432"
+      FULFILLMENT_DB_USER: "fulfillment"
+      FULFILLMENT_HTTP_HOST: "0.0.0.0"
+      FULFILLMENT_HTTP_PORT: "8080"
+      # Single worker for now: entity actors + the event store's
+      # single-writer guarantee need sticky entity->process routing before
+      # this can scale out (addressed in a later plan).
+      FULFILLMENT_WORKERS: "${FULFILLMENT_WORKERS:-1}"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      # Path source for the Monadial\Nexus\* autoload mappings.
+      - ../../packages:/nexus-packages:ro
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8080/healthz') ? 0 : 1);"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+
+  db:
+    image: postgres:17-alpine
+    container_name: nexus-fulfillment-db
+    environment:
+      POSTGRES_DB: "fulfillment"
+      POSTGRES_PASSWORD: "fulfillment"
+      POSTGRES_USER: "fulfillment"
+    ports:
+      - "5436:5432"
+    volumes:
+      - fulfillment-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fulfillment -d fulfillment"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  fulfillment-db-data:
