@@ -1,0 +1,44 @@
+deptrac:
+  paths:
+    - src
+
+  layers:
+    - name: SharedKernel
+      collectors:
+        - type: directory
+          value: src/SharedKernel/.*
+
+    - name: Domain
+      collectors:
+        - type: directory
+          value: src/[A-Za-z]+/Domain/.*
+
+    - name: Application
+      collectors:
+        - type: directory
+          value: src/[A-Za-z]+/Application/.*
+
+    - name: Infrastructure
+      collectors:
+        - type: directory
+          value: src/[A-Za-z]+/Infrastructure/.*
+
+    - name: Platform
+      collectors:
+        - type: directory
+          value: src/Platform/.*
+
+    - name: Nexus
+      collectors:
+        - type: classNameRegex
+          value: '#^Monadial\\Nexus\\(?!Example\\Fulfillment)#'
+
+  ruleset:
+    # Pure domain: PHP + SharedKernel value objects, nothing else.
+    Domain: [SharedKernel]
+    # SharedKernel touches Nexus ONLY for the #[MessageType] attribute on
+    # published contracts.
+    SharedKernel: [Nexus]
+    Application: [Domain, SharedKernel, Nexus]
+    Infrastructure: [Application, Domain, SharedKernel, Nexus]
+    Platform: [Application, Domain, Infrastructure, SharedKernel, Nexus]

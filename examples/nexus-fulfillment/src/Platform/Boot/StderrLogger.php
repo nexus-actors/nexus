@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Boot;
 
+use Override;
 use Psr\Log\AbstractLogger;
 use Stringable;
 
@@ -25,6 +26,7 @@ final class StderrLogger extends AbstractLogger
         return new self($channel);
     }
 
+    #[Override]
     public function log(mixed $level, Stringable|string $message, array $context = []): void
     {
         $suffix = $context === []
