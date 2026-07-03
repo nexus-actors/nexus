@@ -11,6 +11,7 @@ use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\MailboxClosedException;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Monadial\Nexus\Runtime\Mailbox\Mailbox;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use NoDiscard;
@@ -25,8 +26,9 @@ use Override;
  *
  * @template T of object
  * @implements ActorRef<T>
+ * @implements BackpressureCapable<T>
  */
-final readonly class LocalActorRef implements ActorRef
+final readonly class LocalActorRef implements ActorRef, BackpressureCapable
 {
     /**
      * @param ActorPath $path The actor's path in the hierarchy
@@ -47,10 +49,19 @@ final readonly class LocalActorRef implements ActorRef
     #[Override]
     public function tell(object $message): void
     {
+        $_ = $this->offer($message);
+    }
+
+    /**
+     * @param T $message
+     */
+    #[Override]
+    public function offer(object $message): EnqueueResult
+    {
         try {
-            $_ = $this->mailbox->enqueue($this->envelopeFor($message, ActorPath::root()));
+            return $this->mailbox->enqueue($this->envelopeFor($message, ActorPath::root()));
         } catch (MailboxClosedException) {
-            // fire-and-forget: silently drop messages to closed mailboxes
+            return EnqueueResult::Dropped;
         }
     }
 
