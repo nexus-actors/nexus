@@ -593,18 +593,30 @@ final class PluginTest extends TestCase
         $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
         $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
 
-        // 9 issues: UarBareParamService::setSink, UarObjectParamService::route,
+        // 10 issues: UarBareParamService::setSink, UarObjectParamService::route,
         // UarSubtypeBypassService::connect, UarClosureHost closure param,
         // UarContainerService::setBare, UarContainerService::setErased,
         // UarBarePromotedService promoted property, UarObjectPropertyService @var property,
-        // UarSinkRegistry::register interface param
-        self::assertCount(9, $lines, "Expected 9 UntypedActorRefInjection issues:\n" . implode("\n", $lines));
+        // UarSinkRegistry::register interface param, UarAbstractDispatcher::dispatch abstract method
+        self::assertCount(10, $lines, "Expected 10 UntypedActorRefInjection issues:\n" . implode("\n", $lines));
         self::assertStringContains('setSink', $output);
         self::assertStringContains('UarObjectParamService', $output);
         self::assertStringContains('UarSubtypeBypassService', $output);
         self::assertStringContains('setBare', $output);
         self::assertStringContains('setErased', $output);
         self::assertStringNotContains('setTyped', $output);
+        self::assertStringContains('UarAbstractDispatcher', $output);
+    }
+
+    #[Test]
+    public function untypedActorRefRuleExcludesDeadLetterRefByDefault(): void
+    {
+        $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
+        $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
+
+        foreach ($lines as $line) {
+            self::assertStringNotContains('UarDeadLetterSinkService', $line);
+        }
     }
 
     #[Test]
