@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint, static analysis, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Install dependencies
+        run: docker compose run --rm app composer install --no-interaction --no-progress
+
+      - name: PHP-CS-Fixer
+        run: docker compose run --rm app vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: PHPCS
+        run: docker compose run --rm app vendor/bin/phpcs
+
+      - name: Psalm
+        run: docker compose run --rm app vendor/bin/psalm --no-cache
+
+      - name: Deptrac
+        run: docker compose run --rm app php -d error_reporting="E_ALL & ~E_DEPRECATED" vendor/bin/deptrac analyse --no-progress
+
+      - name: PHPUnit
+        run: docker compose run --rm app vendor/bin/phpunit
+
+  smoke:
+    name: Boot server and probe health
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and install
+        run: |
+          docker compose build app
+          docker compose run --rm app composer install --no-interaction --no-progress
+
+      - name: Boot server
+        run: docker compose up -d app
+
+      - name: Wait for /healthz
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9090/healthz > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker compose logs app
+          exit 1
+
+      - name: Probe /readyz
+        run: |
+          curl -fsS http://localhost:9090/readyz | tee /tmp/ready.json
+          test "$(jq -r .status /tmp/ready.json)" = "ready"
+
+      - name: Tear down
+        if: always()
+        run: docker compose down
