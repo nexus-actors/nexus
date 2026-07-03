@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Tests\Integration\Messenger;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleWatchdog;
 use Monadial\Nexus\Messenger\Lifecycle\MessagesProcessed;
@@ -58,6 +59,35 @@ final class LifecycleWatchdogTest extends TestCase
             Duration::seconds(1),
             static fn(): int => 2048,
         )), 'watchdog');
+
+        $runtime->scheduleOnce(Duration::seconds(3), static function () use ($system, &$safetyTriggered): void {
+            $safetyTriggered = true;
+            $system->shutdown(Duration::seconds(1));
+        });
+        $system->run();
+
+        self::assertFalse($safetyTriggered, 'watchdog should have shut the system down before the safety net');
+    }
+
+    #[Test]
+    public function shutsTheSystemDownWhenTheTimeLimitIsReached(): void
+    {
+        $runtime = new FiberRuntime();
+        $clock = new TestClock();
+        $system = ActorSystem::create('watchdog-time', $runtime, clock: $clock);
+        $safetyTriggered = false;
+
+        $system->spawn(Props::fromBehavior(LifecycleWatchdog::create(
+            $system,
+            LifecycleThresholds::none()->withTimeLimit(Duration::seconds(60)),
+            Duration::millis(30),
+            Duration::seconds(1),
+        )), 'watchdog');
+
+        // Advance the injected clock past the 60 s time limit so the next Tick sees a breach.
+        $runtime->scheduleOnce(Duration::millis(100), static function () use ($clock): void {
+            $clock->advance(Duration::seconds(61));
+        });
 
         $runtime->scheduleOnce(Duration::seconds(3), static function () use ($system, &$safetyTriggered): void {
             $safetyTriggered = true;

@@ -65,8 +65,7 @@ final readonly class MessengerBridge
         ?ActorPath $sourcePath = null,
         Observability $observability = new NoopObservability(),
         ?EventDispatcherInterface $events = null,
-    ): MessengerActorRef
-    {
+    ): MessengerActorRef {
         return new MessengerActorRef($sender, $name, $sourcePath, $observability, $events);
     }
 
