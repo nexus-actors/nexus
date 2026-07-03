@@ -83,7 +83,7 @@ final class ProduceCommand extends Command
             return Command::FAILURE;
         }
 
-        $message = $this->serializer->deserialize($body, $typeName);
+        $message = $this->serializer->deserialize($body, $class);
         $gateway = MessengerBridge::gateway($this->sender);
 
         for ($i = 0; $i < $count; $i++) {
