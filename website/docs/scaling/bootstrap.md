@@ -111,8 +111,13 @@ use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
 
 readonly class Increment {}
+readonly class CountResult
+{
+    public function __construct(public int $count) {}
+}
 readonly class GetCount
 {
+    /** @param ActorRef<CountResult> $replyTo */
     public function __construct(public \Monadial\Nexus\Core\Actor\ActorRef $replyTo) {}
 }
 
@@ -131,7 +136,7 @@ final class CounterApp extends WorkerPoolApp
                             }
 
                             if ($msg instanceof GetCount) {
-                                $msg->replyTo->tell($count);
+                                $msg->replyTo->tell(new CountResult($count));
                             }
 
                             return BehaviorWithState::same();

@@ -162,6 +162,7 @@ docker compose exec php vendor/bin/phpunit --filter=testActorStopsOnPoisonPill
 ```php title="src/Client/OrderClient.php"
 // Increase from 1 s to 5 s
 $result = $ref->ask(
+    /** @param ActorRef<OrderFound> $replyTo */
     static fn(ActorRef $replyTo) => new GetOrder($id, $replyTo),
     Duration::seconds(5),
 );
@@ -229,6 +230,9 @@ $ctx->sender()->ifPresent(
 use Monadial\Nexus\Http\Handler\Attribute\FromBody;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 
+/**
+ * @param ActorRef<OrderCommand> $ordersActor
+ */
 public function handle(
     #[FromBody] CreateOrderRequest $body,
     #[FromActor('orders')] ActorRef $ordersActor,

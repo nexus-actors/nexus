@@ -45,6 +45,7 @@ readonly class FulfillmentState
 
 /**
  * @param ActorRef<ChargePayment> $paymentActor
+ * @param ActorRef<ReserveStock|CancelReservation> $inventoryActor
  */
 function orderFulfillmentSaga(
     string $orderId,
