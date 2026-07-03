@@ -13,7 +13,7 @@ The `nexus-psalm` package ships a Psalm plugin with rules and return-type provid
 
 ```xml title="psalm.xml"
 <plugins>
-    <pluginClass class="Monadial\Nexus\Psalm\NexusPlugin" />
+    <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
 </plugins>
 ```
 
@@ -254,7 +254,7 @@ final class CreateOrderHandler
 }
 ```
 
-**Excluding accept-anything refs:** `DeadLetterRef` is excluded by default. Exclude your own heterogeneous ref classes via plugin config: Subclasses of an excluded ref class are also exempt — excluding a base ref class exempts every ref that extends it.
+**Excluding accept-anything refs:** `DeadLetterRef` is excluded by default. Exclude your own heterogeneous ref classes via plugin config. Subclasses of an excluded ref class are also exempt — excluding a base ref class exempts every ref that extends it:
 
 ```xml title="psalm.xml"
 <plugins>

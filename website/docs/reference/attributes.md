@@ -104,6 +104,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 
 final class OrderHandler
 {
+    /** @param ActorRef<OrderCommand> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
     ) {}
