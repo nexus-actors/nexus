@@ -112,6 +112,7 @@ nexus-core (no dependencies — foundational)
 │   │   ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │   │   └── nexus-persistence-doctrine → Persistence, Core, Serialization
 │   └── nexus-messenger        → Core, Runtime, Serialization, Observability (+ symfony/messenger, psr/event-dispatcher)
+│       └── nexus-messenger-console → Core, Messenger, Runtime, Serialization, Observability (+ symfony/console)
 ├── nexus-cluster          → Core only (remote contracts)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
@@ -367,6 +368,14 @@ Two-way bridge to standalone `symfony/messenger` transports (no framework-bundle
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer` + `TypeRegistry`; bridge stamps travel as headers.
 - `LifecycleWatchdog` — worker recycling: triggers graceful `ActorSystem::shutdown()` on memory/uptime/message-count thresholds (`LifecycleThresholds`).
 - `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `spawnReceivers(ActorSystem, int $count, string $namePrefix, ...)` (N competing in-process consumers over one transport), `watchdogProps()`.
+
+### Messenger Console (nexus-messenger-console)
+
+Symfony Console runners — keeps `nexus-messenger` free of `symfony/console`.
+
+- `ConsumeCommand` (`nexus:messenger:consume`) — boots `ActorSystem::create()`, calls `MessengerBridge::spawnReceivers()`, optionally spawns `LifecycleWatchdog` (wired as `$processedListener`) when any limit option is present. No watchdog when no limits. Options: `--receivers|-r` (int, default 1), `--limit`, `--memory-limit` (e.g. `128M`), `--time-limit` (seconds), `--poll-interval` (ms, default 100), `--dead-letters`. Implements `SignalableCommandInterface` (SIGINT/SIGTERM → graceful shutdown).
+- `ProduceCommand` (`nexus:messenger:produce`) — resolves a type name via `TypeRegistry::classForName()`, deserializes a JSON body via `MessageSerializer::deserialize()`, publishes N messages via `MessengerBridge::gateway()`. Args: `type`, `body`. Option: `--count|-c`.
+- `MemoryLimit` — parses human-readable memory strings (`128M`, `1G`, K/M/G suffixes, case-insensitive) to bytes; throws `InvalidArgumentException` on invalid input.
 
 ### Application Bootstrap (nexus-app)
 
