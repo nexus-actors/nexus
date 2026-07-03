@@ -20,6 +20,7 @@ use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
+use Throwable;
 
 /**
  * Supervised poll → route → ack loop over one Messenger receiver.
@@ -133,24 +134,30 @@ final readonly class ReceiverActor
             $parent = $traceStamp instanceof TraceContextStamp && $observability !== null
                 ? $observability->propagator()->extract($traceStamp->carrier)
                 : null;
-            $span = $ctx->tracer()->startSpan(
-                'messenger.receive',
-                SpanKind::Consumer,
-                [
-                    'messaging.operation' => 'receive',
-                    'messaging.system' => 'symfony-messenger',
-                    'nexus.actor.path' => (string) $ctx->path(),
-                    'nexus.message.type' => $inner::class,
-                ],
-                $parent,
-            );
+            $span = null;
+
+            try {
+                $span = $ctx->tracer()->startSpan(
+                    'messenger.receive',
+                    SpanKind::Consumer,
+                    [
+                        'messaging.operation' => 'receive',
+                        'messaging.system' => 'symfony-messenger',
+                        'nexus.actor.path' => (string) $ctx->path(),
+                        'nexus.message.type' => $inner::class,
+                    ],
+                    $parent,
+                );
+            } catch (Throwable) {
+                // Telemetry must never break message flow.
+            }
 
             try {
                 $target = $router->route($inner, $envelope);
 
                 if ($target === null) {
                     $outcome = self::handleUnroutable($ctx, $receiver, $config, $deadLetters, $events, $envelope);
-                    $span->setAttribute('nexus.messenger.outcome', $outcome);
+                    $span?->setAttribute('nexus.messenger.outcome', $outcome);
 
                     continue;
                 }
@@ -159,16 +166,16 @@ final readonly class ReceiverActor
                     $result = $target->offer($inner);
 
                     if ($result !== EnqueueResult::Accepted) {
-                        $ctx->meter()->counter(
+                        self::swallow(static fn(): mixed => $ctx->meter()->counter(
                             'nexus.messenger.enqueue.backpressured',
                             '{message}',
                             'Broker messages not acked because the target mailbox did not accept them',
-                        )->add(1, ['nexus.message.type' => $inner::class]);
+                        )->add(1, ['nexus.message.type' => $inner::class]));
                         $ctx->log()->debug(
                             'Mailbox backpressured, pausing broker consumption',
                             ['type' => $inner::class],
                         );
-                        $span->setAttribute(
+                        $span?->setAttribute(
                             'nexus.messenger.outcome',
                             $result === EnqueueResult::Dropped
                                 ? 'dropped'
@@ -183,15 +190,17 @@ final readonly class ReceiverActor
 
                 $receiver->ack($envelope);
                 $processed++;
-                $ctx->meter()->counter(
+                self::swallow(static fn(): mixed => $ctx->meter()->counter(
                     'nexus.messenger.messages.consumed',
                     '{message}',
                     'Broker messages delivered to a target actor and acked',
-                )->add(1, ['nexus.message.type' => $inner::class]);
-                $span->setAttribute('nexus.messenger.outcome', 'acked');
-                $events?->dispatch(new MessageConsumed($inner, (string) $target->path()));
+                )->add(1, ['nexus.message.type' => $inner::class]));
+                $span?->setAttribute('nexus.messenger.outcome', 'acked');
+                self::swallow(
+                    static fn(): mixed => $events?->dispatch(new MessageConsumed($inner, (string) $target->path())),
+                );
             } finally {
-                $span->end();
+                $span?->end();
             }
         }
 
@@ -220,24 +229,36 @@ final readonly class ReceiverActor
         if ($config->unroutablePolicy === UnroutablePolicy::DeadLetters && $deadLetters !== null) {
             $deadLetters->tell($inner);
             $receiver->ack($envelope);
-            $ctx->meter()->counter(
+            self::swallow(static fn(): mixed => $ctx->meter()->counter(
                 'nexus.messenger.messages.dead_lettered',
                 '{message}',
                 'Unroutable broker messages forwarded to dead letters',
-            )->add(1, ['nexus.message.type' => $inner::class]);
-            $events?->dispatch(new MessageDeadLettered($inner));
+            )->add(1, ['nexus.message.type' => $inner::class]));
+            self::swallow(static fn(): mixed => $events?->dispatch(new MessageDeadLettered($inner)));
 
             return 'dead_lettered';
         }
 
         $receiver->reject($envelope);
-        $ctx->meter()->counter(
+        self::swallow(static fn(): mixed => $ctx->meter()->counter(
             'nexus.messenger.messages.rejected',
             '{message}',
             'Unroutable broker messages rejected back to the transport',
-        )->add(1, ['nexus.message.type' => $inner::class]);
-        $events?->dispatch(new MessageRejected($inner));
+        )->add(1, ['nexus.message.type' => $inner::class]));
+        self::swallow(static fn(): mixed => $events?->dispatch(new MessageRejected($inner)));
 
         return 'rejected';
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private static function swallow(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break message flow.
+        }
     }
 }

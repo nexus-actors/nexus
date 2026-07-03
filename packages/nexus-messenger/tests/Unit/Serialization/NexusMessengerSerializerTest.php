@@ -65,7 +65,29 @@ final class NexusMessengerSerializerTest extends TestCase
         $encoded = $serializer->encode(new Envelope(new Greeting('hello')));
 
         self::assertSame(Greeting::class, $encoded['headers']['type']);
-        self::assertInstanceOf(Greeting::class, $serializer->decode($encoded)->getMessage());
+
+        // Decode must reject the FQCN header because the type is not registered.
+        $this->expectException(MessageDecodingFailedException::class);
+        $serializer->decode($encoded);
+    }
+
+    #[Test]
+    public function fqcnHeaderRoundTripsAfterExplicitRegistration(): void
+    {
+        $registry = new TypeRegistry();
+        $registry->register(Greeting::class, Greeting::class);
+        $serializer = new NexusMessengerSerializer(
+            new PhpNativeSerializer([Greeting::class]),
+            $registry,
+        );
+
+        $encoded = $serializer->encode(new Envelope(new Greeting('hello')));
+
+        self::assertSame(Greeting::class, $encoded['headers']['type']);
+
+        $decoded = $serializer->decode($encoded);
+
+        self::assertInstanceOf(Greeting::class, $decoded->getMessage());
     }
 
     #[Test]

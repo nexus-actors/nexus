@@ -28,12 +28,17 @@ use function sprintf;
 /**
  * Messenger SerializerInterface backed by a Nexus MessageSerializer.
  *
- * Bodies are (de)serialized by the injected Nexus serializer; the message
- * type travels in the "type" header (registered #[MessageType] name when
- * available, FQCN otherwise). The bridge's own stamps round-trip as plain
- * string headers. Other stamps are NOT preserved in v1 — swap in any Symfony
- * SerializerInterface if you need full stamp fidelity or interop with
- * non-Nexus producers.
+ * Bodies are (de)serialized by the injected Nexus serializer; the message type
+ * travels in the "type" header. Encode and decode behave asymmetrically:
+ * encode uses the registered #[MessageType] name when available, falling back
+ * to the FQCN; decode requires the header value to be registered in the
+ * TypeRegistry and throws MessageDecodingFailedException otherwise. To
+ * deliberately accept a FQCN header on decode, register the class as its own
+ * type name: $registry->register(Foo::class, Foo::class).
+ *
+ * The bridge's own stamps round-trip as plain string headers. Other stamps are
+ * NOT preserved in v1 — swap in any Symfony SerializerInterface if you need
+ * full stamp fidelity or interop with non-Nexus producers.
  *
  * @psalm-api
  */
@@ -69,7 +74,16 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
             throw new MessageDecodingFailedException('Encoded envelope is missing the "type" header.');
         }
 
-        $class = $this->types->classForName($type) ?? $type;
+        $class = $this->types->classForName($type);
+
+        if ($class === null) {
+            throw new MessageDecodingFailedException(
+                sprintf(
+                    'Message type "%s" is not registered; register it via TypeRegistry (e.g. registerFromAttribute() or register()).',
+                    $type,
+                ),
+            );
+        }
 
         if (!class_exists($class)) {
             throw new MessageDecodingFailedException(
