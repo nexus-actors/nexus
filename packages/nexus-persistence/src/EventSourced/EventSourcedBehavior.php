@@ -69,6 +69,7 @@ final readonly class EventSourcedBehavior
         private Closure $eventHandler,
         private ?EventStore $eventStore = null,
         private ?SnapshotStore $snapshotStore = null,
+        private ?Closure $signalHandler = null,
         private ?SnapshotStrategy $snapshotStrategy = null,
         private ?RetentionPolicy $retentionPolicy = null,
         private Ulid $writerId = new Ulid(),
@@ -104,6 +105,24 @@ final readonly class EventSourcedBehavior
     public function withSnapshotStore(SnapshotStore $store): self
     {
         return clone($this, ['snapshotStore' => $store]);
+    }
+
+    /**
+     * Attach a lifecycle signal handler to the resolved stateful behavior.
+     *
+     * Use this to handle signals such as ReceiveTimeout for passivation:
+     * ```php
+     * ->withSignalHandler(static function (ActorContext $ctx, object $signal): Behavior {
+     *     if ($signal instanceof ReceiveTimeout) {
+     *         return Behavior::stopped();
+     *     }
+     *     return Behavior::same();
+     * })
+     * ```
+     */
+    public function withSignalHandler(Closure $handler): self
+    {
+        return clone($this, ['signalHandler' => $handler]);
     }
 
     /** Set the strategy that determines when snapshots are taken (e.g. every N events). */
@@ -158,6 +177,7 @@ final readonly class EventSourcedBehavior
                 'EventStore is required — call withEventStore() before toBehavior()',
             ),
             $this->snapshotStore,
+            $this->signalHandler,
             $this->snapshotStrategy,
             $this->retentionPolicy,
             $this->writerId,

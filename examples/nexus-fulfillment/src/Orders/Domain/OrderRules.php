@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Orders\Domain;
 
+use LogicException;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
@@ -69,6 +70,6 @@ final class OrderRules
                 ? $line->total()
                 : $carry->add($line->total()),
             null,
-        ) ?? throw new \LogicException('non-empty-list guarantees at least one line');
+        ) ?? throw new LogicException('non-empty-list guarantees at least one line');
     }
 }

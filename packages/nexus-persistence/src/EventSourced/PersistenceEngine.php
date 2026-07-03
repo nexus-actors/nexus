@@ -61,6 +61,7 @@ final class PersistenceEngine
         Closure $eventHandler,
         EventStore $eventStore,
         ?SnapshotStore $snapshotStore = null,
+        ?Closure $signalHandler = null,
         ?SnapshotStrategy $snapshotStrategy = null,
         ?RetentionPolicy $retentionPolicy = null,
         Ulid $writerId = new Ulid(),
@@ -77,6 +78,7 @@ final class PersistenceEngine
             $commandHandler,
             $eventHandler,
             $eventStore,
+            $signalHandler,
             $snapshotStore,
             $strategy,
             $retention,
@@ -112,7 +114,7 @@ final class PersistenceEngine
             // === Command Processing Phase ===
 
             /** @psalm-suppress InvalidArgument */
-            return Behavior::withState(
+            $withState = Behavior::withState(
                 ['state' => $state, 'sequenceNr' => $sequenceNr],
                 static function (ActorContext $ctx, object $msg, mixed $data) use (
                     $persistenceId,
@@ -153,6 +155,9 @@ final class PersistenceEngine
                     };
                 },
             );
+
+            /** @psalm-suppress InvalidArgument Signal handler closure type is compatible at runtime */
+            return $signalHandler !== null ? $withState->onSignal($signalHandler) : $withState;
         });
     }
 

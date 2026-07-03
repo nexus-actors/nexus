@@ -20,6 +20,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(OrderRules::class)]
 final class OrderRulesTest extends TestCase
@@ -97,7 +98,7 @@ final class OrderRulesTest extends TestCase
     #[Test]
     public function unknownCommandsAreRejected(): void
     {
-        self::assertInstanceOf(Rejection::class, OrderRules::decide($this->emptyState(), new \stdClass()));
+        self::assertInstanceOf(Rejection::class, OrderRules::decide($this->emptyState(), new stdClass()));
     }
 
     private function emptyState(): OrderState

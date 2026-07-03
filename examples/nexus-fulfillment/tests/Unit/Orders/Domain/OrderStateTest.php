@@ -17,6 +17,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 
 #[CoversClass(OrderState::class)]
 final class OrderStateTest extends TestCase
@@ -46,6 +47,6 @@ final class OrderStateTest extends TestCase
     {
         $state = OrderState::empty(TenantId::fromString('acme'), OrderId::generate());
 
-        self::assertSame($state, OrderState::evolve($state, new \stdClass()));
+        self::assertSame($state, OrderState::evolve($state, new stdClass()));
     }
 }
