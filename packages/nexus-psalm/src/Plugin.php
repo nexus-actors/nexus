@@ -20,6 +20,7 @@ use Monadial\Nexus\Psalm\Hook\NonSerializableRemoteMessageRule;
 use Monadial\Nexus\Psalm\Hook\PooledConnectionInActorPropertyRule;
 use Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider;
 use Monadial\Nexus\Psalm\Hook\ReadonlyMessageRule;
+use Monadial\Nexus\Psalm\Hook\UntypedActorRefInjectionRule;
 use Override;
 use Psalm\Plugin\PluginEntryPointInterface;
 use Psalm\Plugin\RegistrationInterface;
@@ -42,6 +43,7 @@ final class Plugin implements PluginEntryPointInterface
             PooledConnectionInActorPropertyRule::class,
             BlockingCallInHandlerRule::class,
             MutableClosureCaptureRule::class,
+            UntypedActorRefInjectionRule::class,
             PropsReturnTypeProvider::class,
             CloneWithReturnTypeProvider::class,
             AskReturnTypeProvider::class,

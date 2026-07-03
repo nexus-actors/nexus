@@ -89,5 +89,33 @@
                 <directory name="packages/nexus-http-ws/src" />
             </errorLevel>
         </PossiblyUnusedMethod>
+
+        <PluginIssue name="UntypedActorRefInjection">
+            <errorLevel type="suppress">
+                <!-- Heterogeneous children/registry maps: one map holds refs with different message types; PHP has no per-key generics -->
+                <file name="packages/nexus-core/src/Actor/ActorCell.php"/>
+                <file name="packages/nexus-core/src/Actor/ActorSystem.php"/>
+                <file name="packages/nexus-http/src/Actor/PerRequestActorScope.php"/>
+                <file name="packages/nexus-http/src/Actor/ResolvedActorTable.php"/>
+                <file name="packages/nexus-worker-pool/src/WorkerNode.php"/>
+                <!-- Parent refs: a child cannot know its parent's message type -->
+                <file name="packages/nexus-core/src/Actor/TaskContext.php"/>
+                <!-- Watch/lifecycle plumbing: refs carried by identity, type erased by design (Akka Typed: ActorRef[Nothing]) -->
+                <file name="packages/nexus-core/src/Lifecycle/ChildFailed.php"/>
+                <file name="packages/nexus-core/src/Lifecycle/Terminated.php"/>
+                <file name="packages/nexus-core/src/Message/DeadLetter.php"/>
+                <file name="packages/nexus-core/src/Message/Unwatch.php"/>
+                <file name="packages/nexus-core/src/Message/Watch.php"/>
+                <!-- Sender ref in Envelope is carried by identity; the sender's message type is unknowable at the call site -->
+                <file name="packages/nexus-core/src/Mailbox/Envelope.php"/>
+                <!-- Reply-to pattern: the reply-to ref type cannot be known at the Effect level (Akka Typed: ActorRef[Nothing]) -->
+                <file name="packages/nexus-persistence/src/EventSourced/Effect.php"/>
+                <file name="packages/nexus-persistence/src/State/DurableEffect.php"/>
+                <file name="packages/nexus-doctrine-orm/src/Behavior/EntityEffect.php"/>
+                <!-- WebSocket connection table holds heterogeneous actor refs keyed by file descriptor -->
+                <file name="packages/nexus-http-ws/src/WebSocket/ConnectionTable.php"/>
+                <file name="packages/nexus-http-ws/src/WebSocket/InMemoryConnectionTable.php"/>
+            </errorLevel>
+        </PluginIssue>
     </issueHandlers>
 </psalm>
