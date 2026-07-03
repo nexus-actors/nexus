@@ -35,7 +35,7 @@ final class Plugin implements PluginEntryPointInterface
 {
     /**
      * @return list<string>
-     * @psalm-suppress TypeDoesNotContainType, MixedPropertyFetch, MixedAssignment, MixedArrayAccess
+     * @psalm-suppress TypeDoesNotContainType
      */
     private static function parseExcludedRefs(?SimpleXMLElement $config): array
     {
@@ -43,9 +43,19 @@ final class Plugin implements PluginEntryPointInterface
             return [];
         }
 
+        $injection = $config->untypedActorRefInjection;
+
+        if (!($injection instanceof SimpleXMLElement)) {
+            return [];
+        }
+
         $excluded = [];
 
-        foreach ($config->untypedActorRefInjection->excludeRef as $node) {
+        foreach ($injection->excludeRef as $node) {
+            if (!($node instanceof SimpleXMLElement)) {
+                continue;
+            }
+
             $class = ltrim((string) $node['class'], '\\');
 
             if ($class !== '') {
