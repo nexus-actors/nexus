@@ -43,10 +43,14 @@ use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketHandler;
 use App\Actor\Message\ChatMessage;
+use App\Actor\Message\UserConnected;
 use App\Actor\Message\UserDisconnected;
 
 final class ChatHandler extends WebSocketHandler
 {
+    /**
+     * @param ActorRef<UserConnected|ChatMessage|UserDisconnected> $room
+     */
     public function __construct(
         #[FromContext] private readonly WebSocketContext $ctx,
         #[FromActor('chat-room')] private readonly ActorRef $room,

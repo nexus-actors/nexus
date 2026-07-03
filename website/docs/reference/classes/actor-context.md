@@ -56,12 +56,12 @@ $supervisor = Behavior::setup(static function (ActorContext $ctx): Behavior {
 
 - `self(): ActorRef<T>` — this actor's own typed reference; safe to share and pass to other actors.
 - `spawn(Props<C> $props, string $name): ActorRef<C>` — create a named child actor; throws `ActorInitializationException` on duplicate name.
-- `watch(ActorRef $target): void` / `unwatch(ActorRef $target): void` — subscribe/unsubscribe to `Terminated` signals when `$target` stops.
+- `watch(ActorRef<W> $target): void` / `unwatch(ActorRef<W> $target): void` — subscribe/unsubscribe to `Terminated` signals when `$target` stops. (`W of object` is a per-call template matching the watched actor's message protocol.)
 - `scheduleOnce(Duration $delay, object $message): Cancellable` — deliver a message to `self()` once after `$delay`.
 - `scheduleRepeatedly(Duration $initial, Duration $interval, object $message): Cancellable` — deliver a message repeatedly on a fixed interval.
 - `stash(): void` / `unstashAll(): void` — buffer the current message for later; re-enqueue all buffered messages in order.
 - `setReceiveTimeout(?Duration $timeout): void` — trigger a `ReceiveTimeout` signal if no user message arrives within the window; pass `null` to cancel.
-- `sender(): ?ActorRef` — the actor that sent the current message (non-null only for `ask()` requests).
+- `sender(): ?ActorRef<object>` — the actor that sent the current message (non-null only for `ask()` requests).
 - `reply(object $message): void` — shorthand for `$ctx->sender()->tell($message)`; throws `NoSenderException` on regular `tell()`.
 - `log(): LoggerInterface` — PSR-3 logger scoped to this actor's path.
 - `spawnTask(Closure $task): Cancellable` — run a background closure tied to this actor's lifecycle; cancelled automatically on actor stop.

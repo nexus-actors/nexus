@@ -65,13 +65,13 @@ $persistenceEngine->persist($id, new EventEnvelope(
 | `$requestId` | `string` | Unique ID for this message (hex-encoded 16 bytes) |
 | `$correlationId` | `string` | Logical operation group ID; defaults to `requestId` |
 | `$causationId` | `string` | `requestId` of the triggering message; defaults to `requestId` |
-| `$senderRef` | `ActorRef\|null` | Live reference to the sender, if available |
+| `$senderRef` | `ActorRef<object>\|null` | Live reference to the sender, if available |
 | `$metadata` | `array<string, string>` | Arbitrary string key/value pairs |
 
 ## Key methods
 
 - `Envelope::of(object $message, ActorPath $sender, ActorPath $target): self` — create a new envelope with auto-generated IDs and empty metadata.
-- `->withSenderRef(ActorRef $senderRef): self` — attach a live sender reference so the receiver can reply.
+- `->withSenderRef(ActorRef<object> $senderRef): self` — attach a live sender reference so the receiver can reply.
 - `->withMetadata(array $metadata): self` — replace the metadata map; returns a new envelope.
 - `->withCorrelationId(string $correlationId): self` — propagate a correlation ID across a message chain.
 - `->withCausationId(string $causationId): self` — record the `requestId` of the triggering message.
