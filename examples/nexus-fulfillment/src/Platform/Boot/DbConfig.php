@@ -29,4 +29,19 @@ final readonly class DbConfig
     {
         return "pgsql:host={$this->host};port={$this->port};dbname={$this->dbname};connect_timeout=2";
     }
+
+    /**
+     * @return array{dbname: string, driver: 'pdo_pgsql', host: string, password: string, port: int, user: string}
+     */
+    public function toConnectionParams(): array
+    {
+        return [
+            'dbname' => $this->dbname,
+            'driver' => 'pdo_pgsql',
+            'host' => $this->host,
+            'password' => $this->password,
+            'port' => $this->port,
+            'user' => $this->user,
+        ];
+    }
 }

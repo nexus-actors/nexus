@@ -40,6 +40,7 @@ final class App
 
             try {
                 $log = self::asyncLogger($system, $workerId);
+                $doctrine = DoctrineKit::build($config->db, $system, $log);
 
                 $app = WsApplication::create($system);
                 $app->withLogger($log);
