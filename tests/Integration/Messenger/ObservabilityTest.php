@@ -222,5 +222,6 @@ final class ObservabilityTest extends TestCase
         self::assertNotEmpty($receiveSpans);
         assert($receiveSpans[0] instanceof RecordingSpan);
         self::assertNotNull($receiveSpans[0]->parent);
+        self::assertSame(str_repeat('a', 32), $receiveSpans[0]->parent->spanContext->traceId);
     }
 }

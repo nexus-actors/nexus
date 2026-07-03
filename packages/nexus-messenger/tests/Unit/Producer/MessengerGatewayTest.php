@@ -8,6 +8,7 @@ use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Producer\MessengerGateway;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
+use Monadial\Nexus\Messenger\Tests\Support\FakeContextPropagator;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
@@ -74,13 +75,13 @@ final class MessengerGatewayTest extends TestCase
     public function publishAttachesTraceContextStampWhenObservabilityIsEnabled(): void
     {
         $sender = new RecordingSender();
-        $gateway = new MessengerGateway($sender, new RecordingObservability());
+        $gateway = new MessengerGateway($sender, new RecordingObservability(new FakeContextPropagator()));
 
         $gateway->publish(new stdClass());
 
         $stamp = $sender->sent[0]->last(TraceContextStamp::class);
 
         self::assertInstanceOf(TraceContextStamp::class, $stamp);
-        self::assertIsArray($stamp->carrier);
+        self::assertSame(['traceparent' => 'fake-trace-id'], $stamp->carrier);
     }
 }

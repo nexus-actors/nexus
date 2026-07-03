@@ -10,6 +10,7 @@ use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
+use Monadial\Nexus\Messenger\Tests\Support\FakeContextPropagator;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
@@ -115,14 +116,19 @@ final class MessengerActorRefTest extends TestCase
     public function tellAttachesTraceContextStampWhenObservabilityIsEnabled(): void
     {
         $sender = new RecordingSender();
-        $ref = new MessengerActorRef($sender, 'orders-out', null, new RecordingObservability());
+        $ref = new MessengerActorRef(
+            $sender,
+            'orders-out',
+            null,
+            new RecordingObservability(new FakeContextPropagator()),
+        );
 
         $ref->tell(new stdClass());
 
         $stamp = $sender->sent[0]->last(TraceContextStamp::class);
 
         self::assertInstanceOf(TraceContextStamp::class, $stamp);
-        self::assertIsArray($stamp->carrier);
+        self::assertSame(['traceparent' => 'fake-trace-id'], $stamp->carrier);
     }
 
     #[Test]
