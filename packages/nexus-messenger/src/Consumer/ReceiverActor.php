@@ -13,6 +13,8 @@ use Monadial\Nexus\Messenger\Event\MessageDeadLettered;
 use Monadial\Nexus\Messenger\Event\MessageRejected;
 use Monadial\Nexus\Messenger\Lifecycle\MessagesProcessed;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
+use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -64,15 +66,16 @@ final readonly class ReceiverActor
         ?ActorRef $deadLetters = null,
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
+        ?Observability $observability = null,
     ): Behavior {
         $config ??= ReceiverActorConfig::default();
 
         return Behavior::setup(
-            static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events): Behavior {
+            static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability): Behavior {
                 $ctx->self()->tell(new Poll());
 
                 return Behavior::receive(
-                    static function (ActorContext $ctx, object $message) use ($receiver, $router, $config, $deadLetters, $processedListener, $events): Behavior {
+                    static function (ActorContext $ctx, object $message) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability): Behavior {
                         if (!$message instanceof Poll) {
                             return Behavior::unhandled();
                         }
@@ -84,6 +87,7 @@ final readonly class ReceiverActor
                             $config,
                             $deadLetters,
                             $events,
+                            $observability,
                         );
 
                         if ($processed > 0 && $processedListener !== null) {
@@ -115,6 +119,7 @@ final readonly class ReceiverActor
         ReceiverActorConfig $config,
         ?ActorRef $deadLetters,
         ?EventDispatcherInterface $events,
+        ?Observability $observability = null,
     ): array {
         $processed = 0;
 
@@ -124,6 +129,10 @@ final readonly class ReceiverActor
             }
 
             $inner = $envelope->getMessage();
+            $traceStamp = $envelope->last(TraceContextStamp::class);
+            $parent = $traceStamp instanceof TraceContextStamp && $observability !== null
+                ? $observability->propagator()->extract($traceStamp->carrier)
+                : null;
             $span = $ctx->tracer()->startSpan(
                 'messenger.receive',
                 SpanKind::Consumer,
@@ -133,6 +142,7 @@ final readonly class ReceiverActor
                     'nexus.actor.path' => (string) $ctx->path(),
                     'nexus.message.type' => $inner::class,
                 ],
+                $parent,
             );
 
             try {

@@ -14,6 +14,7 @@ use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Event\MessageRejected;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Tests\Support\FakeContextPropagator;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSpan;
@@ -28,6 +29,7 @@ use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 
 use function array_filter;
 use function array_values;
+use function assert;
 
 #[CoversClass(MessengerBridge::class)]
 final class ObservabilityTest extends TestCase
@@ -159,5 +161,66 @@ final class ObservabilityTest extends TestCase
         );
 
         self::assertNotEmpty($rejectedSpans);
+    }
+
+    #[Test]
+    public function traceContextPropagatesFromProducerToConsumerReceiveSpan(): void
+    {
+        $runtime = new FiberRuntime();
+        $observability = new RecordingObservability(new FakeContextPropagator());
+        $dispatcher = new RecordingDispatcher();
+        $system = ActorSystem::create(
+            'trace-prop-test',
+            $runtime,
+            eventDispatcher: $dispatcher,
+            observability: $observability,
+        );
+        $transport = new InMemoryTransport();
+
+        $received = [];
+        $target = $system->spawn(Props::fromBehavior(Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$received): Behavior {
+                if ($msg instanceof Ping) {
+                    $received[] = $msg->id;
+                }
+
+                return Behavior::same();
+            },
+        )), 'target');
+
+        $system->spawn(MessengerBridge::receiverProps(
+            $transport,
+            new MapMessageRouter([Ping::class => $target]),
+            ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
+            null,
+            null,
+            $system->eventDispatcher(),
+            $observability,
+        ), 'receiver');
+
+        $producer = MessengerBridge::producer(
+            $transport,
+            'pings-out',
+            null,
+            $observability,
+            $system->eventDispatcher(),
+        );
+        $producer->tell(new Ping('x'));
+
+        $runtime->scheduleOnce(Duration::millis(300), static function () use ($system): void {
+            $system->shutdown(Duration::seconds(1));
+        });
+        $system->run();
+
+        self::assertSame(['x'], $received);
+
+        $receiveSpans = array_values(array_filter(
+            $observability->tracer->spans,
+            static fn(RecordingSpan $span): bool => $span->name === 'messenger.receive',
+        ));
+
+        self::assertNotEmpty($receiveSpans);
+        assert($receiveSpans[0] instanceof RecordingSpan);
+        self::assertNotNull($receiveSpans[0]->parent);
     }
 }

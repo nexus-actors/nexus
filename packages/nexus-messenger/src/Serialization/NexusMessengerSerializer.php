@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Serialization;
 
+use JsonException;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -18,6 +20,8 @@ use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 use function class_exists;
 use function is_array;
 use function is_string;
+use function json_decode;
+use function json_encode;
 use function sprintf;
 
 /**
@@ -36,6 +40,7 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
 {
     private const string HEADER_SOURCE_PATH = 'X-Nexus-Source-Path';
     private const string HEADER_TARGET_PATH = 'X-Nexus-Target-Path';
+    private const string HEADER_TRACE_CONTEXT = 'X-Nexus-Trace-Context';
     private const string HEADER_TYPE = 'type';
 
     public function __construct(private MessageSerializer $messages, private TypeRegistry $types,) {
@@ -112,6 +117,12 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
             $headers[self::HEADER_TARGET_PATH] = $target->path;
         }
 
+        $traceStamp = $envelope->last(TraceContextStamp::class);
+
+        if ($traceStamp instanceof TraceContextStamp) {
+            $headers[self::HEADER_TRACE_CONTEXT] = json_encode($traceStamp->carrier, JSON_THROW_ON_ERROR);
+        }
+
         return $headers;
     }
 
@@ -133,6 +144,30 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
 
         if (is_string($target) && $target !== '') {
             $stamps[] = new TargetActorPathStamp($target);
+        }
+
+        $traceContext = $headers[self::HEADER_TRACE_CONTEXT] ?? null;
+
+        if (is_string($traceContext) && $traceContext !== '') {
+            try {
+                /** @psalm-suppress MixedAssignment */
+                $decoded = json_decode($traceContext, true, 512, JSON_THROW_ON_ERROR);
+
+                if (is_array($decoded)) {
+                    $carrier = [];
+
+                    /** @psalm-suppress MixedAssignment */
+                    foreach ($decoded as $key => $value) {
+                        if (is_string($key) && is_string($value)) {
+                            $carrier[$key] = $value;
+                        }
+                    }
+
+                    $stamps[] = new TraceContextStamp($carrier);
+                }
+            } catch (JsonException) {
+                // Silently skip malformed trace context — telemetry must never break decode.
+            }
         }
 
         return $stamps;

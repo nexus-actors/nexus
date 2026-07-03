@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Tests\Support;
 
+use Monadial\Nexus\Observability\Context\Context;
 use Monadial\Nexus\Observability\Trace\Span;
 use Monadial\Nexus\Observability\Trace\SpanContext;
 use Monadial\Nexus\Observability\Trace\SpanKind;
@@ -26,6 +27,7 @@ final class RecordingSpan implements Span
         public readonly string $name,
         public readonly SpanKind $kind,
         public array $attributes = [],
+        public readonly ?Context $parent = null,
     ) {
     }
 

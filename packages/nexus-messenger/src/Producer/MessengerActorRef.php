@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\Span;
@@ -74,6 +75,7 @@ final readonly class MessengerActorRef implements ActorRef
         }
 
         $span = $this->startSpan($message);
+        $envelope = $this->injectTraceContext($envelope);
 
         try {
             $this->sender->send($envelope);
@@ -111,6 +113,18 @@ final readonly class MessengerActorRef implements ActorRef
     public function isAlive(): bool
     {
         return true;
+    }
+
+    private function injectTraceContext(Envelope $envelope): Envelope
+    {
+        try {
+            $carrier = [];
+            $this->observability->propagator()->inject($this->observability->currentContext(), $carrier);
+
+            return $envelope->with(new TraceContextStamp($carrier));
+        } catch (Throwable) {
+            return $envelope;
+        }
     }
 
     private function startSpan(object $message): ?Span

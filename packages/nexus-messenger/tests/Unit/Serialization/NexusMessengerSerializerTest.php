@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Messenger\Tests\Unit\Serialization;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Messenger\Tests\Unit\Fixture\Greeting;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -97,6 +98,30 @@ final class NexusMessengerSerializerTest extends TestCase
         $this->expectException(MessageDecodingFailedException::class);
 
         $this->serializer->decode(['body' => 'not-a-serialized-object', 'headers' => ['type' => 'greeting']]);
+    }
+
+    #[Test]
+    public function traceContextStampRoundTripsAsXNexusTraceContextHeader(): void
+    {
+        $carrier = ['traceparent' => '00-abc-def-01', 'tracestate' => 'vendor=value'];
+        $envelope = new Envelope(new Greeting('hi'), [new TraceContextStamp($carrier)]);
+
+        $decoded = $this->serializer->decode($this->serializer->encode($envelope));
+        $stamp = $decoded->last(TraceContextStamp::class);
+
+        self::assertInstanceOf(TraceContextStamp::class, $stamp);
+        self::assertSame($carrier, $stamp->carrier);
+    }
+
+    #[Test]
+    public function malformedTraceContextHeaderIsSkippedWithoutException(): void
+    {
+        $encoded = $this->serializer->encode(new Envelope(new Greeting('hi')));
+        $encoded['headers']['X-Nexus-Trace-Context'] = 'not-valid-json{{{';
+
+        $decoded = $this->serializer->decode($encoded);
+
+        self::assertNull($decoded->last(TraceContextStamp::class));
     }
 
     protected function setUp(): void

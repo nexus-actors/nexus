@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Messenger\Tests\Unit\Producer;
 use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Producer\MessengerGateway;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
@@ -67,5 +68,19 @@ final class MessengerGatewayTest extends TestCase
         self::assertInstanceOf(MessagePublished::class, $event);
         self::assertSame($message, $event->message);
         self::assertSame('gateway', $event->senderName);
+    }
+
+    #[Test]
+    public function publishAttachesTraceContextStampWhenObservabilityIsEnabled(): void
+    {
+        $sender = new RecordingSender();
+        $gateway = new MessengerGateway($sender, new RecordingObservability());
+
+        $gateway->publish(new stdClass());
+
+        $stamp = $sender->sent[0]->last(TraceContextStamp::class);
+
+        self::assertInstanceOf(TraceContextStamp::class, $stamp);
+        self::assertIsArray($stamp->carrier);
     }
 }

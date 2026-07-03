@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Producer;
 
 use Monadial\Nexus\Messenger\Event\MessagePublished;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\Span;
@@ -55,6 +56,7 @@ final readonly class MessengerGateway
         }
 
         $span = $this->startSpan($message);
+        $envelope = $this->injectTraceContext($envelope);
 
         try {
             $this->sender->send($envelope);
@@ -72,6 +74,18 @@ final readonly class MessengerGateway
         }
 
         $this->events?->dispatch(new MessagePublished($message, self::SENDER_NAME));
+    }
+
+    private function injectTraceContext(Envelope $envelope): Envelope
+    {
+        try {
+            $carrier = [];
+            $this->observability->propagator()->inject($this->observability->currentContext(), $carrier);
+
+            return $envelope->with(new TraceContextStamp($carrier));
+        } catch (Throwable) {
+            return $envelope;
+        }
     }
 
     private function startSpan(object $message): ?Span

@@ -18,10 +18,13 @@ final class RecordingObservability implements Observability
 
     public readonly RecordingMeter $meter;
 
-    public function __construct()
+    private readonly ContextPropagator $contextPropagator;
+
+    public function __construct(?ContextPropagator $contextPropagator = null)
     {
         $this->tracer = new RecordingTracer();
         $this->meter = new RecordingMeter();
+        $this->contextPropagator = $contextPropagator ?? new NoopContextPropagator();
     }
 
     #[Override]
@@ -45,7 +48,7 @@ final class RecordingObservability implements Observability
     #[Override]
     public function propagator(): ContextPropagator
     {
-        return new NoopContextPropagator();
+        return $this->contextPropagator;
     }
 
     #[Override]
