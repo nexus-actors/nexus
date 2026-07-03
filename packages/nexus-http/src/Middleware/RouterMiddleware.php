@@ -75,6 +75,12 @@ final readonly class RouterMiddleware implements MiddlewareInterface
             $request = $request->withAttribute($name, $value);
         }
 
+        // Marker that the router has run. Route-level middleware (which executes
+        // below, after this point) can rely on it; middleware registered before
+        // the router will not see it. Used by AuthorizationMiddleware to detect
+        // global misregistration and fail closed instead of open.
+        $request = $request->withAttribute('_nexus.routed', true);
+
         if (is_string($route->handler)) {
             $request = $request->withAttribute('_resolvedHandlerClass', $route->handler);
         }

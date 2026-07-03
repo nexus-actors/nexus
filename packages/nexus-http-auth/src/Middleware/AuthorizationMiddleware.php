@@ -12,6 +12,7 @@ use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
 use Monadial\Nexus\Http\Auth\Attribute\RequiresScope;
 use Monadial\Nexus\Http\Auth\AuthChallenge;
 use Monadial\Nexus\Http\Auth\Authorizer;
+use Monadial\Nexus\Http\Auth\Exception\AuthorizationMisconfiguredException;
 use Monadial\Nexus\Http\Auth\Exception\InvalidAuthorizerException;
 use Monadial\Nexus\Http\Auth\Principal;
 use Nyholm\Psr7\Factory\Psr17Factory;
@@ -49,10 +50,14 @@ use function str_contains;
  *   - Principal lacks required scope/role -> 403 with `missing` list
  *   - Authorize policy returns false -> 403 with empty `missing`
  *
- * Register globally AFTER AuthenticationMiddleware:
+ * Register PER-ROUTE, never globally. It reads the handler class that
+ * RouterMiddleware resolves, so it must run AFTER routing — which only happens
+ * for route-level middleware. Registering it globally makes it run before the
+ * router; it detects that and fails closed (500) rather than letting requests
+ * through unchecked.
  *
- *   $app->middleware(new AuthenticationMiddleware($authenticator))
- *       ->middleware(new AuthorizationMiddleware());
+ *   $app->middleware(new AuthenticationMiddleware($authenticator));
+ *   $app->get('/me', MeHandler::class)->middleware(AuthorizationMiddleware::class);
  */
 final class AuthorizationMiddleware implements MiddlewareInterface
 {
@@ -72,10 +77,18 @@ final class AuthorizationMiddleware implements MiddlewareInterface
     #[Override]
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
+        if ($request->getAttribute('_nexus.routed') !== true) {
+            // Running before the router resolved a handler -> registered globally.
+            // Fail closed rather than let the request through unchecked.
+            throw AuthorizationMisconfiguredException::ranBeforeRouter();
+        }
+
         /** @var mixed $handlerClassAttr */
         $handlerClassAttr = $request->getAttribute('_resolvedHandlerClass');
 
         if (!is_string($handlerClassAttr) || $handlerClassAttr === '') {
+            // Router ran but the handler is a closure (no reflectable class),
+            // so there are no class-level auth attributes to enforce.
             return $handler->handle($request);
         }
 
