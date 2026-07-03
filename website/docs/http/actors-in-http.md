@@ -186,6 +186,7 @@ Per-request actors give you per-turn workspace without globals:
 final class CreateOrderHandler
 {
     /**
+     * @param ActorRef<BeginTransaction|Commit> $uow
      * @param ActorRef<Place> $orders
      */
     public function __construct(

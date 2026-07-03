@@ -182,6 +182,9 @@ The same attributes used for HTTP handlers work here:
 ```php title="src/Http/Handler/ChatHandler.php"
 final class ChatHandler extends WebSocketHandler
 {
+    /**
+     * @param ActorRef<RoomCommand> $room
+     */
     public function __construct(
         #[FromContext] private readonly WebSocketContext $ctx,
         #[FromActor('chat-room')] private readonly ActorRef $room,
