@@ -12,6 +12,7 @@ use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\TaskContext;
 use Monadial\Nexus\Messenger\Event\WorkerRecyclingTriggered;
 use Monadial\Nexus\Runtime\Duration;
+use Throwable;
 
 use function is_int;
 use function memory_get_usage;
@@ -86,12 +87,16 @@ final readonly class LifecycleWatchdog
 
                         if ($reason !== null) {
                             $ctx->log()->info('LifecycleWatchdog triggering graceful shutdown', ['reason' => $reason]);
-                            $system->eventDispatcher()->dispatch(new WorkerRecyclingTriggered($reason));
-                            $ctx->meter()->counter(
+                            self::swallow(
+                                static fn(): mixed => $system->eventDispatcher()->dispatch(
+                                    new WorkerRecyclingTriggered($reason),
+                                ),
+                            );
+                            self::swallow(static fn(): mixed => $ctx->meter()->counter(
                                 'nexus.messenger.worker.recycles',
                                 '{recycle}',
                                 'Worker recycles triggered by lifecycle thresholds',
-                            )->add(1);
+                            )->add(1));
                             $ctx->spawnTask(static function (TaskContext $_task) use ($system, $timeout): void {
                                 $system->shutdown($timeout);
                             });
@@ -104,5 +109,17 @@ final readonly class LifecycleWatchdog
                 );
             },
         );
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private static function swallow(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break message flow.
+        }
     }
 }
