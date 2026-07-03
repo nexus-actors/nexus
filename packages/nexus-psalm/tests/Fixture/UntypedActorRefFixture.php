@@ -124,3 +124,58 @@ final class UarContainerService
         return count($typed);
     }
 }
+
+/** Bad: bare promoted constructor property. */
+final readonly class UarBarePromotedService
+{
+    public function __construct(private ActorRef $orders) {}
+
+    public function ping(): bool
+    {
+        return $this->orders->isAlive();
+    }
+}
+
+/** Bad: property with @var ActorRef<object>. */
+final class UarObjectPropertyService
+{
+    /** @var ActorRef<object>|null */
+    private ?ActorRef $sink = null;
+
+    public function bind(): bool
+    {
+        return $this->sink !== null;
+    }
+}
+
+/** Good: promoted property with concrete generic. */
+final readonly class UarTypedPromotedService
+{
+    /** @param ActorRef<UarCommand> $orders */
+    public function __construct(private ActorRef $orders) {}
+
+    public function ping(): bool
+    {
+        return $this->orders->isAlive();
+    }
+}
+
+/** Good: property-level suppression. */
+final class UarSuppressedPropertyService
+{
+    /**
+     * @psalm-suppress UntypedActorRefInjection
+     */
+    private ?ActorRef $legacy = null;
+
+    public function bound(): bool
+    {
+        return $this->legacy !== null;
+    }
+}
+
+/** Bad: bare ActorRef param on a bodyless interface method. */
+interface UarSinkRegistry
+{
+    public function register(string $name, ActorRef $sink): void;
+}

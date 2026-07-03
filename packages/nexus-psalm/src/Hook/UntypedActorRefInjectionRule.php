@@ -70,6 +70,23 @@ final class UntypedActorRefInjectionRule implements AfterFunctionLikeAnalysisInt
     }
 
     /** @param array<string> $suppressed */
+    public static function report(string $subject, CodeLocation $location, array $suppressed): void
+    {
+        IssueBuffer::accepts(new UntypedActorRefInjection($subject, $location), $suppressed);
+    }
+
+    public static function unionViolates(Codebase $codebase, Union $type): bool
+    {
+        foreach ($type->getAtomicTypes() as $atomic) {
+            if (self::atomicViolates($codebase, $atomic)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param array<string> $suppressed */
     private static function checkParams(
         FunctionLikeStorage $storage,
         string $ownerName,
@@ -97,23 +114,6 @@ final class UntypedActorRefInjectionRule implements AfterFunctionLikeAnalysisInt
                 array_merge($suppressed, $storage->suppressed_issues),
             );
         }
-    }
-
-    /** @param array<string> $suppressed */
-    private static function report(string $subject, CodeLocation $location, array $suppressed): void
-    {
-        IssueBuffer::accepts(new UntypedActorRefInjection($subject, $location), $suppressed);
-    }
-
-    private static function unionViolates(Codebase $codebase, Union $type): bool
-    {
-        foreach ($type->getAtomicTypes() as $atomic) {
-            if (self::atomicViolates($codebase, $atomic)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private static function atomicViolates(Codebase $codebase, Atomic $atomic): bool

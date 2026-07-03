@@ -115,6 +115,12 @@
                 <!-- WebSocket connection table holds heterogeneous actor refs keyed by file descriptor -->
                 <file name="packages/nexus-http-ws/src/WebSocket/ConnectionTable.php"/>
                 <file name="packages/nexus-http-ws/src/WebSocket/InMemoryConnectionTable.php"/>
+                <!-- Heterogeneous channel actor registry: different channel actor types have distinct command types -->
+                <file name="packages/nexus-http-ws/src/WebSocket/ChannelActorRegistry.php"/>
+                <!-- Entity ref cache: holds ActorRef<C> but C is a class template not expressible as the array value type -->
+                <file name="packages/nexus-doctrine-orm/src/Behavior/EntityRefFactory.php"/>
+                <!-- Timer scheduler infrastructure: the scheduled actor's message type is injected by ActorCell and not expressible at scheduler level -->
+                <file name="packages/nexus-core/src/Actor/DefaultTimerScheduler.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>
