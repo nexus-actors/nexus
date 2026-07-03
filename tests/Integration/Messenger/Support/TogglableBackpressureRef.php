@@ -37,7 +37,7 @@ final class TogglableBackpressureRef implements ActorRef, BackpressureCapable
     #[Override]
     public function tell(object $message): void
     {
-        $this->accepted[] = $message;
+        throw new RuntimeException('ReceiverActor must use offer() for BackpressureCapable refs');
     }
 
     #[Override]

@@ -126,6 +126,8 @@ final readonly class ReceiverActor
 
         foreach ($receiver->get() as $envelope) {
             if (!$envelope instanceof Envelope) {
+                $ctx->log()->debug('Non-envelope item skipped during drain', ['item' => get_debug_type($envelope)]);
+
                 continue;
             }
 
@@ -166,15 +168,28 @@ final readonly class ReceiverActor
                     $result = $target->offer($inner);
 
                     if ($result !== EnqueueResult::Accepted) {
-                        self::swallow(static fn(): mixed => $ctx->meter()->counter(
-                            'nexus.messenger.enqueue.backpressured',
-                            '{message}',
-                            'Broker messages not acked because the target mailbox did not accept them',
-                        )->add(1, ['nexus.message.type' => $inner::class]));
-                        $ctx->log()->debug(
-                            'Mailbox backpressured, pausing broker consumption',
-                            ['type' => $inner::class],
-                        );
+                        if ($result === EnqueueResult::Dropped) {
+                            self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                                'nexus.messenger.enqueue.dropped',
+                                '{message}',
+                                'Broker messages left un-acked because the target mailbox was closed or dropped them',
+                            )->add(1, ['nexus.message.type' => $inner::class]));
+                            $ctx->log()->warning(
+                                'Target mailbox dropped the message; leaving un-acked for redelivery',
+                                ['type' => $inner::class],
+                            );
+                        } else {
+                            self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                                'nexus.messenger.enqueue.backpressured',
+                                '{message}',
+                                'Broker messages not acked because the target mailbox did not accept them',
+                            )->add(1, ['nexus.message.type' => $inner::class]));
+                            $ctx->log()->debug(
+                                'Mailbox backpressured, pausing broker consumption',
+                                ['type' => $inner::class],
+                            );
+                        }
+
                         $span?->setAttribute(
                             'nexus.messenger.outcome',
                             $result === EnqueueResult::Dropped

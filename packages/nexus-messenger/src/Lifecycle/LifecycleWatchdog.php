@@ -65,11 +65,11 @@ final readonly class LifecycleWatchdog
         return Behavior::setup(
             static function (ActorContext $ctx) use ($system, $thresholds, $interval, $timeout, $probe): Behavior {
                 $startedAt = $system->clock()->now()->getTimestamp();
-                $ctx->scheduleRepeatedly($interval, $interval, new Tick());
+                $tick = $ctx->scheduleRepeatedly($interval, $interval, new Tick());
 
                 return Behavior::withState(
                     0,
-                    static function (ActorContext $ctx, object $message, mixed $processed) use ($system, $thresholds, $timeout, $probe, $startedAt): BehaviorWithState {
+                    static function (ActorContext $ctx, object $message, mixed $processed) use ($system, $thresholds, $timeout, $probe, $startedAt, $tick): BehaviorWithState {
                         $count = is_int($processed)
                             ? $processed
                             : 0;
@@ -97,6 +97,7 @@ final readonly class LifecycleWatchdog
                                 '{recycle}',
                                 'Worker recycles triggered by lifecycle thresholds',
                             )->add(1));
+                            self::swallow(static fn(): mixed => $tick->cancel());
                             $ctx->spawnTask(static function (TaskContext $_task) use ($system, $timeout): void {
                                 $system->shutdown($timeout);
                             });
