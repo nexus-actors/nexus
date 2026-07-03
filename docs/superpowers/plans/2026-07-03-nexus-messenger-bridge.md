@@ -3062,6 +3062,41 @@ The Astro landing site lives in `landing/` (pages under `landing/src/pages/`, e.
 - Docs: `website/docs/packages/messenger-console.md` (frontmatter, both commands with option tables, a `bin/console` Application wiring example) + sidebar next to `packages/messenger`; short "CLI runners" section in `guides/messenger-bridge.md` linking it; example app gains `bin/console` wiring `ConsumeCommand`/`ProduceCommand` (keep existing bin scripts).
 - Commits: `feat(messenger-console): Symfony Console runners for producer and consumer`, then `docs(messenger-console): package page, guide section, and example wiring`.
 
+### Task 20: Swoole console — runtime verification + threaded consume package (user-requested addition 2026-07-03)
+
+**Part A — SwooleRuntime verification (no new code expected):** `ConsumeCommand` already takes `Runtime` by injection, so `new SwooleRuntime()` (zero-arg ctor, optional `SwooleConfig`) should work as-is. Add an integration test in `tests/Integration/Swoole/` (suite `integration-swoole`, runs in the `php-swoole` container via `make test-swoole`): `CommandTester` + `ConsumeCommand(new SwooleRuntime(), ...)` + pre-seeded `InMemoryTransport` + `--limit=N --poll-interval=20`; assert SUCCESS + N acked. Note: on SwooleRuntime, sends from outside coroutines must be avoided — the command only pre-seeds the transport (plain array) and lets actors do the telling, which is safe; if the test hits coroutine-context issues, mirror `tests/Integration/Swoole/SwooleCounterActorTest.php` patterns. Document SwooleRuntime usage on the messenger-console package page.
+
+**Part B — new package `packages/nexus-messenger-console-swoole`** (composer `nexus-actors/messenger-console-swoole`, namespace `Monadial\Nexus\Messenger\Console\Swoole`), following the repo's `-swoole` suffix convention because `nexus-actors/worker-pool-swoole` requires `ext-swoole >= 6.2.1`.
+
+- **Thread-boundary ground truth (verified):** `WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads($n))` + `->withSerializedConfigure(Opis\Closure\serialize($staticClosure))` + `->run()`; each `WorkerRunnable` thread builds its own `SwooleRuntime` + `ActorSystem` + `WorkerNode` (`$node->system()` accessor), invokes the configure closure with the `WorkerNode`, then `$system->run()` blocks the thread. Only scalars/class-strings/Swoole primitives/opis-serialized-static-closures cross; live receivers/routers CANNOT.
+- `src/ThreadedConsumerBootstrap.php` — the user contract (no-arg constructible, name travels as class-string):
+  ```php
+  interface ThreadedConsumerBootstrap extends ConsumerSetup
+  {
+      /** Build a FRESH transport connection for this thread. */
+      public function receiver(): ReceiverInterface;
+  }
+  ```
+  (inherits `setup(ActorSystem $system): MessageRouter` from messenger-console's `ConsumerSetup`).
+- `src/ThreadedConsumeCommand.php` — `#[AsCommand(name: 'nexus:messenger:consume-threads')]`. Ctor `(string $bootstrapClass, ?LoggerInterface $logger = null)` validating `is_a($bootstrapClass, ThreadedConsumerBootstrap::class, true)` (throw `InvalidArgumentException` otherwise). Options: `--threads|-t` (default 2), plus the same `--receivers` (per thread), `--limit`/`--memory-limit`/`--time-limit` (per thread — document that limits are per worker thread), `--poll-interval`, `--dead-letters`. `execute()` builds a `static` configure closure capturing ONLY scalars + the class-string:
+  ```php
+  $configure = static function (WorkerNode $node) use ($bootstrapClass, $receivers, $limit, $memoryBytes, $timeSeconds, $pollMs, $deadLetters): void {
+      $bootstrap = new $bootstrapClass();
+      $system = $node->system();
+      // thresholds → optional watchdog (processedListener), ReceiverActorConfig from scalars,
+      // MessengerBridge::spawnReceivers($system, $receivers, 'receiver', $bootstrap->receiver(), $bootstrap->setup($system), ...)
+  };
+  WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads($threads)->withSystemNamePrefix('messenger-consumer'))
+      ->withSerializedConfigure(\Opis\Closure\serialize($configure))
+      ->run(); // blocks; Thread\Pool restarts recycled threads → per-thread watchdog recycling works naturally
+  ```
+  No `SignalableCommandInterface` in v1 (main thread blocks in `Pool::start()`); document that the pool is stopped by the process manager. SymfonyStyle startup summary before `run()`.
+- composer requires: php >=8.5.7, `ext-swoole >=6.2.1`, dev-main: core, runtime, runtime-swoole, messenger, messenger-console, worker-pool, worker-pool-swoole; `symfony/console ^7.4 || ^8.0`; `opis/closure ^4.0`.
+- Tests: unit (constructor validation, option→closure scalar mapping if extractable) under `packages/nexus-messenger-console-swoole/tests/Unit` registered in the `unit-swoole` phpunit suite; integration test in `tests/Integration/WorkerPoolSwoole/` mirroring `PoolBootIntegrationTest` (Swoole\Process child boots `ThreadedConsumeCommand` via a small support script with a heartbeat-file `ThreadedConsumerBootstrap` support class; assert N threads ran setup; SIGTERM teardown). Suites run in the `php-swoole` container (`make test-worker-pool-swoole`); GrumPHP's `unit` suite must not include them.
+- Wiring: root composer autoload(+dev); deptrac layer `MessengerConsoleSwoole` → Core, Runtime, RuntimeSwoole, Serialization, Messenger, MessengerConsole, WorkerPool, WorkerPoolSwoole, Observability (match real imports); split.yml `- { local: 'nexus-messenger-console-swoole', remote: 'messenger-console-swoole' }` + `gh repo create`; CHANGELOG; CLAUDE.md graph + section; package README.
+- Docs: `website/docs/packages/messenger-console-swoole.md` (contract, per-thread semantics — fresh transport per thread, limits are per-thread, broker load-balances across threads' competing consumers) + sidebar; "Swoole & threads" subsection in the guide's CLI-runners section; messenger-console.md related-link + a SwooleRuntime note (Part A).
+- Commits: `test(messenger-console): verify ConsumeCommand on SwooleRuntime`, `feat(messenger-console-swoole): threaded consume command over the Swoole worker pool`, `docs(messenger-console-swoole): package page and guide wiring`.
+
 ## Execution notes
 
 - Tasks 1→8 are strictly ordered. Task 9 depends on Task 3; Tasks 14–16 (user additions: observability, trace propagation, Redis example) run after Task 10 and BEFORE the docs tasks; Tasks 10–12 depend on the code being final; Task 17 (landing page) runs with the docs wave after Task 11 (it links the guide); Task 18 (polish) and Task 19 (console package, user-confirmed) run after the final review, sequentially (both touch the guide); Task 13 is last. Docs tasks 11–12 must also cover the Task 14/15 surface (events, metrics table, trace propagation) and link the Task 16 example.
