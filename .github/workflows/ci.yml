@@ -167,6 +167,9 @@ jobs:
       - name: Serialization integration tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=integration-serialization --colors=always
 
+      - name: Messenger integration tests
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=integration-messenger --colors=always
+
       - name: Step integration tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=integration-step --colors=always
 
