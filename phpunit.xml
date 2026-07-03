@@ -12,6 +12,7 @@
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
+            <directory>packages/nexus-messenger/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
             <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
@@ -73,6 +74,9 @@
         <testsuite name="integration-serialization">
             <directory>tests/Integration/Serialization</directory>
         </testsuite>
+        <testsuite name="integration-messenger">
+            <directory>tests/Integration/Messenger</directory>
+        </testsuite>
         <testsuite name="integration-workerPool">
             <directory>tests/Integration/WorkerPool</directory>
         </testsuite>
@@ -113,6 +117,7 @@
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
+            <directory>packages/nexus-messenger/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>
             <directory>packages/nexus-doctrine-orm/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>
