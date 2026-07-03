@@ -43,7 +43,6 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
 
     /**
      * @param array<string, mixed> $encodedEnvelope
-     * @psalm-suppress MixedArgumentTypeCoercion
      */
     #[Override]
     public function decode(array $encodedEnvelope): Envelope
@@ -57,6 +56,7 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
             );
         }
 
+        /** @var array<string, mixed> $headers */
         $type = $headers[self::HEADER_TYPE] ?? null;
 
         if (!is_string($type) || $type === '') {
