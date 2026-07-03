@@ -11,6 +11,7 @@ use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use Override;
 
 /**
  * A durable, pool-friendly {@see EventStore}.
@@ -26,6 +27,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
         private MessageSerializer $serializer,
     ) {}
 
+    #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
         $serializer = $this->serializer;
@@ -38,17 +40,25 @@ final readonly class PooledDoctrineEventStore implements EventStore
     /**
      * @return list<EventEnvelope>
      */
+    #[Override]
     public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
     {
         $serializer = $this->serializer;
 
         return $this->pool->withEntityManager(
-            static fn(EntityManagerInterface $em): array => [
-                ...new DoctrineEventStore($em, $serializer)->load($id, $fromSequenceNr, $toSequenceNr),
-            ],
+            static function (EntityManagerInterface $em) use ($serializer, $id, $fromSequenceNr, $toSequenceNr): array {
+                $events = [];
+
+                foreach (new DoctrineEventStore($em, $serializer)->load($id, $fromSequenceNr, $toSequenceNr) as $event) {
+                    $events[] = $event;
+                }
+
+                return $events;
+            },
         );
     }
 
+    #[Override]
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
         $serializer = $this->serializer;
@@ -58,6 +68,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
         });
     }
 
+    #[Override]
     public function highestSequenceNr(PersistenceId $id): int
     {
         $serializer = $this->serializer;

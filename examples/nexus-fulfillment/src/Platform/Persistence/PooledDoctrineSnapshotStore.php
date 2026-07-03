@@ -11,6 +11,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use Override;
 
 /**
  * A durable, pool-friendly {@see SnapshotStore}.
@@ -26,6 +27,7 @@ final readonly class PooledDoctrineSnapshotStore implements SnapshotStore
         private MessageSerializer $serializer,
     ) {}
 
+    #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
         $serializer = $this->serializer;
@@ -35,6 +37,7 @@ final readonly class PooledDoctrineSnapshotStore implements SnapshotStore
         });
     }
 
+    #[Override]
     public function load(PersistenceId $id): ?SnapshotEnvelope
     {
         $serializer = $this->serializer;
@@ -44,6 +47,7 @@ final readonly class PooledDoctrineSnapshotStore implements SnapshotStore
         );
     }
 
+    #[Override]
     public function delete(PersistenceId $id, int $maxSequenceNr): void
     {
         $serializer = $this->serializer;
