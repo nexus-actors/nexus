@@ -59,7 +59,7 @@ final readonly class GetOrder
 |---|---|---|
 | `$name` | `string` | Stable wire-format type identifier. Must not change once data has been persisted or sent. |
 
-`TypeRegistry` uses `#[MessageType]` to map between PHP class names and their serialized type identifier. Required for all messages sent via `WorkerActorRef` (cross-thread) or serialized to the event store.
+`TypeRegistry` uses `#[MessageType]` to map between PHP class names and their serialized type identifier. Required for all messages sent via `WorkerActorRef` (cross-thread), serialized to the event store, or published via `MessengerActorRef::tell()` to a broker transport (enforced by the Psalm plugin at the `tell()` call site).
 
 ```php title="src/Message/OrderPlaced.php"
 use Monadial\Nexus\Serialization\MessageType;

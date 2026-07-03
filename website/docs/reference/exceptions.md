@@ -601,6 +601,24 @@ Extends `LogicException`.
 
 ---
 
+## nexus-messenger
+
+### UnsupportedOperationException
+
+`Monadial\Nexus\Messenger\Exception\UnsupportedOperationException`
+
+Extends `NexusException`.
+
+**When thrown:** `MessengerActorRef::ask()` is called. Broker request/reply requires correlation stamps and a dedicated reply transport; this is deferred beyond v1.
+
+**Cause:** Actor code called `ask()` on a `MessengerActorRef`. The `ActorRef` interface requires `ask()` but the Messenger transport layer cannot fulfil a synchronous reply in v1.
+
+**Recovery:** Use `tell()` instead and model the reply as a separate inbound message routed back through a `ReceiverActor`. If you need request/reply semantics across a broker, implement a correlation-stamp pattern manually.
+
+**See also:** [MessengerActorRef](./classes/messenger-actor-ref.md) — the ref class that throws this exception
+
+---
+
 ## nexus-http-ws
 
 ### DuplicateRouteException
@@ -627,7 +645,7 @@ Extends `RuntimeException`.
 
 ## Untyped throws
 
-Beyond the 41 typed exception classes above, the Nexus codebase contains approximately 128 sites that throw standard PHP exceptions — `RuntimeException`, `LogicException`, and `InvalidArgumentException` — directly without a Nexus-specific subclass. These are concentrated in:
+Beyond the 42 typed exception classes above, the Nexus codebase contains approximately 128 sites that throw standard PHP exceptions — `RuntimeException`, `LogicException`, and `InvalidArgumentException` — directly without a Nexus-specific subclass. These are concentrated in:
 
 - Internal runtime plumbing (fiber scheduling, Swoole coroutine management)
 - Validation guards on named constructors (e.g., `WorkerPoolConfig::withThreads()` throws `InvalidArgumentException` for `$workerCount < 1`)

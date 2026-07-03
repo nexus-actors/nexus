@@ -203,6 +203,89 @@ $runtime = new SwooleRuntime(
 
 ---
 
+## ReceiverActorConfig
+
+`ReceiverActorConfig` is an immutable value object that tunes the `ReceiverActor` poll loop. Obtain the default with `ReceiverActorConfig::default()` and chain wither methods for overrides.
+
+```php title="src/bootstrap.php"
+use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
+use Monadial\Nexus\Messenger\Consumer\UnroutablePolicy;
+use Monadial\Nexus\Runtime\Duration;
+
+$config = ReceiverActorConfig::default()
+    ->withPollInterval(Duration::millis(50))
+    ->withUnroutablePolicy(UnroutablePolicy::DeadLetters);
+```
+
+### Named constructors
+
+| Method | Description |
+|---|---|
+| `ReceiverActorConfig::default()` | `pollInterval` = 100 ms, `unroutablePolicy` = `Reject`. |
+
+### Modifier methods
+
+| Method | Returns | Description |
+|---|---|---|
+| `withPollInterval(Duration $pollInterval)` | `ReceiverActorConfig` | Override how long the actor waits before the next poll when idle or backpressured. |
+| `withUnroutablePolicy(UnroutablePolicy $policy)` | `ReceiverActorConfig` | Override what happens to messages that `MessageRouter::route()` returns `null` for. |
+
+### Parameters
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `$pollInterval` | `Duration` | `Duration::millis(100)` | Wait between idle or backpressured poll ticks. Busy ticks re-poll immediately. |
+| `$unroutablePolicy` | `UnroutablePolicy` | `UnroutablePolicy::Reject` | `Reject` — reject back to transport; `DeadLetters` — forward to the dead-letters ref and ack. |
+
+---
+
+## LifecycleThresholds
+
+`LifecycleThresholds` is an immutable value object evaluated by `LifecycleWatchdog` on each tick. A `null` limit is disabled. All comparisons are inclusive: reaching the limit exactly triggers a breach.
+
+```php title="src/bootstrap.php"
+use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
+use Monadial\Nexus\Runtime\Duration;
+
+$thresholds = LifecycleThresholds::none()
+    ->withMessageLimit(10_000)
+    ->withMemoryLimit(128 * 1024 * 1024)
+    ->withTimeLimit(Duration::seconds(3600));
+```
+
+### Named constructors
+
+| Method | Description |
+|---|---|
+| `LifecycleThresholds::none()` | All three limits disabled (`null`). |
+
+### Modifier methods
+
+| Method | Parameter | Description |
+|---|---|---|
+| `withMemoryLimit(int $bytes)` | Bytes | Breach when `memory_get_usage(true) >= $bytes`. |
+| `withMessageLimit(int $count)` | Count | Breach when cumulative processed messages `>= $count`. |
+| `withTimeLimit(Duration $limit)` | Duration | Breach when actor uptime `>=` the limit (second precision). |
+
+### Parameters
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `$memoryLimitBytes` | `?int` | `null` | Memory threshold in bytes; `null` = disabled. |
+| `$messageLimit` | `?int` | `null` | Cumulative message count threshold; `null` = disabled. |
+| `$timeLimit` | `?Duration` | `null` | Uptime threshold; `null` = disabled. |
+
+### LifecycleWatchdog defaults
+
+When `LifecycleWatchdog::create()` is called without explicit timing parameters, the watchdog uses:
+
+| Parameter | Default |
+|---|---|
+| `$checkInterval` | `Duration::seconds(5)` |
+| `$shutdownTimeout` | `Duration::seconds(10)` |
+
+---
+
 ## See also
 
 - [Mailboxes](../core-concepts/mailboxes.md) — how mailboxes enqueue, dequeue, and backpressure

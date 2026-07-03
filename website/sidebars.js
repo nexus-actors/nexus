@@ -307,6 +307,11 @@ const sidebars = {
             'reference/classes/requires-auth',
             'reference/classes/worker-node',
             'reference/classes/nexus-app',
+            'reference/classes/messenger-actor-ref',
+            'reference/classes/receiver-actor',
+            'reference/classes/message-router',
+            'reference/classes/lifecycle-watchdog',
+            'reference/classes/nexus-messenger-serializer',
           ],
         },
         {
