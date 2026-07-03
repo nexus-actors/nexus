@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Wallet\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Example\Wallet\Domain\Command\WalletCommand;
 
 /**
  * Reply to EnsureWallet. The directory hands the caller an opaque ref
@@ -12,6 +13,6 @@ use Monadial\Nexus\Core\Actor\ActorRef;
  */
 final readonly class WalletRef
 {
-    /** @param ActorRef<object> $ref */
+    /** @param ActorRef<WalletCommand> $ref */
     public function __construct(public ActorRef $ref) {}
 }

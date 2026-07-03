@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Wallet\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Example\Wallet\Domain\Command\WalletCommand;
 
 /**
  * Immutable per-owner spawn cache held by `WalletDirectoryActor`.
@@ -19,7 +20,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 final readonly class WalletRegistry
 {
     /**
-     * @param array<string, ActorRef<object>> $byOwner
+     * @param array<string, ActorRef<WalletCommand>> $byOwner
      */
     public function __construct(public array $byOwner = []) {}
 
@@ -29,7 +30,7 @@ final readonly class WalletRegistry
     }
 
     /**
-     * @param ActorRef<object> $ref
+     * @param ActorRef<WalletCommand> $ref
      */
     public function with(string $ownerId, ActorRef $ref): self
     {

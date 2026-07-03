@@ -54,6 +54,7 @@ use Psr\Log\LoggerInterface;
 
 final class CreateOrderHandler
 {
+    /** @param ActorRef<Place> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
         #[FromService(LoggerInterface::class)] private readonly LoggerInterface $log,

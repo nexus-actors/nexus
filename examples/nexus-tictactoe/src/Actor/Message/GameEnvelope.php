@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Example\TicTacToe\Actor\Message;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Example\TicTacToe\Domain\Command\GameCommand;
+use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
 
 /**
  * Actor-layer envelope: a domain {@see GameCommand}, the actor to reply
@@ -19,7 +20,7 @@ use Monadial\Nexus\Example\TicTacToe\Domain\Command\GameCommand;
 final readonly class GameEnvelope
 {
     /**
-     * @param ActorRef<object> $replyTo
+     * @param ActorRef<GameRejected|Seated|GameSnapshot> $replyTo
      */
     public function __construct(public GameCommand $command, public ActorRef $replyTo, public int $originFd) {}
 }

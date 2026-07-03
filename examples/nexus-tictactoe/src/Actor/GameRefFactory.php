@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Example\TicTacToe\Actor;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameEnvelope;
 use Monadial\Nexus\Example\TicTacToe\ReadModel\GameReadModel;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Psr\Log\LoggerInterface;
@@ -24,7 +25,7 @@ use Psr\Log\LoggerInterface;
  */
 final class GameRefFactory
 {
-    /** @var array<string, ActorRef<object>> */
+    /** @var array<string, ActorRef<GameEnvelope>> */
     private array $cache = [];
 
     public function __construct(
@@ -35,7 +36,7 @@ final class GameRefFactory
     ) {}
 
     /**
-     * @return ActorRef<object>
+     * @return ActorRef<GameEnvelope>
      */
     public function of(string $gameId): ActorRef
     {

@@ -39,6 +39,7 @@ use Psr\Http\Message\ResponseInterface;
 
 final class CreateOrderHandler
 {
+    /** @param ActorRef<PlaceOrder> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
     ) {}

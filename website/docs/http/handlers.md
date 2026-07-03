@@ -60,6 +60,7 @@ use Psr\Log\LoggerInterface;
 
 final class ShowOrderHandler
 {
+    /** @param ActorRef<GetOrder> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
         #[FromService(LoggerInterface::class)] private readonly LoggerInterface $log,
@@ -97,6 +98,7 @@ $app->actor('orders', Props::fromFactory(fn() => new OrderActor()));
 ```php title="src/Http/Handler/CreateOrderHandler.php"
 final class CreateOrderHandler
 {
+    /** @param ActorRef<CreateOrder> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
     ) {}
@@ -154,6 +156,7 @@ $app->perRequestActor('audit', Props::fromFactory(fn() => new AuditBufferActor()
 ```php title="src/Http/Handler/CreateOrderHandler.php"
 final class CreateOrderHandler
 {
+    /** @param ActorRef<RecordAction> $audit */
     public function __construct(
         #[FromActor('audit')] private readonly ActorRef $audit,
     ) {}

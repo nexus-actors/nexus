@@ -208,6 +208,7 @@ $ctx->sender()->get()->tell(new Response($result));
 
 // Correct — check presence first
 $ctx->sender()->ifPresent(
+    /** @param ActorRef<Response> $sender */
     static fn(ActorRef $sender) => $sender->tell(new Response($result)),
 );
 ```
