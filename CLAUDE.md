@@ -374,7 +374,7 @@ NexusApp::create('my-app')
 
 ### Psalm Plugin (nexus-psalm)
 
-Custom Psalm plugin with 7 hooks for actor-specific validation:
+Custom Psalm plugin with 8 hooks for actor-specific validation:
 1. **ReadonlyMessageRule** — Messages passed to `tell()` must be `readonly` classes
 2. **MutableActorStateRule** — `ActorHandler`/`StatefulActorHandler` properties must be `readonly`
 3. **NonSerializableRemoteMessageRule** — `WorkerActorRef::tell()` messages need `#[MessageType]` attribute
@@ -382,6 +382,7 @@ Custom Psalm plugin with 7 hooks for actor-specific validation:
 5. **MutableClosureCaptureRule** — `Props::fromFactory()` closures must not capture by reference (`&$var`)
 6. **PropsReturnTypeProvider** — Infers generic types for `Props::from*()` methods
 7. **CloneWithReturnTypeProvider** — Type inference for `clone()` operations
+8. **UntypedActorRefInjectionRule** (+ `UntypedActorRefPropertyRule`) — Injected `ActorRef` params/properties must declare a concrete message type (`ActorRef<T>`); bare `ActorRef` and `ActorRef<object>` flagged, `DeadLetterRef` + configured excludes exempt, by-design internals exempted via psalm.xml issueHandlers
 
 ### Exception Hierarchy
 
