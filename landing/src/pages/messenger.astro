@@ -251,7 +251,7 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.sent</code> counter per message type</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.consumed</code> + processing duration histogram</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.consumed</code> counter — processing time observable as <code class="font-mono">messenger.receive</code> span duration</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Producer and consumer spans linked — one trace ID end-to-end</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Disabled by default: zero overhead when no observability is wired</li>
       </ul>
