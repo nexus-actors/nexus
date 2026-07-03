@@ -40,19 +40,37 @@ error. Every injected `ActorRef` (or subtype) must declare a concrete message ty
    `list<ActorRef<object>>`, `iterable<ActorRef>` etc. are checked by recursing
    into generic type parameters — otherwise the rule is trivially bypassed by
    wrapping refs in a collection.
-6. **Framework internals are scoped out via Psalm `issueHandlers`, not code
-   suppressions.** The monorepo has ~44 legitimate `ActorRef<object>` positions
-   in 19 src files (system messages `Watch`/`Unwatch`/`DeadLetter`, signals
-   `ChildFailed`/`Terminated`, `ActorContext`/`ActorCell`/`ActorSystem`,
-   messenger router registries) that are structurally heterogeneous. These are
-   exempted in the monorepo `psalm.xml` with Psalm's built-in mechanism:
+6. **Internal `ActorRef<object>` uses are fixed first, exempted last.** The
+   monorepo has 44 `ActorRef<object>` positions in 19 src files. Before any
+   exemption, a generify pass reduces them:
+
+   - **Method-level generics** where a ref only flows through an API by identity
+     (never a typed send): `ActorContext::watch()/unwatch()/stop()`,
+     `ActorSystem::stop()`, `ActorCell` watch/unwatch/child helpers gain
+     `@template W of object` + `@param ActorRef<W> $target`.
+   - **Concrete types** where the message type is provably known:
+     `ReceiverActor::$processedListener` / `MessengerBridge::$processedListener`
+     only receive `MessagesProcessed` → `ActorRef<MessagesProcessed>`; the
+     `NexusLogger` sink only receives `Record` messages.
+   - **`ActorRef<object>` remains only where the type is erased by design**:
+     heterogeneous children/registry maps (`ActorCell`, `ActorSystem`,
+     `ResolvedActorTable`, `PerRequestActorScope`, `WorkerNode`, messenger
+     router registries), parent/sender refs, lifecycle plumbing
+     (`Watch`/`Unwatch`/`Terminated`/`ChildFailed`/`DeadLetter`), and
+     dead-letter sinks — the same positions Akka Typed models as
+     `ActorRef[Nothing]`.
+
+   Only the remaining by-design files are exempted in the monorepo `psalm.xml`
+   via Psalm's built-in mechanism (no code suppressions), each entry carrying an
+   XML comment stating why the type is erased:
 
    ```xml
    <issueHandlers>
        <UntypedActorRefInjection>
            <errorLevel type="suppress">
+               <!-- watch/lifecycle plumbing: refs carried by identity, type erased by design -->
                <file name="packages/nexus-core/src/Message/Watch.php"/>
-               <!-- … the other structurally-heterogeneous internal files -->
+               <!-- … the other by-design heterogeneous internal files -->
            </errorLevel>
        </UntypedActorRefInjection>
    </issueHandlers>
@@ -191,9 +209,12 @@ ActorRef. Deliverables:
    bare `ActorRef` params/properties annotated the same way (examples are not
    Psalm-analyzed, but they are the reference users copy).
 6. **CLAUDE.md** — Psalm plugin section: add the new rule to the hook list.
-7. **Monorepo `psalm.xml`** — plugin config with defaults plus the
-   `issueHandlers` block for the ~19 internal files; `make psalm` must be green
-   after the sweep.
+7. **Internal generify pass** — apply the Bucket A method-level generics and
+   Bucket B concrete types from Decision 6 across nexus-core, nexus-messenger,
+   and nexus-logger; unit tests and Psalm must stay green.
+8. **Monorepo `psalm.xml`** — plugin config with defaults plus the
+   `issueHandlers` block for the remaining by-design files (with per-entry
+   rationale comments); `make psalm` must be green after the sweep.
 
 Known staleness (out of scope, noted for a future pass):
 `website/docs/reference/psalm-rules.md` documents only 7 of the 16 existing
