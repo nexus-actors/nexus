@@ -124,6 +124,28 @@ final class NexusMessengerSerializerTest extends TestCase
         self::assertNull($decoded->last(TraceContextStamp::class));
     }
 
+    #[Test]
+    public function jsonArrayTraceContextHeaderIsSkippedWithoutException(): void
+    {
+        $encoded = $this->serializer->encode(new Envelope(new Greeting('hi')));
+        $encoded['headers']['X-Nexus-Trace-Context'] = '[1,2,3]';
+
+        $decoded = $this->serializer->decode($encoded);
+
+        self::assertNull($decoded->last(TraceContextStamp::class));
+    }
+
+    #[Test]
+    public function jsonObjectWithNonStringValueTraceContextHeaderIsSkippedWithoutException(): void
+    {
+        $encoded = $this->serializer->encode(new Envelope(new Greeting('hi')));
+        $encoded['headers']['X-Nexus-Trace-Context'] = '{"x":42}';
+
+        $decoded = $this->serializer->decode($encoded);
+
+        self::assertNull($decoded->last(TraceContextStamp::class));
+    }
+
     protected function setUp(): void
     {
         $registry = new TypeRegistry();

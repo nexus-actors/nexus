@@ -18,6 +18,7 @@ use Symfony\Component\Messenger\Stamp\StampInterface;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 
 use function class_exists;
+use function count;
 use function is_array;
 use function is_string;
 use function json_decode;
@@ -163,7 +164,9 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
                         }
                     }
 
-                    $stamps[] = new TraceContextStamp($carrier);
+                    if (count($carrier) > 0) {
+                        $stamps[] = new TraceContextStamp($carrier);
+                    }
                 }
             } catch (JsonException) {
                 // Silently skip malformed trace context — telemetry must never break decode.
