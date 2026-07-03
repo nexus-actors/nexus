@@ -16,4 +16,15 @@
     <plugins>
         <pluginClass class="Monadial\Nexus\Psalm\Plugin" />
     </plugins>
+
+    <issueHandlers>
+        <PluginIssue name="UntypedActorRefInjection">
+            <errorLevel type="suppress">
+                <!-- ContextBus is intentionally heterogeneous: every bounded context publishes
+                     different event types through the same bus — per-event-type generics would
+                     collapse the fan-out seam to a single type, defeating the design. -->
+                <file name="src/Platform/Bus/Subscribe.php"/>
+            </errorLevel>
+        </PluginIssue>
+    </issueHandlers>
 </psalm>
