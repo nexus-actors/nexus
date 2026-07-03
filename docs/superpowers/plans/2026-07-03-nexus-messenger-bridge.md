@@ -2974,8 +2974,82 @@ Note: the split.yml entry requires the `nexus-actors/messenger` repo to exist be
 
 ---
 
+### Task 14: Observability — metrics, tracing, logs, PSR-14 events (user-requested addition 2026-07-03)
+
+**Files:**
+- Modify: `packages/nexus-messenger/composer.json` (add `"nexus-actors/observability": "dev-main"` and `"psr/event-dispatcher": "^1.0"` to require, alphabetical)
+- Modify: `deptrac.yaml` (Messenger ruleset gains `- Observability` — verify the layer name matches the existing Observability layer)
+- Create: `packages/nexus-messenger/src/Event/MessagePublished.php`, `MessageConsumed.php`, `MessageRejected.php`, `MessageDeadLettered.php`, `WorkerRecyclingTriggered.php`
+- Modify: `packages/nexus-messenger/src/Producer/MessengerActorRef.php`, `Producer/MessengerGateway.php`, `Consumer/ReceiverActor.php`, `Lifecycle/LifecycleWatchdog.php`, `MessengerBridge.php`
+- Test: `packages/nexus-messenger/tests/Unit/Producer/*` (extend), `tests/Support/RecordingDispatcher.php`, `tests/Support/RecordingObservability.php` (+ recording Tracer/Span/Meter/Counter/Histogram doubles)
+- Test: `tests/Integration/Messenger/ObservabilityTest.php`
+
+**Interfaces (grounded in the real codebase):**
+- Contracts (namespace `Monadial\Nexus\Observability\...`): `Observability` (`isEnabled()`, `tracer()`, `meter()`, `propagator()`, `currentContext()`), `Trace\Tracer::startSpan(string $name, SpanKind $kind = Internal, array $attributes = [], ?Context $parent = null): Span`, `Trace\Span` (`setAttribute`, `addEvent`, `recordException`, `setStatus(StatusCode, ?string)`, `end()`), `Metric\Meter::counter(string $name, string $unit = '', string $description = ''): Counter`, `Counter::add(int|float, array $attributes = [])`. No-op: `new NoopObservability()`. `SpanKind::{Producer,Consumer,Internal}`, `StatusCode::{Ok,Error}`.
+- PSR-14: `Psr\EventDispatcher\EventDispatcherInterface`; core's no-op is `Monadial\Nexus\Core\Actor\NullDispatcher`; `ActorSystem::eventDispatcher()` returns the system dispatcher.
+- Actors reach telemetry via `$ctx->tracer()` / `$ctx->meter()` / `$ctx->log()` (no-op when observability disabled) — no new deps needed for consumer-side instrumentation.
+
+**Behavior to implement:**
+
+1. **Event classes** — all `final readonly`, `@psalm-api`, namespace `Monadial\Nexus\Messenger\Event`:
+   - `MessagePublished(public object $message, public string $senderName)`
+   - `MessageConsumed(public object $message, public string $targetPath)`
+   - `MessageRejected(public object $message)`
+   - `MessageDeadLettered(public object $message)`
+   - `WorkerRecyclingTriggered(public string $reason)`
+
+2. **Producer** — `MessengerActorRef` and `MessengerGateway` ctors gain trailing optional params `Observability $observability = new NoopObservability()`, `?EventDispatcherInterface $events = null`. In `tell()`/`publish()`: when `$observability->isEnabled()`, wrap the send in a span `'messenger.send'` (`SpanKind::Producer`, attrs `['messaging.operation' => 'send', 'messaging.system' => 'symfony-messenger', 'nexus.message.type' => $message::class, 'nexus.messenger.sender' => $senderName]` — gateway uses `'gateway'` as sender attr), `recordException` + `setStatus(Error)` on Throwable then rethrow, `end()` in finally; increment counter `nexus.messenger.messages.sent` (`{message}`) with `['nexus.message.type' => ...]`. Always (independent of isEnabled) dispatch `MessagePublished` when `$events !== null` after a successful send. Mirror `TracingWorkerTransport` (packages/nexus-observability-worker-pool/src/TracingWorkerTransport.php): lazily cache instruments with `??=` in a non-readonly private prop — NOTE: `final readonly class` cannot hold mutable cache; either create the counter per call (cheap; Noop instruments are stateless) or drop `readonly` on the class like TracingWorkerTransport does. Prefer per-call `$this->observability->meter()->counter(...)->add(...)` to preserve `readonly`.
+3. **Consumer (`ReceiverActor`)** — `create()` gains trailing `?EventDispatcherInterface $events = null`. Pass `$ctx` into `drainOnce()`. Per drained envelope: span `'messenger.receive'` via `$ctx->tracer()->startSpan(..., SpanKind::Consumer, ['messaging.operation' => 'receive', 'messaging.system' => 'symfony-messenger', 'nexus.actor.path' => (string) $ctx->path(), 'nexus.message.type' => $inner::class])`; set outcome attr `nexus.messenger.outcome` = `acked|rejected|dead_lettered|backpressured|dropped`; `end()` always. Counters via `$ctx->meter()`: `nexus.messenger.messages.consumed` on ack-after-enqueue, `nexus.messenger.messages.rejected`, `nexus.messenger.messages.dead_lettered`, `nexus.messenger.enqueue.backpressured` (all unit `{message}`, attrs `['nexus.message.type' => ...]`). Logs via `$ctx->log()`: `warning('Unroutable messenger message', ['policy' => ..., 'type' => ...])` on unroutable; `debug('Mailbox backpressured, pausing broker consumption', ['type' => ...])` on backpressure. Events: `MessageConsumed` (with `(string) $target->path()`) after ack, `MessageRejected` on reject, `MessageDeadLettered` on dead-letter — dispatched only when `$events !== null`.
+4. **Watchdog** — in the breach branch, before `spawnTask`, dispatch `WorkerRecyclingTriggered($reason)` via `$system->eventDispatcher()->dispatch(...)` (no signature change needed), and increment `$ctx->meter()->counter('nexus.messenger.worker.recycles', '{recycle}', ...)->add(1)`.
+5. **MessengerBridge** — `producer()`/`gateway()` gain the same trailing optional params and forward them; `receiverProps()` gains `?EventDispatcherInterface $events = null`; `spawnReceivers()` and the e2e path auto-wire `$system->eventDispatcher()` when their `$events` argument is null.
+
+**Testing:**
+- `tests/Support/RecordingDispatcher.php` (`implements EventDispatcherInterface`, `public array $events`, dispatch collects + returns event).
+- Recording observability doubles in `packages/nexus-messenger/tests/Support/`: `RecordingObservability` (isEnabled true, hands out recording tracer/meter), `RecordingTracer` (collects `[name, kind, attributes]` and returns `RecordingSpan`), `RecordingSpan` (collects attributes/status/ended), `RecordingMeter`/`RecordingCounter` (sums adds by name). Histogram may return a no-op.
+- Unit: producer with RecordingObservability + RecordingDispatcher → span `'messenger.send'` recorded with correct attrs, counter `nexus.messenger.messages.sent` incremented, `MessagePublished` dispatched with the same message instance; with `NoopObservability` + null dispatcher → behavior unchanged (existing tests keep passing untouched).
+- Integration (`ObservabilityTest.php`): boot `ActorSystem::create('obs-test', $runtime, observability: $recording, eventDispatcher: $recordingDispatcher)` — check `create()`'s actual named params order; wire receiver via `MessengerBridge::receiverProps($transport, $router, config, null, null, $system->eventDispatcher())`; produce 2 messages; after run assert: `MessageConsumed` events == 2, consumed counter == 2, at least one `'messenger.receive'` span with outcome `acked`. Add an unroutable message case asserting `MessageRejected` + rejected counter.
+- Full checks + commit: `feat(messenger): tracing, metrics, logs, and PSR-14 events across the bridge`
+
+### Task 15: Cross-broker trace propagation (user-requested addition 2026-07-03)
+
+**Files:**
+- Create: `packages/nexus-messenger/src/Stamp/TraceContextStamp.php`
+- Modify: `Producer/MessengerActorRef.php`, `Producer/MessengerGateway.php` (inject), `Serialization/NexusMessengerSerializer.php` (header round-trip), `Consumer/ReceiverActor.php` (extract → parent)
+- Test: extend serializer unit tests + `tests/Integration/Messenger/ObservabilityTest.php`
+
+**Behavior:**
+- `TraceContextStamp` — `final readonly`, implements `StampInterface`, `/** @param array<string, string> $carrier */ public array $carrier`.
+- Producer: when `$observability->isEnabled()`, inject the current trace context into a carrier array using the SAME propagator idiom `TracingWorkerTransport::inject()` uses (read that file first — mirror its exact `ContextPropagator` calls), and attach `TraceContextStamp($carrier)` to the outgoing envelope inside the send span so the child relationship is captured.
+- Serializer: encode `TraceContextStamp` → header `X-Nexus-Trace-Context` = `json_encode($carrier)`; decode back (silently skip on malformed JSON — never fail decode over telemetry). Keys sorted alphabetically where literal arrays are used.
+- Consumer: `ReceiverActor::create()` gains trailing `?Observability $observability = null` (used ONLY for `propagator()->extract()`; spans still come from `$ctx->tracer()`). Per envelope: if the stamp is present and observability provided, `$parent = $observability->propagator()->extract($stamp->carrier)` and pass as the `$parent` arg of the `'messenger.receive'` span. Check whether `ActorSystem` exposes an observability accessor for `MessengerBridge` auto-wiring; if not, thread the optional param through `receiverProps()`/`spawnReceivers()`.
+- Tests: serializer round-trips the stamp (and skips malformed header); integration asserts the consume span's recorded parent is non-null when the producer had an active span (RecordingTracer must capture the `$parent` argument).
+- Full checks + commit: `feat(messenger): propagate trace context across the broker boundary`
+
+### Task 16: Example app — nexus-messenger over Redis (user-requested addition 2026-07-03)
+
+**Files (create under `examples/nexus-messenger-redis/`):**
+- `composer.json` — requires `nexus-actors/messenger`, `symfony/messenger`, `symfony/redis-messenger` (mirror how `examples/nexus-wallet-app/composer.json` references monorepo packages)
+- `compose.yaml` — a `redis:7-alpine` service (example-local; do NOT modify the root compose.yaml)
+- `src/Message/OrderPlaced.php` — `final readonly`, `#[MessageType('order-placed')]`
+- `src/Actor/OrderProcessor.php` — simple handler actor that logs each order
+- `bin/produce.php` — builds a Redis transport (`Symfony\Component\Messenger\Bridge\Redis\Transport\...` with `NexusMessengerSerializer`), publishes N `OrderPlaced` via `MessengerBridge::producer()`
+- `bin/worker.php` — Nexus-owned queue worker: `ActorSystem` + `FiberRuntime`, `MessengerBridge::spawnReceivers($system, 3, ...)` + `watchdogProps` (message limit for demo), `$system->run()`
+- `README.md` — how to run (start redis, produce, consume), what to observe (at-least-once delivery, backpressure, watchdog recycling, PSR-14 events on stdout), and an **SQS variant** section showing the same wiring with `symfony/amazon-sqs-messenger` (config snippet only)
+
+**Constraints & contingencies:**
+- Check first how existing examples are wired (`examples/nexus-wallet-app/composer.json`; GrumPHP/psalm/phpcs ignore `/examples/`). Follow that exact pattern.
+- The Symfony Redis transport requires the phpredis extension. Verify with `docker compose exec php php -m | grep -i redis`. If ext-redis is NOT in the image: still ship the example (documentation-grade code, excluded from CI checks), state the requirement prominently in the README, and note in the task report that it could not be executed end-to-end. If available, actually run the demo against the example's redis service and paste the output in the report.
+- `symfony/redis-messenger` goes ONLY in the example's composer.json, never the root or package composer.json.
+- Use the observability wiring from Tasks 14–15 in `bin/worker.php` (PSR-3 logger on `ActorSystem::create`, event dispatcher printing `MessageConsumed`/`WorkerRecyclingTriggered` to stdout) so the example doubles as an observability showcase.
+- Commit: `feat(messenger): Redis transport example app with worker recycling showcase`
+- Execution order: after Task 15, before docs Tasks 11–12 (the guide links the example).
+
+### Task 17: Landing page — feature messenger in integrations (user-requested addition 2026-07-03)
+
+The Astro landing site lives in `landing/` (pages under `landing/src/pages/`, e.g. `comparison.astro`, `http.astro`; nav in `landing/src/components/Nav.astro`). Explore first: find where integrations/ecosystem features are presented (a dedicated integrations page, a section on `index.astro`, or feature cards). Add the Symfony Messenger bridge there following the existing style exactly: name, one-sentence pitch ("Publish from actors to any broker Messenger supports — AMQP, Redis, SQS, Doctrine — and consume broker messages into actor mailboxes"), link to the docs guide (`/docs/guides/messenger-bridge`). If sibling integrations have their own subpage (like `http.astro`), a matching `messenger.astro` subpage is in scope — mirror the structure and depth of the closest sibling page. Verify the landing build (`cd landing && npm run build`) if the toolchain is available; otherwise note it. Commit: `feat(landing): feature the Symfony Messenger bridge in integrations`.
+
 ## Execution notes
 
-- Tasks 1→8 are strictly ordered. Task 9 depends on Task 3; Tasks 10–12 depend on the code being final; Task 13 is last.
+- Tasks 1→8 are strictly ordered. Task 9 depends on Task 3; Tasks 14–16 (user additions: observability, trace propagation, Redis example) run after Task 10 and BEFORE the docs tasks; Tasks 10–12 depend on the code being final; Task 17 (landing page) runs with the docs wave after Task 11 (it links the guide); Task 13 is last. Docs tasks 11–12 must also cover the Task 14/15 surface (events, metrics table, trace propagation) and link the Task 16 example.
 - If any discovered API detail contradicts this plan (e.g. `ActorPath` rendering, `spawnTask` closure shape, `InMemoryTransport` namespace/getters), trust the codebase, adjust locally, and note the deviation in the task report — do not redesign.
 - Every commit must pass GrumPHP (php-cs-fixer, phpcs, psalm level 1, full unit suite). No Claude attribution in commit messages.
