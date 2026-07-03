@@ -134,50 +134,55 @@ final readonly class ReceiverActor
                     'nexus.message.type' => $inner::class,
                 ],
             );
-            $target = $router->route($inner, $envelope);
 
-            if ($target === null) {
-                $outcome = self::handleUnroutable($ctx, $receiver, $config, $deadLetters, $events, $envelope);
-                $span->setAttribute('nexus.messenger.outcome', $outcome);
-                $span->end();
+            try {
+                $target = $router->route($inner, $envelope);
 
-                continue;
-            }
+                if ($target === null) {
+                    $outcome = self::handleUnroutable($ctx, $receiver, $config, $deadLetters, $events, $envelope);
+                    $span->setAttribute('nexus.messenger.outcome', $outcome);
 
-            if ($target instanceof BackpressureCapable) {
-                $result = $target->offer($inner);
-
-                if ($result !== EnqueueResult::Accepted) {
-                    $ctx->meter()->counter(
-                        'nexus.messenger.enqueue.backpressured',
-                        '{message}',
-                        'Broker messages not acked because the target mailbox did not accept them',
-                    )->add(1, ['nexus.message.type' => $inner::class]);
-                    $ctx->log()->debug('Mailbox backpressured, pausing broker consumption', ['type' => $inner::class]);
-                    $span->setAttribute(
-                        'nexus.messenger.outcome',
-                        $result === EnqueueResult::Dropped
-                            ? 'dropped'
-                            : 'backpressured',
-                    );
-                    $span->end();
-
-                    return [$processed, true];
+                    continue;
                 }
-            } else {
-                $target->tell($inner);
-            }
 
-            $receiver->ack($envelope);
-            $processed++;
-            $ctx->meter()->counter(
-                'nexus.messenger.messages.consumed',
-                '{message}',
-                'Broker messages delivered to a target actor and acked',
-            )->add(1, ['nexus.message.type' => $inner::class]);
-            $span->setAttribute('nexus.messenger.outcome', 'acked');
-            $span->end();
-            $events?->dispatch(new MessageConsumed($inner, (string) $target->path()));
+                if ($target instanceof BackpressureCapable) {
+                    $result = $target->offer($inner);
+
+                    if ($result !== EnqueueResult::Accepted) {
+                        $ctx->meter()->counter(
+                            'nexus.messenger.enqueue.backpressured',
+                            '{message}',
+                            'Broker messages not acked because the target mailbox did not accept them',
+                        )->add(1, ['nexus.message.type' => $inner::class]);
+                        $ctx->log()->debug(
+                            'Mailbox backpressured, pausing broker consumption',
+                            ['type' => $inner::class],
+                        );
+                        $span->setAttribute(
+                            'nexus.messenger.outcome',
+                            $result === EnqueueResult::Dropped
+                                ? 'dropped'
+                                : 'backpressured',
+                        );
+
+                        return [$processed, true];
+                    }
+                } else {
+                    $target->tell($inner);
+                }
+
+                $receiver->ack($envelope);
+                $processed++;
+                $ctx->meter()->counter(
+                    'nexus.messenger.messages.consumed',
+                    '{message}',
+                    'Broker messages delivered to a target actor and acked',
+                )->add(1, ['nexus.message.type' => $inner::class]);
+                $span->setAttribute('nexus.messenger.outcome', 'acked');
+                $events?->dispatch(new MessageConsumed($inner, (string) $target->path()));
+            } finally {
+                $span->end();
+            }
         }
 
         return [$processed, false];
