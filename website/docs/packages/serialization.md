@@ -3,6 +3,7 @@ sidebar_position: 4
 title: nexus-serialization
 related:
   - packages/core
+  - packages/messenger
   - packages/persistence
   - packages/worker-pool
 ---

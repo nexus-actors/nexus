@@ -3,6 +3,7 @@ title: nexus-worker-pool
 related:
   - packages/worker-pool-swoole
   - packages/core
+  - packages/messenger
   - packages/runtime-swoole
   - scaling/overview
 ---

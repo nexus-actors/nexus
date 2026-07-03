@@ -3,6 +3,7 @@ title: nexus-cluster
 related:
   - packages/worker-pool
   - packages/worker-pool-swoole
+  - packages/messenger
   - scaling/overview
 ---
 

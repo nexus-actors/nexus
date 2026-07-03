@@ -56,6 +56,7 @@ const sidebars = {
         'guides/rate-limiting-actor',
         'guides/saga',
         'guides/standalone-integration',
+        'guides/messenger-bridge',
       ],
     },
     {
@@ -262,6 +263,7 @@ const sidebars = {
           items: [
             'packages/app',
             'packages/logger',
+            'packages/messenger',
             'packages/serialization',
             'packages/psalm',
             'packages/nexus',
