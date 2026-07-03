@@ -74,6 +74,51 @@ final class PhpNativeSerializerTest extends TestCase
 
         (void) $serializer->deserialize($data, stdClass::class);
     }
+
+    #[Test]
+    public function allowListRejectsClassOutsideItWithoutRunningItsGadget(): void
+    {
+        // Restricted serializer: only SimpleMessage may be instantiated.
+        $serializer = new PhpNativeSerializer(allowedClasses: [SimpleMessage::class]);
+        GadgetMessage::$awakened = false;
+        $data = (new PhpNativeSerializer())->serialize(new GadgetMessage());
+
+        try {
+            (void) $serializer->deserialize($data, SimpleMessage::class);
+            self::fail('Expected MessageDeserializationException');
+        } catch (MessageDeserializationException) {
+            self::assertFalse(GadgetMessage::$awakened, 'Gadget __wakeup must not run for a disallowed class');
+        }
+    }
+
+    #[Test]
+    public function defaultPreservesNestedObjectGraph(): void
+    {
+        // Default (no allow-list) must round-trip rich graphs with nested objects.
+        $serializer = new PhpNativeSerializer();
+        $data = $serializer->serialize(new NestedMessage(new SimpleMessage('inner', 7)));
+
+        $result = $serializer->deserialize($data, NestedMessage::class);
+
+        self::assertInstanceOf(NestedMessage::class, $result);
+        self::assertInstanceOf(SimpleMessage::class, $result->inner);
+        self::assertSame('inner', $result->inner->text);
+    }
+}
+
+final readonly class NestedMessage
+{
+    public function __construct(public SimpleMessage $inner) {}
+}
+
+final class GadgetMessage
+{
+    public static bool $awakened = false;
+
+    public function __wakeup(): void
+    {
+        self::$awakened = true;
+    }
 }
 
 final readonly class SimpleMessage

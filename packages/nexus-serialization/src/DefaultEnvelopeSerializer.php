@@ -20,6 +20,14 @@ use Throwable;
  *
  * Serializes the envelope structure (sender, target, metadata) as JSON,
  * delegating inner message serialization to the wrapped MessageSerializer.
+ *
+ * SECURITY: on deserialize, the `messageType` is read from the wire and passed
+ * as the target type to the wrapped serializer. When (and only when) a future
+ * remote/cluster transport decodes untrusted peer data through this class, the
+ * wrapped serializer MUST bound instantiation to an allow-list of registered
+ * types (e.g. ValinorMessageSerializer + TypeRegistry) and reject unregistered
+ * `messageType` values. Never wrap PhpNativeSerializer for cross-boundary
+ * envelopes. No production transport feeds untrusted input here today.
  */
 final readonly class DefaultEnvelopeSerializer implements EnvelopeSerializer
 {

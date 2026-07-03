@@ -10,6 +10,7 @@ use Monadial\Nexus\Http\Auth\Attribute\RequiresAuth;
 use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
 use Monadial\Nexus\Http\Auth\Attribute\RequiresScope;
 use Monadial\Nexus\Http\Auth\Authorizer;
+use Monadial\Nexus\Http\Auth\Exception\AuthorizationMisconfiguredException;
 use Monadial\Nexus\Http\Auth\Middleware\AuthorizationMiddleware;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
@@ -176,9 +177,46 @@ final class AuthorizationMiddlewareTest extends TestCase
         self::assertStringNotContainsString('alice', $body);
     }
 
+    #[Test]
+    public function fails_closed_when_run_before_router(): void
+    {
+        $next = new OkHandler();
+        $mw = new AuthorizationMiddleware();
+
+        // No '_nexus.routed' marker -> middleware ran before the router, i.e. it
+        // was registered globally. Even with a resolved handler class present it
+        // must refuse rather than pass through.
+        $req = (new Psr17Factory())->createServerRequest('GET', '/test')
+            ->withAttribute('_resolvedHandlerClass', AuthRequiredHandler::class);
+
+        $this->expectException(AuthorizationMisconfiguredException::class);
+
+        try {
+            $mw->process($req, $next);
+        } finally {
+            self::assertFalse($next->wasCalled, 'Handler must not run when misconfigured');
+        }
+    }
+
+    #[Test]
+    public function passes_through_for_closure_handler_after_routing(): void
+    {
+        $next = new OkHandler();
+        $mw = new AuthorizationMiddleware();
+
+        // Routed, but the handler was a closure so no '_resolvedHandlerClass' is
+        // set -> no reflectable class-level attributes to enforce.
+        $req = $this->req();
+        $response = $mw->process($req, $next);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertTrue($next->wasCalled);
+    }
+
     private function req(): ServerRequestInterface
     {
-        return (new Psr17Factory())->createServerRequest('GET', '/test');
+        return (new Psr17Factory())->createServerRequest('GET', '/test')
+            ->withAttribute('_nexus.routed', true);
     }
 }
 
