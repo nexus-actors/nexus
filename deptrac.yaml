@@ -187,6 +187,7 @@ deptrac:
     Psalm:
       - Core
       - DoctrineOrm
+      - Messenger
       - Runtime
       - Serialization
       - WorkerPool
@@ -194,6 +195,7 @@ deptrac:
       - Core
     Messenger:
       - Core
+      - Observability
       - Runtime
       - Serialization
     DoctrineDbal:

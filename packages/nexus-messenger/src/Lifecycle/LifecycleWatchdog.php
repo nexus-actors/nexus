@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\TaskContext;
+use Monadial\Nexus\Messenger\Event\WorkerRecyclingTriggered;
 use Monadial\Nexus\Runtime\Duration;
 
 use function is_int;
@@ -85,6 +86,12 @@ final readonly class LifecycleWatchdog
 
                         if ($reason !== null) {
                             $ctx->log()->info('LifecycleWatchdog triggering graceful shutdown', ['reason' => $reason]);
+                            $system->eventDispatcher()->dispatch(new WorkerRecyclingTriggered($reason));
+                            $ctx->meter()->counter(
+                                'nexus.messenger.worker.recycles',
+                                '{recycle}',
+                                'Worker recycles triggered by lifecycle thresholds',
+                            )->add(1);
                             $ctx->spawnTask(static function (TaskContext $_task) use ($system, $timeout): void {
                                 $system->shutdown($timeout);
                             });
