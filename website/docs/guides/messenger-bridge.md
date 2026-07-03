@@ -387,6 +387,29 @@ On the consumer side, `ReceiverActor` reads the `TraceContextStamp` from the dec
 
 No configuration is required beyond passing `$observability` to both sides. The `TraceContextStamp` is silently skipped on decode if the header is absent or malformed — tracing errors never block message delivery.
 
+## CLI runners
+
+Install `nexus-actors/messenger-console` for ready-made Symfony Console commands that wrap everything covered in this guide:
+
+```bash
+composer require nexus-actors/messenger-console
+```
+
+| Command | What it does |
+|---------|-------------|
+| `nexus:messenger:consume` | Boots an `ActorSystem`, spawns receiver actors, optional limit-driven watchdog |
+| `nexus:messenger:produce` | Deserializes a JSON body and publishes N messages to the transport |
+
+```bash
+# Consume with recycling after 10 000 messages, 3 actors
+bin/console nexus:messenger:consume --receivers=3 --limit=10000 --memory-limit=256M
+
+# Publish a test message
+bin/console nexus:messenger:produce order.placed '{"orderId":"A-42","amountCents":1999}'
+```
+
+See the [nexus-messenger-console package page](/docs/packages/messenger-console) for the full option reference and `bin/console` Application wiring example.
+
 ## Complete runnable example
 
 The [nexus-messenger-redis](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-messenger-redis) example in the monorepo demonstrates the full stack end-to-end:
