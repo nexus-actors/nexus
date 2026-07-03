@@ -1,0 +1,365 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const heroCode = `<?php
+// Wire a two-way bridge in under ten lines.
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+use Monadial\\Nexus\\Messenger\\Routing\\MapMessageRouter;
+
+// Consumer: broker message → actor mailbox
+$router = new MapMessageRouter([OrderPlaced::class => $ordersRef]);
+$system->spawn(MessengerBridge::receiverProps($amqpTransport, $router), 'in');
+
+// Producer: actor code → broker
+$out = MessengerBridge::producer($amqpTransport, 'orders-out');
+$out->tell(new OrderShipped($orderId)); // identical to a local actor tell()`;
+
+const producerCode = `<?php
+// MessengerActorRef implements ActorRef — actor code never changes.
+// Swap a local ref for a broker-backed one without touching handlers.
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+
+$ordersRef = MessengerBridge::producer($amqpTransport, 'orders-out');
+
+// In your actor handler — same call, regardless of whether
+// $ordersRef is local or broker-backed:
+$ordersRef->tell(new OrderPlaced($orderId));
+
+// Attach the source actor path for traceability:
+$ref = MessengerBridge::producer(
+    $amqpTransport,
+    'orders-out',
+    sourcePath: $ctx->self()->path(), // stamped on every outbound envelope
+);`;
+
+const consumerCode = `<?php
+// ReceiverActor polls the transport, routes by message class, and acks
+// only after the actor's mailbox accepts the message — at-least-once.
+use Monadial\\Nexus\\Messenger\\Routing\\MapMessageRouter;
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+use Monadial\\Nexus\\Messenger\\Consumer\\ReceiverActorConfig;
+
+$router = new MapMessageRouter([
+    OrderPlaced::class  => $ordersRef,
+    PaymentMade::class  => $paymentsRef,
+]);
+
+$config = ReceiverActorConfig::default()
+    ->withPollInterval(Duration::millis(50));
+
+$system->spawn(
+    MessengerBridge::receiverProps($transport, $router, $config),
+    'consumer',
+);`;
+
+const scalingCode = `<?php
+// Spawn N competing ReceiverActors over the same broker transport.
+// Each polls, routes, and acks independently — at-least-once semantics.
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+
+$refs = MessengerBridge::spawnReceivers(
+    system: $system,
+    count: 4,          // named "in-0" … "in-3"
+    namePrefix: 'in',
+    receiver: $amqpTransport,
+    router: $router,
+);
+
+// Acks happen only on accepted mailbox enqueue.
+// Backpressure from a bounded mailbox propagates back to the broker:
+// the consumer parks a message rather than nacking it prematurely.`;
+
+const watchdogCode = `<?php
+// Worker recycling: restart after N messages, on memory growth, or on a timer.
+// Keeps long-lived consumer processes healthy without a process manager.
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+use Monadial\\Nexus\\Messenger\\Lifecycle\\LifecycleThresholds;
+
+$system->spawn(MessengerBridge::watchdogProps(
+    $system,
+    LifecycleThresholds::none()
+        ->withMessageLimit(10_000)
+        ->withMemoryLimit(128 * 1024 * 1024)    // 128 MB
+        ->withTimeLimit(Duration::seconds(3600)), // 1 hour
+), 'watchdog');
+
+// On breach: graceful shutdown, WorkerRecyclingTriggered event dispatched.
+// Your process manager restarts the process; the broker holds unacked messages.`;
+
+const traceCode = `<?php
+// TraceContextStamp carries the W3C traceparent across the broker boundary.
+// MessengerActorRef injects it on every tell(); ReceiverActor extracts it.
+// Both sides use the same OpenTelemetry SDK — no extra config.
+
+// Resulting trace across two services (one trace ID):
+//   POST /orders              [120ms]   (Service A)
+//   └─ orders.handle          [110ms]
+//      └─ messenger.send        [8ms]   (publish to AMQP)
+//         └─ consumer.handle   [80ms]   (Service B — same trace)
+//            └─ payments.tell  [60ms]
+
+// Enable with one line alongside your existing observability setup:
+$out = MessengerBridge::producer($transport, 'orders-out', observability: $obs);
+$system->spawn(MessengerBridge::receiverProps($transport, $router, observability: $obs), 'in');`;
+---
+<Marketing
+  title="Symfony Messenger Bridge — Nexus"
+  description="Publish from actors to any broker Messenger supports — AMQP, Redis, SQS, Doctrine — and consume broker messages into actor mailboxes. Location-transparent, supervised, observable."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Symfony Messenger Bridge</p>
+      <h1 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight">
+        Actors speak broker.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        Publish from actors to any broker Symfony Messenger supports — AMQP, Redis, SQS,
+        Doctrine — and consume broker messages directly into actor mailboxes.
+        One bridge. Location-transparent producers. Supervised, at-least-once consumers.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/guides/messenger-bridge')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          Bridge guide
+        </a>
+        <a
+          href={docsUrl('/packages/messenger')}
+          class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+        >
+          Package reference
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={heroCode} lang="php" title="bootstrap.php" />
+  </section>
+
+  <!-- Location-transparent producer -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Location-transparent producers.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">MessengerActorRef</code> implements
+        <code class="font-mono">ActorRef</code> — the same interface as every other actor
+        reference in the system. Your handler calls <code class="font-mono">tell()</code>
+        and never knows whether the recipient lives in the same process or behind an AMQP
+        exchange. Swap a local ref for a broker-backed one without touching a single handler.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Same <code class="font-mono">tell()</code> call whether local or remote</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any Messenger <code class="font-mono">SenderInterface</code> — AMQP, Redis, SQS, Doctrine, in-memory</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Optional <code class="font-mono">sourcePath</code> stamps the sender's actor path on every envelope</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">MessengerBridge::producer()</code> — no container, plain factory</li>
+      </ul>
+    </div>
+    <CodeBlock code={producerCode} lang="php" title="src/Actor/OrderActor.php" />
+  </section>
+
+  <!-- Supervised consumer -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={consumerCode} lang="php" title="bootstrap.php — consumer wiring" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Supervised, at-least-once consumers.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">ReceiverActor</code> polls the transport,
+        routes by message class via <code class="font-mono">MapMessageRouter</code>, and
+        acks the broker only after the target actor's mailbox accepts the message. If
+        enqueue fails — because the mailbox is full — the message is not acked.
+        The broker retains it; your actors never drop a message silently.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        The consumer is a first-class Nexus actor. It lives under the supervision tree,
+        restarts on failure, and obeys the same lifecycle signals as any other actor.
+        A crash does not leave messages in a half-processed state.
+      </p>
+      <a
+        href={docsUrl('/guides/messenger-bridge')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Consumer configuration docs →
+      </a>
+    </div>
+  </section>
+
+  <!-- Horizontal scaling -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Scale in-process with <code class="font-mono text-2xl">spawnReceivers</code>.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">MessengerBridge::spawnReceivers()</code> launches
+        N competing <code class="font-mono">ReceiverActor</code> instances over the same
+        transport — each polling, routing, and acking independently. Backpressure from a
+        bounded actor mailbox parks a message rather than nacking it prematurely; the broker
+        never loses a message because a downstream actor is momentarily slow.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        For scaling across machines, run multiple worker processes. The broker
+        load-balances between them; each process runs its own receiver pool.
+      </p>
+      <a
+        href={docsUrl('/guides/messenger-bridge')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Scaling guide →
+      </a>
+    </div>
+    <CodeBlock code={scalingCode} lang="php" title="bootstrap.php — receiver pool" />
+  </section>
+
+  <!-- Worker recycling watchdog -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={watchdogCode} lang="php" title="bootstrap.php — watchdog" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Worker recycling without a cron job.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Long-lived consumer processes accumulate memory and state. The
+        <code class="font-mono text-primary">LifecycleWatchdog</code> monitors message count,
+        memory usage, and uptime. On a threshold breach it initiates a graceful
+        <code class="font-mono">ActorSystem</code> shutdown before your process manager
+        restarts the worker — the broker holds unacked messages during the restart window.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Message count, memory bytes, or elapsed time — combine any subset</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">WorkerRecyclingTriggered</code> PSR-14 event dispatched before shutdown</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Graceful drain: in-flight messages ack before the process exits</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with any process supervisor — systemd, Supervisor, Docker</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- OTel trace propagation -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">One trace. Two services. One broker.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">TraceContextStamp</code> carries the W3C
+        <code class="font-mono">traceparent</code> across the broker boundary.
+        <code class="font-mono">MessengerActorRef</code> injects the current span context
+        on every <code class="font-mono">tell()</code>;
+        <code class="font-mono">ReceiverActor</code> extracts it and opens a child span
+        on the consuming side — automatically, with no manual wiring.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The full publish-consume chain appears as a single distributed trace in your
+        collector. Dead letters and rejected messages surface as span events, not
+        silent gaps.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.sent</code> counter per message type</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.consumed</code> + processing duration histogram</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Producer and consumer spans linked — one trace ID end-to-end</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Disabled by default: zero overhead when no observability is wired</li>
+      </ul>
+      <a
+        href={docsUrl('/guides/messenger-bridge')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Observability wiring →
+      </a>
+    </div>
+    <CodeBlock code={traceCode} lang="php" title="distributed trace across a broker" />
+  </section>
+
+  <!-- PSR-14 events -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">PSR-14 events at every step.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        Pass any <code class="font-mono">EventDispatcherInterface</code> to the bridge
+        and every significant transition dispatches a typed event — no polling, no log
+        scraping. Wire them to your metrics, alerting, or audit log.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Publish lifecycle</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">MessagePublished</code> fires after a successful broker send.
+          <code class="font-mono">MessageRejected</code> fires when the transport throws —
+          the exception is re-thrown so supervision handles it.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Consume lifecycle</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">MessageConsumed</code> fires after the actor's mailbox
+          accepts the message. <code class="font-mono">MessageDeadLettered</code> fires
+          when routing returns <code class="font-mono">null</code> and the unroutable
+          policy is <code class="font-mono">DeadLetter</code>.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Worker recycling</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">WorkerRecyclingTriggered</code> fires before the
+          watchdog initiates shutdown — giving observers a chance to flush buffers
+          or emit a final metric before the process exits.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Broker support -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">Any broker Messenger supports.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        The bridge adapts to Symfony Messenger's <code class="font-mono">SenderInterface</code>
+        and <code class="font-mono">ReceiverInterface</code> — no Nexus-specific transport
+        code. If Messenger already has a transport for your broker, it works here.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-4 gap-6">
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">AMQP / RabbitMQ</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Exchange routing keys, dead-letter exchanges, priority queues — all via the Messenger AMQP transport.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Redis Streams</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Consumer groups, stream trimming, and reliable delivery via the Messenger Redis transport. See the <a href={docsUrl('/guides/messenger-bridge')} class="text-primary hover:underline">Redis example</a>.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Amazon SQS</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Standard and FIFO queues, visibility timeouts, and long polling via the Messenger SQS transport.</p>
+      </div>
+      <div class="p-5 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold mb-1">Doctrine / database</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Transactional outbox pattern — publish from a database row, consume with actor supervision. No separate broker required for simple workloads.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What the bridge is not -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">What the bridge does not do.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        <code class="font-mono">ask()</code> is not supported on
+        <code class="font-mono">MessengerActorRef</code> in v1. Broker request/reply
+        requires correlation stamps and a reply transport — that pattern is deferred
+        beyond the initial release. For request/reply within a single process, use a
+        local <code class="font-mono">ActorRef</code> and <code class="font-mono">ask()</code>
+        as normal.
+      </p>
+      <p class="text-slate-600 dark:text-slate-300">
+        The bridge is also not a replacement for Symfony Messenger's own workers.
+        If you have an existing Messenger-based application with no actor requirements,
+        continue using Messenger directly. The bridge earns its complexity when you
+        need actor supervision, backpressure propagation, or location transparency
+        alongside a message broker.
+      </p>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Connect your actors to any broker."
+    subtitle="The guide walks through AMQP wiring, consumer configuration, and OTel setup end-to-end."
+    primary={{ href: docsUrl('/guides/messenger-bridge'), label: 'Messenger bridge guide' }}
+    secondary={{ href: docsUrl('/packages/messenger'), label: 'Package reference' }}
+  />
+</Marketing>
