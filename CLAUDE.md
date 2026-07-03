@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 33 packages under `packages/`, each published independently to Packagist.
+Nexus is a production-grade typed actor system for PHP 8.5+, bringing Akka/OTP patterns to PHP. Write actor code once, run it on PHP Fibers (development/testing) or Swoole (production). The project is a monorepo with 34 packages under `packages/`, each published independently to Packagist.
 
 ## Development Environment
 
@@ -108,9 +108,10 @@ nexus-core (no dependencies — foundational)
 ├── nexus-runtime-step     → Core only (deterministic test runtime)
 ├── nexus-app              → Core only (PSR-11 bootstrap)
 ├── nexus-serialization    → Core only
-│   └── nexus-persistence  → Core, Serialization
-│       ├── nexus-persistence-dbal     → Persistence, Core, Serialization
-│       └── nexus-persistence-doctrine → Persistence, Core, Serialization
+│   ├── nexus-persistence  → Core, Serialization
+│   │   ├── nexus-persistence-dbal     → Persistence, Core, Serialization
+│   │   └── nexus-persistence-doctrine → Persistence, Core, Serialization
+│   └── nexus-messenger        → Core, Runtime, Serialization (+ symfony/messenger)
 ├── nexus-cluster          → Core only (remote contracts)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
@@ -149,7 +150,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 - `tell(object $message): void` — Fire-and-forget
 - `ask(callable(ActorRef<R>): T, Duration $timeout): R` — Request-response with timeout
 - `path(): ActorPath` / `isAlive(): bool`
-- Implementations: `LocalActorRef<T>` (enqueues to mailbox), `WorkerActorRef<T>` (sends `Envelope` directly via `WorkerTransport` — no serializer), `DeadLetterRef` (null object)
+- Implementations: `LocalActorRef<T>` (enqueues to mailbox, also implements `BackpressureCapable::offer(object): EnqueueResult` for delivery-feedback integrations), `WorkerActorRef<T>` (sends `Envelope` directly via `WorkerTransport` — no serializer), `DeadLetterRef` (null object)
 
 **`ActorContext<T>`** (`Actor/ActorContext.php`) — Runtime context passed to handlers:
 - `self(): ActorRef<T>` / `parent(): Option<ActorRef>` / `sender(): Option<ActorRef>`
@@ -354,6 +355,18 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 - `ClusterTransport` interface — `send(NodeAddress $target, string $data): void`. For future TCP inter-node transport.
 - `NodeDirectory` interface — Maps actor paths to `NodeAddress` for multi-machine routing.
 - `NodeHashRing` — Consistent hash ring mapping actor names to `NodeAddress` instances.
+
+### Messenger Bridge (nexus-messenger)
+
+Two-way bridge to standalone `symfony/messenger` transports (no framework-bundle, no console).
+
+- `MessengerActorRef<T>` — `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport, `ask()` throws `UnsupportedOperationException` (v1). Messages need `#[MessageType]` (Psalm-enforced).
+- `MessengerGateway` — explicit `publish(object, array $stamps = [])` egress service.
+- `ReceiverActor` — supervised poll→route→ack loop per `ReceiverInterface`. Acks only on `EnqueueResult::Accepted` (via the core `BackpressureCapable` seam); backpressured/dropped enqueues are not acked so the broker redelivers (at-least-once). Unroutable messages: `reject()` by default, dead-letters opt-in (`ReceiverActorConfig`).
+- `MessageRouter` — pluggable inbound routing: `MapMessageRouter` (class → ref, default), `StampMessageRouter` (TargetActorPathStamp → ref; cluster seam).
+- `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer` + `TypeRegistry`; bridge stamps travel as headers.
+- `LifecycleWatchdog` — worker recycling: triggers graceful `ActorSystem::shutdown()` on memory/uptime/message-count thresholds (`LifecycleThresholds`).
+- `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `watchdogProps()`.
 
 ### Application Bootstrap (nexus-app)
 
