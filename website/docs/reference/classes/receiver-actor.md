@@ -33,7 +33,8 @@ Consumer counters incremented per outcome:
 | Counter | Unit | When |
 |---|---|---|
 | `nexus.messenger.messages.consumed` | `{message}` | Envelope acked after successful delivery. |
-| `nexus.messenger.enqueue.backpressured` | `{message}` | Mailbox returned non-accepted. |
+| `nexus.messenger.enqueue.backpressured` | `{message}` | Mailbox returned `Backpressured`; tick paused, no ack. |
+| `nexus.messenger.enqueue.dropped` | `{message}` | Mailbox returned `Dropped` (closed or overflow-dropped); tick paused, message stays un-acked for redelivery. |
 | `nexus.messenger.messages.rejected` | `{message}` | Unroutable + `UnroutablePolicy::Reject`. |
 | `nexus.messenger.messages.dead_lettered` | `{message}` | Unroutable + `UnroutablePolicy::DeadLetters`. |
 
@@ -73,7 +74,7 @@ ReceiverActor::create(
 | `$deadLetters` | `?ActorRef` | `null` | Required when `unroutablePolicy` is `DeadLetters` (falls back to Reject when null). |
 | `$processedListener` | `?ActorRef` | `null` | Receives `MessagesProcessed` reports; wire to a `LifecycleWatchdog`. |
 | `$events` | `?EventDispatcherInterface` | `null` | PSR-14 dispatcher for consume/reject/dead-letter events. |
-| `$observability` | `?Observability` | `null` | OTel instrumentation for spans, counters, and trace-context extraction. |
+| `$observability` | `?Observability` | `null` | Used only for trace-context extraction from `TraceContextStamp` to parent-link the `messenger.receive` span. Spans and counters are emitted via `$ctx->tracer()` / `$ctx->meter()` automatically — they are always available as no-ops when observability is disabled. |
 
 ## Example
 

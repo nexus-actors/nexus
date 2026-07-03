@@ -105,6 +105,7 @@ Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 
 | `nexus.messenger.messages.rejected` | Consumer | Incremented when an unroutable message is rejected back to the transport |
 | `nexus.messenger.messages.dead_lettered` | Consumer | Incremented when an unroutable message is forwarded to dead letters |
 | `nexus.messenger.enqueue.backpressured` | Consumer | Incremented each time a full mailbox causes a poll pause |
+| `nexus.messenger.enqueue.dropped` | Consumer | Incremented when the target mailbox is closed or drops the message; it stays un-acked for redelivery |
 | `nexus.messenger.worker.recycles` | Watchdog | Incremented when a threshold breach triggers graceful shutdown |
 
 All counters carry a `nexus.message.type` attribute with the message class name.

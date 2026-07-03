@@ -41,7 +41,7 @@ new NexusMessengerSerializer(
 | Method | Signature | Description |
 |---|---|---|
 | `encode` | `encode(Envelope $envelope): array{body: string, headers: array<string, string>}` | Serialize the message body and collect bridge stamp headers. |
-| `decode` | `decode(array $encodedEnvelope): Envelope` | Deserialize body and restore bridge stamps from headers. Throws `MessageDecodingFailedException` on missing or unknown type. |
+| `decode` | `decode(array $encodedEnvelope): Envelope` | Deserialize body and restore bridge stamps from headers. Throws `MessageDecodingFailedException` on a missing or unknown `type` header, or when the `body` key is absent or not a string. |
 
 ## Wire headers
 
