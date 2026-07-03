@@ -17,7 +17,7 @@ The `nexus-psalm` package ships a Psalm plugin with rules and return-type provid
 </plugins>
 ```
 
-All seven rules run at Psalm level 1 (the strictest level). Psalm reports violations as custom issue types; suppress with `@psalm-suppress IssueTypeName` on the specific line or method docblock.
+All rules run at Psalm level 1 (the strictest level). Psalm reports violations as custom issue types; suppress with `@psalm-suppress IssueTypeName` on the specific line or method docblock.
 
 ---
 
@@ -209,6 +209,74 @@ Props::fromFactory(function () use (&$counter) {  // by-ref capture — flagged
 ```php title="src/Actor/GoodFactory.php"
 Props::fromFactory(static fn() => new CounterActor());
 // State lives inside CounterActor, not in the closure
+```
+
+---
+
+## UntypedActorRefInjectionRule
+
+**Hook classes:** `Monadial\Nexus\Psalm\Hook\UntypedActorRefInjectionRule`, `Monadial\Nexus\Psalm\Hook\UntypedActorRefPropertyRule`
+
+**What it catches:** Injected `ActorRef` parameters and properties (constructor, promoted, method, closure) whose declared type does not name a concrete message type. Bare `ActorRef`, explicit `ActorRef<object>`, concrete subtypes (`LocalActorRef`, `MessengerActorRef`, …) without a generic, and refs hidden inside containers (`array<string, ActorRef>`) are all flagged.
+
+**Issue type:** `UntypedActorRefInjection`
+
+**Example error:**
+
+```
+ERROR: UntypedActorRefInjection: ActorRef injection for parameter $orders of App\OrderController::__construct
+       must declare a concrete message type, e.g. ActorRef<MyCommand>.
+       Bare ActorRef and ActorRef<object> defeat typed messaging at the injection boundary.
+```
+
+**Why:** `ActorRef<T>` is only type-safe when `T` is declared. A bare `ActorRef` injected into a controller or service accepts *any* object in `tell()` — the type safety the actor system is built around silently disappears at every DI boundary.
+
+**Fix:**
+
+:::caution Don't do this
+```php title="src/Http/CreateOrderHandler.php" verify:lint-only
+final class CreateOrderHandler
+{
+    public function __construct(
+        #[FromActor('orders')] private readonly ActorRef $orders,  // Psalm will flag this
+    ) {}
+}
+```
+:::
+
+```php title="src/Http/CreateOrderHandler.php"
+final class CreateOrderHandler
+{
+    /** @param ActorRef<OrderCommand> $orders */
+    public function __construct(
+        #[FromActor('orders')] private readonly ActorRef $orders,
+    ) {}
+}
+```
+
+**Excluding accept-anything refs:** `DeadLetterRef` is excluded by default. Exclude your own heterogeneous ref classes via plugin config:
+
+```xml title="psalm.xml"
+<plugins>
+    <pluginClass class="Monadial\Nexus\Psalm\Plugin">
+        <untypedActorRefInjection>
+            <excludeRef class="App\Infra\AuditSinkRef"/>
+        </untypedActorRefInjection>
+    </pluginClass>
+</plugins>
+```
+
+**Exempting by-design heterogeneous positions:** where a *consumer* legitimately holds refs of mixed message types (registry maps, dead-letter sinks), scope the rule out per file with Psalm's standard mechanism instead of inline suppressions:
+
+```xml title="psalm.xml"
+<issueHandlers>
+    <PluginIssue name="UntypedActorRefInjection">
+        <errorLevel type="suppress">
+            <!-- registry map: one map holds refs with different message types -->
+            <file name="src/Infra/ActorRegistry.php"/>
+        </errorLevel>
+    </PluginIssue>
+</issueHandlers>
 ```
 
 ---

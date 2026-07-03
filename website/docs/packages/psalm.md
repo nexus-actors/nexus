@@ -20,6 +20,7 @@ Psalm plugin that enforces actor-model safety rules and improves generic type in
 - `NonSerializableRemoteMessage` — `WorkerActorRef::tell()` messages must carry `#[MessageType]`
 - `BlockingCallInHandler` — flags `sleep`, `file_get_contents`, `curl_exec`, and similar blocking calls inside handlers
 - `MutableClosureCapture` — `Props::fromFactory()` / `fromStatefulFactory()` closures must not capture by reference (`use (&$var)`)
+- `UntypedActorRefInjection` — injected `ActorRef` params/properties must declare a concrete message type (`ActorRef<MyCommand>`); bare `ActorRef` and `ActorRef<object>` are flagged, `DeadLetterRef` and configured `<excludeRef>` classes are exempt
 
 **Type providers**
 
@@ -53,7 +54,7 @@ composer require --dev nexus-actors/psalm
 </psalm>
 ```
 
-All five safety rules fire at Psalm level 1. Suppress per-line with `@psalm-suppress NonReadonlyMessage` (and equivalent names), or globally in `psalm.xml` via `<issueHandlers>`.
+All six safety rules fire at Psalm level 1. Suppress per-line with `@psalm-suppress NonReadonlyMessage` (and equivalent names), or globally in `psalm.xml` via `<issueHandlers>`.
 
 ## See also
 
