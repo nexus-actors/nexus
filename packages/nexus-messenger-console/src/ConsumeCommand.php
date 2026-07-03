@@ -108,7 +108,7 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
                 'memory-limit',
                 null,
                 InputOption::VALUE_REQUIRED,
-                'Stop when memory usage reaches this limit (e.g. 128M, 1G).',
+                'Stop when memory usage reaches this limit (e.g. 128M, 1G); must be > 0.',
             )
             ->addOption('time-limit', null, InputOption::VALUE_REQUIRED, 'Stop after running for this many seconds.')
             ->addOption(

@@ -65,7 +65,7 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
         $className = $this->registry->classForName($type);
 
         if ($className === null) {
-            throw new MessageDeserializationException($type, "No class registered for type name '{$type}'");
+            $className = $type;
         }
 
         try {

@@ -153,4 +153,46 @@ final class ConsumeCommandTest extends TestCase
         self::assertCount(2, $received);
         self::assertCount(2, $transport->getAcknowledged());
     }
+
+    #[Test]
+    public function deadLettersForwardUnroutableMessagesAndAcksWithoutCountingTowardLimit(): void
+    {
+        $unroutableMsg = new class {};
+        $routableMsg = new class {};
+
+        $transport = new InMemoryTransport();
+        $transport->send(new Envelope($unroutableMsg));
+        $transport->send(new Envelope($routableMsg));
+
+        $routableMsgClass = $routableMsg::class;
+
+        $command = new ConsumeCommand(
+            new FiberRuntime(),
+            $transport,
+            new CallbackConsumerSetup(static function (ActorSystem $system) use ($routableMsgClass): MessageRouter {
+                $ref = $system->spawn(
+                    Props::fromBehavior(Behavior::receive(
+                        static function (ActorContext $ctx, object $msg): Behavior {
+                            return Behavior::same();
+                        },
+                    )),
+                    'handler',
+                );
+
+                return new MapMessageRouter([$routableMsgClass => $ref]);
+            }),
+        );
+
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute([
+            '--dead-letters' => true,
+            '--limit' => '1',
+            '--poll-interval' => '20',
+        ]);
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+        self::assertCount(2, $transport->getAcknowledged());
+        self::assertCount(0, $transport->getRejected());
+    }
 }
