@@ -30,7 +30,7 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 composer require nexus-actors/messenger
 ```
 
-Depends on `nexus-actors/core`, `nexus-actors/runtime`, `nexus-actors/serialization`, and `symfony/messenger` only — never `framework-bundle` or `symfony/console`.
+Depends on `nexus-actors/core`, `nexus-actors/runtime`, `nexus-actors/serialization`, `nexus-actors/observability`, and `symfony/messenger` only — never `framework-bundle` or `symfony/console`.
 
 ## Producer — actor → broker
 
@@ -94,7 +94,7 @@ Every receiver acks only what the target mailbox accepted, so all three levers p
 
 ## Observability
 
-Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 `EventDispatcherInterface` to unlock full telemetry. All telemetry is fire-and-forget — errors never break message flow.
+Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 `EventDispatcherInterface` to unlock full telemetry. All telemetry is fire-and-forget — errors are always swallowed and never break message flow.
 
 ### Metrics
 

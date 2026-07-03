@@ -14,7 +14,7 @@ Supervised poll → route → ack loop over one Symfony Messenger `ReceiverInter
 
 `ReceiverActor` is a behavior factory — it returns a `Behavior<object>` ready to pass to `Props::fromBehavior()` or `MessengerBridge::receiverProps()`. Spawn one actor per Messenger receiver (transport). The actor self-schedules `Poll` ticks and drives the receive loop independently of `symfony/console`.
 
-**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. An accepted envelope is acked immediately; a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms).
+**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. An accepted envelope is acked immediately; a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms). Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally.
 
 **Unroutable messages:** when `route()` returns `null`, the policy in `ReceiverActorConfig` decides the outcome — `Reject` (default) rejects the envelope back to the transport; `DeadLetters` forwards the inner message to the configured `$deadLetters` ref and acks.
 
@@ -70,7 +70,7 @@ ReceiverActor::create(
 | `$receiver` | `ReceiverInterface` | — | Messenger transport receiver to poll. |
 | `$router` | `MessageRouter` | — | Resolves each envelope to a target `ActorRef`. |
 | `$config` | `?ReceiverActorConfig` | `ReceiverActorConfig::default()` | Poll interval and unroutable policy. |
-| `$deadLetters` | `?ActorRef` | `null` | Required when `unroutablePolicy` is `DeadLetters`. |
+| `$deadLetters` | `?ActorRef` | `null` | Required when `unroutablePolicy` is `DeadLetters` (falls back to Reject when null). |
 | `$processedListener` | `?ActorRef` | `null` | Receives `MessagesProcessed` reports; wire to a `LifecycleWatchdog`. |
 | `$events` | `?EventDispatcherInterface` | `null` | PSR-14 dispatcher for consume/reject/dead-letter events. |
 | `$observability` | `?Observability` | `null` | OTel instrumentation for spans, counters, and trace-context extraction. |

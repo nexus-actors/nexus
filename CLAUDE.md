@@ -111,7 +111,7 @@ nexus-core (no dependencies — foundational)
 │   ├── nexus-persistence  → Core, Serialization
 │   │   ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │   │   └── nexus-persistence-doctrine → Persistence, Core, Serialization
-│   └── nexus-messenger        → Core, Runtime, Serialization (+ symfony/messenger)
+│   └── nexus-messenger        → Core, Runtime, Serialization, Observability (+ symfony/messenger, psr/event-dispatcher)
 ├── nexus-cluster          → Core only (remote contracts)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
