@@ -1,5 +1,6 @@
 {
     "name": "nexus-actors/example-messenger-redis",
+    "_comment": "Standalone use outside the monorepo: replace the path-autoload entries with `composer require nexus-actors/messenger nexus-actors/runtime-fiber` from Packagist and remove the autoload->files and autoload->psr-4 path entries below.",
     "description": "Nexus example: competing-consumer queue worker over Symfony Redis transport with worker recycling, PSR-14 events, and serialization allow-list.",
     "type": "project",
     "license": "MIT",

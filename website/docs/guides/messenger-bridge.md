@@ -209,7 +209,7 @@ $serializer = new NexusMessengerSerializer(
 
 **v1 limitation:** other Symfony stamps (e.g. `DelayStamp`, `RedeliveryStamp`) are not preserved. If you need full stamp fidelity or interop with non-Nexus producers (e.g. a Python service), swap in Symfony's built-in `Serializer` instead — the bridge's routing and actor integration still work regardless of which serializer the transport uses.
 
-When both producer and consumer share the same codebase, `PhpNativeSerializer` is faster and requires no type registry. Use `ValinorMessageSerializer` (and `NexusMessengerSerializer`) for cross-service, cross-language, or cross-deployment message exchange.
+`NexusMessengerSerializer` always requires a `TypeRegistry`. When both producer and consumer share the same codebase and you want a simpler setup, you can back it with `PhpNativeSerializer` — but always provide an explicit allow-list to prevent PHP object injection: `new PhpNativeSerializer(allowedClasses: [OrderPlaced::class, PaymentReceived::class])`. Use `ValinorMessageSerializer` for cross-service, cross-language, or cross-deployment message exchange.
 
 ## Recycling workers
 

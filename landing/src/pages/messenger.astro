@@ -155,6 +155,7 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any Messenger <code class="font-mono">SenderInterface</code> — AMQP, Redis, SQS, Doctrine, in-memory</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Optional <code class="font-mono">sourcePath</code> stamps the sender's actor path on every envelope</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">MessengerBridge::producer()</code> — no container, plain factory</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">NexusMessengerSerializer</code> — Nexus-backed wire format with an explicit <code class="font-mono">allowedClasses</code> allow-list; swappable for any Symfony <code class="font-mono">SerializerInterface</code></li>
       </ul>
     </div>
     <CodeBlock code={producerCode} lang="php" title="src/Actor/OrderActor.php" />
@@ -340,11 +341,12 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
       <h2 class="text-2xl font-bold mb-4">What the bridge does not do.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-4">
         <code class="font-mono">ask()</code> is not supported on
-        <code class="font-mono">MessengerActorRef</code> in v1. Broker request/reply
-        requires correlation stamps and a reply transport — that pattern is deferred
-        beyond the initial release. For request/reply within a single process, use a
-        local <code class="font-mono">ActorRef</code> and <code class="font-mono">ask()</code>
-        as normal.
+        <code class="font-mono">MessengerActorRef</code> in v1 — calling it throws
+        <code class="font-mono">UnsupportedOperationException</code> at runtime. Broker
+        request/reply requires correlation stamps and a reply transport — that pattern is
+        deferred beyond the initial release. For request/reply within a single process,
+        use a local <code class="font-mono">ActorRef</code> and
+        <code class="font-mono">ask()</code> as normal.
       </p>
       <p class="text-slate-600 dark:text-slate-300">
         The bridge is also not a replacement for Symfony Messenger's own workers.
