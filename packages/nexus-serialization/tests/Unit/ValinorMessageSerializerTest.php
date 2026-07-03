@@ -91,6 +91,31 @@ final class ValinorMessageSerializerTest extends TestCase
         (void) $this->serializer->deserialize('{invalid-json', 'valinor.test');
     }
 
+    #[Test]
+    public function deserializeAcceptsClassNameDirectlyWhenUnregistered(): void
+    {
+        $emptyRegistry = new TypeRegistry();
+        $serializer = new ValinorMessageSerializer($emptyRegistry);
+
+        $json = json_encode(['text' => 'direct-class', 'number' => 77], JSON_THROW_ON_ERROR);
+
+        $result = $serializer->deserialize($json, ValinorTestMessage::class);
+
+        self::assertInstanceOf(ValinorTestMessage::class, $result);
+        self::assertSame('direct-class', $result->text);
+        self::assertSame(77, $result->number);
+    }
+
+    #[Test]
+    public function deserializeStillThrowsForUnresolvableType(): void
+    {
+        $this->expectException(MessageDeserializationException::class);
+
+        $json = json_encode(['text' => 'invalid', 'number' => 0], JSON_THROW_ON_ERROR);
+
+        (void) $this->serializer->deserialize($json, 'NonExistentClass\\That\\DoesNotExist');
+    }
+
     protected function setUp(): void
     {
         $this->registry = new TypeRegistry();
