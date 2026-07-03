@@ -33,6 +33,7 @@ jobs:
           - { local: 'nexus-app',                  remote: 'app' }
           - { local: 'nexus-cluster',              remote: 'cluster' }
           - { local: 'nexus-messenger',            remote: 'messenger' }
+          - { local: 'nexus-messenger-console',   remote: 'messenger-console' }
           - { local: 'nexus-worker-pool',          remote: 'worker-pool' }
           - { local: 'nexus-worker-pool-swoole',   remote: 'worker-pool-swoole' }
     steps:

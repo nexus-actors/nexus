@@ -57,6 +57,11 @@ deptrac:
         - type: directory
           value: packages/nexus-messenger/src/.*
 
+    - name: MessengerConsole
+      collectors:
+        - type: directory
+          value: packages/nexus-messenger-console/src/.*
+
     - name: DoctrineDbal
       collectors:
         - type: directory
@@ -195,6 +200,12 @@ deptrac:
       - Core
     Messenger:
       - Core
+      - Observability
+      - Runtime
+      - Serialization
+    MessengerConsole:
+      - Core
+      - Messenger
       - Observability
       - Runtime
       - Serialization

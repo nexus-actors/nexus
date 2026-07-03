@@ -1,0 +1,30 @@
+{
+    "name": "nexus-actors/messenger-console",
+    "description": "Nexus messenger console — Symfony Console runners for the nexus-messenger bridge: nexus:messenger:consume and nexus:messenger:produce commands.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/messenger": "dev-main",
+        "nexus-actors/observability": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/serialization": "dev-main",
+        "psr/event-dispatcher": "^1.0",
+        "psr/log": "^3.0",
+        "symfony/console": "^7.4 || ^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Messenger\\Console\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Messenger\\Console\\Tests\\": "tests/"
+        }
+    }
+}

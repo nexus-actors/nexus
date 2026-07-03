@@ -13,6 +13,7 @@
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
             <directory>packages/nexus-messenger/tests/Unit</directory>
+            <directory>packages/nexus-messenger-console/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
             <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
@@ -118,6 +119,7 @@
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-cluster/src</directory>
             <directory>packages/nexus-messenger/src</directory>
+            <directory>packages/nexus-messenger-console/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>
             <directory>packages/nexus-doctrine-orm/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>
