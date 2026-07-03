@@ -217,7 +217,7 @@ Props::fromFactory(static fn() => new CounterActor());
 
 **Hook classes:** `Monadial\Nexus\Psalm\Hook\UntypedActorRefInjectionRule`, `Monadial\Nexus\Psalm\Hook\UntypedActorRefPropertyRule`
 
-**What it catches:** Injected `ActorRef` parameters and properties (constructor, promoted, method, closure) whose declared type does not name a concrete message type. Bare `ActorRef`, explicit `ActorRef<object>`, concrete subtypes (`LocalActorRef`, `MessengerActorRef`, …) without a generic, and refs hidden inside containers (`array<string, ActorRef>`) are all flagged.
+**What it catches:** Injected `ActorRef` parameters and properties (constructor, promoted, method, closure, and class properties) whose declared type does not name a concrete message type. Bare `ActorRef`, explicit `ActorRef<object>`, concrete subtypes (`LocalActorRef`, `MessengerActorRef`, …) without a generic, and refs hidden inside containers (`array<string, ActorRef>`) are all flagged. Parameters of bodyless interface and abstract methods are covered too.
 
 **Issue type:** `UntypedActorRefInjection`
 
@@ -254,7 +254,7 @@ final class CreateOrderHandler
 }
 ```
 
-**Excluding accept-anything refs:** `DeadLetterRef` is excluded by default. Exclude your own heterogeneous ref classes via plugin config:
+**Excluding accept-anything refs:** `DeadLetterRef` is excluded by default. Exclude your own heterogeneous ref classes via plugin config: Subclasses of an excluded ref class are also exempt — excluding a base ref class exempts every ref that extends it.
 
 ```xml title="psalm.xml"
 <plugins>
