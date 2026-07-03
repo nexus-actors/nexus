@@ -102,7 +102,8 @@ interface ActorContext
      * The child finishes processing its current message, then receives a
      * `PostStop` signal before being removed from the supervision tree.
      *
-     * @param ActorRef<object> $child Reference to the child actor to stop
+     * @template W of object
+     * @param ActorRef<W> $child Reference to the child actor to stop
      */
     public function stop(ActorRef $child): void;
 
@@ -128,14 +129,16 @@ interface ActorContext
      * When `$target` stops, this actor receives a `Terminated` signal via its
      * `onSignal()` handler.
      *
-     * @param ActorRef<object> $target Actor reference to watch for termination
+     * @template W of object
+     * @param ActorRef<W> $target Actor reference to watch for termination
      */
     public function watch(ActorRef $target): void;
 
     /**
      * Cancel a previously registered death-watch subscription.
      *
-     * @param ActorRef<object> $target Previously-watched reference to stop watching
+     * @template W of object
+     * @param ActorRef<W> $target Previously-watched reference to stop watching
      */
     public function unwatch(ActorRef $target): void;
 

@@ -386,10 +386,14 @@ final class ActorCell implements ActorContext
         return $childRef;
     }
 
-    /** @param ActorRef<object> $child */
+    /**
+     * @template W of object
+     * @param ActorRef<W> $child
+     */
     #[Override]
     public function stop(ActorRef $child): void
     {
+        /** @psalm-suppress InvalidArgument — PoisonPill rides the user channel; the system-message path is type-erased by design. */
         $child->tell(new PoisonPill());
     }
 
@@ -407,18 +411,27 @@ final class ActorCell implements ActorContext
         return $this->childrenMap;
     }
 
-    /** @param ActorRef<object> $target */
+    /**
+     * @template W of object
+     * @param ActorRef<W> $target
+     */
     #[Override]
     public function watch(ActorRef $target): void
     {
+        /** @psalm-suppress InvalidArgument — Watch rides the user channel; the system-message path is type-erased by design. */
         $target->tell(new Watch($this->selfRef));
+        /** @psalm-suppress InvalidPropertyAssignmentValue — watchers is a heterogeneous identity map. */
         $this->watchers[(string) $target->path()] = $target;
     }
 
-    /** @param ActorRef<object> $target */
+    /**
+     * @template W of object
+     * @param ActorRef<W> $target
+     */
     #[Override]
     public function unwatch(ActorRef $target): void
     {
+        /** @psalm-suppress InvalidArgument — Unwatch rides the user channel; the system-message path is type-erased by design. */
         $target->tell(new Unwatch($this->selfRef));
         unset($this->watchers[(string) $target->path()]);
     }
