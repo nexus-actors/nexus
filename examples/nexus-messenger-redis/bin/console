@@ -1,0 +1,94 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * nexus-messenger-redis — Symfony Console application
+ *
+ * Provides both nexus:messenger:consume and nexus:messenger:produce as
+ * Symfony Console commands, wired to the Redis transport.
+ *
+ * Usage (inside the example container):
+ *   php bin/console nexus:messenger:consume --receivers=3 --limit=50
+ *   php bin/console nexus:messenger:produce order-placed '{"orderId":"A-1","customerId":"c-1","amountCents":1999}'
+ *
+ * Environment variables:
+ *   REDIS_DSN         redis://redis:6379  (default)
+ *   REDIS_STREAM      orders              (default)
+ *   CONSUMER_GROUP    nexus-workers       (default)
+ */
+
+declare(strict_types=1);
+
+use Monadial\Nexus\Example\MessengerRedis\Actor\OrderProcessor;
+use Monadial\Nexus\Example\MessengerRedis\Event\StdoutDispatcher;
+use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Monadial\Nexus\Messenger\Console\ConsumeCommand;
+use Monadial\Nexus\Messenger\Console\ProduceCommand;
+use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
+use Monadial\Nexus\Serialization\TypeRegistry;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+use Symfony\Component\Console\Application;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
+
+require __DIR__ . '/../vendor/autoload.php';
+
+// ---------------------------------------------------------------------------
+// 1. Serializer + TypeRegistry — explicit allow-list prevents PHP Object Injection
+// ---------------------------------------------------------------------------
+$typeRegistry = new TypeRegistry();
+$typeRegistry->registerFromAttribute(OrderPlaced::class);
+
+$serializer = new NexusMessengerSerializer(
+    new PhpNativeSerializer(allowedClasses: [OrderPlaced::class]),
+    $typeRegistry,
+);
+
+// ---------------------------------------------------------------------------
+// 2. Redis transport
+// ---------------------------------------------------------------------------
+$dsn    = (string) ($_SERVER['REDIS_DSN'] ?? 'redis://redis:6379');
+$stream = (string) ($_SERVER['REDIS_STREAM'] ?? 'orders');
+$group  = (string) ($_SERVER['CONSUMER_GROUP'] ?? 'nexus-workers');
+
+$connection = Connection::fromDsn($dsn . '/' . $stream, ['group' => $group]);
+$transport  = new RedisTransport($connection, $serializer);
+
+// ---------------------------------------------------------------------------
+// 3. PSR-3 logger and PSR-14 dispatcher
+// ---------------------------------------------------------------------------
+$logger = new Logger('nexus-worker');
+$logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+
+$events = new StdoutDispatcher();
+
+// ---------------------------------------------------------------------------
+// 4. Router — OrderPlaced → OrderProcessor actor
+//    The actor is spawned inside ConsumeCommand; DeadLetterRef is used here
+//    as a placeholder that accepts any message in the router for the console
+//    wiring. In production, wire to a pre-spawned actor or use a lazy ref.
+// ---------------------------------------------------------------------------
+$router = new MapMessageRouter([
+    OrderPlaced::class => new Monadial\Nexus\Core\Actor\DeadLetterRef(),
+]);
+
+// ---------------------------------------------------------------------------
+// 5. Console application
+// ---------------------------------------------------------------------------
+$app = new Application('nexus-messenger-redis', '1.0.0');
+
+$app->add(new ConsumeCommand(
+    new FiberRuntime(),
+    $transport,
+    $router,
+    logger: $logger,
+    events: $events,
+));
+
+$app->add(new ProduceCommand($transport, $serializer, $typeRegistry));
+
+$app->run();

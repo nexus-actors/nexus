@@ -10,6 +10,7 @@
         "monolog/monolog": "^3.0",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
+        "symfony/console": "^7.4 || ^8.0",
         "symfony/messenger": "^7.4 || ^8.0",
         "symfony/redis-messenger": "^7.4 || ^8.0"
     },
@@ -22,6 +23,7 @@
             "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
             "Monadial\\Nexus\\Example\\MessengerRedis\\": "src/",
             "Monadial\\Nexus\\Messenger\\": "/nexus-packages/nexus-messenger/src/",
+            "Monadial\\Nexus\\Messenger\\Console\\": "/nexus-packages/nexus-messenger-console/src/",
             "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
             "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "/nexus-packages/nexus-runtime-fiber/src/",
@@ -34,6 +36,7 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "scripts": {
+        "console": "php bin/console",
         "produce": "php bin/produce.php",
         "worker": "php bin/worker.php"
     }

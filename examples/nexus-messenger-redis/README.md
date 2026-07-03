@@ -52,6 +52,17 @@ docker compose run --rm app php bin/produce.php 20
 docker compose run --rm app php bin/worker.php
 ```
 
+Alternatively, use the Symfony Console runner from `nexus-actors/messenger-console`:
+
+```bash
+# Consume with the Console command (--limit stops after N messages)
+docker compose run --rm app php bin/console nexus:messenger:consume --receivers=3 --limit=50
+
+# Publish via the Console command
+docker compose run --rm app php bin/console nexus:messenger:produce order-placed \
+  '{"orderId":"A-1","customerId":"c-1","amountCents":1999}'
+```
+
 ---
 
 ## What to observe

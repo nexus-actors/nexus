@@ -264,6 +264,7 @@ const sidebars = {
             'packages/app',
             'packages/logger',
             'packages/messenger',
+            'packages/messenger-console',
             'packages/serialization',
             'packages/psalm',
             'packages/nexus',

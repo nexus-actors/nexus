@@ -2,6 +2,7 @@
 title: nexus-messenger
 related:
   - packages/core
+  - packages/messenger-console
   - packages/serialization
   - packages/cluster
   - guides/messenger-bridge
