@@ -32,6 +32,7 @@ jobs:
           - { local: 'nexus-persistence-doctrine', remote: 'persistence-doctrine' }
           - { local: 'nexus-app',                  remote: 'app' }
           - { local: 'nexus-cluster',              remote: 'cluster' }
+          - { local: 'nexus-messenger',            remote: 'messenger' }
           - { local: 'nexus-worker-pool',          remote: 'worker-pool' }
           - { local: 'nexus-worker-pool-swoole',   remote: 'worker-pool-swoole' }
     steps:
