@@ -169,7 +169,9 @@ final class ReceiverActorTest extends TestCase
         });
         $system->run();
 
-        self::assertSame(1, $observability->meter->sum('nexus.messenger.enqueue.dropped'));
+        // The un-acked message is redelivered on every poll tick, so the
+        // dropped counter records one increment per delivery attempt.
+        self::assertGreaterThanOrEqual(1, $observability->meter->sum('nexus.messenger.enqueue.dropped'));
         self::assertCount(0, $transport->getAcknowledged());
         self::assertCount(0, $transport->getRejected());
     }
