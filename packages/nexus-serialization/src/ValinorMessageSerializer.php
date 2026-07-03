@@ -56,6 +56,10 @@ final readonly class ValinorMessageSerializer implements MessageSerializer
     }
 
     /**
+     * Deserializes JSON data to an object of the specified type.
+     *
+     * Type resolution attempts the registry first (type name lookup); if not found, treats $type as a literal class name.
+     *
      * @throws MessageDeserializationException
      */
     #[Override]
