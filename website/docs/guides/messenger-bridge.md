@@ -126,7 +126,7 @@ $system->spawn(
 
 ### At-least-once semantics
 
-The bridge acks a broker message only after the target actor's mailbox has accepted the envelope (`EnqueueResult::Accepted`). If the mailbox is bounded and full, the poll returns `Backpressured` — the message is not acked, and the broker redelivers it later. This means:
+The bridge acks a broker message only after the target actor's mailbox has accepted the envelope (`EnqueueResult::Accepted`). If the mailbox is bounded and full, the poll returns `Backpressured` — the message is not acked, and the broker redelivers it later. Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally (no backpressure signal). This means:
 
 - Mailbox overflow never silently drops messages.
 - Your actor handlers should be idempotent (or deduplicate on a correlation ID) because redelivery is possible.
@@ -179,7 +179,7 @@ Choose `DeadLetters` when your broker does not have its own dead-letter queue, o
 
 ## Swapping serialization
 
-`NexusMessengerSerializer` implements Symfony Messenger's `SerializerInterface` and delegates encoding to any Nexus `MessageSerializer`. Wire it into a transport that accepts a custom serializer:
+`NexusMessengerSerializer` implements Symfony Messenger's `SerializerInterface` and delegates encoding to any Nexus `MessageSerializer`. Encode and decode are asymmetric: encode emits the `#[MessageType]` name when registered and falls back to the FQCN; decode requires the `type` header to be registered in the `TypeRegistry` and throws `MessageDecodingFailedException` if it is not. To deliberately accept a FQCN header on decode, register the class as its own type name: `$registry->register(Foo::class, Foo::class)`. Wire the serializer into a transport that accepts a custom serializer:
 
 ```php title="src/Serialization/SerializerSetup.php"
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
@@ -234,7 +234,7 @@ $system->spawn(
 $system->run(); // blocks; watchdog triggers shutdown when a threshold is breached
 ```
 
-When a threshold is breached, the watchdog calls `ActorSystem::shutdown()` with a grace period (default 30 s), which broadcasts `PoisonPill` to all root actors and waits for clean termination before the process exits. Your process manager (systemd, supervisor, or a k8s liveness probe) then restarts the worker.
+When a threshold is breached, the watchdog calls `ActorSystem::shutdown()` with a grace period (default 10 s), which broadcasts `PoisonPill` to all root actors and waits for clean termination before the process exits. Your process manager (systemd, supervisor, or a k8s liveness probe) then restarts the worker.
 
 All three thresholds are independent and additive — whichever is reached first triggers recycling. Pass only the ones you need; `LifecycleThresholds::none()` with no `with*()` calls disables recycling entirely (not recommended in production).
 

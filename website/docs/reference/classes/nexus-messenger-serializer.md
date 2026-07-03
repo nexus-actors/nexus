@@ -14,7 +14,7 @@ Symfony Messenger `SerializerInterface` backed by a Nexus `MessageSerializer`; e
 
 `NexusMessengerSerializer` implements Messenger's `SerializerInterface` so the bridge can use any Nexus `MessageSerializer` (Valinor, PHP-native, or custom) as the wire format for broker transports instead of Symfony's default PHP serializer.
 
-**Message bodies** are serialized by the injected `MessageSerializer`. The message type travels in the `type` header — the `#[MessageType]`-registered name when available, otherwise the FQCN.
+**Message bodies** are serialized by the injected `MessageSerializer`. The message type travels in the `type` header. Encode and decode are asymmetric: encode uses the `#[MessageType]`-registered name when available and falls back to the FQCN; decode requires the header value to be registered in the `TypeRegistry` and throws `MessageDecodingFailedException` otherwise. To deliberately accept a FQCN header on decode, register the class as its own type name: `$registry->register(Foo::class, Foo::class)`.
 
 **Bridge stamps** round-trip as plain string headers and are fully restored on `decode()`. Non-bridge stamps are **not** preserved in v1 — if you need full Symfony stamp fidelity or interoperability with non-Nexus producers, swap in any other `SerializerInterface`.
 
@@ -47,7 +47,7 @@ new NexusMessengerSerializer(
 
 | Header | Value | Notes |
 |---|---|---|
-| `type` | `#[MessageType]` name or FQCN | Required. Missing or empty header causes `MessageDecodingFailedException`. |
+| `type` | `#[MessageType]` name (encode: FQCN fallback) | Required. Encode falls back to FQCN when unregistered; decode throws `MessageDecodingFailedException` if the value is not in the `TypeRegistry`. |
 | `X-Nexus-Source-Path` | Actor path string | Present when a `SourceActorPathStamp` is on the envelope. |
 | `X-Nexus-Target-Path` | Actor path string | Present when a `TargetActorPathStamp` is on the envelope. |
 | `X-Nexus-Trace-Context` | JSON object `{"traceparent":"…", …}` | Present when a `TraceContextStamp` is on the envelope. Malformed JSON or non-string-map values are silently skipped on decode. |
