@@ -587,6 +587,37 @@ final class PluginTest extends TestCase
         self::assertStringNotContains('PlainHandlerNoAttribute', $output);
     }
 
+    #[Test]
+    public function untypedActorRefRuleFlagsBareAndObjectParams(): void
+    {
+        $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
+        $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
+
+        // 6 issues: UarBareParamService::setSink, UarObjectParamService::route,
+        // UarSubtypeBypassService::connect, UarClosureHost closure param,
+        // UarContainerService::setBare, UarContainerService::setErased
+        self::assertCount(6, $lines, "Expected 6 UntypedActorRefInjection issues:\n" . implode("\n", $lines));
+        self::assertStringContains('setSink', $output);
+        self::assertStringContains('UarObjectParamService', $output);
+        self::assertStringContains('UarSubtypeBypassService', $output);
+        self::assertStringContains('setBare', $output);
+        self::assertStringContains('setErased', $output);
+        self::assertStringNotContains('setTyped', $output);
+    }
+
+    #[Test]
+    public function untypedActorRefRuleAllowsTypedTemplatedSuppressedAndUnrelated(): void
+    {
+        $output = $this->runPsalmOnFixture('UntypedActorRefFixture.php');
+        $lines = $this->filterIssueLines($output, 'UntypedActorRefInjection');
+
+        foreach ($lines as $line) {
+            foreach (['UarTypedParamService', 'UarTemplatedService', 'UarNullableTypedService', 'UarSuppressedService', 'UarUnrelatedService'] as $clean) {
+                self::assertStringNotContains($clean, $line);
+            }
+        }
+    }
+
     private function runPsalmOnFixture(string $fixture): string
     {
         $fixturePath = __DIR__ . '/Fixture/' . $fixture;
