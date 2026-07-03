@@ -48,11 +48,11 @@ static fn (ActorContext $ctx, object $cmd, LedgerState $state): Effect => match 
 
 - `Effect::persist(object ...$events): self` — persist one or more domain events; the event handler is called for each before side effects run.
 - `Effect::none(): self` — no events, no state change; side effects may still be attached.
-- `Effect::reply(ActorRef $to, object $message): self` — send an immediate reply without persisting (useful for read queries).
+- `Effect::reply(ActorRef<object> $to, object $message): self` — send an immediate reply without persisting (useful for read queries).
 - `Effect::stash(): self` — defer the current command until the actor is ready (used during recovery or initialization).
 - `Effect::stop(): self` — stop the actor cleanly after any chained side effects complete.
 - `Effect::unhandled(): self` — signal that the command was not recognised; routes to dead letters.
-- `->thenReply(ActorRef $to, Closure $fn): self` — send a reply after events are persisted; `$fn` receives the post-persist state.
+- `->thenReply(ActorRef<object> $to, Closure $fn): self` — send a reply after events are persisted; `$fn` receives the post-persist state.
 - `->thenRun(Closure $fn): self` — execute an arbitrary side effect after events are persisted; `$fn` receives the post-persist state.
 
 ## Full API reference

@@ -77,9 +77,9 @@ $behavior = Behavior::receive(
   children, opening connections).
 - `PostStop` — emitted once at shutdown; guaranteed to run after all children have
   stopped, so it is safe to close shared resources here.
-- `Terminated(ActorRef $ref)` — emitted per watched peer. Register a watch with
+- `Terminated(ActorRef<object> $ref)` — emitted per watched peer. Register a watch with
   `$ctx->watch($ref)`; cancel with `$ctx->unwatch($ref)`.
-- `ChildFailed(ActorRef $child, Throwable $cause)` — emitted when a child throws and
+- `ChildFailed(ActorRef<object> $child, Throwable $cause)` — emitted when a child throws and
   the supervision strategy escalates to the parent.
 
 ## Attaching a signal handler
