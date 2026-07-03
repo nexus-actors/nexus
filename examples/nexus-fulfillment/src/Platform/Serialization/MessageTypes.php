@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Serialization;
 
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
 use Monadial\Nexus\Serialization\TypeRegistry;
 
@@ -16,6 +17,7 @@ final class MessageTypes
 {
     /** @var list<class-string> */
     private const array CONTRACTS = [
+        OrderCancelled::class,
         OrderPlaced::class,
     ];
 
