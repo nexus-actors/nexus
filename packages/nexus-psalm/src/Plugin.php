@@ -28,13 +28,39 @@ use Psalm\Plugin\RegistrationInterface;
 use SimpleXMLElement;
 
 use function class_exists;
+use function ltrim;
 
 /** @psalm-api */
 final class Plugin implements PluginEntryPointInterface
 {
+    /**
+     * @return list<string>
+     * @psalm-suppress TypeDoesNotContainType, MixedPropertyFetch, MixedAssignment, MixedArrayAccess
+     */
+    private static function parseExcludedRefs(?SimpleXMLElement $config): array
+    {
+        if ($config === null || !isset($config->untypedActorRefInjection)) {
+            return [];
+        }
+
+        $excluded = [];
+
+        foreach ($config->untypedActorRefInjection->excludeRef as $node) {
+            $class = ltrim((string) $node['class'], '\\');
+
+            if ($class !== '') {
+                $excluded[] = $class;
+            }
+        }
+
+        return $excluded;
+    }
+
     #[Override]
     public function __invoke(RegistrationInterface $registration, ?SimpleXMLElement $config = null): void
     {
+        UntypedActorRefInjectionRule::configure(self::parseExcludedRefs($config));
+
         $hooks = [
             BehaviorSubclassNarrowingHook::class,
             ReadonlyMessageRule::class,

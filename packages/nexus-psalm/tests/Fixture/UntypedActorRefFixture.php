@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Psalm\Tests\Fixture;
 
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 
 use function count;
@@ -178,4 +179,21 @@ final class UarSuppressedPropertyService
 interface UarSinkRegistry
 {
     public function register(string $name, ActorRef $sink): void;
+}
+
+/** Good: DeadLetterRef is excluded by default — accept-anything is its contract. */
+final readonly class UarDeadLetterSinkService
+{
+    public function __construct(private DeadLetterRef $sink) {}
+
+    public function swallow(): bool
+    {
+        return $this->sink->isAlive();
+    }
+}
+
+/** Bad: bare ActorRef param on a bodyless abstract method. */
+abstract class UarAbstractDispatcher
+{
+    abstract public function dispatch(ActorRef $sink): void;
 }
