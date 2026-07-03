@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use NoDiscard;
 
 /**
  * An ActorRef whose sends can report mailbox admission.
@@ -23,9 +24,16 @@ interface BackpressureCapable
     /**
      * Enqueue a message and report the mailbox admission result.
      *
-     * Returns Dropped when the mailbox is already closed.
+     * Possible outcomes:
+     * - Accepted       — message enqueued; caller may ack the upstream source.
+     * - Backpressured  — bounded mailbox is full with the Backpressure overflow
+     *                    strategy; the message was not enqueued. Caller should
+     *                    pause and retry later.
+     * - Dropped        — mailbox is closed or the overflow strategy discarded the
+     *                    message; it was not enqueued and will not be delivered.
      *
      * @param T $message
      */
+    #[NoDiscard]
     public function offer(object $message): EnqueueResult;
 }

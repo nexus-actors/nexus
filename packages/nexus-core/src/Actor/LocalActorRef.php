@@ -56,6 +56,7 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
      * @param T $message
      */
     #[Override]
+    #[NoDiscard]
     public function offer(object $message): EnqueueResult
     {
         try {
