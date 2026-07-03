@@ -82,9 +82,18 @@ final readonly class MessengerBridge
         ?ActorRef $deadLetters = null,
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
+        ?Observability $observability = null,
     ): Props {
         return Props::fromBehavior(
-            ReceiverActor::create($receiver, $router, $config, $deadLetters, $processedListener, $events),
+            ReceiverActor::create(
+                $receiver,
+                $router,
+                $config,
+                $deadLetters,
+                $processedListener,
+                $events,
+                $observability,
+            ),
         );
     }
 
@@ -110,6 +119,7 @@ final readonly class MessengerBridge
         ?ActorRef $deadLetters = null,
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
+        ?Observability $observability = null,
     ): array {
         if ($count < 1) {
             throw new InvalidArgumentException('Receiver count must be at least 1.');
@@ -120,7 +130,15 @@ final readonly class MessengerBridge
 
         for ($i = 0; $i < $count; $i++) {
             $refs[] = $system->spawn(
-                self::receiverProps($receiver, $router, $config, $deadLetters, $processedListener, $events),
+                self::receiverProps(
+                    $receiver,
+                    $router,
+                    $config,
+                    $deadLetters,
+                    $processedListener,
+                    $events,
+                    $observability,
+                ),
                 $namePrefix . '-' . $i,
             );
         }

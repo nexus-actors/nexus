@@ -25,7 +25,7 @@ final class RecordingTracer implements Tracer
         array $attributes = [],
         ?Context $parent = null,
     ): Span {
-        $span = new RecordingSpan($name, $kind, $attributes);
+        $span = new RecordingSpan($name, $kind, $attributes, $parent);
         $this->spans[] = $span;
 
         return $span;

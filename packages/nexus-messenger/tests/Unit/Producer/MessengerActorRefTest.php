@@ -9,6 +9,7 @@ use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
+use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
@@ -108,6 +109,20 @@ final class MessengerActorRefTest extends TestCase
         self::assertCount(1, $sender->sent);
         self::assertCount(1, $dispatcher->events);
         self::assertInstanceOf(MessagePublished::class, $dispatcher->events[0]);
+    }
+
+    #[Test]
+    public function tellAttachesTraceContextStampWhenObservabilityIsEnabled(): void
+    {
+        $sender = new RecordingSender();
+        $ref = new MessengerActorRef($sender, 'orders-out', null, new RecordingObservability());
+
+        $ref->tell(new stdClass());
+
+        $stamp = $sender->sent[0]->last(TraceContextStamp::class);
+
+        self::assertInstanceOf(TraceContextStamp::class, $stamp);
+        self::assertIsArray($stamp->carrier);
     }
 
     #[Test]
