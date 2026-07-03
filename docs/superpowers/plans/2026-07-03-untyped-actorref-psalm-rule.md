@@ -14,9 +14,10 @@
 
 - **All commands run through Docker** — `docker compose exec -T php …` or `make` targets. Never `php`/`composer`/`vendor/bin/*` on the host.
 - **No `Co-Authored-By: Claude`** (or any attribution trailer) in commit messages.
-- **Execute on the `feat/nexus-messenger` branch** (or a branch cut from it) — Tasks 2 and 3 modify `packages/nexus-messenger` files that exist only there.
+- **Execution environment: git worktree based on `main`** (`.claude/worktrees/psalm-untyped-actorref`, branch `worktree-psalm-untyped-actorref`). `packages/nexus-messenger` does NOT exist here — **Task 2 is DEFERRED** (see its header) and the messenger issueHandlers entries are omitted from Task 3.
+- **Worktree commit workflow:** GrumPHP hooks and GPG signing are broken in worktrees under Docker. Run the gate manually before every commit (`make cs-fix && make phpcs && make psalm` plus the task's tests; CI also runs `--testsuite=psalm`, which `make test-unit` does not cover), then commit with `git -c commit.gpgsign=false commit --no-verify`.
 - Code style: PER-CS2.0 + Slevomat. Blank line before `if`/`foreach`/etc. blocks; string-keyed arrays sorted alphabetically; multi-line ternaries; ordered imports (class, function, const — each alphabetical); trailing commas in multiline contexts; all classes `final`.
-- GrumPHP pre-commit runs cs-fixer, phpcs, psalm, phpunit on every commit — every task must leave the monorepo green (`make psalm` passes) or its commit will be rejected.
+- Every task must leave the monorepo green (`make psalm` passes) — the manual gate replaces GrumPHP enforcement.
 - The plugin rule name / issue type is exactly `UntypedActorRefInjection`. The ActorRef FQCN is `Monadial\Nexus\Core\Actor\ActorRef`; the default-excluded ref is `Monadial\Nexus\Core\Actor\DeadLetterRef`.
 
 ## File Structure
@@ -183,6 +184,8 @@ git commit -m "refactor(core): method-level generics for watch/unwatch/stop — 
 ---
 
 ### Task 2: Type `processedListener` as `ActorRef<MessagesProcessed>` (Bucket B)
+
+> **DEFERRED — do not execute in this worktree.** `packages/nexus-messenger` lives on `feat/nexus-messenger`, not `main`. Execute this task (and add the four messenger issueHandlers entries from Task 3) on whichever branch integrates second — see "Messenger integration note" at the end of the plan.
 
 **Files:**
 - Modify: `packages/nexus-messenger/src/Consumer/ReceiverActor.php:46` (`create()` docblock)
@@ -717,8 +720,6 @@ In `psalm.xml`, inside the existing `<issueHandlers>` element, add:
                 <file name="packages/nexus-core/src/Actor/ActorSystem.php"/>
                 <file name="packages/nexus-http/src/Actor/PerRequestActorScope.php"/>
                 <file name="packages/nexus-http/src/Actor/ResolvedActorTable.php"/>
-                <file name="packages/nexus-messenger/src/Routing/MapMessageRouter.php"/>
-                <file name="packages/nexus-messenger/src/Routing/StampMessageRouter.php"/>
                 <file name="packages/nexus-worker-pool/src/WorkerNode.php"/>
                 <!-- Parent refs: a child cannot know its parent's message type -->
                 <file name="packages/nexus-core/src/Actor/TaskContext.php"/>
@@ -728,12 +729,11 @@ In `psalm.xml`, inside the existing `<issueHandlers>` element, add:
                 <file name="packages/nexus-core/src/Message/DeadLetter.php"/>
                 <file name="packages/nexus-core/src/Message/Unwatch.php"/>
                 <file name="packages/nexus-core/src/Message/Watch.php"/>
-                <!-- Dead-letter sinks receive arbitrary unroutable messages by definition -->
-                <file name="packages/nexus-messenger/src/Consumer/ReceiverActor.php"/>
-                <file name="packages/nexus-messenger/src/MessengerBridge.php"/>
             </errorLevel>
         </UntypedActorRefInjection>
 ```
+
+(Messenger entries — `MapMessageRouter.php`, `StampMessageRouter.php`, `ReceiverActor.php`, `MessengerBridge.php` — are added when this branch and `feat/nexus-messenger` integrate; see the Messenger integration note.)
 
 - [ ] **Step 6: Run the new tests GREEN**
 
@@ -1293,6 +1293,15 @@ git commit -m "docs: register UntypedActorRefInjectionRule in CLAUDE.md plugin l
 ```
 
 ---
+
+## Messenger integration note
+
+This branch is based on `main`; `feat/nexus-messenger` is developed in parallel. Whichever merges second must, in the same PR:
+
+1. Execute the deferred Task 2 (`processedListener` → `ActorRef<MessagesProcessed>` in `ReceiverActor.php` + `MessengerBridge.php`).
+2. Add the four messenger issueHandlers entries to `psalm.xml`:
+   `packages/nexus-messenger/src/Routing/MapMessageRouter.php`, `packages/nexus-messenger/src/Routing/StampMessageRouter.php` (heterogeneous registry maps), `packages/nexus-messenger/src/Consumer/ReceiverActor.php`, `packages/nexus-messenger/src/MessengerBridge.php` (dead-letter sinks).
+3. Re-run `make psalm` — the new rule will flag messenger's `ActorRef<object>` positions until (1) and (2) land.
 
 ## Self-Review Notes
 
