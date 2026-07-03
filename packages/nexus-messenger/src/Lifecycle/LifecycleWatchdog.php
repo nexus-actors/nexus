@@ -88,6 +88,8 @@ final readonly class LifecycleWatchdog
                             $ctx->spawnTask(static function (TaskContext $_task) use ($system, $timeout): void {
                                 $system->shutdown($timeout);
                             });
+
+                            return BehaviorWithState::stopped();
                         }
 
                         return BehaviorWithState::same();
