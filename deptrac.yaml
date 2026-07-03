@@ -52,6 +52,11 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster/src/.*
 
+    - name: Messenger
+      collectors:
+        - type: directory
+          value: packages/nexus-messenger/src/.*
+
     - name: DoctrineDbal
       collectors:
         - type: directory
@@ -187,6 +192,10 @@ deptrac:
       - WorkerPool
     Cluster:
       - Core
+    Messenger:
+      - Core
+      - Runtime
+      - Serialization
     DoctrineDbal:
       - Core
       - Http

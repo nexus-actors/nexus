@@ -26,6 +26,7 @@
         "psr/http-server-middleware": "^1.0",
         "psr/log": "^3.0",
         "psr/simple-cache": "^3.0",
+        "symfony/messenger": "^8.0",
         "symfony/uid": "^8.0"
     },
     "require-dev": {
@@ -59,6 +60,7 @@
             "Monadial\\Nexus\\Serialization\\": "packages/nexus-serialization/src/",
             "Monadial\\Nexus\\Psalm\\": "packages/nexus-psalm/src/",
             "Monadial\\Nexus\\Cluster\\": "packages/nexus-cluster/src/",
+            "Monadial\\Nexus\\Messenger\\": "packages/nexus-messenger/src/",
             "Monadial\\Nexus\\Logger\\": "packages/nexus-logger/src/",
             "Monadial\\Nexus\\Http\\": "packages/nexus-http/src/",
             "Monadial\\Nexus\\Http\\Server\\Swoole\\": "packages/nexus-http-server-swoole/src/",
@@ -97,6 +99,7 @@
             "Monadial\\Nexus\\Tests\\Integration\\": "tests/Integration/",
             "Monadial\\Nexus\\Tests\\Performance\\": "tests/Performance/",
             "Monadial\\Nexus\\Cluster\\Tests\\": "packages/nexus-cluster/tests/",
+            "Monadial\\Nexus\\Messenger\\Tests\\": "packages/nexus-messenger/tests/",
             "Monadial\\Nexus\\Logger\\Tests\\": "packages/nexus-logger/tests/",
             "Monadial\\Nexus\\Http\\Tests\\": "packages/nexus-http/tests/",
             "Monadial\\Nexus\\Http\\Server\\Swoole\\Tests\\": "packages/nexus-http-server-swoole/tests/",
