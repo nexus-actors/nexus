@@ -90,6 +90,11 @@ final class TestProbe
     /** @var list<object> */
     private array $received = [];
 
+    /**
+     * @template M of object
+     * @param ActorRef<M> $target
+     * @param M $msg
+     */
     public function captureReply(ActorRef $target, object $msg, StepRuntime $r): object
     {
         $self = $this->system->spawn(
