@@ -17,7 +17,10 @@ use Monadial\Nexus\Messenger\Lifecycle\LifecycleWatchdog;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Messenger\Producer\MessengerGateway;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Observability\NoopObservability;
+use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Duration;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 use Symfony\Component\Messenger\Transport\Sender\SenderInterface;
 
@@ -43,22 +46,28 @@ final readonly class MessengerBridge
     {
     }
 
-    public static function gateway(SenderInterface $sender): MessengerGateway
-    {
-        return new MessengerGateway($sender);
+    public static function gateway(
+        SenderInterface $sender,
+        Observability $observability = new NoopObservability(),
+        ?EventDispatcherInterface $events = null,
+    ): MessengerGateway {
+        return new MessengerGateway($sender, $observability, $events);
     }
 
     /**
      * @template T of object
      * @return MessengerActorRef<T>
+     * @psalm-suppress InvalidReturnType,InvalidReturnStatement Psalm cannot infer T through MessengerActorRef<object> constructor
      */
     public static function producer(
         SenderInterface $sender,
         string $name,
         ?ActorPath $sourcePath = null,
+        Observability $observability = new NoopObservability(),
+        ?EventDispatcherInterface $events = null,
     ): MessengerActorRef
     {
-        return new MessengerActorRef($sender, $name, $sourcePath);
+        return new MessengerActorRef($sender, $name, $sourcePath, $observability, $events);
     }
 
     /**
@@ -72,9 +81,10 @@ final readonly class MessengerBridge
         ?ReceiverActorConfig $config = null,
         ?ActorRef $deadLetters = null,
         ?ActorRef $processedListener = null,
+        ?EventDispatcherInterface $events = null,
     ): Props {
         return Props::fromBehavior(
-            ReceiverActor::create($receiver, $router, $config, $deadLetters, $processedListener),
+            ReceiverActor::create($receiver, $router, $config, $deadLetters, $processedListener, $events),
         );
     }
 
@@ -99,16 +109,18 @@ final readonly class MessengerBridge
         ?ReceiverActorConfig $config = null,
         ?ActorRef $deadLetters = null,
         ?ActorRef $processedListener = null,
+        ?EventDispatcherInterface $events = null,
     ): array {
         if ($count < 1) {
             throw new InvalidArgumentException('Receiver count must be at least 1.');
         }
 
+        $events ??= $system->eventDispatcher();
         $refs = [];
 
         for ($i = 0; $i < $count; $i++) {
             $refs[] = $system->spawn(
-                self::receiverProps($receiver, $router, $config, $deadLetters, $processedListener),
+                self::receiverProps($receiver, $router, $config, $deadLetters, $processedListener, $events),
                 $namePrefix . '-' . $i,
             );
         }
