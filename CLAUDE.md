@@ -366,7 +366,7 @@ Two-way bridge to standalone `symfony/messenger` transports (no framework-bundle
 - `MessageRouter` — pluggable inbound routing: `MapMessageRouter` (class → ref, default), `StampMessageRouter` (TargetActorPathStamp → ref; cluster seam).
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer` + `TypeRegistry`; bridge stamps travel as headers.
 - `LifecycleWatchdog` — worker recycling: triggers graceful `ActorSystem::shutdown()` on memory/uptime/message-count thresholds (`LifecycleThresholds`).
-- `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `watchdogProps()`.
+- `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `spawnReceivers(ActorSystem, int $count, string $namePrefix, ...)` (N competing in-process consumers over one transport), `watchdogProps()`.
 
 ### Application Bootstrap (nexus-app)
 
