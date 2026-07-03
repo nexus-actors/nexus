@@ -27,8 +27,13 @@ error. Every injected `ActorRef` (or subtype) must declare a concrete message ty
    hatch is the standard `@psalm-suppress UntypedActorRefInjection`.
 3. **Subtypes covered.** Any type extending/implementing
    `Monadial\Nexus\Core\Actor\ActorRef` is checked — `LocalActorRef`,
-   `WorkerActorRef`, `MessengerActorRef`, `DeadLetterRef`, and future refs. The rule
-   cannot be bypassed by hinting a concrete class.
+   `WorkerActorRef`, `MessengerActorRef`, and future refs. The rule cannot be
+   bypassed by hinting a concrete class.
+4. **Excluded refs via plugin config, not suppressions.** Internal accept-anything
+   refs are exempt through an exclude list rather than scattering
+   `@psalm-suppress` across the codebase. `DeadLetterRef` (the only non-generic
+   internal ref, declared `@implements ActorRef<object>`) is excluded by default.
+   Users can exclude additional ref classes in `psalm.xml`.
 
 ## Design
 
@@ -72,10 +77,42 @@ storage and constructor parameter storage; the rule must not report them twice.
 Canonical source: the class-like hook reports all properties (promoted or not);
 the function-like hook skips promoted parameters.
 
+### Excluded refs (plugin config)
+
+The plugin entry point (`Plugin::__invoke`) already receives an optional
+`SimpleXMLElement $config` from `psalm.xml` — currently unused. It gains parsing
+for an exclude list:
+
+```xml
+<plugins>
+    <pluginClass class="Monadial\Nexus\Psalm\Plugin">
+        <untypedActorRefInjection>
+            <excludeRef class="App\Infra\AuditSinkRef"/>
+        </untypedActorRefInjection>
+    </pluginClass>
+</plugins>
+```
+
+Semantics:
+
+- **Default exclude list** (always active, no config needed):
+  `Monadial\Nexus\Core\Actor\DeadLetterRef`. User config *extends* the default
+  list; it does not replace it.
+- An excluded class is exempt as the **declared type** — a bare `DeadLetterRef`
+  hint passes. Exclusion matches the declared class exactly plus its subtypes
+  (checked via the same codebase hierarchy lookup).
+- A bare `ActorRef` hint is still flagged even if the runtime value happens to be
+  an excluded ref — exclusion is by declared type only.
+- Since hooks are registered as static classes, `Plugin::__invoke` passes the
+  merged exclude list to the rule via a static setter on
+  `UntypedActorRefInjectionRule` (e.g. `UntypedActorRefInjectionRule::setExcludedRefs()`)
+  before registering it.
+
 ### Registration
 
 Add `UntypedActorRefInjectionRule::class` to the `$hooks` array in
-`packages/nexus-psalm/src/Plugin.php`.
+`packages/nexus-psalm/src/Plugin.php`, after configuring the exclude list from
+`$config`.
 
 ### Tests
 
@@ -96,6 +133,8 @@ Follow the existing `packages/nexus-psalm/tests` pattern with fixture classes:
 - Nullable `?ActorRef` with `@param ActorRef<MyCommand>|null`
 - Non-ActorRef parameters (ignored)
 - `@psalm-suppress UntypedActorRefInjection` silences the issue
+- Bare `DeadLetterRef` hint (default exclude list)
+- Bare hint of a class listed in `<untypedActorRefInjection><excludeRef/>` config
 
 ## Out of scope
 
