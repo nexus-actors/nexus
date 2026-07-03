@@ -50,7 +50,10 @@ final readonly class DoctrineKit
         $journalPath = dirname((string) new ReflectionClass(EventEntry::class)->getFileName());
 
         $ormConfig = ORMSetup::createAttributeMetadataConfig(
-            paths: [$journalPath],
+            paths: [
+                $journalPath,
+                dirname(__DIR__, 2) . '/Orders/Infrastructure/ReadModel',
+            ],
         );
         $ormConfig->enableNativeLazyObjects(true);
 
