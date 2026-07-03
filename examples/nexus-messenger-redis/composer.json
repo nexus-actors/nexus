@@ -1,0 +1,39 @@
+{
+    "name": "nexus-actors/example-messenger-redis",
+    "description": "Nexus example: competing-consumer queue worker over Symfony Redis transport with worker recycling, PSR-14 events, and serialization allow-list.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-redis": "*",
+        "monolog/monolog": "^3.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/log": "^3.0",
+        "symfony/messenger": "^7.4 || ^8.0",
+        "symfony/redis-messenger": "^7.4 || ^8.0"
+    },
+    "autoload": {
+        "files": [
+            "/nexus-packages/nexus-core/src/Actor/Functions/functions.php"
+        ],
+        "psr-4": {
+            "Monadial\\Nexus\\App\\": "/nexus-packages/nexus-app/src/",
+            "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Example\\MessengerRedis\\": "src/",
+            "Monadial\\Nexus\\Messenger\\": "/nexus-packages/nexus-messenger/src/",
+            "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
+            "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
+            "Monadial\\Nexus\\Runtime\\Fiber\\": "/nexus-packages/nexus-runtime-fiber/src/",
+            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "produce": "php bin/produce.php",
+        "worker": "php bin/worker.php"
+    }
+}

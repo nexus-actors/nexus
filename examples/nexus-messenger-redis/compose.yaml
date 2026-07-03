@@ -1,0 +1,39 @@
+# Example-local Docker Compose — independent of the parent Nexus monorepo's compose.yaml.
+#
+# Usage:
+#   docker compose up -d redis        # start Redis 7
+#   docker compose run --rm app php bin/produce.php 20   # publish 20 orders
+#   docker compose run --rm app php bin/worker.php       # run competing-consumer worker
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-messenger-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nexus-messenger-redis:dev
+    environment:
+      REDIS_DSN: "redis://redis:6379"
+      REDIS_STREAM: "orders"
+      CONSUMER_GROUP: "nexus-workers"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./composer.json:/app/composer.json:ro
+      - ./vendor:/app/vendor
+      - ./src:/app/src:ro
+      - ./bin:/app/bin:ro
+      # Path-repository source for nexus-actors/* packages — see composer.json.
+      # When published to its own repo, remove this mount and resolve from Packagist.
+      - ../../packages:/nexus-packages:ro
