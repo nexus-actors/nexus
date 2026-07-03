@@ -61,11 +61,11 @@ final class PersistenceEngine
         Closure $eventHandler,
         EventStore $eventStore,
         ?SnapshotStore $snapshotStore = null,
-        ?Closure $signalHandler = null,
         ?SnapshotStrategy $snapshotStrategy = null,
         ?RetentionPolicy $retentionPolicy = null,
         Ulid $writerId = new Ulid(),
         ?ReplayFilter $replayFilter = null,
+        ?Closure $signalHandler = null,
     ): Behavior {
         $strategy = $snapshotStrategy ?? SnapshotStrategy::never();
         $retention = $retentionPolicy ?? RetentionPolicy::none();

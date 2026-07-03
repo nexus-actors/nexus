@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Tests\Integration\Orders;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -182,16 +183,19 @@ final class OrderActorTest extends TestCase
             [new OrderLine(new Sku('WIDGET-001'), new Quantity(1), new Money(500, 'USD'))],
         );
 
+        /** @var ActorRef<object>|null $originalRef */
+        $originalRef = null;
         /** @var bool|null $aliveAt50 */
         $aliveAt50 = null;
         /** @var bool|null $aliveAt300 */
         $aliveAt300 = null;
 
-        // Place order at 10ms to arm the receive timer
+        // Place order at 10ms; capture the ref so we can check isAlive() later
         $runtime->scheduleOnce(
             Duration::millis(10),
-            static function () use ($factory, $tenantId, $orderId, $placeOrder): void {
-                $factory->of($tenantId, $orderId)->tell($placeOrder);
+            static function () use ($factory, $tenantId, $orderId, $placeOrder, &$originalRef): void {
+                $originalRef = $factory->of($tenantId, $orderId);
+                $originalRef->tell($placeOrder);
             },
         );
 
@@ -208,12 +212,8 @@ final class OrderActorTest extends TestCase
         // At 300ms the actor should have passivated (100ms past the last message at 10ms)
         $runtime->scheduleOnce(
             Duration::millis(300),
-            static function () use ($factory, $tenantId, $orderId, &$aliveAt300): void {
-                $cached = $factory->of($tenantId, $orderId);
-                $aliveAt300 = false; // factory returned a NEW ref — original is dead
-                // Confirm the original ref from cache is dead by the fact factory
-                // needed to respawn (it won't be the same ref)
-                unset($cached);
+            static function () use (&$originalRef, &$aliveAt300): void {
+                $aliveAt300 = $originalRef?->isAlive();
             },
         );
 
@@ -221,6 +221,7 @@ final class OrderActorTest extends TestCase
         $system->run();
 
         self::assertTrue($aliveAt50, 'actor should be alive within the idle window');
+        self::assertFalse($aliveAt300, 'actor should have passivated after the receive timeout');
     }
 
     #[Test]

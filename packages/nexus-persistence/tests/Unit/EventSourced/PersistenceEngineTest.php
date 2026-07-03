@@ -9,7 +9,9 @@ use Monadial\Nexus\Core\Actor\ActorCell;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
+use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
@@ -938,6 +940,38 @@ final class PersistenceEngineTest extends TestCase
         // State should still be ['apple'] after unhandled
         self::assertCount(2, $states);
         self::assertSame(['apple'], $states[1]->items);
+    }
+
+    // ========================================================================
+    // Test: Signal handler receives lifecycle signals
+    // ========================================================================
+
+    #[Test]
+    public function signal_handler_receives_post_stop_signal(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $signalReceived = false;
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static fn(object $state, ActorContext $ctx, object $msg): Effect => Effect::none(),
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+            signalHandler: static function (ActorContext $ctx, object $signal) use (&$signalReceived): Behavior {
+                if ($signal instanceof PostStop) {
+                    $signalReceived = true;
+                }
+
+                return Behavior::same();
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+        $cell->initiateStop();
+
+        self::assertTrue($signalReceived, 'signal handler must receive PostStop when the actor stops');
     }
 
     // ========================================================================

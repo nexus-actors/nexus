@@ -137,6 +137,24 @@ final class EventSourcedBehaviorTest extends TestCase
     }
 
     #[Test]
+    public function withSignalHandlerReturnsNewImmutableInstance(): void
+    {
+        $original = EventSourcedBehavior::create(
+            $this->persistenceId,
+            $this->emptyState,
+            $this->commandHandler,
+            $this->eventHandler,
+        );
+
+        $withHandler = $original->withSignalHandler(
+            static fn(ActorContext $ctx, object $signal): Behavior => Behavior::same(),
+        );
+
+        self::assertInstanceOf(EventSourcedBehavior::class, $withHandler);
+        self::assertNotSame($original, $withHandler);
+    }
+
+    #[Test]
     public function fullBuilderChainReturnsBehavior(): void
     {
         $behavior = EventSourcedBehavior::create(

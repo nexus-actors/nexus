@@ -69,11 +69,11 @@ final readonly class EventSourcedBehavior
         private Closure $eventHandler,
         private ?EventStore $eventStore = null,
         private ?SnapshotStore $snapshotStore = null,
-        private ?Closure $signalHandler = null,
         private ?SnapshotStrategy $snapshotStrategy = null,
         private ?RetentionPolicy $retentionPolicy = null,
         private Ulid $writerId = new Ulid(),
         private ?ReplayFilter $replayFilter = null,
+        private ?Closure $signalHandler = null,
     ) {}
 
     /**
@@ -177,11 +177,11 @@ final readonly class EventSourcedBehavior
                 'EventStore is required — call withEventStore() before toBehavior()',
             ),
             $this->snapshotStore,
-            $this->signalHandler,
             $this->snapshotStrategy,
             $this->retentionPolicy,
             $this->writerId,
             $this->replayFilter,
+            $this->signalHandler,
         );
     }
 }
