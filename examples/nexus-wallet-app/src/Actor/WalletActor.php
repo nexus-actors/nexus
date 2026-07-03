@@ -74,6 +74,9 @@ final readonly class WalletActor
         };
     }
 
+    /**
+     * @param ActorRef<DepositResult>|null $sender
+     */
     private static function onDeposit(WalletState $state, Deposit $command, ?ActorRef $sender, string $ownerId): Effect
     {
         $events = [
@@ -91,6 +94,9 @@ final readonly class WalletActor
         );
     }
 
+    /**
+     * @param ActorRef<WithdrawResult>|null $sender
+     */
     private static function onWithdraw(
         WalletState $state,
         Withdraw $command,
@@ -116,6 +122,9 @@ final readonly class WalletActor
         );
     }
 
+    /**
+     * @param ActorRef<BalanceSnapshot>|null $sender
+     */
     private static function onGetBalance(WalletState $state, ?ActorRef $sender): Effect
     {
         if ($sender === null) {
@@ -125,6 +134,9 @@ final readonly class WalletActor
         return Effect::reply($sender, new BalanceSnapshot($state->balance->cents));
     }
 
+    /**
+     * @param ActorRef<WithdrawResult>|null $sender
+     */
     private static function rejectWithdraw(WalletState $state, ?ActorRef $sender, string $reason): Effect
     {
         if ($sender === null) {

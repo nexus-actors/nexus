@@ -214,6 +214,7 @@ A handler can hold its `WebSocketContext` and call `send()` from outside `onMess
 ```php title="src/Http/Handler/NotificationHandler.php"
 final class NotificationHandler extends WebSocketHandler
 {
+    /** @param ActorRef<Subscribe> $hub */
     public function __construct(
         #[FromContext] private readonly WebSocketContext $ctx,
         #[FromActor('notifications')] private readonly ActorRef $hub,

@@ -9,7 +9,7 @@ use Monadial\Nexus\Example\Wallet\Domain\Money;
 use Monadial\Nexus\Example\Wallet\Domain\Reply\WithdrawResult;
 
 #[ReplyType(WithdrawResult::class)]
-final readonly class Withdraw
+final readonly class Withdraw implements WalletCommand
 {
     public function __construct(public Money $amount) {}
 }

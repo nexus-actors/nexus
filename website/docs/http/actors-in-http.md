@@ -52,6 +52,7 @@ Inject the `ActorRef` directly into your handler:
 ```php title="src/Http/Handler/ShowOrderHandler.php"
 final class ShowOrderHandler
 {
+    /** @param ActorRef<IncrementViewCount> $orders */
     public function __construct(
         #[FromActor('orders')] private readonly ActorRef $orders,
     ) {}
@@ -184,6 +185,9 @@ Per-request actors give you per-turn workspace without globals:
 ```php title="src/Http/Handler/CreateOrderHandler.php"
 final class CreateOrderHandler
 {
+    /**
+     * @param ActorRef<Place> $orders
+     */
     public function __construct(
         #[FromActor('uow')]    private readonly ActorRef $uow,
         #[FromActor('orders')] private readonly ActorRef $orders,

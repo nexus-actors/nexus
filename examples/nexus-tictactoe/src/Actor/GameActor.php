@@ -18,6 +18,7 @@ use Monadial\Nexus\Example\TicTacToe\Domain\Event\GameEvent;
 use Monadial\Nexus\Example\TicTacToe\Domain\GameDecision;
 use Monadial\Nexus\Example\TicTacToe\Domain\GameRules;
 use Monadial\Nexus\Example\TicTacToe\Domain\State\GameState;
+use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
 use Monadial\Nexus\Example\TicTacToe\ReadModel\GameReadModel;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
@@ -108,7 +109,7 @@ final class GameActor
     }
 
     /**
-     * @param ActorRef<object> $replyTo
+     * @param ActorRef<GameRejected|Seated> $replyTo
      */
     private static function onJoin(
         GameState $state,
@@ -139,7 +140,7 @@ final class GameActor
     }
 
     /**
-     * @param ActorRef<object> $replyTo
+     * @param ActorRef<GameRejected|GameSnapshot> $replyTo
      */
     private static function onMutation(
         GameState $state,

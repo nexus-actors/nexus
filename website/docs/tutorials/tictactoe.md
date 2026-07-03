@@ -134,6 +134,7 @@ public static function behavior(string $gameId, EventStore $store, GameReadModel
 }
 
 // A move: persist the events, reply the new snapshot, project it into the read model.
+/** @param ActorRef<GameRejected|GameSnapshot> $replyTo */
 private static function onMutation(GameState $state, GameDecision $decision, ActorRef $replyTo, int $fd, ...): Effect
 {
     if ($decision->isRejected()) {

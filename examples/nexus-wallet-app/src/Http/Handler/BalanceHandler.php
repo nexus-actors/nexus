@@ -23,6 +23,9 @@ use Psr\Http\Message\ResponseInterface;
  */
 final readonly class BalanceHandler
 {
+    /**
+     * @param ActorRef<EnsureWallet> $directory
+     */
     public function __invoke(
         #[FromPrincipal]
         Principal $principal,
