@@ -39,9 +39,12 @@
         "slevomat/coding-standard": "^8.0",
         "squizlabs/php_codesniffer": "^4.0",
         "swoole/ide-helper": "^6.0",
-        "symfony/cache": "^8.0",
+        "symfony/cache": "^8.0.12",
         "symfony/http-client": "^8.1",
         "vimeo/psalm": "^6.0"
+    },
+    "conflict": {
+        "symfony/yaml": "<8.0.12"
     },
     "autoload": {
         "files": [
