@@ -19,7 +19,7 @@ final readonly class OrderState
     /**
      * @param list<OrderLine> $lines
      */
-    private function __construct(
+    public function __construct(
         public TenantId $tenantId,
         public OrderId $orderId,
         public OrderStatus $status,

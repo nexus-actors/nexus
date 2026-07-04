@@ -10,7 +10,9 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineSnapshotStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
+use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\TypeRegistry;
 use Override;
 use WeakMap;
 
@@ -22,6 +24,12 @@ use WeakMap;
  * lifetime. The {@see DoctrineSnapshotStore} wrapper is cached per pooled
  * EntityManager in a WeakMap — one instance per EM, reused across
  * operations, released automatically when the pool recycles the EM.
+ *
+ * Snapshot envelopes from {@see PersistenceEngine} carry FQCN state types.
+ * This store translates them to registry wire names (e.g.
+ * `orders.order_state.v1`) before writing so the `state_type` column always
+ * holds the versioned wire name. Load paths need no translation: the stored
+ * wire name flows directly into the serializer's `deserialize()`.
  */
 final class PooledDoctrineSnapshotStore implements SnapshotStore
 {
@@ -31,6 +39,7 @@ final class PooledDoctrineSnapshotStore implements SnapshotStore
     public function __construct(
         private readonly EntityManagerPool $pool,
         private readonly MessageSerializer $serializer,
+        private readonly TypeRegistry $registry,
     ) {
         /** @var WeakMap<EntityManagerInterface, DoctrineSnapshotStore> $map */
         $map = new WeakMap();
@@ -40,10 +49,26 @@ final class PooledDoctrineSnapshotStore implements SnapshotStore
     #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
+        $className = $snapshot->state::class;
+        $wireName = $this->registry->nameForClass($className)
+            ?? throw new MessageSerializationException(
+                $className,
+                "No type name registered for class '{$className}'",
+            );
+
+        $translated = new SnapshotEnvelope(
+            persistenceId: $snapshot->persistenceId,
+            sequenceNr: $snapshot->sequenceNr,
+            state: $snapshot->state,
+            stateType: $wireName,
+            timestamp: $snapshot->timestamp,
+            writerId: $snapshot->writerId,
+        );
+
         $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $snapshot, $storeFor): void {
-            $storeFor($em)->save($id, $snapshot);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $translated, $storeFor): void {
+            $storeFor($em)->save($id, $translated);
         });
     }
 

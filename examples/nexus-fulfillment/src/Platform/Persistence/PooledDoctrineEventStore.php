@@ -10,7 +10,9 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineEventStore;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\TypeRegistry;
 use Override;
 use WeakMap;
 
@@ -22,6 +24,13 @@ use WeakMap;
  * lifetime. The {@see DoctrineEventStore} wrapper is cached per pooled
  * EntityManager in a WeakMap — one instance per EM, reused across
  * operations, released automatically when the pool recycles the EM.
+ *
+ * Event envelopes from {@see PersistenceEngine} carry FQCN event types.
+ * This store translates them to registry wire names (e.g.
+ * `orders.order_placed.v1`) before writing to the journal so the
+ * `event_type` column always holds the versioned wire name — the
+ * upcasting seam. Load paths need no translation: the stored wire name
+ * flows directly into the serializer's `deserialize()`.
  */
 final class PooledDoctrineEventStore implements EventStore
 {
@@ -31,6 +40,7 @@ final class PooledDoctrineEventStore implements EventStore
     public function __construct(
         private readonly EntityManagerPool $pool,
         private readonly MessageSerializer $serializer,
+        private readonly TypeRegistry $registry,
     ) {
         /** @var WeakMap<EntityManagerInterface, DoctrineEventStore> $map */
         $map = new WeakMap();
@@ -40,10 +50,31 @@ final class PooledDoctrineEventStore implements EventStore
     #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
+        $translated = [];
+
+        foreach ($events as $envelope) {
+            $className = $envelope->event::class;
+            $wireName = $this->registry->nameForClass($className)
+                ?? throw new MessageSerializationException(
+                    $className,
+                    "No type name registered for class '{$className}'",
+                );
+
+            $translated[] = new EventEnvelope(
+                persistenceId: $envelope->persistenceId,
+                sequenceNr: $envelope->sequenceNr,
+                event: $envelope->event,
+                eventType: $wireName,
+                timestamp: $envelope->timestamp,
+                writerId: $envelope->writerId,
+                metadata: $envelope->metadata,
+            );
+        }
+
         $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $events, $storeFor): void {
-            $storeFor($em)->persist($id, ...$events);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $translated, $storeFor): void {
+            $storeFor($em)->persist($id, ...$translated);
         });
     }
 

@@ -72,13 +72,14 @@ final readonly class DoctrineKit
             config: new EmPoolConfig(max: 8, minIdle: 1),
         );
 
-        $serializer = new ValinorMessageSerializer(MessageTypes::registry());
+        $registry = MessageTypes::registry();
+        $serializer = new ValinorMessageSerializer($registry);
 
         return new self(
             connPool: $connPool,
             emPool: $emPool,
-            eventStore: new PooledDoctrineEventStore($emPool, $serializer),
-            snapshotStore: new PooledDoctrineSnapshotStore($emPool, $serializer),
+            eventStore: new PooledDoctrineEventStore($emPool, $serializer, $registry),
+            snapshotStore: new PooledDoctrineSnapshotStore($emPool, $serializer, $registry),
         );
     }
 }
