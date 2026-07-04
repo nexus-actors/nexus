@@ -38,8 +38,8 @@ All endpoints require `Authorization: Bearer <token>` and `role = ops`.
 curl -X POST http://localhost:9090/api/orders \
   -H "Authorization: Bearer acme-ops-token" \
   -H "Content-Type: application/json" \
-  -d '{"orderId":"<ULID>","lines":[{"sku":"WIDGET-01","quantity":2,"unitPriceCents":1999,"currency":"USD"}]}'
-# → 201 {"orderId":"...","status":"placed","totalCents":3998}
+  -d '{"orderId":"01K...","lines":[{"sku":"WIDGET-42","quantity":2,"unitPrice":{"amount":1999,"currency":"EUR"}}]}'
+# → 201 {"orderId":{"value":"01K..."},"status":"placed","total":{"amount":3998,"currency":"EUR"}}
 ```
 
 **Idempotency model:** `orderId` is caller-assigned (a ULID). Sending the
@@ -52,7 +52,7 @@ returns `409`.
 ```bash
 curl http://localhost:9090/api/orders \
   -H "Authorization: Bearer acme-ops-token"
-# → 200 {"orders":[...]}   ← only the calling tenant's orders
+# → 200 {"orders":[{"cancelReason":null,"lineCount":2,"orderId":{"value":"01K..."},"status":"placed","total":{"amount":3998,"currency":"EUR"},"updatedAt":"2024-01-01T00:00:00+00:00"},...]}
 ```
 
 Results are scoped to the caller's tenant and sorted by `updatedAt DESC`
@@ -64,7 +64,7 @@ sees only umbrella orders.
 ```bash
 curl http://localhost:9090/api/orders/<ULID> \
   -H "Authorization: Bearer acme-ops-token"
-# → 200 {"orderId":"...","status":"placed","totalCents":3998,"cancelReason":null,...}
+# → 200 {"cancelReason":null,"lineCount":2,"orderId":{"value":"01K..."},"status":"placed","total":{"amount":3998,"currency":"EUR"},"updatedAt":"2024-01-01T00:00:00+00:00"}
 # → 404 if the order does not exist or belongs to a different tenant
 ```
 
@@ -73,7 +73,7 @@ curl http://localhost:9090/api/orders/<ULID> \
 ```bash
 curl -X DELETE http://localhost:9090/api/orders/<ULID> \
   -H "Authorization: Bearer acme-ops-token"
-# → 200 {"orderId":"...","status":"cancelled","totalCents":3998}
+# → 200 {"orderId":{"value":"01K..."},"status":"cancelled","total":{"amount":3998,"currency":"EUR"}}
 # → 409 {"orderId":"...","reason":"Order does not exist"}  (unknown id)
 ```
 

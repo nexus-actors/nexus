@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http;
 
-/**
- * @psalm-type LineShape = array{currency: string, quantity: int, sku: string, unitPriceCents: int}
- */
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
+
 final readonly class PlaceOrderRequest
 {
     /**
-     * @param non-empty-list<PlaceOrderLine> $lines
+     * @param non-empty-list<OrderLine> $lines
      */
     public function __construct(
+        public OrderId $orderId,
         public array $lines,
-        public string $orderId,
     ) {}
 }

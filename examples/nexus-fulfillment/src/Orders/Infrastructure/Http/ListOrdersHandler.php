@@ -32,18 +32,11 @@ final readonly class ListOrdersHandler
             100,
         );
 
-        $orders = array_map(
-            static fn(OrderView $row): array => [
-                'currency' => $row->currency,
-                'lineCount' => $row->lineCount,
-                'orderId' => $row->id,
-                'status' => $row->status,
-                'totalCents' => $row->totalAmount,
-                'updatedAt' => $row->updatedAt->format('c'),
-            ],
+        $resources = array_map(
+            static fn(OrderView $row): OrderResource => OrderResource::fromView($row),
             $rows,
         );
 
-        return JsonResponse::ok(['orders' => $orders]);
+        return JsonResponse::ok(['orders' => $resources]);
     }
 }

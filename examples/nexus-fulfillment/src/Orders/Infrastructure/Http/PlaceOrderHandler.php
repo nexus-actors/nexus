@@ -9,11 +9,6 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Application\OrderRefFactory;
 use Monadial\Nexus\Example\Fulfillment\Orders\Application\Reply\OrderAccepted;
 use Monadial\Nexus\Example\Fulfillment\Orders\Application\Reply\OrderRejected;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Quantity;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
 use Monadial\Nexus\Http\Auth\Principal;
@@ -47,29 +42,16 @@ final readonly class PlaceOrderHandler
 
         try {
             $tenant = TenantId::fromString((string) ($principal->claims()['tenant'] ?? ''));
-            $orderId = OrderId::fromString($body->orderId);
-            $lines = array_map(
-                static fn(PlaceOrderLine $l): OrderLine => new OrderLine(
-                    Sku::fromString($l->sku),
-                    Quantity::of($l->quantity),
-                    Money::of($l->unitPriceCents, $l->currency),
-                ),
-                $body->lines,
-            );
         } catch (InvalidArgumentException $e) {
             return Response::badRequest($e->getMessage());
         }
 
-        $reply = $this->orders->of($tenant, $orderId)
-            ->ask(new PlaceOrder($tenant, $orderId, $lines), Duration::seconds(2))
+        $reply = $this->orders->of($tenant, $body->orderId)
+            ->ask(new PlaceOrder($tenant, $body->orderId, $body->lines), Duration::seconds(2))
             ->await();
 
         return match (true) {
-            $reply instanceof OrderAccepted => JsonResponse::created([
-                'orderId' => $reply->orderId->value,
-                'status' => $reply->status->value,
-                'totalCents' => $reply->total?->amount,
-            ], null),
+            $reply instanceof OrderAccepted => JsonResponse::created(OrderActionResource::fromReply($reply), null),
             $reply instanceof OrderRejected => new Psr7Response(
                 409,
                 ['Content-Type' => 'application/json'],

@@ -20,6 +20,7 @@ use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Subscribe;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\Auth\DemoTokens;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\ReadinessProbe;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\Routes;
+use Monadial\Nexus\Example\Fulfillment\Platform\Http\VoParamResolver;
 use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
 use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
@@ -93,6 +94,7 @@ final class App
                 $app->middleware(new ConnectionScopeMiddleware($doctrine->connPool));
                 $app->middleware(new EntityManagerScopeMiddleware($doctrine->emPool));
                 $app->middleware(new PoolExhaustedToServiceUnavailable(new Psr17Factory()));
+                $app->paramResolver(new VoParamResolver());
                 $app->paramResolver(new FromPrincipalResolver());
                 $app->paramResolver(new ConnectionResolver());
                 $app->paramResolver(new EntityManagerResolver());

@@ -33,7 +33,7 @@ final readonly class CancelOrderHandler
     public function __invoke(
         #[FromPrincipal]
         Principal $principal,
-        string $id,
+        OrderId $id,
     ): ResponseInterface {
         if (!$principal->hasRole('ops')) {
             return new Psr7Response(403, ['Content-Type' => 'application/json'], '{"error":"role ops required"}');
@@ -41,21 +41,16 @@ final readonly class CancelOrderHandler
 
         try {
             $tenant = TenantId::fromString((string) ($principal->claims()['tenant'] ?? ''));
-            $orderId = OrderId::fromString($id);
         } catch (InvalidArgumentException $e) {
             return Response::badRequest($e->getMessage());
         }
 
-        $reply = $this->orders->of($tenant, $orderId)
-            ->ask(new CancelOrder($tenant, $orderId, 'api cancel'), Duration::seconds(2))
+        $reply = $this->orders->of($tenant, $id)
+            ->ask(new CancelOrder($tenant, $id, 'api cancel'), Duration::seconds(2))
             ->await();
 
         return match (true) {
-            $reply instanceof OrderAccepted => JsonResponse::ok([
-                'orderId' => $reply->orderId->value,
-                'status' => $reply->status->value,
-                'totalCents' => $reply->total?->amount,
-            ]),
+            $reply instanceof OrderAccepted => JsonResponse::ok(OrderActionResource::fromReply($reply)),
             $reply instanceof OrderRejected => new Psr7Response(
                 409,
                 ['Content-Type' => 'application/json'],

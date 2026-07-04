@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http;
 
 use Doctrine\ORM\EntityManagerInterface;
-use InvalidArgumentException;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrderView;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
@@ -20,21 +19,15 @@ final readonly class GetOrderHandler
     public function __invoke(
         #[FromPrincipal]
         Principal $principal,
-        string $id,
+        OrderId $id,
         EntityManagerInterface $em,
     ): ResponseInterface {
         if (!$principal->hasRole('ops')) {
             return new Psr7Response(403, ['Content-Type' => 'application/json'], '{"error":"role ops required"}');
         }
 
-        try {
-            $orderId = OrderId::fromString($id);
-        } catch (InvalidArgumentException $e) {
-            return Response::badRequest($e->getMessage());
-        }
-
         /** @var OrderView|null $row */
-        $row = $em->find(OrderView::class, $orderId->value);
+        $row = $em->find(OrderView::class, $id->value);
 
         if ($row === null) {
             return Response::notFound('order not found');
@@ -46,14 +39,6 @@ final readonly class GetOrderHandler
             return Response::notFound('order not found');
         }
 
-        return JsonResponse::ok([
-            'cancelReason' => $row->cancelReason,
-            'currency' => $row->currency,
-            'lineCount' => $row->lineCount,
-            'orderId' => $row->id,
-            'status' => $row->status,
-            'totalCents' => $row->totalAmount,
-            'updatedAt' => $row->updatedAt->format('c'),
-        ]);
+        return JsonResponse::ok(OrderResource::fromView($row));
     }
 }
