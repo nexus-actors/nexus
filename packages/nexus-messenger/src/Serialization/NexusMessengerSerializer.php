@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Serialization;
 
 use JsonException;
+use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
@@ -44,6 +46,8 @@ use function sprintf;
  */
 final readonly class NexusMessengerSerializer implements SerializerInterface
 {
+    private const string HEADER_CORRELATION_ID = 'X-Nexus-Correlation-Id';
+    private const string HEADER_REPLY_TO = 'X-Nexus-Reply-To';
     private const string HEADER_SOURCE_PATH = 'X-Nexus-Source-Path';
     private const string HEADER_TARGET_PATH = 'X-Nexus-Target-Path';
     private const string HEADER_TRACE_CONTEXT = 'X-Nexus-Trace-Context';
@@ -120,6 +124,18 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
     private function headersFor(Envelope $envelope, object $message): array
     {
         $headers = [self::HEADER_TYPE => $this->types->nameForClass($message::class) ?? $message::class];
+        $correlationId = $envelope->last(CorrelationIdStamp::class);
+
+        if ($correlationId instanceof CorrelationIdStamp) {
+            $headers[self::HEADER_CORRELATION_ID] = $correlationId->id;
+        }
+
+        $replyTo = $envelope->last(ReplyToStamp::class);
+
+        if ($replyTo instanceof ReplyToStamp) {
+            $headers[self::HEADER_REPLY_TO] = $replyTo->channel;
+        }
+
         $source = $envelope->last(SourceActorPathStamp::class);
 
         if ($source instanceof SourceActorPathStamp) {
@@ -149,6 +165,18 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
     private function stampsFromHeaders(array $headers): array
     {
         $stamps = [];
+        $correlationId = $headers[self::HEADER_CORRELATION_ID] ?? null;
+
+        if (is_string($correlationId) && $correlationId !== '') {
+            $stamps[] = new CorrelationIdStamp($correlationId);
+        }
+
+        $replyTo = $headers[self::HEADER_REPLY_TO] ?? null;
+
+        if (is_string($replyTo) && $replyTo !== '') {
+            $stamps[] = new ReplyToStamp($replyTo);
+        }
+
         $source = $headers[self::HEADER_SOURCE_PATH] ?? null;
 
         if (is_string($source) && $source !== '') {
