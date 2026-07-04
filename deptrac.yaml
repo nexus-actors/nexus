@@ -62,6 +62,11 @@ deptrac:
         - type: directory
           value: packages/nexus-messenger-console/src/.*
 
+    - name: MessengerConsoleSwoole
+      collectors:
+        - type: directory
+          value: packages/nexus-messenger-console-swoole/src/.*
+
     - name: DoctrineDbal
       collectors:
         - type: directory
@@ -209,6 +214,16 @@ deptrac:
       - Observability
       - Runtime
       - Serialization
+    MessengerConsoleSwoole:
+      - Core
+      - Messenger
+      - MessengerConsole
+      - Observability
+      - Runtime
+      - RuntimeSwoole
+      - Serialization
+      - WorkerPool
+      - WorkerPoolSwoole
     DoctrineDbal:
       - Core
       - Http

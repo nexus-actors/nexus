@@ -112,7 +112,8 @@ nexus-core (no dependencies — foundational)
 │   │   ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │   │   └── nexus-persistence-doctrine → Persistence, Core, Serialization
 │   └── nexus-messenger        → Core, Runtime, Serialization, Observability (+ symfony/messenger, psr/event-dispatcher)
-│       └── nexus-messenger-console → Core, Messenger, Runtime, Serialization, Observability (+ symfony/console)
+│       ├── nexus-messenger-console → Core, Messenger, Runtime, Serialization, Observability (+ symfony/console)
+│       └── nexus-messenger-console-swoole → Core, Messenger, MessengerConsole, Runtime, RuntimeSwoole, Serialization, WorkerPool, WorkerPoolSwoole (+ opis/closure)
 ├── nexus-cluster          → Core only (remote contracts)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
@@ -376,6 +377,16 @@ Symfony Console runners — keeps `nexus-messenger` free of `symfony/console`.
 - `ConsumeCommand` (`nexus:messenger:consume`) — boots `ActorSystem::create()`, calls `MessengerBridge::spawnReceivers()`, optionally spawns `LifecycleWatchdog` (wired as `$processedListener`) when any limit option is present. No watchdog when no limits. Options: `--receivers|-r` (int, default 1), `--limit`, `--memory-limit` (e.g. `128M`), `--time-limit` (seconds), `--poll-interval` (ms, default 100), `--dead-letters`. Implements `SignalableCommandInterface` (SIGINT/SIGTERM → graceful shutdown).
 - `ProduceCommand` (`nexus:messenger:produce`) — resolves a type name via `TypeRegistry::classForName()`, deserializes a JSON body via `MessageSerializer::deserialize()`, publishes N messages via `MessengerBridge::gateway()`. Args: `type`, `body`. Option: `--count|-c`.
 - `MemoryLimit` — parses human-readable memory strings (`128M`, `1G`, K/M/G suffixes, case-insensitive) to bytes; throws `InvalidArgumentException` on invalid input.
+- `ConsumerSetup` interface — `setup(ActorSystem): MessageRouter`; implement to defer actor spawning until `ConsumeCommand` boots the system.
+- `CallbackConsumerSetup` — closure-based `ConsumerSetup` implementation.
+
+### Messenger Console Swoole (nexus-messenger-console-swoole)
+
+Swoole thread-pool adapter for `nexus-messenger-console`. Requires `ext-swoole >= 6.2.1`.
+
+- `ThreadedConsumerBootstrap` — interface extending `ConsumerSetup` with `receiver(): ReceiverInterface`; implement and pass the class-string to `ThreadedConsumeCommand`. The pool instantiates it fresh per thread — no cross-thread object sharing.
+- `ThreadedConsumeCommand` (`nexus:messenger:consume-threads`) — validates `$bootstrapClass is_a ThreadedConsumerBootstrap`, builds a `static` opis-serialized configure closure capturing only scalars + the class-string, then calls `WorkerPoolBootstrap::create(WorkerPoolConfig::withThreads($n)->withSystemNamePrefix('messenger-consumer'))->withSerializedConfigure(...)->run()`. Options: `--threads|-t` (default 2), `--receivers|-r` (default 1 per thread), `--limit`, `--memory-limit`, `--time-limit`, `--poll-interval` (ms, default 100), `--dead-letters`. All limit options are **per-thread** — each thread has its own `LifecycleWatchdog`. No `SignalableCommandInterface` in v1; main thread blocks in `Pool::start()`, stop via SIGTERM.
+- Thread-boundary rule: the configure closure must be `static` and capture ONLY scalars + class-strings. Live objects (logger, transport, router) cannot cross thread boundaries; each thread constructs its own via `new $bootstrapClass()`.
 
 ### Application Bootstrap (nexus-app)
 

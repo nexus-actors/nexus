@@ -15,3 +15,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Psalm plugin for generic actor type inference
 - Symfony Messenger bridge (`nexus-messenger`): MessengerActorRef/MessengerGateway producers, supervised ReceiverActor with backpressure-aware ack, pluggable MessageRouter, Nexus-backed Messenger serializer, and LifecycleWatchdog worker recycling
 - Symfony Console runners (`nexus-messenger-console`): `nexus:messenger:consume` and `nexus:messenger:produce` commands with limit/memory/time watchdog wiring
+- Threaded Swoole console adapter (`nexus-messenger-console-swoole`): `nexus:messenger:consume-threads` command using the Swoole worker pool; each thread owns an independent transport connection and actor system; limits are per-thread

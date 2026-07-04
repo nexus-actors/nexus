@@ -1,0 +1,34 @@
+{
+    "name": "nexus-actors/messenger-console-swoole",
+    "description": "Nexus messenger console Swoole adapter — threaded consume command over the Swoole worker pool.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "ext-swoole": ">=6.2.1",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/messenger": "dev-main",
+        "nexus-actors/messenger-console": "dev-main",
+        "nexus-actors/observability": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/runtime-swoole": "dev-main",
+        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/worker-pool": "dev-main",
+        "nexus-actors/worker-pool-swoole": "dev-main",
+        "opis/closure": "^4.0",
+        "symfony/console": "^7.4 || ^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Messenger\\Console\\Swoole\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Messenger\\Console\\Swoole\\Tests\\": "tests/"
+        }
+    }
+}
