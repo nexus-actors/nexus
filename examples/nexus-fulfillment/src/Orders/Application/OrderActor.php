@@ -13,7 +13,7 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Application\Reply\OrderRejected;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderRules;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderState;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Rejection;
-use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Publish;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Persistence\Event\EventStore;

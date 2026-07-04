@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Http;
 
+use Monadial\Nexus\Example\Fulfillment\Orders\Application\OrderRefFactory;
+use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\CancelOrderHandler;
+use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\GetOrderHandler;
+use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\ListOrdersHandler;
+use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\PlaceOrderHandler;
 use Monadial\Nexus\Http\Ws\WsApplication;
 use Nyholm\Psr7\Response as Psr7Response;
 use Psr\Http\Message\ResponseInterface;
@@ -11,11 +16,11 @@ use Psr\Http\Message\ResponseInterface;
 use function json_encode;
 
 /**
- * All routes in one place. Later milestones add /api/* and /ws/* here.
+ * All routes in one place. Later milestones add /ws/* here.
  */
 final class Routes
 {
-    public static function register(WsApplication $app, ReadinessProbe $probe): void
+    public static function register(WsApplication $app, ReadinessProbe $probe, OrderRefFactory $orders): void
     {
         $app->get('/healthz', static fn(): ResponseInterface => self::json(200, ['status' => 'ok']));
 
@@ -26,6 +31,11 @@ final class Routes
                 ? self::json(200, ['status' => 'ready'])
                 : self::json(503, ['reason' => $reason, 'status' => 'unready']);
         });
+
+        $app->post('/api/orders', new PlaceOrderHandler($orders)(...));
+        $app->get('/api/orders', ListOrdersHandler::class);
+        $app->get('/api/orders/{id}', GetOrderHandler::class);
+        $app->delete('/api/orders/{id}', new CancelOrderHandler($orders)(...));
     }
 
     /**

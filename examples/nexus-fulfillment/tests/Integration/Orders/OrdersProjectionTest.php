@@ -23,8 +23,8 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrdersRea
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrdersViewProjector;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrderView;
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\ContextBusActor;
-use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Publish;
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Subscribe;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;

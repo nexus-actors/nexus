@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
 
 /**
  * In-process fan-out between bounded contexts — the seam a broker

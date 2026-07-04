@@ -7,7 +7,7 @@ namespace Monadial\Nexus\Example\Fulfillment\Orders\Application;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
-use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Publish;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Persistence\Event\EventStore;
