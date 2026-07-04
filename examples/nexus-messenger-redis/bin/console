@@ -77,7 +77,7 @@ $events = new StdoutDispatcher();
 // ---------------------------------------------------------------------------
 $app = new Application('nexus-messenger-redis', '1.0.0');
 
-$app->add(new ConsumeCommand(
+$app->addCommand(new ConsumeCommand(
     new FiberRuntime(),
     $transport,
     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
@@ -92,6 +92,6 @@ $app->add(new ConsumeCommand(
     events: $events,
 ));
 
-$app->add(new ProduceCommand($transport, $serializer, $typeRegistry));
+$app->addCommand(new ProduceCommand($transport, $serializer, $typeRegistry));
 
 $app->run();

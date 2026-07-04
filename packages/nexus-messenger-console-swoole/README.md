@@ -46,7 +46,7 @@ final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
 ```php
 // bin/console
 $app = new Application('nexus-worker', '1.0.0');
-$app->add(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
+$app->addCommand(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
 $app->run();
 ```
 

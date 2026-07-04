@@ -52,7 +52,7 @@ use function sprintf;
  *
  * Usage:
  * ```php
- * $app->add(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
+ * $app->addCommand(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
  * ```
  *
  * @psalm-api
@@ -242,11 +242,20 @@ final class ThreadedConsumeCommand extends Command
             $limitDesc,
         ));
 
+        $this->logger?->info(sprintf(
+            'Messenger consumer starting: %d thread(s), %d receiver(s) per thread, %s',
+            $threads,
+            $receivers,
+            $limitDesc,
+        ));
+
         WorkerPoolBootstrap::create(
             WorkerPoolConfig::withThreads($threads)->withSystemNamePrefix('messenger-consumer'),
         )
             ->withSerializedConfigure(opis_serialize($configure))
             ->run();
+
+        $this->logger?->info('Messenger consumer stopped.');
 
         $io->success('Consumer stopped.');
 

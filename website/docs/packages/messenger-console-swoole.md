@@ -69,7 +69,7 @@ use Symfony\Component\Console\Application;
 require __DIR__ . '/../vendor/autoload.php';
 
 $app = new Application('nexus-worker', '1.0.0');
-$app->add(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
+$app->addCommand(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
 $app->run();
 ```
 

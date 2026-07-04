@@ -42,7 +42,7 @@ use function sprintf;
  * Example wiring inside a Symfony Console Application:
  * ```php
  * $app = new Application('nexus-worker', '1.0.0');
- * $app->add(new ConsumeCommand(
+ * $app->addCommand(new ConsumeCommand(
  *     new FiberRuntime(),
  *     $transport,
  *     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
