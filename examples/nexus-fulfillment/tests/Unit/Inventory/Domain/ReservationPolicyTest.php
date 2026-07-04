@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Tests\Unit\Inventory\Domain;
 
-use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\ItemState;
+use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\InventoryItem;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\ReservationPolicy;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restocked;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
@@ -25,12 +25,12 @@ final class ReservationPolicyTest extends TestCase
         $tenant = TenantId::fromString('acme');
         $sku = Sku::fromString('WIDGET-42');
         $orderId = OrderId::generate();
-        $state = ItemState::empty($tenant, $sku);
-        $state = ItemState::evolve($state, new Restocked($tenant, $sku, Quantity::of(10)));
-        $state = ItemState::evolve($state, new StockReserved($tenant, $sku, $orderId, Quantity::of(3)));
+        $item = InventoryItem::empty($tenant, $sku);
+        $item->apply(new Restocked($tenant, $sku, Quantity::of(10)));
+        $item->apply(new StockReserved($tenant, $sku, $orderId, Quantity::of(3)));
         // available = 10 - 3 = 7
 
-        self::assertTrue(ReservationPolicy::allows($state, Quantity::of(7)));
+        self::assertTrue(ReservationPolicy::allows($item, Quantity::of(7)));
     }
 
     #[Test]
@@ -39,11 +39,11 @@ final class ReservationPolicyTest extends TestCase
         $tenant = TenantId::fromString('acme');
         $sku = Sku::fromString('WIDGET-42');
         $orderId = OrderId::generate();
-        $state = ItemState::empty($tenant, $sku);
-        $state = ItemState::evolve($state, new Restocked($tenant, $sku, Quantity::of(10)));
-        $state = ItemState::evolve($state, new StockReserved($tenant, $sku, $orderId, Quantity::of(3)));
+        $item = InventoryItem::empty($tenant, $sku);
+        $item->apply(new Restocked($tenant, $sku, Quantity::of(10)));
+        $item->apply(new StockReserved($tenant, $sku, $orderId, Quantity::of(3)));
         // available = 10 - 3 = 7
 
-        self::assertFalse(ReservationPolicy::allows($state, Quantity::of(8)));
+        self::assertFalse(ReservationPolicy::allows($item, Quantity::of(8)));
     }
 }

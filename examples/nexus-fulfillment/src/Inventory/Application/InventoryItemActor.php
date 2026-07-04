@@ -10,11 +10,12 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Application\Reply\StockCommandAccepted;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Application\Reply\StockCommandRejected;
-use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\InventoryRules;
-use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\ItemState;
-use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\Rejection;
+use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\InventoryItem;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReserveStock;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restock;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\RejectionEvent;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Persistence\Event\EventStore;
@@ -27,22 +28,20 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Runtime\Duration;
 
 /**
- * The InventoryItem entity's actor shell. All decisions live in InventoryRules
- * (Domain); this class only wires persistence, replies, publication,
+ * The InventoryItem entity's actor shell. All decisions live in the InventoryItem
+ * aggregate (Domain); this class only wires persistence, replies, publication,
  * and passivation.
  *
- * Reply idiom (mirrored from OrderActor):
- *   - `$sender = $ctx->sender()` captures the ask() reply-to ref (or null for tell()).
- *   - No-persist replies use `Effect::reply($sender, $msg)` (not `none()->thenRun`
- *     — PersistenceEngine's None branch discards side-effects).
- *   - Persist replies use `Effect::persist(...)->thenRun(fn($next) { $sender?->tell(...) })`.
- *
- * Signal handler is threaded via `withSignalHandler()` so it reaches the inner
- * `WithStateBehavior` that PersistenceEngine creates — the only place the
- * ActorCell consults the signal handler at runtime.
+ * Reply idiom:
+ *   - No events recorded → `Effect::reply($sender, Accepted(current state))` (null-sender guard).
+ *   - Rejection event recorded → `Effect::persist(...)->thenRun(publish all + reply Rejected(reason))`.
+ *   - Success events recorded → `Effect::persist(...)->thenRun(publish all + reply Accepted($next))`.
  *
  * Every persisted event (including StockReservationRejected) is published to the
  * bus so the saga receives its failure signal without polling.
+ *
+ * Signal handler is threaded via `withSignalHandler()` so it reaches the inner
+ * `WithStateBehavior` that PersistenceEngine creates.
  *
  * @param ActorRef<Publish> $bus
  */
@@ -61,45 +60,67 @@ final class InventoryItemActor
     ): Behavior {
         $es = EventSourcedBehavior::create(
             PersistenceId::of('InventoryItem', "{$tenantId->value}|{$sku->value}"),
-            ItemState::empty($tenantId, $sku),
-            static function (ItemState $state, ActorContext $ctx, object $command) use ($bus): Effect {
+            InventoryItem::empty($tenantId, $sku),
+            static function (InventoryItem $item, ActorContext $ctx, object $command) use ($bus): Effect {
                 $sender = $ctx->sender();
 
-                $decision = InventoryRules::decide($state, $command);
+                if ($command instanceof Restock) {
+                    $item->restock($command->quantity);
+                } elseif ($command instanceof ReserveStock) {
+                    $item->reserve($command->orderId, $command->quantity);
+                } elseif ($command instanceof ReleaseReservation) {
+                    $item->release($command->orderId);
+                }
 
-                if ($decision instanceof Rejection) {
+                // Unknown commands: no events recorded — falls through to [] path below.
+                $events = $item->releaseEvents();
+
+                if ($events === []) {
                     if ($sender === null) {
                         return Effect::none();
                     }
 
-                    return Effect::reply($sender, new StockCommandRejected($state->sku, $decision->reason));
+                    return Effect::reply($sender, new StockCommandAccepted($item->sku, $item->onHand, $item->available()));
                 }
 
-                if ($decision === []) {
-                    if ($sender === null) {
-                        return Effect::none();
+                $rejectionEvent = null;
+
+                foreach ($events as $event) {
+                    if ($event instanceof RejectionEvent) {
+                        $rejectionEvent = $event;
+                        break;
                     }
-
-                    return Effect::reply($sender, new StockCommandAccepted($state->sku, $state->onHand, $state->available()));
                 }
 
-                return Effect::persist(...$decision)->thenRun(
-                    static function (ItemState $next) use ($bus, $sender, $decision): void {
-                        foreach ($decision as $event) {
+                if ($rejectionEvent !== null) {
+                    $reason = $rejectionEvent->reason();
+
+                    return Effect::persist(...$events)->thenRun(
+                        static function (InventoryItem $next) use ($bus, $sender, $events, $reason): void {
+                            foreach ($events as $event) {
+                                $bus->tell(new Publish($event));
+                            }
+
+                            $sender?->tell(new StockCommandRejected($next->sku, $reason));
+                        },
+                    );
+                }
+
+                return Effect::persist(...$events)->thenRun(
+                    static function (InventoryItem $next) use ($bus, $sender, $events): void {
+                        foreach ($events as $event) {
                             $bus->tell(new Publish($event));
                         }
 
-                        $firstEvent = $decision[0];
-
-                        if ($firstEvent instanceof StockReservationRejected) {
-                            $sender?->tell(new StockCommandRejected($next->sku, $firstEvent->reason));
-                        } else {
-                            $sender?->tell(new StockCommandAccepted($next->sku, $next->onHand, $next->available()));
-                        }
+                        $sender?->tell(new StockCommandAccepted($next->sku, $next->onHand, $next->available()));
                     },
                 );
             },
-            static fn(ItemState $state, object $event): ItemState => ItemState::evolve($state, $event),
+            static function (InventoryItem $item, object $event): InventoryItem {
+                $item->apply($event);
+
+                return $item;
+            },
         )
             ->withEventStore($store)
             ->withRetention(RetentionPolicy::snapshotAndEvents(3, deleteEventsTo: false))

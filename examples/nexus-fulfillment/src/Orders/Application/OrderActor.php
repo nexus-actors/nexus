@@ -10,10 +10,12 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Example\Fulfillment\Orders\Application\Reply\OrderAccepted;
 use Monadial\Nexus\Example\Fulfillment\Orders\Application\Reply\OrderRejected;
-use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderRules;
-use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderState;
-use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Rejection;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Order;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\RejectionEvent;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Persistence\Event\EventStore;
@@ -26,19 +28,19 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Runtime\Duration;
 
 /**
- * The Order entity's actor shell. All decisions live in OrderRules
- * (Domain); this class only wires persistence, replies, publication,
- * and passivation.
+ * The Order entity's actor shell. All decisions live in the Order aggregate
+ * (Domain); this class only wires persistence, replies, publication, and
+ * passivation.
  *
- * Reply idiom (mirrored from WalletActor):
- *   - `$sender = $ctx->sender()` captures the ask() reply-to ref (or null for tell()).
- *   - No-persist replies use `Effect::reply($sender, $msg)` (not `none()->thenRun`
- *     — PersistenceEngine's None branch discards side-effects).
- *   - Persist replies use `Effect::persist(...)->thenRun(fn($next) { $sender?->tell(...) })`.
+ * Reply idiom:
+ *   - No events recorded → `Effect::reply($sender, Accepted(current state))` (null-sender guard).
+ *   - Rejection event recorded → `Effect::persist(...)->thenRun(publish all + reply Rejected(reason))`.
+ *   - Success events recorded → `Effect::persist(...)->thenRun(publish all + reply Accepted($next))`.
  *
  * Signal handler is threaded via `withSignalHandler()` so it reaches the inner
- * `WithStateBehavior` that PersistenceEngine creates — the only place the
- * ActorCell consults the signal handler at runtime.
+ * `WithStateBehavior` that PersistenceEngine creates.
+ *
+ * @param ActorRef<Publish> $bus
  */
 final class OrderActor
 {
@@ -55,31 +57,55 @@ final class OrderActor
     ): Behavior {
         $es = EventSourcedBehavior::create(
             PersistenceId::of('Order', "{$tenantId->value}|{$orderId->value}"),
-            OrderState::empty($tenantId, $orderId),
-            static function (OrderState $state, ActorContext $ctx, object $command) use ($bus): Effect {
+            Order::empty($tenantId, $orderId),
+            static function (Order $order, ActorContext $ctx, object $command) use ($bus): Effect {
                 $sender = $ctx->sender();
 
-                $decision = OrderRules::decide($state, $command);
+                if ($command instanceof PlaceOrder) {
+                    $order->place($command->lines);
+                } elseif ($command instanceof MarkStockReserved) {
+                    $order->markStockReserved();
+                } elseif ($command instanceof CancelOrder) {
+                    $order->cancel($command->reason);
+                }
 
-                if ($decision instanceof Rejection) {
+                // Unknown commands: no events recorded — falls through to [] path below.
+                $events = $order->releaseEvents();
+
+                if ($events === []) {
                     if ($sender === null) {
                         return Effect::none();
                     }
 
-                    return Effect::reply($sender, new OrderRejected($state->orderId, $decision->reason));
+                    return Effect::reply($sender, new OrderAccepted($order->orderId, $order->status, $order->total));
                 }
 
-                if ($decision === []) {
-                    if ($sender === null) {
-                        return Effect::none();
+                $rejectionEvent = null;
+
+                foreach ($events as $event) {
+                    if ($event instanceof RejectionEvent) {
+                        $rejectionEvent = $event;
+                        break;
                     }
-
-                    return Effect::reply($sender, new OrderAccepted($state->orderId, $state->status, $state->total));
                 }
 
-                return Effect::persist(...$decision)->thenRun(
-                    static function (OrderState $next) use ($bus, $sender, $decision): void {
-                        foreach ($decision as $event) {
+                if ($rejectionEvent !== null) {
+                    $reason = $rejectionEvent->reason();
+
+                    return Effect::persist(...$events)->thenRun(
+                        static function (Order $next) use ($bus, $sender, $events, $reason): void {
+                            foreach ($events as $event) {
+                                $bus->tell(new Publish($event));
+                            }
+
+                            $sender?->tell(new OrderRejected($next->orderId, $reason));
+                        },
+                    );
+                }
+
+                return Effect::persist(...$events)->thenRun(
+                    static function (Order $next) use ($bus, $sender, $events): void {
+                        foreach ($events as $event) {
                             $bus->tell(new Publish($event));
                         }
 
@@ -87,7 +113,11 @@ final class OrderActor
                     },
                 );
             },
-            static fn(OrderState $state, object $event): OrderState => OrderState::evolve($state, $event),
+            static function (Order $order, object $event): Order {
+                $order->apply($event);
+
+                return $order;
+            },
         )
             ->withEventStore($store)
             ->withRetention(RetentionPolicy::snapshotAndEvents(3, deleteEventsTo: false))

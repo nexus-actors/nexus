@@ -18,7 +18,7 @@ use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
 use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
 use Monadial\Nexus\Doctrine\Orm\Pool\PooledEntityManager;
-use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderState;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Order;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderStatus;
 use Monadial\Nexus\Example\Fulfillment\Platform\Persistence\PooledDoctrineEventStore;
 use Monadial\Nexus\Example\Fulfillment\Platform\Persistence\PooledDoctrineSnapshotStore;
@@ -122,7 +122,7 @@ final class PooledStoresRoundTripTest extends TestCase
         $tenantId = TenantId::fromString('acme');
         $orderId = OrderId::generate();
         $lines = [new OrderLine(Sku::fromString('WIDGET-42'), Quantity::of(2), Money::of(1999, 'EUR'))];
-        $state = new OrderState($tenantId, $orderId, OrderStatus::Placed, $lines, Money::of(3998, 'EUR'), null);
+        $state = new Order($tenantId, $orderId, OrderStatus::Placed, $lines, Money::of(3998, 'EUR'), null);
         $writerId = new Ulid();
 
         // Snapshot envelope arrives from PersistenceEngine with FQCN as stateType.
@@ -130,7 +130,7 @@ final class PooledStoresRoundTripTest extends TestCase
             persistenceId: $pid,
             sequenceNr: 10,
             state: $state,
-            stateType: OrderState::class,
+            stateType: Order::class,
             timestamp: new DateTimeImmutable(),
             writerId: $writerId,
         );
@@ -140,7 +140,7 @@ final class PooledStoresRoundTripTest extends TestCase
         // load() returns state with status intact.
         $loaded = $store->load($pid);
         self::assertNotNull($loaded);
-        self::assertInstanceOf(OrderState::class, $loaded->state);
+        self::assertInstanceOf(Order::class, $loaded->state);
         self::assertSame(OrderStatus::Placed, $loaded->state->status);
         self::assertSame('orders.order_state.v1', $loaded->stateType);
 

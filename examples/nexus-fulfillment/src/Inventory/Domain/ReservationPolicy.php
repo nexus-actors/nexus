@@ -13,8 +13,8 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Quantity;
  */
 final class ReservationPolicy
 {
-    public static function allows(ItemState $state, Quantity $requested): bool
+    public static function allows(InventoryItem $item, Quantity $requested): bool
     {
-        return $requested->value <= $state->available();
+        return $requested->value <= $item->available();
     }
 }
