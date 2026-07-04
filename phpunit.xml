@@ -41,6 +41,7 @@
             <directory>packages/nexus-http-server-swoole-threads/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/UnitSwoole</directory>
             <directory>packages/nexus-observability-swoole/tests/Unit</directory>
+            <directory>packages/nexus-messenger-console-swoole/tests/Unit</directory>
         </testsuite>
         <testsuite name="integration-doctrine-entity-behavior">
             <directory>tests/Integration/Doctrine/Orm/EntityBehavior</directory>
