@@ -10,6 +10,7 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Doctrine\ORM\Configuration;
 use Doctrine\ORM\Tools\SchemaTool;
 use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
+use Monadial\Nexus\Example\Fulfillment\Inventory\Infrastructure\ReadModel\InventoryLevel;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrderView;
 use Monadial\Nexus\Persistence\Doctrine\Entity\EventEntry;
 use Monadial\Nexus\Persistence\Doctrine\Entity\SnapshotEntry;
@@ -42,6 +43,7 @@ final class SchemaBootstrap
             try {
                 new SchemaTool($em)->updateSchema([
                     $em->getClassMetadata(EventEntry::class),
+                    $em->getClassMetadata(InventoryLevel::class),
                     $em->getClassMetadata(OrderView::class),
                     $em->getClassMetadata(SnapshotEntry::class),
                 ]);

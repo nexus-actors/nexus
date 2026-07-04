@@ -5,9 +5,11 @@ event-sourced entity actors, a fulfillment saga with compensation,
 WebSockets, and full OpenTelemetry observability. Built step by step;
 the tutorial lives in `docs/tutorial/` (arrives with later milestones).
 
-**Status: milestone 2 — Orders HTTP vertical.** Event-sourced Order
-entity actors, tenant-scoped read models, idempotent place/cancel API,
-static bearer-token auth, and a full live end-to-end test drive.
+**Status: milestone 3 — Inventory + fulfillment saga.** Adds event-sourced
+InventoryItem entities, an inventory read model + HTTP vertical, and a
+per-order fulfillment saga that reserves stock across contexts and
+compensates (releases holds, cancels the order) on insufficient stock —
+all proven by a fresh-volume live end-to-end drive.
 
 ## Run it
 
@@ -79,6 +81,60 @@ curl -X DELETE http://localhost:9090/api/orders/<ULID> \
 ```
 
 Cancelling an already-cancelled order is idempotent (returns `200`).
+
+## Inventory API (milestone 3)
+
+All endpoints require `Authorization: Bearer <token>` and `role = ops`.
+Stock is an event-sourced `InventoryItem` entity per `(tenant, sku)`; the
+`inventory_levels` read model is a tenant-scoped projection folded from the
+context bus.
+
+### Restock — `POST /api/inventory/{sku}/restock`
+
+```bash
+curl -X POST http://localhost:9090/api/inventory/WIDGET-42/restock \
+  -H "Authorization: Bearer acme-ops-token" \
+  -H "Content-Type: application/json" \
+  -d '{"quantity":10}'
+# → 200 {"sku":{"value":"WIDGET-42"},"onHand":10,"available":10}
+```
+
+`{sku}` is resolved from the path into a `Sku` value object; a malformed SKU
+returns `400`. `quantity` must be a positive integer.
+
+### List inventory — `GET /api/inventory`
+
+```bash
+curl http://localhost:9090/api/inventory \
+  -H "Authorization: Bearer acme-ops-token"
+# → 200 {"items":[{"sku":{"value":"WIDGET-42"},"onHand":10,"available":8}]}
+```
+
+Results are scoped to the caller's tenant and sorted by `sku ASC`. `available`
+is `on_hand − reserved`; the same SKU under two tenants yields two distinct
+rows (composite `(tenant_id, sku)` key).
+
+## Fulfillment saga
+
+Placing an order publishes `OrderPlaced` on the in-process context bus. The
+`fulfillment-manager` routes it to a per-order `FulfillmentProcess` saga, which
+persists `FulfillmentStarted` and sends `ReserveStock` to each line's inventory
+entity:
+
+- **Happy path** — every line reserves. The saga confirms each reservation,
+  persists `FulfillmentCompleted`, and tells the order `MarkStockReserved`; the
+  order becomes `stock_reserved` and inventory `reserved` rises.
+- **Compensation** — any line rejects (insufficient stock). The saga persists
+  `FulfillmentCompensated`, releases the union of confirmed + in-flight holds
+  (`ReleaseReservation`), and cancels the order (`CancelOrder`) with the
+  `insufficient stock` reason. Previously reserved stock is returned; already
+  reserved orders in the same tenant are untouched.
+
+The saga is journal-backed and passivates after idle; a saga stopped mid-flight
+resumes from its journal when the expected events arrive (covered by the
+replay test). Cancelling an order after its stock is reserved is guarded and
+returns `409` (the reservation lifecycle owns that transition — a milestone-4
+concern).
 
 ## Known limitations
 

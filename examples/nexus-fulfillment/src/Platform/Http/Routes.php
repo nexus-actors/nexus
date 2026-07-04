@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Http;
 
+use Monadial\Nexus\Example\Fulfillment\Inventory\Infrastructure\Http\ListInventoryHandler;
+use Monadial\Nexus\Example\Fulfillment\Inventory\Infrastructure\Http\RestockHandler;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\CancelOrderHandler;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\GetOrderHandler;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\Http\ListOrdersHandler;
@@ -39,6 +41,11 @@ final class Routes
         $app->get('/api/orders/{id}', GetOrderHandler::class)
             ->middleware(AuthorizationMiddleware::class);
         $app->delete('/api/orders/{id}', CancelOrderHandler::class)
+            ->middleware(AuthorizationMiddleware::class);
+
+        $app->post('/api/inventory/{sku}/restock', RestockHandler::class)
+            ->middleware(AuthorizationMiddleware::class);
+        $app->get('/api/inventory', ListInventoryHandler::class)
             ->middleware(AuthorizationMiddleware::class);
     }
 

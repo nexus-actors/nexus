@@ -52,6 +52,7 @@ final readonly class DoctrineKit
         $ormConfig = ORMSetup::createAttributeMetadataConfig(
             paths: [
                 $journalPath,
+                dirname(__DIR__, 2) . '/Inventory/Infrastructure/ReadModel',
                 dirname(__DIR__, 2) . '/Orders/Infrastructure/ReadModel',
             ],
         );
