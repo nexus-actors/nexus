@@ -27,7 +27,15 @@ deptrac:
     - name: Platform
       collectors:
         - type: directory
-          value: src/Platform/.*
+          value: src/Platform/(?!Actor/).*
+
+    # PlatformActor is the shared actor-framework sublayer (src/Platform/Actor/).
+    # Bounded-context Application shells may use it (like Nexus itself), but they
+    # cannot reach the composition root (Boot, Bus, Http, Persistence, Serialization).
+    - name: PlatformActor
+      collectors:
+        - type: directory
+          value: src/Platform/Actor/.*
 
     - name: Nexus
       collectors:
@@ -69,14 +77,18 @@ deptrac:
     # SharedKernel touches Nexus ONLY for the #[MessageType] attribute on
     # published contracts.
     SharedKernel: [Nexus]
-    # Application may depend on Platform — AggregateEntityBehavior and other
+    # Application may depend on PlatformActor — AggregateEntityBehavior and other
     # Platform/Actor helpers are shared application-framework utilities that
     # bounded-context Application shells legitimately use (similar to Nexus).
-    Application: [Application, Domain, Platform, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    # Platform (composition root) is NOT listed here — contexts must not reach Boot/Bus/Http/etc.
+    Application: [Application, Domain, PlatformActor, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     Infrastructure: [Application, Infrastructure, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     # Platform is the composition root and is deliberately ungoverned at the context level:
     # it wires all contexts together. Context fences (below) apply only between bounded contexts.
-    Platform: [Application, Domain, Infrastructure, Platform, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    Platform: [Application, Domain, Infrastructure, Platform, PlatformActor, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    # PlatformActor (shared actor-framework sublayer) may only use Nexus framework types
+    # and SharedKernel contracts. It must NOT reach bounded contexts or the rest of Platform.
+    PlatformActor: [Nexus, SharedKernel]
 
     # ── Context fence rules ────────────────────────────────────────────────
     # Files belong to BOTH a structural layer and a context layer; each
@@ -86,9 +98,9 @@ deptrac:
     # OrdersCtx and InventoryCtx do NOT list each other or FulfillmentCtx.
     #
     # Orders and Inventory are leaf contexts: no cross-context deps allowed.
-    # Platform added so Application shells can use Platform/Actor helpers.
-    OrdersCtx: [OrdersCtx, Domain, Application, Infrastructure, Platform, SharedKernel, Nexus]
-    InventoryCtx: [InventoryCtx, Domain, Application, Infrastructure, Platform, SharedKernel, Nexus]
+    # PlatformActor (actor-framework sublayer only) allowed; Platform composition root is NOT.
+    OrdersCtx: [OrdersCtx, Domain, Application, Infrastructure, PlatformActor, SharedKernel, Nexus]
+    InventoryCtx: [InventoryCtx, Domain, Application, Infrastructure, PlatformActor, SharedKernel, Nexus]
     # Fulfillment/Application is the saga orchestrator: it legitimately
     # imports OrderRefFactory (Orders/Application), InventoryRefFactory
     # (Inventory/Application), and Orders domain commands CancelOrder +
