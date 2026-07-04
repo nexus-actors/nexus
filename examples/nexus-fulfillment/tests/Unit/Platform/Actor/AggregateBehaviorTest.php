@@ -12,8 +12,6 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Order;
 use Monadial\Nexus\Example\Fulfillment\Platform\Actor\AggregateBehavior;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\AggregateRoot;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\RejectionEvent;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -150,13 +148,36 @@ final class AggregateBehaviorTest extends TestCase
         self::assertArrayHasKey(PlaceOrder::class, $handlers);
     }
 
-    private function tenant(): TenantId
+    /**
+     * Value-returning methods are NOT command handlers: discovery requires
+     * a `: void` return type, so query helpers taking a single class-typed
+     * param (e.g. a Money-returning calculator) are excluded.
+     */
+    #[Test]
+    public function discoverHandlersExcludesValueReturningMethods(): void
     {
-        return TenantId::fromString('acme');
-    }
+        $aggregate = new class implements AggregateRoot {
+            public function handleConcrete(PlaceOrder $cmd): void {}
 
-    private function orderId(): OrderId
-    {
-        return OrderId::generate();
+            public function totalFor(PlaceOrder $cmd): int
+            {
+                return 0;
+            }
+
+            public function apply(object $event): void {}
+
+            /** @return list<object> */
+            public function releaseEvents(): array
+            {
+                return [];
+            }
+        };
+
+        $discoverMethod = new ReflectionMethod(AggregateBehavior::class, 'discoverHandlers');
+        $handlers = $discoverMethod->invoke(null, $aggregate::class);
+
+        self::assertCount(1, $handlers);
+        self::assertArrayHasKey(PlaceOrder::class, $handlers);
+        self::assertSame('handleConcrete', $handlers[PlaceOrder::class]);
     }
 }

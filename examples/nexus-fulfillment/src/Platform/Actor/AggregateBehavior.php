@@ -239,10 +239,13 @@ final class AggregateBehavior
     /**
      * Discover command handlers for an aggregate class by signature convention.
      *
-     * Rules: public, non-static, non-constructor method with exactly one parameter
-     * whose declared type is a concrete class (not built-in, not abstract, not
-     * interface). `apply()` is auto-excluded because its parameter type is `object`
-     * (built-in). Discovery results are cached per aggregate class.
+     * Rules: public, non-static, non-constructor method declaring `: void` with
+     * exactly one parameter whose declared type is a concrete class (not built-in,
+     * not abstract, not interface). `apply()` is auto-excluded (its parameter type
+     * is `object`); value-returning query helpers are excluded by the void
+     * requirement. CAVEAT: a public VOID method taking a non-message class WOULD
+     * be claimed — keep aggregate public surfaces to intention methods only.
+     * Discovery results are cached per aggregate class.
      *
      * @param class-string $class
      *
@@ -261,6 +264,18 @@ final class AggregateBehavior
 
         foreach ($reflection->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
             if ($method->isStatic() || $method->isConstructor()) {
+                continue;
+            }
+
+            // Intention methods MUST declare `: void` — a value-returning
+            // method taking a single class-typed param (e.g. a query helper
+            // `totalFor(Sku $sku): Money`) is NOT a command handler and is
+            // excluded here. Void mutators taking a non-message class would
+            // still be claimed: keep aggregate public surfaces to intention
+            // methods only, or make helpers private.
+            $returnType = $method->getReturnType();
+
+            if (!$returnType instanceof ReflectionNamedType || $returnType->getName() !== 'void') {
                 continue;
             }
 
