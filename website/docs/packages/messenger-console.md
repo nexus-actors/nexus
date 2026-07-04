@@ -60,7 +60,7 @@ $registry->registerFromAttribute(OrderPlaced::class);
 $serializer = new ValinorMessageSerializer($registry);
 
 $app = new Application('nexus-worker', '1.0.0');
-$app->add(new ConsumeCommand(
+$app->addCommand(new ConsumeCommand(
     $runtime,
     $transport,
     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
@@ -69,7 +69,7 @@ $app->add(new ConsumeCommand(
         return new MapMessageRouter([OrderPlaced::class => $ref]);
     }),
 ));
-$app->add(new ProduceCommand($transport, $serializer, $registry));
+$app->addCommand(new ProduceCommand($transport, $serializer, $registry));
 $app->run();
 ```
 
@@ -140,7 +140,7 @@ An unknown type name produces a clear error and exits with `Command::FAILURE` â€
 ```php
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 
-$app->add(new ConsumeCommand(
+$app->addCommand(new ConsumeCommand(
     new SwooleRuntime(),
     $transport,
     $setup,

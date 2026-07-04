@@ -30,7 +30,7 @@ use function sprintf;
  * Example wiring inside a Symfony Console Application:
  * ```php
  * $app = new Application('nexus-worker', '1.0.0');
- * $app->add(new ProduceCommand($transport, $serializer, $typeRegistry));
+ * $app->addCommand(new ProduceCommand($transport, $serializer, $typeRegistry));
  * $app->run();
  * ```
  *

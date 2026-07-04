@@ -40,7 +40,7 @@ use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
  * }
  *
  * // In bin/console:
- * $app->add(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
+ * $app->addCommand(new ThreadedConsumeCommand(OrderConsumerBootstrap::class));
  * ```
  *
  * @psalm-api
