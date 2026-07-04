@@ -43,15 +43,29 @@ use Monadial\Nexus\Runtime\Duration;
  * Side-effect dispatch in thenRun:
  *   FulfillmentStarted     → tell InventoryRef ReserveStock per pending line
  *   FulfillmentCompleted   → tell OrderRef MarkStockReserved
- *   FulfillmentCompensated → tell InventoryRef ReleaseReservation per confirmed sku
+ *   FulfillmentCompensated → tell InventoryRef ReleaseReservation per confirmed + in-flight
+ *                            sku (confirmed ∪ pending); releasing an unconfirmed (in-flight)
+ *                            sku is an idempotent no-op at inventory. This covers the
+ *                            rejection-races-ahead scenario: StockReservationRejected(B)
+ *                            processed before StockReserved(A) arrives at the saga — A's
+ *                            reservation is released even though the saga has not yet seen
+ *                            the confirmation.
  *                            + tell OrderRef CancelOrder(insufficient stock reason)
  *
  * At-most-once seam: thenRun closures do NOT re-run on replay. A crash between
  * persist and thenRun executing strands the saga until the broker milestone
  * introduces journal-backed redelivery. Documented here and in the README.
  *
+ * Compensation sub-race (residual, documented): if inventory processes
+ * ReleaseReservation(A) BEFORE it processes the original ReserveStock(A) command,
+ * the release lands first, the reserve creates the hold afterwards, and A leaks
+ * permanently. Journal-backed delivery (broker milestone) closes this by ensuring
+ * the release is only sent once the full ReserveStock round-trip completes.
+ * See README "Known limitations" for the full discussion.
+ *
  * confirmed-set decision: fold-keeps — apply(FulfillmentCompensated) only sets
- * phase; $confirmed survives intact so the thenRun release loop reads $next->confirmed.
+ * phase; $confirmed and $pending survive intact so the thenRun release loop reads
+ * both $next->confirmed and array_keys($next->pending) to form the release set.
  */
 final class FulfillmentProcessActor
 {
@@ -99,7 +113,14 @@ final class FulfillmentProcessActor
                                     new MarkStockReserved($next->tenantId, $next->orderId),
                                 );
                             } elseif ($event instanceof FulfillmentCompensated) {
-                                foreach ($next->confirmed as $skuStr) {
+                                // Release confirmed SKUs + in-flight (pending) SKUs.
+                                // confirmed and pending are mutually exclusive; releasing a
+                                // never-confirmed SKU is an idempotent no-op at inventory.
+                                $toRelease = array_unique(
+                                    array_merge($next->confirmed, array_keys($next->pending)),
+                                );
+
+                                foreach ($toRelease as $skuStr) {
                                     $sku = new Sku($skuStr);
                                     $inventory->of($next->tenantId, $sku)->tell(
                                         new ReleaseReservation($next->tenantId, $sku, $next->orderId),

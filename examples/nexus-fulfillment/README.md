@@ -80,6 +80,22 @@ curl -X DELETE http://localhost:9090/api/orders/<ULID> \
 
 Cancelling an already-cancelled order is idempotent (returns `200`).
 
+## Known limitations
+
+- **At-most-once bus seam**: the `ContextBus` delivers events in-process only. A crash
+  between an entity persisting an event and publishing it to the bus loses that delivery
+  for live saga subscribers. The event journal preserves the fact, but the saga does not
+  replay from the journal. Journal-backed subscriptions and an outbox pattern resolve this
+  in the broker milestone.
+- **Compensation sub-race**: when a reservation rejection races ahead of a confirmation
+  (`StockReservationRejected(B)` reaches the saga before `StockReserved(A)`), the
+  `FulfillmentProcessActor` releases the union of confirmed + in-flight (pending) SKUs so
+  that A's hold is freed. A residual sub-race remains: if `ReleaseReservation(A)` reaches
+  the inventory entity *before* the original `ReserveStock(A)` command is processed, the
+  release lands first and the reserve creates a hold afterwards — A leaks permanently.
+  Journal-backed delivery (broker milestone) closes this by ensuring the release is only
+  dispatched once the full reserve round-trip completes.
+
 ## Quality gates
 
     make ci         # phpunit + psalm + deptrac + php-cs-fixer + phpcs

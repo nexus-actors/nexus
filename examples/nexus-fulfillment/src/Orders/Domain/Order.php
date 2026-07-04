@@ -71,7 +71,13 @@ final class Order
             OrderStatus::Placed,
             OrderStatus::StockReserved => null,
             OrderStatus::Cancelled => $this->record(
-                new OrderPlacementRejected($this->tenantId, $this->orderId, 'Order was cancelled; place a new order instead'),
+                new OrderPlacementRejected(
+                    $this->tenantId,
+                    $this->orderId,
+                    $this->cancelReason !== null
+                        ? "Order was cancelled ({$this->cancelReason}); place a new order instead"
+                        : 'Order was cancelled; place a new order instead',
+                ),
             ),
         };
     }
