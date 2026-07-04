@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
+use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -52,6 +53,7 @@ final class PersistenceEngine
      * @param RetentionPolicy|null $retentionPolicy Event/snapshot retention (default: keep all)
      * @param Ulid $writerId Writer identity stamped on persisted events and snapshots
      * @param ReplayFilter|null $replayFilter Filter for detecting writer conflicts during recovery
+     * @param null|Closure(ActorContext<object>, Signal): Behavior<object> $signalHandler Lifecycle signal handler attached to the resolved behavior
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -156,8 +158,9 @@ final class PersistenceEngine
                 },
             );
 
-            /** @psalm-suppress InvalidArgument Signal handler closure type is compatible at runtime */
-            return $signalHandler !== null ? $withState->onSignal($signalHandler) : $withState;
+            return $signalHandler !== null
+                ? $withState->onSignal($signalHandler)
+                : $withState;
         });
     }
 

@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Persistence\EventSourced;
 
 use Closure;
 use LogicException;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
@@ -61,7 +63,11 @@ use Symfony\Component\Uid\Ulid;
  */
 final readonly class EventSourcedBehavior
 {
-    /** @psalm-suppress UnusedConstructor Called by create() */
+    /**
+     * @psalm-suppress UnusedConstructor Called by create()
+     *
+     * @param null|Closure(ActorContext<object>, Signal): Behavior<object> $signalHandler
+     */
     private function __construct(
         private PersistenceId $persistenceId,
         private object $emptyState,
@@ -119,6 +125,8 @@ final readonly class EventSourcedBehavior
      *     return Behavior::same();
      * })
      * ```
+     *
+     * @param Closure(ActorContext<object>, Signal): Behavior<object> $handler
      */
     public function withSignalHandler(Closure $handler): self
     {
