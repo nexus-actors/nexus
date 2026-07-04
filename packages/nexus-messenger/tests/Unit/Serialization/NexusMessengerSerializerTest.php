@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Tests\Unit\Serialization;
 
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
+use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
@@ -133,6 +135,41 @@ final class NexusMessengerSerializerTest extends TestCase
 
         self::assertInstanceOf(TraceContextStamp::class, $stamp);
         self::assertSame($carrier, $stamp->carrier);
+    }
+
+    #[Test]
+    public function correlationIdStampRoundTripsAsXNexusCorrelationIdHeader(): void
+    {
+        $envelope = new Envelope(new Greeting('hi'), [new CorrelationIdStamp('req-abc123')]);
+
+        $decoded = $this->serializer->decode($this->serializer->encode($envelope));
+        $stamp = $decoded->last(CorrelationIdStamp::class);
+
+        self::assertInstanceOf(CorrelationIdStamp::class, $stamp);
+        self::assertSame('req-abc123', $stamp->id);
+    }
+
+    #[Test]
+    public function replyToStampRoundTripsAsXNexusReplyToHeader(): void
+    {
+        $envelope = new Envelope(new Greeting('hi'), [new ReplyToStamp('reply-queue')]);
+
+        $decoded = $this->serializer->decode($this->serializer->encode($envelope));
+        $stamp = $decoded->last(ReplyToStamp::class);
+
+        self::assertInstanceOf(ReplyToStamp::class, $stamp);
+        self::assertSame('reply-queue', $stamp->channel);
+    }
+
+    #[Test]
+    public function absentHeadersProduceNoStamps(): void
+    {
+        $encoded = $this->serializer->encode(new Envelope(new Greeting('hi')));
+
+        $decoded = $this->serializer->decode($encoded);
+
+        self::assertNull($decoded->last(CorrelationIdStamp::class));
+        self::assertNull($decoded->last(ReplyToStamp::class));
     }
 
     #[Test]
