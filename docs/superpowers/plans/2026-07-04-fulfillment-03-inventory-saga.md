@@ -217,3 +217,26 @@ duplicates / late events on terminal phases → [] (idempotent)
 - Saga proven recoverable: replay test (Task 4c) green — a saga stopped after `FulfillmentStarted` resumes and completes when its expected events arrive.
 - Deptrac context fences proven by the red/green Step-2 demonstration; role guards are framework-attribute-based; VO-param 400s render JSON.
 - All gates green; every persisted class registry-named; milestone 4 (Warehouse/Shipping + timers) can consume `OrderStockReserved` from the bus and the same saga file.
+
+---
+
+## AMENDMENT A (user directive, 2026-07-04): aggregate-style domains, all rejections as events
+
+Supersedes the functional DECIDE/EVOLVE style in Tasks 1–4 and the milestone-2 Orders domain. Inserted as **Task 4** (refactor); former Tasks 4/5/6 become 5/6/7 unchanged except where noted.
+
+**Target design (binds Task 4 and the saga):**
+- Rich aggregate roots (`Order`, `InventoryItem`, later `FulfillmentProcess`) replace `{OrderState+OrderRules}` / `{ItemState+InventoryRules}`. Behavior methods on the aggregate (`place()`, `cancel()`, `markStockReserved()`, `restock()`, `reserve()`, `release()`) enforce invariants and RECORD events; the actor is a thin orchestrator: match command → call method → drain `releaseEvents()` → `Effect::persist`/reply. No decision logic in actors.
+- **All rejections are persisted events** (full Verraes): new marker interface `SharedKernel\Contracts\RejectionEvent` (`public string $reason { get; }` — or plain readonly property via interface constant shape; implementer picks the cleanest PHP 8.5 interface form). New Orders rejection contracts: `OrderPlacementRejected`, `OrderCancellationRejected`, `MarkStockReservedRejected` (wire `orders.order_placement_rejected.v1` etc.). Inventory's existing `StockReservationRejected` implements the marker. Rejection events fold as no-ops. Idempotent repeats record NOTHING (a repeat is not a business fact).
+- Replies derived from recorded events: any drained event `instanceof RejectionEvent` → reply Rejected(reason); none recorded → reply Accepted(current state) via `Effect::reply`; else persist + thenRun(publish all + reply Accepted from `$next`). Unknown commands → the actor's match default returns the framework's unhandled path (dead letters), NOT a persisted event.
+- **Aggregate mechanics (CRITICAL):** mutable aggregate, `public private(set)` state (no getters), PUBLIC constructor over state fields (Valinor snapshot target; `private array $recorded = []` stays out of serialization), `apply(object $event): void` mutates state per event, `record(object $event): void` APPENDS ONLY — it must NOT self-apply, because `PersistenceEngine` folds persisted events through the event handler (`fn(Order $o, object $e): Order => { $o->apply($e); return $o; }`); self-applying would double-apply. Methods therefore read PRE-command state — identical semantics to the old decide().
+- Wire-name continuity: keep `orders.order_state.v1` / `inventory.item_state.v1` mapped to the new aggregate classes with UNCHANGED public field names/shapes (snapshot compatibility); note it in MessageTypes comments.
+- Decision semantics are FROZEN: every row of the existing OrderRulesTest/InventoryRulesTest tables carries over 1:1 into aggregate-method tests (rejection rows now assert a recorded RejectionEvent instead of a returned Rejection). The `Rejection` value classes are deleted.
+- The former Task 3's review was folded into Task 4's review (the code it validated is restructured here; the reviewer must confirm all Task 3 semantics survived).
+
+### Task 4 (NEW): Aggregate refactor — Orders + Inventory (TDD-preserving)
+
+Files: rewrite `src/Orders/Domain/` (`Order` aggregate replaces OrderState/OrderRules; delete Rejection), `src/Inventory/Domain/` (`InventoryItem` aggregate replaces ItemState/InventoryRules; delete its Rejection), add the marker + three Orders rejection contracts, rewrite both actors' command handlers as thin orchestrators, convert both domain test suites, update MessageTypes, keep projection/HTTP behavior identical (HTTP replies unchanged in shape). Steps: convert tests first (RED against missing aggregate), implement aggregates, rewire actors, all integration tests must pass UNMODIFIED except imports/reply plumbing, four gates green. Commit: `refactor(fulfillment): rich aggregates — thin actors, rejections as recorded events`
+
+### Deltas to renumbered tasks
+- **Task 5 (saga)**: `FulfillmentProcess` is an aggregate in the same style (`start()`, `confirmReservation()`, `rejectReservation()` recording the saga events; `SagaRules` is not built). The manager and side-effect wiring are unchanged. Saga has no rejection events (it never says no — late/duplicate messages record nothing).
+- **Task 6/7**: unchanged.
