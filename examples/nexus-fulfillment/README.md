@@ -48,7 +48,9 @@ curl -X POST http://localhost:9090/api/orders \
 same `orderId` a second time returns `201` again — the actor returns the
 existing state without persisting a new event. The retry body is ignored;
 the original order's data is returned unchanged regardless of what the
-retry carries. Placing a cancelled order returns `409`.
+retry carries. Placing a cancelled order returns `409`. Placing an order with
+duplicate SKUs in the lines also returns `409` (the `OrderPlacementRejected`
+rejection event surfaces via `OrderRejected` reply).
 
 ### List orders — `GET /api/orders`
 
@@ -143,6 +145,12 @@ concern).
   for live saga subscribers. The event journal preserves the fact, but the saga does not
   replay from the journal. Journal-backed subscriptions and an outbox pattern resolve this
   in the broker milestone.
+- **User-cancel racing the saga**: a `DELETE /api/orders/{id}` while the order is still
+  `Placed` (the reserving window) succeeds, but `OrderCancelled` is not routed to the saga;
+  the saga continues, `MarkStockReserved` is rejected by the already-cancelled order, and
+  the inventory holds created at `FulfillmentStarted` are never released. The behavioral
+  fix — routing `OrderCancelled` into the saga for compensation — arrives with milestone 4's
+  cancellation lifecycle.
 - **Compensation sub-race**: when a reservation rejection races ahead of a confirmation
   (`StockReservationRejected(B)` reaches the saga before `StockReserved(A)`), the
   `FulfillmentProcessActor` releases the union of confirmed + in-flight (pending) SKUs so

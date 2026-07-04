@@ -14,6 +14,8 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 
+use function count;
+
 /**
  * FulfillmentProcess aggregate root. Mutable — apply() mutates state;
  * record() appends events without applying them.
@@ -22,8 +24,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
  * apply(). The persistence engine calls the event handler closure
  * `fn(FulfillmentProcess $p, object $e): FulfillmentProcess => { $p->apply($e); return $p; }`
  * for each persisted event. Self-applying inside record() would double-apply every event.
- * Behavior methods therefore read PRE-command state — identical semantics to
- * the old SagaRules::decide().
+ * Behavior methods therefore read PRE-command state.
  *
  * At-most-once side-effects: thenRun closures do NOT re-run on replay. A crash
  * between persist and thenRun executing leaves the saga mid-flight until the

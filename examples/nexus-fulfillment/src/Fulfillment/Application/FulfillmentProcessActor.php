@@ -33,6 +33,10 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Runtime\Duration;
 
+use function array_keys;
+use function array_merge;
+use function array_unique;
+
 /**
  * FulfillmentProcess entity shell. All decisions live in the FulfillmentProcess
  * aggregate (Domain); this class only wires persistence, side-effects, and passivation.
@@ -55,6 +59,11 @@ use Monadial\Nexus\Runtime\Duration;
  * At-most-once seam: thenRun closures do NOT re-run on replay. A crash between
  * persist and thenRun executing strands the saga until the broker milestone
  * introduces journal-backed redelivery. Documented here and in the README.
+ *
+ * User-cancel race (pending, milestone 4): a DELETE /api/orders/{id} that succeeds while
+ * the saga is in flight is NOT routed to this saga; the saga completes normally but
+ * MarkStockReserved is rejected and the inventory holds from FulfillmentStarted are never
+ * released — fixed in milestone 4 by routing OrderCancelled into the saga for compensation.
  *
  * Compensation sub-race (residual, documented): if inventory processes
  * ReleaseReservation(A) BEFORE it processes the original ReserveStock(A) command,

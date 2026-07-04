@@ -71,6 +71,8 @@ deptrac:
     SharedKernel: [Nexus]
     Application: [Application, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     Infrastructure: [Application, Infrastructure, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    # Platform is the composition root and is deliberately ungoverned at the context level:
+    # it wires all contexts together. Context fences (below) apply only between bounded contexts.
     Platform: [Application, Domain, Infrastructure, Platform, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
 
     # ── Context fence rules ────────────────────────────────────────────────

@@ -60,7 +60,7 @@ final class MessageTypes
             $registry->registerFromAttribute($contract);
         }
 
-        // Persisted snapshot state types — explicitly registered; Domain stays pure (no attribute).
+        // Persisted snapshot state types and saga domain events — explicitly registered; Domain stays pure (no attribute).
         // Wire names are UNCHANGED from the deleted OrderState/ItemState classes so existing
         // snapshots deserialize correctly: Valinor constructs Order/InventoryItem via their public
         // constructors which have identical parameter names and types.

@@ -44,6 +44,7 @@ use stdClass;
  * 15. [State S3] apply OrderStockReserved transitions to StockReserved
  * 16. [State S4] apply unknown event is no-op
  * 17. [No-double-apply] place() does not apply events; state is pre-command until engine fold
+ * 18. [Invariant I1] place on NotCreated with duplicate SKUs → OrderPlacementRejected (no OrderPlaced)
  */
 #[CoversClass(Order::class)]
 final class OrderTest extends TestCase
@@ -279,6 +280,24 @@ final class OrderTest extends TestCase
         // Now simulate the engine fold: apply the event
         $order->apply($events[0]);
         self::assertSame(OrderStatus::Placed, $order->status);
+    }
+
+    // Row 18 — place on NotCreated with duplicate SKUs → OrderPlacementRejected, no OrderPlaced
+    #[Test]
+    public function placeOnNotCreatedWithDuplicateSkusRecordsOrderPlacementRejected(): void
+    {
+        $order = $this->emptyOrder();
+        $order->place([
+            new OrderLine(Sku::fromString('WIDGET-42'), Quantity::of(2), Money::of(1999, 'EUR')),
+            new OrderLine(Sku::fromString('WIDGET-42'), Quantity::of(1), Money::of(1999, 'EUR')),
+        ]);
+        $events = $order->releaseEvents();
+
+        self::assertCount(1, $events);
+        self::assertInstanceOf(OrderPlacementRejected::class, $events[0]);
+        self::assertInstanceOf(RejectionEvent::class, $events[0]);
+        self::assertStringContainsString('duplicate SKU', $events[0]->reason());
+        self::assertStringContainsString('WIDGET-42', $events[0]->reason());
     }
 
     // Rejection events are no-ops in apply()

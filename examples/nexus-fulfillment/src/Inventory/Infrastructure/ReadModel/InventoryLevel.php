@@ -19,10 +19,10 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockRes
  * rebuildable.
  *
  * `$reservations` (orderId->qty) is tracked so reserve/release folds are
- * idempotent under duplicate bus delivery (the at-most-once seam can
- * redeliver); `reserved` mirrors the domain aggregate's derivation. Restock
- * has no idempotency key and increments on_hand — consistent with the domain
- * and the journal, which never emit a duplicate restock event.
+ * idempotent under projection rebuild replays and the future at-least-once
+ * broker delivery; `reserved` mirrors the domain aggregate's derivation.
+ * Restock has no idempotency key and increments on_hand — consistent with the
+ * domain and the journal, which never emit a duplicate restock event.
  */
 #[Entity]
 #[Table(name: 'inventory_levels')]

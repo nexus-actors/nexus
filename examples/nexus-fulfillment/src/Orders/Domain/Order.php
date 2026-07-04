@@ -65,9 +65,7 @@ final class Order
     public function place(array $lines): void
     {
         match ($this->status) {
-            OrderStatus::NotCreated => $this->record(
-                new OrderPlaced($this->tenantId, $this->orderId, $lines, $this->computeTotal($lines)),
-            ),
+            OrderStatus::NotCreated => $this->placeNew($lines),
             OrderStatus::Placed,
             OrderStatus::StockReserved => null,
             OrderStatus::Cancelled => $this->record(
@@ -161,6 +159,38 @@ final class Order
     private function applyOrderStockReserved(): void
     {
         $this->status = OrderStatus::StockReserved;
+    }
+
+    /**
+     * Handle the NotCreated → Placed transition, enforcing the duplicate-SKU invariant.
+     *
+     * Invariant: each SKU must appear at most once in an order. Duplicate lines cause the
+     * saga's sku→qty fold to silently overwrite, under-reserving stock while billing the
+     * summed total; rejected with OrderPlacementRejected before any event is persisted.
+     *
+     * @param non-empty-list<OrderLine> $lines
+     */
+    private function placeNew(array $lines): void
+    {
+        $seen = [];
+
+        foreach ($lines as $line) {
+            if (isset($seen[$line->sku->value])) {
+                $this->record(new OrderPlacementRejected(
+                    $this->tenantId,
+                    $this->orderId,
+                    "duplicate SKU in order lines: {$line->sku->value}",
+                ));
+
+                return;
+            }
+
+            $seen[$line->sku->value] = true;
+        }
+
+        $this->record(
+            new OrderPlaced($this->tenantId, $this->orderId, $lines, $this->computeTotal($lines)),
+        );
     }
 
     /**
