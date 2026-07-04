@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Platform\Serialization;
 
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentCompensated;
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentCompleted;
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentStarted;
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationConfirmed;
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationFailed;
+use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\FulfillmentProcess;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\InventoryItem;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Order;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
@@ -58,8 +64,14 @@ final class MessageTypes
         // Wire names are UNCHANGED from the deleted OrderState/ItemState classes so existing
         // snapshots deserialize correctly: Valinor constructs Order/InventoryItem via their public
         // constructors which have identical parameter names and types.
+        $registry->register(FulfillmentCompensated::class, 'fulfillment.compensated.v1');
+        $registry->register(FulfillmentCompleted::class, 'fulfillment.completed.v1');
+        $registry->register(FulfillmentProcess::class, 'fulfillment.process_state.v1');
+        $registry->register(FulfillmentStarted::class, 'fulfillment.started.v1');
         $registry->register(InventoryItem::class, 'inventory.item_state.v1');
         $registry->register(Order::class, 'orders.order_state.v1');
+        $registry->register(ReservationConfirmed::class, 'fulfillment.reservation_confirmed.v1');
+        $registry->register(ReservationFailed::class, 'fulfillment.reservation_failed.v1');
 
         return $registry;
     }

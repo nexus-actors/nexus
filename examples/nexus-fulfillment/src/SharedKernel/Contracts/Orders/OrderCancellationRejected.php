@@ -8,6 +8,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\RejectionEvent;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Serialization\MessageType;
+use Override;
 
 /**
  * Published rejection event: a CancelOrder command was rejected because the
@@ -23,7 +24,7 @@ final readonly class OrderCancellationRejected implements RejectionEvent
         public string $reason,
     ) {}
 
-    #[\Override]
+    #[Override]
     public function reason(): string
     {
         return $this->reason;

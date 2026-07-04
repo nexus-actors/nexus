@@ -31,6 +31,9 @@
                 <!-- InventoryRefFactory caches refs to actors that accept a union of command types
                      (Restock | ReserveStock | ReleaseReservation). Same reason as OrderRefFactory. -->
                 <file name="src/Inventory/Application/InventoryRefFactory.php"/>
+                <!-- ProcessRefFactory caches refs to saga actors that accept a union of bus-delivered
+                     events (OrderPlaced | StockReserved | StockReservationRejected). Same reason. -->
+                <file name="src/Fulfillment/Application/ProcessRefFactory.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>

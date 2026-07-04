@@ -10,6 +10,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Quantity;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Serialization\MessageType;
+use Override;
 
 /**
  * Published event: a reservation attempt was rejected. This is a persisted
@@ -29,7 +30,7 @@ final readonly class StockReservationRejected implements RejectionEvent
         public string $reason,
     ) {}
 
-    #[\Override]
+    #[Override]
     public function reason(): string
     {
         return $this->reason;
