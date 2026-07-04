@@ -133,8 +133,25 @@ bin/console nexus:messenger:produce order.placed '{"orderId":"load-test","amount
 
 An unknown type name produces a clear error and exits with `Command::FAILURE` — no messages are sent.
 
+## Using SwooleRuntime
+
+`ConsumeCommand` accepts any `Runtime` implementation — pass `new SwooleRuntime()` to run the actor system on Swoole coroutines instead of Fibers:
+
+```php
+use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
+
+$app->add(new ConsumeCommand(
+    new SwooleRuntime(),
+    $transport,
+    $setup,
+));
+```
+
+This keeps the single-process model while gaining Swoole's async I/O for handlers that make outbound network calls. For multi-thread horizontal scaling within one process, see [nexus-messenger-console-swoole](/docs/packages/messenger-console-swoole).
+
 ## See also
 
 - [Messenger bridge guide](/docs/guides/messenger-bridge)
 - [nexus-messenger package](/docs/packages/messenger)
+- [nexus-messenger-console-swoole package](/docs/packages/messenger-console-swoole) — threaded `nexus:messenger:consume-threads` command over the Swoole worker pool
 - [Redis example app](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-messenger-redis) — includes a `bin/console` wiring both commands to the Redis transport
