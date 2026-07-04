@@ -128,9 +128,12 @@ final class SwooleRuntime implements Runtime
     {
         // Coroutine::yield() suspends until someone explicitly calls
         // Coroutine::resume($cid) — that's generator-style, not cooperative.
-        // Coroutine::sleep(0) drops to the scheduler for one tick and
+        // A minimal positive sleep drops to the scheduler for one tick and
         // resumes automatically; this is what shutdown/drain loops need.
-        Coroutine::sleep(0);
+        // Swoole 6.2+ rejects sleep values below 0.001s ("Timer must be
+        // greater than or equal to 0.001"), so use the smallest valid delay
+        // rather than 0 — passing 0 busy-spins without ever yielding.
+        Coroutine::sleep(0.001);
     }
 
     #[Override]
