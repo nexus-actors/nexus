@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Tests\Unit\Orders\Domain;
 
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Order;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderStatus;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\MarkStockReservedRejected;
@@ -69,7 +72,7 @@ final class OrderTest extends TestCase
     public function placeOnNotCreatedRecordsOrderPlacedWithComputedTotal(): void
     {
         $order = $this->emptyOrder();
-        $order->place($this->lines);
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, $this->lines));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -83,7 +86,7 @@ final class OrderTest extends TestCase
     {
         $order = $this->emptyOrder();
         $order->apply(new OrderPlaced($this->tenant, $this->orderId, $this->lines, Money::of(3998, 'EUR')));
-        $order->place($this->lines);
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, $this->lines));
 
         self::assertSame([], $order->releaseEvents());
     }
@@ -93,7 +96,7 @@ final class OrderTest extends TestCase
     public function placeOnStockReservedRecordsNothing(): void
     {
         $order = $this->stockReservedOrder();
-        $order->place($this->lines);
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, $this->lines));
 
         self::assertSame([], $order->releaseEvents());
     }
@@ -103,7 +106,7 @@ final class OrderTest extends TestCase
     public function placeOnCancelledRecordsOrderPlacementRejected(): void
     {
         $order = $this->cancelledOrder();
-        $order->place($this->lines);
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, $this->lines));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -118,7 +121,7 @@ final class OrderTest extends TestCase
     {
         $order = $this->emptyOrder();
         $order->apply(new OrderPlaced($this->tenant, $this->orderId, $this->lines, Money::of(3998, 'EUR')));
-        $order->cancel('customer request');
+        $order->cancel(new CancelOrder($this->tenant, $this->orderId, 'customer request'));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -131,7 +134,7 @@ final class OrderTest extends TestCase
     public function cancelOnCancelledRecordsNothing(): void
     {
         $order = $this->cancelledOrder();
-        $order->cancel('again');
+        $order->cancel(new CancelOrder($this->tenant, $this->orderId, 'again'));
 
         self::assertSame([], $order->releaseEvents());
     }
@@ -141,7 +144,7 @@ final class OrderTest extends TestCase
     public function cancelOnNotCreatedRecordsOrderCancellationRejected(): void
     {
         $order = $this->emptyOrder();
-        $order->cancel('nope');
+        $order->cancel(new CancelOrder($this->tenant, $this->orderId, 'nope'));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -155,7 +158,7 @@ final class OrderTest extends TestCase
     public function cancelOnStockReservedRecordsOrderCancellationRejected(): void
     {
         $order = $this->stockReservedOrder();
-        $order->cancel('too late');
+        $order->cancel(new CancelOrder($this->tenant, $this->orderId, 'too late'));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -170,7 +173,7 @@ final class OrderTest extends TestCase
     {
         $order = $this->emptyOrder();
         $order->apply(new OrderPlaced($this->tenant, $this->orderId, $this->lines, Money::of(3998, 'EUR')));
-        $order->markStockReserved();
+        $order->markStockReserved(new MarkStockReserved($this->tenant, $this->orderId));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -182,7 +185,7 @@ final class OrderTest extends TestCase
     public function markStockReservedOnStockReservedRecordsNothing(): void
     {
         $order = $this->stockReservedOrder();
-        $order->markStockReserved();
+        $order->markStockReserved(new MarkStockReserved($this->tenant, $this->orderId));
 
         self::assertSame([], $order->releaseEvents());
     }
@@ -192,7 +195,7 @@ final class OrderTest extends TestCase
     public function markStockReservedOnNotCreatedRecordsMarkStockReservedRejected(): void
     {
         $order = $this->emptyOrder();
-        $order->markStockReserved();
+        $order->markStockReserved(new MarkStockReserved($this->tenant, $this->orderId));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -205,7 +208,7 @@ final class OrderTest extends TestCase
     public function markStockReservedOnCancelledRecordsMarkStockReservedRejected(): void
     {
         $order = $this->cancelledOrder();
-        $order->markStockReserved();
+        $order->markStockReserved(new MarkStockReserved($this->tenant, $this->orderId));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);
@@ -268,7 +271,7 @@ final class OrderTest extends TestCase
     public function placeRecordsEventWithoutApplyingItSoStateRemainsPreCommand(): void
     {
         $order = $this->emptyOrder();
-        $order->place($this->lines);
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, $this->lines));
 
         // State is STILL NotCreated — record() must not call apply()
         self::assertSame(OrderStatus::NotCreated, $order->status);
@@ -287,10 +290,10 @@ final class OrderTest extends TestCase
     public function placeOnNotCreatedWithDuplicateSkusRecordsOrderPlacementRejected(): void
     {
         $order = $this->emptyOrder();
-        $order->place([
+        $order->place(new PlaceOrder($this->tenant, $this->orderId, [
             new OrderLine(Sku::fromString('WIDGET-42'), Quantity::of(2), Money::of(1999, 'EUR')),
             new OrderLine(Sku::fromString('WIDGET-42'), Quantity::of(1), Money::of(1999, 'EUR')),
-        ]);
+        ]));
         $events = $order->releaseEvents();
 
         self::assertCount(1, $events);

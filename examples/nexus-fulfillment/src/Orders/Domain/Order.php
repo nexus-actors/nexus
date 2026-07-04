@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Orders\Domain;
 
 use LogicException;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\AggregateRoot;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\MarkStockReservedRejected;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancellationRejected;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
@@ -16,6 +20,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
+use Override;
 
 use function array_reduce;
 
@@ -37,7 +42,7 @@ use function array_reduce;
  * $recorded is private and excluded from Valinor snapshot serialization by design
  * (private fields are not visible to the mapper or json_encode).
  */
-final class Order
+final class Order implements AggregateRoot
 {
     /** @var list<object> */
     private array $recorded = [];
@@ -59,13 +64,10 @@ final class Order
         return new self($tenantId, $orderId, OrderStatus::NotCreated, [], null, null);
     }
 
-    /**
-     * @param non-empty-list<OrderLine> $lines
-     */
-    public function place(array $lines): void
+    public function place(PlaceOrder $command): void
     {
         match ($this->status) {
-            OrderStatus::NotCreated => $this->placeNew($lines),
+            OrderStatus::NotCreated => $this->placeNew($command->lines),
             OrderStatus::Placed,
             OrderStatus::StockReserved => null,
             OrderStatus::Cancelled => $this->record(
@@ -80,7 +82,7 @@ final class Order
         };
     }
 
-    public function markStockReserved(): void
+    public function markStockReserved(MarkStockReserved $command): void
     {
         match ($this->status) {
             OrderStatus::Placed => $this->record(new OrderStockReserved($this->tenantId, $this->orderId)),
@@ -92,10 +94,10 @@ final class Order
         };
     }
 
-    public function cancel(string $reason): void
+    public function cancel(CancelOrder $command): void
     {
         match ($this->status) {
-            OrderStatus::Placed => $this->record(new OrderCancelled($this->tenantId, $this->orderId, $reason)),
+            OrderStatus::Placed => $this->record(new OrderCancelled($this->tenantId, $this->orderId, $command->reason)),
             OrderStatus::Cancelled => null,
             OrderStatus::NotCreated => $this->record(
                 new OrderCancellationRejected($this->tenantId, $this->orderId, 'Order does not exist'),
@@ -111,6 +113,7 @@ final class Order
      *
      * @return list<object>
      */
+    #[Override]
     public function releaseEvents(): array
     {
         $events = $this->recorded;
@@ -123,6 +126,7 @@ final class Order
      * Apply an event — called by the persistence engine's event fold.
      * MUST NOT be called from record() to prevent double-apply.
      */
+    #[Override]
     public function apply(object $event): void
     {
         match (true) {

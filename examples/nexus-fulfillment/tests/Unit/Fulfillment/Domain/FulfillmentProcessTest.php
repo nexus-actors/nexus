@@ -11,6 +11,9 @@ use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationConfi
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationFailed;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\FulfillmentPhase;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\FulfillmentProcess;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
@@ -76,7 +79,7 @@ final class FulfillmentProcessTest extends TestCase
     public function startOnFreshProcessRecordsFulfillmentStarted(): void
     {
         $process = FulfillmentProcess::empty($this->tenant, $this->orderId);
-        $process->start($this->twoLines());
+        $process->start(new OrderPlaced($this->tenant, $this->orderId, $this->twoLines(), new Money(3000, 'EUR')));
         $events = $process->releaseEvents();
 
         self::assertCount(1, $events);
@@ -91,7 +94,7 @@ final class FulfillmentProcessTest extends TestCase
         $process = FulfillmentProcess::empty($this->tenant, $this->orderId);
         $process->apply(new FulfillmentStarted($this->tenant, $this->orderId, $this->twoLines()));
 
-        $process->start($this->twoLines());
+        $process->start(new OrderPlaced($this->tenant, $this->orderId, $this->twoLines(), new Money(3000, 'EUR')));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -106,7 +109,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationConfirmed($this->tenant, $this->orderId, $this->skuB));
         $process->apply(new FulfillmentCompleted($this->tenant, $this->orderId));
 
-        $process->start($this->twoLines());
+        $process->start(new OrderPlaced($this->tenant, $this->orderId, $this->twoLines(), new Money(3000, 'EUR')));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -120,7 +123,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationFailed($this->tenant, $this->orderId, $this->skuA, 'insufficient stock'));
         $process->apply(new FulfillmentCompensated($this->tenant, $this->orderId, 'insufficient stock: SKU-AAA'));
 
-        $process->start($this->twoLines());
+        $process->start(new OrderPlaced($this->tenant, $this->orderId, $this->twoLines(), new Money(3000, 'EUR')));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -132,7 +135,7 @@ final class FulfillmentProcessTest extends TestCase
         $process = FulfillmentProcess::empty($this->tenant, $this->orderId);
         $process->apply(new FulfillmentStarted($this->tenant, $this->orderId, $this->twoLines()));
 
-        $process->confirmReservation($this->skuA);
+        $process->confirmReservation(new StockReserved($this->tenant, $this->skuA, $this->orderId, Quantity::of(1)));
         $events = $process->releaseEvents();
 
         self::assertCount(1, $events);
@@ -148,7 +151,7 @@ final class FulfillmentProcessTest extends TestCase
         $lines = [new OrderLine($this->skuA, Quantity::of(2), new Money(1000, 'EUR'))];
         $process->apply(new FulfillmentStarted($this->tenant, $this->orderId, $lines));
 
-        $process->confirmReservation($this->skuA);
+        $process->confirmReservation(new StockReserved($this->tenant, $this->skuA, $this->orderId, Quantity::of(1)));
         $events = $process->releaseEvents();
 
         self::assertCount(2, $events);
@@ -168,7 +171,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationConfirmed($this->tenant, $this->orderId, $this->skuA));
 
         // Confirming skuA again (no longer in pending) → no-op
-        $process->confirmReservation($this->skuA);
+        $process->confirmReservation(new StockReserved($this->tenant, $this->skuA, $this->orderId, Quantity::of(1)));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -183,7 +186,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationConfirmed($this->tenant, $this->orderId, $this->skuA));
         $process->apply(new FulfillmentCompleted($this->tenant, $this->orderId));
 
-        $process->confirmReservation($this->skuA);
+        $process->confirmReservation(new StockReserved($this->tenant, $this->skuA, $this->orderId, Quantity::of(1)));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -197,7 +200,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationFailed($this->tenant, $this->orderId, $this->skuA, 'insufficient stock'));
         $process->apply(new FulfillmentCompensated($this->tenant, $this->orderId, 'insufficient stock: SKU-AAA'));
 
-        $process->confirmReservation($this->skuB);
+        $process->confirmReservation(new StockReserved($this->tenant, $this->skuB, $this->orderId, Quantity::of(1)));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -209,7 +212,7 @@ final class FulfillmentProcessTest extends TestCase
         $process = FulfillmentProcess::empty($this->tenant, $this->orderId);
         $process->apply(new FulfillmentStarted($this->tenant, $this->orderId, $this->twoLines()));
 
-        $process->rejectReservation($this->skuA, 'insufficient stock');
+        $process->rejectReservation(new StockReservationRejected($this->tenant, $this->skuA, $this->orderId, Quantity::of(1), 0, 'insufficient stock'));
         $events = $process->releaseEvents();
 
         self::assertCount(2, $events);
@@ -229,7 +232,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationConfirmed($this->tenant, $this->orderId, $this->skuA));
 
         // skuA already confirmed, not pending → no-op
-        $process->rejectReservation($this->skuA, 'insufficient stock');
+        $process->rejectReservation(new StockReservationRejected($this->tenant, $this->skuA, $this->orderId, Quantity::of(1), 0, 'insufficient stock'));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -244,7 +247,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationConfirmed($this->tenant, $this->orderId, $this->skuA));
         $process->apply(new FulfillmentCompleted($this->tenant, $this->orderId));
 
-        $process->rejectReservation($this->skuA, 'insufficient stock');
+        $process->rejectReservation(new StockReservationRejected($this->tenant, $this->skuA, $this->orderId, Quantity::of(1), 0, 'insufficient stock'));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -258,7 +261,7 @@ final class FulfillmentProcessTest extends TestCase
         $process->apply(new ReservationFailed($this->tenant, $this->orderId, $this->skuA, 'insufficient stock'));
         $process->apply(new FulfillmentCompensated($this->tenant, $this->orderId, 'insufficient stock: SKU-AAA'));
 
-        $process->rejectReservation($this->skuB, 'insufficient stock');
+        $process->rejectReservation(new StockReservationRejected($this->tenant, $this->skuB, $this->orderId, Quantity::of(1), 0, 'insufficient stock'));
 
         self::assertSame([], $process->releaseEvents());
     }
@@ -353,7 +356,7 @@ final class FulfillmentProcessTest extends TestCase
     public function startRecordsEventWithoutApplyingItSoStateRemainsPreCommand(): void
     {
         $process = FulfillmentProcess::empty($this->tenant, $this->orderId);
-        $process->start($this->twoLines());
+        $process->start(new OrderPlaced($this->tenant, $this->orderId, $this->twoLines(), new Money(3000, 'EUR')));
 
         // State is STILL fresh (pending=[]) — record() must not call apply()
         self::assertSame([], $process->pending);

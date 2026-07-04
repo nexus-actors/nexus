@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Tests\Unit\Inventory\Domain;
 
 use Monadial\Nexus\Example\Fulfillment\Inventory\Domain\InventoryItem;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReserveStock;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restock;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restocked;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReleased;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
@@ -56,7 +59,7 @@ final class InventoryItemTest extends TestCase
     public function restockRecordsRestocked(): void
     {
         $item = InventoryItem::empty($this->tenant, $this->sku);
-        $item->restock(Quantity::of(50));
+        $item->restock(new Restock($this->tenant, $this->sku, Quantity::of(50)));
         $events = $item->releaseEvents();
 
         self::assertCount(1, $events);
@@ -71,7 +74,7 @@ final class InventoryItemTest extends TestCase
         $item = InventoryItem::empty($this->tenant, $this->sku);
         $item->apply(new Restocked($this->tenant, $this->sku, Quantity::of(10)));
 
-        $item->reserve($this->orderId, Quantity::of(3));
+        $item->reserve(new ReserveStock($this->tenant, $this->sku, $this->orderId, Quantity::of(3)));
         $events = $item->releaseEvents();
 
         self::assertCount(1, $events);
@@ -87,7 +90,7 @@ final class InventoryItemTest extends TestCase
         $item->apply(new Restocked($this->tenant, $this->sku, Quantity::of(10)));
         $item->apply(new StockReserved($this->tenant, $this->sku, $this->orderId, Quantity::of(3)));
 
-        $item->reserve($this->orderId, Quantity::of(5));
+        $item->reserve(new ReserveStock($this->tenant, $this->sku, $this->orderId, Quantity::of(5)));
 
         self::assertSame([], $item->releaseEvents());
     }
@@ -99,7 +102,7 @@ final class InventoryItemTest extends TestCase
         $item = InventoryItem::empty($this->tenant, $this->sku);
         $item->apply(new Restocked($this->tenant, $this->sku, Quantity::of(2)));
 
-        $item->reserve($this->orderId, Quantity::of(5));
+        $item->reserve(new ReserveStock($this->tenant, $this->sku, $this->orderId, Quantity::of(5)));
         $events = $item->releaseEvents();
 
         self::assertCount(1, $events);
@@ -118,7 +121,7 @@ final class InventoryItemTest extends TestCase
         $item->apply(new Restocked($this->tenant, $this->sku, Quantity::of(10)));
         $item->apply(new StockReserved($this->tenant, $this->sku, $this->orderId, Quantity::of(3)));
 
-        $item->release($this->orderId);
+        $item->release(new ReleaseReservation($this->tenant, $this->sku, $this->orderId));
         $events = $item->releaseEvents();
 
         self::assertCount(1, $events);
@@ -131,7 +134,7 @@ final class InventoryItemTest extends TestCase
     public function releaseNonexistentReservationRecordsNothing(): void
     {
         $item = InventoryItem::empty($this->tenant, $this->sku);
-        $item->release($this->orderId);
+        $item->release(new ReleaseReservation($this->tenant, $this->sku, $this->orderId));
 
         self::assertSame([], $item->releaseEvents());
     }
@@ -234,7 +237,7 @@ final class InventoryItemTest extends TestCase
     public function restockRecordsEventWithoutApplyingItSoStateRemainsPreCommand(): void
     {
         $item = InventoryItem::empty($this->tenant, $this->sku);
-        $item->restock(Quantity::of(100));
+        $item->restock(new Restock($this->tenant, $this->sku, Quantity::of(100)));
 
         // State is STILL 0 — record() must not call apply()
         self::assertSame(0, $item->onHand);

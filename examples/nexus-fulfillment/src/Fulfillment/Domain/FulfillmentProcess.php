@@ -9,10 +9,13 @@ use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentCompl
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentStarted;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationConfirmed;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\ReservationFailed;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\AggregateRoot;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
+use Override;
 
 use function count;
 
@@ -40,7 +43,7 @@ use function count;
  *
  * $recorded is private and excluded from Valinor snapshot serialization by design.
  */
-final class FulfillmentProcess
+final class FulfillmentProcess implements AggregateRoot
 {
     /** @var list<object> */
     private array $recorded = [];
@@ -67,16 +70,14 @@ final class FulfillmentProcess
      * Records FulfillmentStarted only when phase is Reserving AND pending is
      * empty (i.e. the process has not been started yet).
      * Late/duplicate deliveries (pending non-empty or terminal phase) → no-op.
-     *
-     * @param non-empty-list<OrderLine> $lines
      */
-    public function start(array $lines): void
+    public function start(OrderPlaced $command): void
     {
         if ($this->phase !== FulfillmentPhase::Reserving || $this->pending !== []) {
             return;
         }
 
-        $this->record(new FulfillmentStarted($this->tenantId, $this->orderId, $lines));
+        $this->record(new FulfillmentStarted($this->tenantId, $this->orderId, $command->lines));
     }
 
     /**
@@ -84,13 +85,13 @@ final class FulfillmentProcess
      * Records ReservationConfirmed (and FulfillmentCompleted in the same drain
      * when this was the last pending SKU). Late/duplicate/terminal → no-op.
      */
-    public function confirmReservation(Sku $sku): void
+    public function confirmReservation(StockReserved $command): void
     {
-        if ($this->phase !== FulfillmentPhase::Reserving || !isset($this->pending[$sku->value])) {
+        if ($this->phase !== FulfillmentPhase::Reserving || !isset($this->pending[$command->sku->value])) {
             return;
         }
 
-        $this->record(new ReservationConfirmed($this->tenantId, $this->orderId, $sku));
+        $this->record(new ReservationConfirmed($this->tenantId, $this->orderId, $command->sku));
 
         // count($this->pending) === 1 here: this is the only outstanding reservation.
         // After apply(ReservationConfirmed), pending will be empty → process is complete.
@@ -105,17 +106,17 @@ final class FulfillmentProcess
      * Records ReservationFailed + FulfillmentCompensated in the same drain.
      * Non-pending sku / terminal phase → no-op.
      */
-    public function rejectReservation(Sku $sku, string $reason): void
+    public function rejectReservation(StockReservationRejected $command): void
     {
-        if ($this->phase !== FulfillmentPhase::Reserving || !isset($this->pending[$sku->value])) {
+        if ($this->phase !== FulfillmentPhase::Reserving || !isset($this->pending[$command->sku->value])) {
             return;
         }
 
-        $this->record(new ReservationFailed($this->tenantId, $this->orderId, $sku, $reason));
+        $this->record(new ReservationFailed($this->tenantId, $this->orderId, $command->sku, $command->reason()));
         $this->record(new FulfillmentCompensated(
             $this->tenantId,
             $this->orderId,
-            "insufficient stock: {$sku->value}",
+            "insufficient stock: {$command->sku->value}",
         ));
     }
 
@@ -124,6 +125,7 @@ final class FulfillmentProcess
      *
      * @return list<object>
      */
+    #[Override]
     public function releaseEvents(): array
     {
         $events = $this->recorded;
@@ -136,6 +138,7 @@ final class FulfillmentProcess
      * Apply an event — called by the persistence engine's event fold.
      * MUST NOT be called from record() to prevent double-apply.
      */
+    #[Override]
     public function apply(object $event): void
     {
         match (true) {

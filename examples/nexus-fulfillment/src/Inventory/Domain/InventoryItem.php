@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Inventory\Domain;
 
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\AggregateRoot;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReserveStock;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restock;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\Restocked;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReleased;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Quantity;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
+use Override;
 
 use function array_diff_key;
 use function array_merge;
@@ -32,7 +36,7 @@ use function array_sum;
  *
  * $recorded is private and excluded from Valinor snapshot serialization by design.
  */
-final class InventoryItem
+final class InventoryItem implements AggregateRoot
 {
     /** @var list<object> */
     private array $recorded = [];
@@ -68,23 +72,23 @@ final class InventoryItem
         return $this->onHand - $this->reserved();
     }
 
-    public function restock(Quantity $quantity): void
+    public function restock(Restock $command): void
     {
-        $this->record(new Restocked($this->tenantId, $this->sku, $quantity));
+        $this->record(new Restocked($this->tenantId, $this->sku, $command->quantity));
     }
 
-    public function reserve(OrderId $orderId, Quantity $quantity): void
+    public function reserve(ReserveStock $command): void
     {
-        if (isset($this->reservations[$orderId->value])) {
+        if (isset($this->reservations[$command->orderId->value])) {
             return; // idempotent — reservation already exists for this order
         }
 
-        if (!ReservationPolicy::allows($this, $quantity)) {
+        if (!ReservationPolicy::allows($this, $command->quantity)) {
             $this->record(new StockReservationRejected(
                 $this->tenantId,
                 $this->sku,
-                $orderId,
-                $quantity,
+                $command->orderId,
+                $command->quantity,
                 $this->available(),
                 'insufficient stock',
             ));
@@ -92,20 +96,20 @@ final class InventoryItem
             return;
         }
 
-        $this->record(new StockReserved($this->tenantId, $this->sku, $orderId, $quantity));
+        $this->record(new StockReserved($this->tenantId, $this->sku, $command->orderId, $command->quantity));
     }
 
-    public function release(OrderId $orderId): void
+    public function release(ReleaseReservation $command): void
     {
-        if (!isset($this->reservations[$orderId->value])) {
+        if (!isset($this->reservations[$command->orderId->value])) {
             return; // idempotent — no reservation to release
         }
 
         $this->record(new StockReleased(
             $this->tenantId,
             $this->sku,
-            $orderId,
-            Quantity::of($this->reservations[$orderId->value]),
+            $command->orderId,
+            Quantity::of($this->reservations[$command->orderId->value]),
         ));
     }
 
@@ -114,6 +118,7 @@ final class InventoryItem
      *
      * @return list<object>
      */
+    #[Override]
     public function releaseEvents(): array
     {
         $events = $this->recorded;
@@ -126,6 +131,7 @@ final class InventoryItem
      * Apply an event — called by the persistence engine's event fold.
      * MUST NOT be called from record() to prevent double-apply.
      */
+    #[Override]
     public function apply(object $event): void
     {
         match (true) {

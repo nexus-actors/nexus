@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\Fulfillment\Fulfillment\Application;
 
-use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
-use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentCompensated;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentCompleted;
 use Monadial\Nexus\Example\Fulfillment\Fulfillment\Domain\Event\FulfillmentStarted;
@@ -15,20 +13,14 @@ use Monadial\Nexus\Example\Fulfillment\Inventory\Application\InventoryRefFactory
 use Monadial\Nexus\Example\Fulfillment\Orders\Application\OrderRefFactory;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
+use Monadial\Nexus\Example\Fulfillment\Platform\Actor\AggregateBehavior;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReserveStock;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReservationRejected;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
-use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Quantity;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Sku;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Persistence\Event\EventStore;
-use Monadial\Nexus\Persistence\EventSourced\Effect;
-use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
-use Monadial\Nexus\Persistence\EventSourced\RetentionPolicy;
-use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Runtime\Duration;
@@ -41,10 +33,13 @@ use function array_unique;
  * FulfillmentProcess entity shell. All decisions live in the FulfillmentProcess
  * aggregate (Domain); this class only wires persistence, side-effects, and passivation.
  *
+ * AggregateBehavior discovers command handlers from FulfillmentProcess's method signatures:
+ * start(OrderPlaced), confirmReservation(StockReserved), rejectReservation(StockReservationRejected).
+ *
  * Sagas never reply — there is no sender. Unknown commands dead-letter via
  * Effect::unhandled(). Empty drain (late/duplicate) → Effect::none() (no side effects).
  *
- * Side-effect dispatch in thenRun:
+ * Side-effect dispatch in the sideEffects closure:
  *   FulfillmentStarted     → tell InventoryRef ReserveStock per pending line
  *   FulfillmentCompleted   → tell OrderRef MarkStockReserved
  *   FulfillmentCompensated → tell InventoryRef ReleaseReservation per confirmed + in-flight
@@ -73,7 +68,7 @@ use function array_unique;
  * See README "Known limitations" for the full discussion.
  *
  * confirmed-set decision: fold-keeps — apply(FulfillmentCompensated) only sets
- * phase; $confirmed and $pending survive intact so the thenRun release loop reads
+ * phase; $confirmed and $pending survive intact so the sideEffects closure reads
  * both $next->confirmed and array_keys($next->pending) to form the release set.
  */
 final class FulfillmentProcessActor
@@ -87,87 +82,46 @@ final class FulfillmentProcessActor
         InventoryRefFactory $inventory,
         Duration $passivateAfter,
     ): Behavior {
-        $es = EventSourcedBehavior::create(
-            PersistenceId::of('FulfillmentProcess', "{$tenantId->value}|{$orderId->value}"),
-            FulfillmentProcess::empty($tenantId, $orderId),
-            static function (FulfillmentProcess $process, ActorContext $ctx, object $command) use ($orders, $inventory): Effect {
-                if ($command instanceof OrderPlaced) {
-                    $process->start($command->lines);
-                } elseif ($command instanceof StockReserved) {
-                    $process->confirmReservation($command->sku);
-                } elseif ($command instanceof StockReservationRejected) {
-                    $process->rejectReservation($command->sku, $command->reason());
-                } else {
-                    return Effect::unhandled();
-                }
-
-                $events = $process->releaseEvents();
-
-                if ($events === []) {
-                    return Effect::none();
-                }
-
-                return Effect::persist(...$events)->thenRun(
-                    static function (FulfillmentProcess $next) use ($events, $orders, $inventory): void {
-                        foreach ($events as $event) {
-                            if ($event instanceof FulfillmentStarted) {
-                                foreach ($next->pending as $skuStr => $qty) {
-                                    $sku = new Sku($skuStr);
-                                    $inventory->of($next->tenantId, $sku)->tell(
-                                        new ReserveStock($next->tenantId, $sku, $next->orderId, Quantity::of($qty)),
-                                    );
-                                }
-                            } elseif ($event instanceof FulfillmentCompleted) {
-                                $orders->of($next->tenantId, $next->orderId)->tell(
-                                    new MarkStockReserved($next->tenantId, $next->orderId),
-                                );
-                            } elseif ($event instanceof FulfillmentCompensated) {
-                                // Release confirmed SKUs + in-flight (pending) SKUs.
-                                // confirmed and pending are mutually exclusive; releasing a
-                                // never-confirmed SKU is an idempotent no-op at inventory.
-                                $toRelease = array_unique(
-                                    array_merge($next->confirmed, array_keys($next->pending)),
-                                );
-
-                                foreach ($toRelease as $skuStr) {
-                                    $sku = new Sku($skuStr);
-                                    $inventory->of($next->tenantId, $sku)->tell(
-                                        new ReleaseReservation($next->tenantId, $sku, $next->orderId),
-                                    );
-                                }
-
-                                $orders->of($next->tenantId, $next->orderId)->tell(
-                                    new CancelOrder($next->tenantId, $next->orderId, $event->reason),
-                                );
-                            }
+        return AggregateBehavior::forProcess(
+            aggregate: FulfillmentProcess::empty($tenantId, $orderId),
+            persistenceId: PersistenceId::of('FulfillmentProcess', "{$tenantId->value}|{$orderId->value}"),
+            sideEffects: static function (FulfillmentProcess $next, array $events) use ($orders, $inventory): void {
+                foreach ($events as $event) {
+                    if ($event instanceof FulfillmentStarted) {
+                        foreach ($next->pending as $skuStr => $qty) {
+                            $sku = new Sku($skuStr);
+                            $inventory->of($next->tenantId, $sku)->tell(
+                                new ReserveStock($next->tenantId, $sku, $next->orderId, Quantity::of($qty)),
+                            );
                         }
-                    },
-                );
-            },
-            static function (FulfillmentProcess $process, object $event): FulfillmentProcess {
-                $process->apply($event);
+                    } elseif ($event instanceof FulfillmentCompleted) {
+                        $orders->of($next->tenantId, $next->orderId)->tell(
+                            new MarkStockReserved($next->tenantId, $next->orderId),
+                        );
+                    } elseif ($event instanceof FulfillmentCompensated) {
+                        // Release confirmed SKUs + in-flight (pending) SKUs.
+                        // confirmed and pending are mutually exclusive; releasing a
+                        // never-confirmed SKU is an idempotent no-op at inventory.
+                        $toRelease = array_unique(
+                            array_merge($next->confirmed, array_keys($next->pending)),
+                        );
 
-                return $process;
-            },
-        )
-            ->withEventStore($store)
-            ->withRetention(RetentionPolicy::snapshotAndEvents(3, deleteEventsTo: false))
-            ->withSignalHandler(static function (ActorContext $ctx, object $signal): Behavior {
-                if ($signal instanceof ReceiveTimeout) {
-                    return Behavior::stopped();
+                        foreach ($toRelease as $skuStr) {
+                            $sku = new Sku($skuStr);
+                            $inventory->of($next->tenantId, $sku)->tell(
+                                new ReleaseReservation($next->tenantId, $sku, $next->orderId),
+                            );
+                        }
+
+                        $orders->of($next->tenantId, $next->orderId)->tell(
+                            new CancelOrder($next->tenantId, $next->orderId, $event->reason),
+                        );
+                    }
                 }
-
-                return Behavior::same();
-            })
-            ->withSnapshotStore($snapshots)
-            ->withSnapshotStrategy(SnapshotStrategy::everyN(50))
-            ->toBehavior();
-
-        /** @psalm-suppress InvalidArgument $es is a Behavior<object> built by PersistenceEngine; generic T resolves at runtime */
-        return Behavior::setup(static function (ActorContext $ctx) use ($es, $passivateAfter): Behavior {
-            $ctx->setReceiveTimeout($passivateAfter);
-
-            return $es;
-        });
+            },
+            store: $store,
+            snapshots: $snapshots,
+            passivateAfter: $passivateAfter,
+        );
     }
 }

@@ -106,4 +106,5 @@ deptrac:
     # (Inventory/Application), and Orders domain commands CancelOrder +
     # MarkStockReserved (commands-as-contracts pattern — noted for future
     # milestone review; intentionally NOT moved to SharedKernel now).
-    FulfillmentCtx: [FulfillmentCtx, OrdersCtx, InventoryCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]
+    # PlatformActor (AggregateBehavior) allowed — same rationale as OrdersCtx/InventoryCtx.
+    FulfillmentCtx: [FulfillmentCtx, OrdersCtx, InventoryCtx, Domain, Application, Infrastructure, PlatformActor, SharedKernel, Nexus]
