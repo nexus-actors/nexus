@@ -33,6 +33,7 @@ use Monadial\Nexus\Runtime\Duration;
  * passivation.
  *
  * Reply idiom:
+ *   - Unknown command → `Effect::unhandled()` (dead-lettered by PersistenceEngine; no reply).
  *   - No events recorded → `Effect::reply($sender, Accepted(current state))` (null-sender guard).
  *   - Rejection event recorded → `Effect::persist(...)->thenRun(publish all + reply Rejected(reason))`.
  *   - Success events recorded → `Effect::persist(...)->thenRun(publish all + reply Accepted($next))`.
@@ -67,9 +68,11 @@ final class OrderActor
                     $order->markStockReserved();
                 } elseif ($command instanceof CancelOrder) {
                     $order->cancel($command->reason);
+                } else {
+                    // Unknown commands dead-letter via PersistenceEngine; state is unchanged.
+                    return Effect::unhandled();
                 }
 
-                // Unknown commands: no events recorded — falls through to [] path below.
                 $events = $order->releaseEvents();
 
                 if ($events === []) {

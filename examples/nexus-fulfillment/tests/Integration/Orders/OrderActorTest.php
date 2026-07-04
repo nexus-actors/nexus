@@ -225,6 +225,56 @@ final class OrderActorTest extends TestCase
     }
 
     #[Test]
+    public function unknownCommandDeadLettersAndEntityStateIsUnchanged(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('order-test-5', $runtime);
+        $store = new InMemoryEventStore();
+        $snapshots = new InMemorySnapshotStore();
+        $bus = $system->spawn(Props::fromBehavior(ContextBusActor::behavior()), 'context-bus');
+        $factory = new OrderRefFactory($system, $store, $snapshots, $bus, Duration::seconds(30));
+
+        $tenantId = new TenantId('acme');
+        $orderId = OrderId::generate();
+        $placeOrder = new PlaceOrder(
+            $tenantId,
+            $orderId,
+            [new OrderLine(new Sku('WIDGET-001'), new Quantity(1), new Money(999, 'USD'))],
+        );
+
+        /** @var OrderAccepted|null $reply */
+        $reply = null;
+
+        $runtime->spawn(
+            static function () use ($factory, $tenantId, $orderId, $placeOrder, &$reply): void {
+                $ref = $factory->of($tenantId, $orderId);
+
+                // Place the order so state is non-empty
+                $ref->ask($placeOrder, Duration::seconds(5))->await();
+
+                // Fire an unknown command via tell() — Effect::unhandled() routes it to dead
+                // letters; the actor keeps running and state is not corrupted.
+                // Dead-letter assertion: not performed directly (ActorSystem::deadLetters()
+                // returns a DeadLetterRef null-object, not a queryable store). Correctness is
+                // verified below by the successful subsequent real command.
+                $ref->tell(new UnknownOrderCommand());
+
+                // Real command after the unknown one must succeed and reflect correct state
+                /** @var OrderAccepted $r */
+                $r = $ref->ask(new CancelOrder($tenantId, $orderId, 'verify unhandled'), Duration::seconds(5))->await();
+                $reply = $r;
+            },
+        );
+
+        $runtime->scheduleOnce(Duration::seconds(3), static fn() => $system->shutdown(Duration::seconds(1)));
+        $system->run();
+
+        // Placed → Cancelled proves the unknown command did not corrupt state or block the actor
+        self::assertInstanceOf(OrderAccepted::class, $reply);
+        self::assertSame(OrderStatus::Cancelled, $reply->status);
+    }
+
+    #[Test]
     public function persistedEventsArePublishedToTheBus(): void
     {
         $runtime = new FiberRuntime();
@@ -275,3 +325,6 @@ final class OrderActorTest extends TestCase
         self::assertInstanceOf(OrderPlaced::class, $received[0]);
     }
 }
+
+/** Fixture: unknown command type for dead-letter routing test. Must be readonly (Psalm ReadonlyMessageRule). */
+final readonly class UnknownOrderCommand {}

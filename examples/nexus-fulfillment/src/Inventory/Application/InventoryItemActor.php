@@ -33,6 +33,7 @@ use Monadial\Nexus\Runtime\Duration;
  * and passivation.
  *
  * Reply idiom:
+ *   - Unknown command → `Effect::unhandled()` (dead-lettered by PersistenceEngine; no reply).
  *   - No events recorded → `Effect::reply($sender, Accepted(current state))` (null-sender guard).
  *   - Rejection event recorded → `Effect::persist(...)->thenRun(publish all + reply Rejected(reason))`.
  *   - Success events recorded → `Effect::persist(...)->thenRun(publish all + reply Accepted($next))`.
@@ -70,9 +71,11 @@ final class InventoryItemActor
                     $item->reserve($command->orderId, $command->quantity);
                 } elseif ($command instanceof ReleaseReservation) {
                     $item->release($command->orderId);
+                } else {
+                    // Unknown commands dead-letter via PersistenceEngine; state is unchanged.
+                    return Effect::unhandled();
                 }
 
-                // Unknown commands: no events recorded — falls through to [] path below.
                 $events = $item->releaseEvents();
 
                 if ($events === []) {

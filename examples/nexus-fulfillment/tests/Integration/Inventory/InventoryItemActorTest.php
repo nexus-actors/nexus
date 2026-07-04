@@ -303,4 +303,60 @@ final class InventoryItemActorTest extends TestCase
         self::assertSame(100, $replayReply->onHand);
         self::assertSame(0, $replayReply->available);
     }
+
+    #[Test]
+    public function unknownCommandDeadLettersAndEntityStateIsUnchanged(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('inv-test-6', $runtime);
+        $store = new InMemoryEventStore();
+        $snapshots = new InMemorySnapshotStore();
+        $bus = $system->spawn(Props::fromBehavior(ContextBusActor::behavior()), 'context-bus');
+        $factory = new InventoryRefFactory($system, $store, $snapshots, $bus, Duration::seconds(30));
+
+        $tenantId = new TenantId('acme');
+        $sku = new Sku('WIDGET-006');
+        $orderId = OrderId::generate();
+
+        /** @var StockCommandAccepted|null $reply */
+        $reply = null;
+
+        $runtime->spawn(
+            static function () use ($factory, $tenantId, $sku, $orderId, &$reply): void {
+                $ref = $factory->of($tenantId, $sku);
+
+                // Restock so state is non-empty
+                $ref->ask(
+                    new Restock($tenantId, $sku, Quantity::of(50)),
+                    Duration::seconds(5),
+                )->await();
+
+                // Fire an unknown command via tell() — Effect::unhandled() routes it to dead
+                // letters; the actor keeps running and state is not corrupted.
+                // Dead-letter assertion: not performed directly (ActorSystem::deadLetters()
+                // returns a DeadLetterRef null-object, not a queryable store). Correctness is
+                // verified below by the successful subsequent real command.
+                $ref->tell(new UnknownInventoryCommand());
+
+                // Real command after the unknown one must reflect untouched state
+                /** @var StockCommandAccepted $r */
+                $r = $ref->ask(
+                    new ReserveStock($tenantId, $sku, $orderId, Quantity::of(50)),
+                    Duration::seconds(5),
+                )->await();
+                $reply = $r;
+            },
+        );
+
+        $runtime->scheduleOnce(Duration::seconds(3), static fn() => $system->shutdown(Duration::seconds(1)));
+        $system->run();
+
+        // onHand=50, available=0 proves the unknown command did not corrupt state or block the actor
+        self::assertInstanceOf(StockCommandAccepted::class, $reply);
+        self::assertSame(50, $reply->onHand);
+        self::assertSame(0, $reply->available);
+    }
 }
+
+/** Fixture: unknown command type for dead-letter routing test. Must be readonly (Psalm ReadonlyMessageRule). */
+final readonly class UnknownInventoryCommand {}
