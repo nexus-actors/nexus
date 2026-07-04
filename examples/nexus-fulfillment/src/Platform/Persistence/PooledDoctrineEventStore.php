@@ -12,28 +12,38 @@ use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
+use WeakMap;
 
 /**
  * A durable, pool-friendly {@see EventStore}.
  *
  * Each operation borrows an EntityManager from the shared pool for its
- * duration, wrapping a {@see DoctrineEventStore} with the given serializer,
- * instead of pinning one connection per actor for its whole lifetime.
+ * duration instead of pinning one connection per actor for its whole
+ * lifetime. The {@see DoctrineEventStore} wrapper is cached per pooled
+ * EntityManager in a WeakMap — one instance per EM, reused across
+ * operations, released automatically when the pool recycles the EM.
  */
-final readonly class PooledDoctrineEventStore implements EventStore
+final class PooledDoctrineEventStore implements EventStore
 {
+    /** @var WeakMap<EntityManagerInterface, DoctrineEventStore> */
+    private WeakMap $stores;
+
     public function __construct(
-        private EntityManagerPool $pool,
-        private MessageSerializer $serializer,
-    ) {}
+        private readonly EntityManagerPool $pool,
+        private readonly MessageSerializer $serializer,
+    ) {
+        /** @var WeakMap<EntityManagerInterface, DoctrineEventStore> $map */
+        $map = new WeakMap();
+        $this->stores = $map;
+    }
 
     #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $events, $serializer): void {
-            new DoctrineEventStore($em, $serializer)->persist($id, ...$events);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $events, $storeFor): void {
+            $storeFor($em)->persist($id, ...$events);
         });
     }
 
@@ -43,13 +53,13 @@ final readonly class PooledDoctrineEventStore implements EventStore
     #[Override]
     public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
         return $this->pool->withEntityManager(
-            static function (EntityManagerInterface $em) use ($serializer, $id, $fromSequenceNr, $toSequenceNr): array {
+            static function (EntityManagerInterface $em) use ($storeFor, $id, $fromSequenceNr, $toSequenceNr): array {
                 $events = [];
 
-                foreach (new DoctrineEventStore($em, $serializer)->load($id, $fromSequenceNr, $toSequenceNr) as $event) {
+                foreach ($storeFor($em)->load($id, $fromSequenceNr, $toSequenceNr) as $event) {
                     $events[] = $event;
                 }
 
@@ -61,20 +71,32 @@ final readonly class PooledDoctrineEventStore implements EventStore
     #[Override]
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $toSequenceNr, $serializer): void {
-            new DoctrineEventStore($em, $serializer)->deleteUpTo($id, $toSequenceNr);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $toSequenceNr, $storeFor): void {
+            $storeFor($em)->deleteUpTo($id, $toSequenceNr);
         });
     }
 
     #[Override]
     public function highestSequenceNr(PersistenceId $id): int
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
         return $this->pool->withEntityManager(
-            static fn(EntityManagerInterface $em): int => new DoctrineEventStore($em, $serializer)->highestSequenceNr($id),
+            static fn(EntityManagerInterface $em): int => $storeFor($em)->highestSequenceNr($id),
         );
+    }
+
+    private function storeFor(EntityManagerInterface $em): DoctrineEventStore
+    {
+        $store = $this->stores[$em] ?? null;
+
+        if ($store === null) {
+            $store = new DoctrineEventStore($em, $this->serializer);
+            $this->stores[$em] = $store;
+        }
+
+        return $store;
     }
 }

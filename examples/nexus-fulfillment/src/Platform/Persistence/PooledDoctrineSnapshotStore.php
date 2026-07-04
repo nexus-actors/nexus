@@ -12,48 +12,70 @@ use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
+use WeakMap;
 
 /**
  * A durable, pool-friendly {@see SnapshotStore}.
  *
  * Each operation borrows an EntityManager from the shared pool for its
- * duration, wrapping a {@see DoctrineSnapshotStore} with the given serializer,
- * instead of pinning one connection per actor for its whole lifetime.
+ * duration instead of pinning one connection per actor for its whole
+ * lifetime. The {@see DoctrineSnapshotStore} wrapper is cached per pooled
+ * EntityManager in a WeakMap — one instance per EM, reused across
+ * operations, released automatically when the pool recycles the EM.
  */
-final readonly class PooledDoctrineSnapshotStore implements SnapshotStore
+final class PooledDoctrineSnapshotStore implements SnapshotStore
 {
+    /** @var WeakMap<EntityManagerInterface, DoctrineSnapshotStore> */
+    private WeakMap $stores;
+
     public function __construct(
-        private EntityManagerPool $pool,
-        private MessageSerializer $serializer,
-    ) {}
+        private readonly EntityManagerPool $pool,
+        private readonly MessageSerializer $serializer,
+    ) {
+        /** @var WeakMap<EntityManagerInterface, DoctrineSnapshotStore> $map */
+        $map = new WeakMap();
+        $this->stores = $map;
+    }
 
     #[Override]
     public function save(PersistenceId $id, SnapshotEnvelope $snapshot): void
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $snapshot, $serializer): void {
-            new DoctrineSnapshotStore($em, $serializer)->save($id, $snapshot);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $snapshot, $storeFor): void {
+            $storeFor($em)->save($id, $snapshot);
         });
     }
 
     #[Override]
     public function load(PersistenceId $id): ?SnapshotEnvelope
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
         return $this->pool->withEntityManager(
-            static fn(EntityManagerInterface $em): ?SnapshotEnvelope => new DoctrineSnapshotStore($em, $serializer)->load($id),
+            static fn(EntityManagerInterface $em): ?SnapshotEnvelope => $storeFor($em)->load($id),
         );
     }
 
     #[Override]
     public function delete(PersistenceId $id, int $maxSequenceNr): void
     {
-        $serializer = $this->serializer;
+        $storeFor = $this->storeFor(...);
 
-        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $maxSequenceNr, $serializer): void {
-            new DoctrineSnapshotStore($em, $serializer)->delete($id, $maxSequenceNr);
+        $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $maxSequenceNr, $storeFor): void {
+            $storeFor($em)->delete($id, $maxSequenceNr);
         });
+    }
+
+    private function storeFor(EntityManagerInterface $em): DoctrineSnapshotStore
+    {
+        $store = $this->stores[$em] ?? null;
+
+        if ($store === null) {
+            $store = new DoctrineSnapshotStore($em, $this->serializer);
+            $this->stores[$em] = $store;
+        }
+
+        return $store;
     }
 }
