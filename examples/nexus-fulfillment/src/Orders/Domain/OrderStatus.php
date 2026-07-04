@@ -8,5 +8,6 @@ enum OrderStatus: string
 {
     case NotCreated = 'not_created';
     case Placed = 'placed';
+    case StockReserved = 'stock_reserved';
     case Cancelled = 'cancelled';
 }

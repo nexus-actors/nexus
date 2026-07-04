@@ -15,6 +15,7 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockRes
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\StockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Serialization\TypeRegistry;
 
 /**
@@ -28,6 +29,7 @@ final class MessageTypes
     private const array CONTRACTS = [
         OrderCancelled::class,
         OrderPlaced::class,
+        OrderStockReserved::class,
         ReleaseReservation::class,
         ReserveStock::class,
         Restock::class,

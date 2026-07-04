@@ -8,6 +8,7 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderState;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderStatus;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
@@ -40,6 +41,25 @@ final class OrderStateTest extends TestCase
         $state = OrderState::evolve($state, new OrderCancelled($tenant, $id, 'why not'));
         self::assertSame(OrderStatus::Cancelled, $state->status);
         self::assertSame('why not', $state->cancelReason);
+    }
+
+    #[Test]
+    public function stockReservedEventTransitionsToStockReservedStatus(): void
+    {
+        $tenant = TenantId::fromString('acme');
+        $id = OrderId::generate();
+        $lines = [new OrderLine(Sku::fromString('A-1'), Quantity::of(1), Money::of(500, 'EUR'))];
+
+        $state = OrderState::evolve(
+            OrderState::empty($tenant, $id),
+            new OrderPlaced($tenant, $id, $lines, Money::of(500, 'EUR')),
+        );
+        $state = OrderState::evolve($state, new OrderStockReserved($tenant, $id));
+
+        self::assertSame(OrderStatus::StockReserved, $state->status);
+        self::assertSame($lines, $state->lines);
+        self::assertTrue($state->total?->equals(Money::of(500, 'EUR')));
+        self::assertNull($state->cancelReason);
     }
 
     #[Test]

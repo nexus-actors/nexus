@@ -12,6 +12,7 @@ use Doctrine\ORM\Mapping\Index;
 use Doctrine\ORM\Mapping\Table;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 
 use function count;
 
@@ -67,6 +68,12 @@ final class OrderView
     {
         $this->status = 'cancelled';
         $this->cancelReason = $event->reason;
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    public function applyStockReserved(OrderStockReserved $event): void
+    {
+        $this->status = 'stock_reserved';
         $this->updatedAt = new DateTimeImmutable();
     }
 }

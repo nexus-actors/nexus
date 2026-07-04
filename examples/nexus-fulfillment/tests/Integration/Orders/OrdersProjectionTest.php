@@ -27,6 +27,7 @@ use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Subscribe;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Bus\Publish;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
@@ -135,6 +136,83 @@ final class OrdersProjectionTest extends TestCase
         self::assertSame('EUR', $row->currency);
         self::assertSame(1, $row->lineCount);
         self::assertSame('customer-request', $row->cancelReason);
+
+        $verifyEm->getConnection()->close();
+        $pool->close(Duration::seconds(1));
+        unlink($dbPath);
+    }
+
+    #[Test]
+    public function stockReservedEventUpdatesViewStatus(): void
+    {
+        $dbPath = tempnam(sys_get_temp_dir(), 'nexus-orders-view-stock-reserved-');
+        self::assertIsString($dbPath);
+        $connParams = ['driver' => 'pdo_sqlite', 'path' => $dbPath];
+
+        $ormConfig = ORMSetup::createAttributeMetadataConfig(
+            paths: [dirname(__DIR__, 3) . '/src/Orders/Infrastructure/ReadModel'],
+        );
+        $ormConfig->enableNativeLazyObjects(true);
+
+        /** @var Channel<Connection> $connChannel */
+        $connChannel = new FiberChannel(2);
+        /** @var Channel<PooledEntityManager> $emChannel */
+        $emChannel = new FiberChannel(2);
+
+        $pool = new EntityManagerPool(
+            name: 'orders-stock-reserved-test',
+            factory: new DefaultEntityManagerFactory($ormConfig),
+            connPool: new ConnectionPool(
+                name: 'orders-stock-reserved-test-conn',
+                factory: new DriverManagerConnectionFactory($connParams),
+                config: new PoolConfig(max: 2, minIdle: 0),
+                channel: $connChannel,
+            ),
+            config: new EmPoolConfig(
+                clearOnReturn: true,
+                max: 2,
+                minIdle: 0,
+            ),
+            channel: $emChannel,
+        );
+
+        $schemaEm = $pool->take();
+        new SchemaTool($schemaEm)->createSchema([$schemaEm->getClassMetadata(OrderView::class)]);
+        $pool->release($schemaEm);
+
+        $tenantId = TenantId::fromString('acme');
+        $orderId = OrderId::generate();
+        $lines = [
+            new OrderLine(Sku::fromString('WIDGET-01'), Quantity::of(2), Money::of(1999, 'EUR')),
+        ];
+
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('orders-stock-reserved-test', $runtime);
+
+        $bus = $system->spawn(Props::fromBehavior(ContextBusActor::behavior()), 'context-bus');
+        $projector = $system->spawn(
+            Props::fromBehavior(OrdersViewProjector::behavior(new OrdersReadModel($pool))),
+            OrdersViewProjector::ACTOR_NAME,
+        );
+
+        $bus->tell(new Subscribe($projector));
+        $bus->tell(new Publish(new OrderPlaced($tenantId, $orderId, $lines, Money::of(3998, 'EUR'))));
+        $bus->tell(new Publish(new OrderStockReserved($tenantId, $orderId)));
+
+        $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
+            $system->shutdown(Duration::seconds(1));
+        });
+        $system->run();
+
+        $verifyEm = new DefaultEntityManagerFactory($ormConfig)->create(DriverManager::getConnection($connParams));
+
+        $row = $verifyEm->find(OrderView::class, ['id' => $orderId->value, 'tenantId' => 'acme']);
+        self::assertNotNull($row);
+        self::assertSame('stock_reserved', $row->status);
+        self::assertSame(3998, $row->totalAmount);
+        self::assertSame('EUR', $row->currency);
+        self::assertSame(1, $row->lineCount);
+        self::assertNull($row->cancelReason);
 
         $verifyEm->getConnection()->close();
         $pool->close(Duration::seconds(1));

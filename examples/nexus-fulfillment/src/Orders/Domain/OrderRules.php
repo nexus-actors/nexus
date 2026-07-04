@@ -6,9 +6,11 @@ namespace Monadial\Nexus\Example\Fulfillment\Orders\Domain;
 
 use LogicException;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
 
@@ -27,8 +29,9 @@ final class OrderRules
     public static function decide(OrderState $state, object $command): array|Rejection
     {
         return match (true) {
-            $command instanceof PlaceOrder => self::place($state, $command),
             $command instanceof CancelOrder => self::cancel($state, $command),
+            $command instanceof MarkStockReserved => self::markStockReserved($state, $command),
+            $command instanceof PlaceOrder => self::place($state, $command),
             default => new Rejection('Unknown command ' . $command::class),
         };
     }
@@ -42,7 +45,8 @@ final class OrderRules
             OrderStatus::NotCreated => [
                 new OrderPlaced($command->tenantId, $command->orderId, $command->lines, self::total($command->lines)),
             ],
-            OrderStatus::Placed => [],
+            OrderStatus::Placed,
+            OrderStatus::StockReserved => [],
             OrderStatus::Cancelled => new Rejection('Order was cancelled; place a new order instead'),
         };
     }
@@ -55,7 +59,21 @@ final class OrderRules
         return match ($state->status) {
             OrderStatus::NotCreated => new Rejection('Order does not exist'),
             OrderStatus::Placed => [new OrderCancelled($command->tenantId, $command->orderId, $command->reason)],
+            OrderStatus::StockReserved => new Rejection('cancellation after stock reservation arrives in milestone 4'),
             OrderStatus::Cancelled => [],
+        };
+    }
+
+    /**
+     * @return list<object>|Rejection
+     */
+    private static function markStockReserved(OrderState $state, MarkStockReserved $command): array|Rejection
+    {
+        return match ($state->status) {
+            OrderStatus::Placed => [new OrderStockReserved($command->tenantId, $command->orderId)],
+            OrderStatus::StockReserved => [],
+            OrderStatus::NotCreated,
+            OrderStatus::Cancelled => new Rejection('Cannot mark stock reserved for order in status ' . $state->status->value),
         };
     }
 

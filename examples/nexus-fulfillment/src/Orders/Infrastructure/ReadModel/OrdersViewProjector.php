@@ -8,6 +8,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 
 /**
  * One projector actor per read model (spec): consumes the ContextBus,
@@ -24,7 +25,7 @@ final class OrdersViewProjector
     public static function behavior(OrdersReadModel $readModel): Behavior
     {
         return Behavior::receive(static function (ActorContext $ctx, object $event) use ($readModel): Behavior {
-            if ($event instanceof OrderPlaced || $event instanceof OrderCancelled) {
+            if ($event instanceof OrderCancelled || $event instanceof OrderPlaced || $event instanceof OrderStockReserved) {
                 $readModel->apply($event);
             }
 

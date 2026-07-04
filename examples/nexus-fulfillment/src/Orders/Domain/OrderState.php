@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Example\Fulfillment\Orders\Domain;
 
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
@@ -36,6 +37,14 @@ final readonly class OrderState
     public static function evolve(self $state, object $event): self
     {
         return match (true) {
+            $event instanceof OrderCancelled => new self(
+                $state->tenantId,
+                $state->orderId,
+                OrderStatus::Cancelled,
+                $state->lines,
+                $state->total,
+                $event->reason,
+            ),
             $event instanceof OrderPlaced => new self(
                 $state->tenantId,
                 $state->orderId,
@@ -44,13 +53,13 @@ final readonly class OrderState
                 $event->total,
                 null,
             ),
-            $event instanceof OrderCancelled => new self(
+            $event instanceof OrderStockReserved => new self(
                 $state->tenantId,
                 $state->orderId,
-                OrderStatus::Cancelled,
+                OrderStatus::StockReserved,
                 $state->lines,
                 $state->total,
-                $event->reason,
+                $state->cancelReason,
             ),
             default => $state,
         };

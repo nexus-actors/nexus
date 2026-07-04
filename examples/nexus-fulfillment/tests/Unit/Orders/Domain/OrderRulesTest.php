@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\Fulfillment\Tests\Unit\Orders\Domain;
 
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
+use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\MarkStockReserved;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\PlaceOrder;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderRules;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\OrderState;
 use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Rejection;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderCancelled;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced;
+use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderStockReserved;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Money;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderLine;
@@ -101,6 +103,47 @@ final class OrderRulesTest extends TestCase
         self::assertInstanceOf(Rejection::class, OrderRules::decide($this->emptyState(), new stdClass()));
     }
 
+    #[Test]
+    public function markStockReservedOnPlacedEmitsOrderStockReserved(): void
+    {
+        $placed = OrderState::evolve($this->emptyState(), $this->placedEvent());
+        $decision = OrderRules::decide($placed, new MarkStockReserved($this->tenant, $this->orderId));
+
+        self::assertIsArray($decision);
+        self::assertCount(1, $decision);
+        self::assertInstanceOf(OrderStockReserved::class, $decision[0]);
+    }
+
+    #[Test]
+    public function markStockReservedOnStockReservedIsIdempotent(): void
+    {
+        self::assertSame([], OrderRules::decide($this->stockReservedState(), new MarkStockReserved($this->tenant, $this->orderId)));
+    }
+
+    #[Test]
+    public function markStockReservedOnNotCreatedIsRejected(): void
+    {
+        self::assertInstanceOf(Rejection::class, OrderRules::decide($this->emptyState(), new MarkStockReserved($this->tenant, $this->orderId)));
+    }
+
+    #[Test]
+    public function markStockReservedOnCancelledIsRejected(): void
+    {
+        self::assertInstanceOf(Rejection::class, OrderRules::decide($this->cancelledState(), new MarkStockReserved($this->tenant, $this->orderId)));
+    }
+
+    #[Test]
+    public function cancellingAStockReservedOrderIsRejected(): void
+    {
+        self::assertInstanceOf(Rejection::class, OrderRules::decide($this->stockReservedState(), new CancelOrder($this->tenant, $this->orderId, 'too late')));
+    }
+
+    #[Test]
+    public function placingAStockReservedOrderIsIdempotent(): void
+    {
+        self::assertSame([], OrderRules::decide($this->stockReservedState(), $this->place()));
+    }
+
     private function emptyState(): OrderState
     {
         return OrderState::empty($this->tenant, $this->orderId);
@@ -121,5 +164,12 @@ final class OrderRulesTest extends TestCase
         $placed = OrderState::evolve($this->emptyState(), $this->placedEvent());
 
         return OrderState::evolve($placed, new OrderCancelled($this->tenant, $this->orderId, 'x'));
+    }
+
+    private function stockReservedState(): OrderState
+    {
+        $placed = OrderState::evolve($this->emptyState(), $this->placedEvent());
+
+        return OrderState::evolve($placed, new OrderStockReserved($this->tenant, $this->orderId));
     }
 }
