@@ -46,6 +46,7 @@ final class OrderView
         #[Id]
         #[Column]
         public private(set) string $id,
+        #[Id]
         #[Column(name: 'tenant_id')]
         public private(set) string $tenantId,
     ) {

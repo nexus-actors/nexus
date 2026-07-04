@@ -44,8 +44,9 @@ curl -X POST http://localhost:9090/api/orders \
 
 **Idempotency model:** `orderId` is caller-assigned (a ULID). Sending the
 same `orderId` a second time returns `201` again — the actor returns the
-existing state without persisting a new event. Placing a cancelled order
-returns `409`.
+existing state without persisting a new event. The retry body is ignored;
+the original order's data is returned unchanged regardless of what the
+retry carries. Placing a cancelled order returns `409`.
 
 ### List orders — `GET /api/orders`
 

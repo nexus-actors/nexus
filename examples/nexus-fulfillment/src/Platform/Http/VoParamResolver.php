@@ -53,7 +53,7 @@ final readonly class VoParamResolver implements ParamResolver
             return null;
         }
 
-        if ($ctor === null) {
+        if ($ctor === null || !$ctor->isPublic()) {
             return null;
         }
 

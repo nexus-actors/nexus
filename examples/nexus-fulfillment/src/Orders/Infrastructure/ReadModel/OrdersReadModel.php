@@ -20,7 +20,7 @@ final readonly class OrdersReadModel
     {
         if ($event instanceof OrderPlaced) {
             $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($event): void {
-                $row = $em->find(OrderView::class, $event->orderId->value)
+                $row = $em->find(OrderView::class, ['id' => $event->orderId->value, 'tenantId' => $event->tenantId->value])
                     ?? new OrderView($event->orderId->value, $event->tenantId->value);
                 $row->applyPlaced($event);
                 $em->persist($row);
@@ -32,7 +32,7 @@ final readonly class OrdersReadModel
 
         if ($event instanceof OrderCancelled) {
             $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($event): void {
-                $row = $em->find(OrderView::class, $event->orderId->value);
+                $row = $em->find(OrderView::class, ['id' => $event->orderId->value, 'tenantId' => $event->tenantId->value]);
 
                 if ($row === null) {
                     return;

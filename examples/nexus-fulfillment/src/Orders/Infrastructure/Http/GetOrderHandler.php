@@ -26,16 +26,12 @@ final readonly class GetOrderHandler
             return new Psr7Response(403, ['Content-Type' => 'application/json'], '{"error":"role ops required"}');
         }
 
-        /** @var OrderView|null $row */
-        $row = $em->find(OrderView::class, $id->value);
-
-        if ($row === null) {
-            return Response::notFound('order not found');
-        }
-
         $tenant = (string) ($principal->claims()['tenant'] ?? '');
 
-        if ($row->tenantId !== $tenant) {
+        /** @var OrderView|null $row */
+        $row = $em->find(OrderView::class, ['id' => $id->value, 'tenantId' => $tenant]);
+
+        if ($row === null) {
             return Response::notFound('order not found');
         }
 

@@ -127,7 +127,7 @@ final class OrdersProjectionTest extends TestCase
         $rows = $verifyEm->getRepository(OrderView::class)->findAll();
         self::assertCount(1, $rows);
 
-        $row = $verifyEm->find(OrderView::class, $orderId->value);
+        $row = $verifyEm->find(OrderView::class, ['id' => $orderId->value, 'tenantId' => 'acme']);
         self::assertNotNull($row);
         self::assertSame('cancelled', $row->status);
         self::assertSame('acme', $row->tenantId);
@@ -135,6 +135,93 @@ final class OrdersProjectionTest extends TestCase
         self::assertSame('EUR', $row->currency);
         self::assertSame(1, $row->lineCount);
         self::assertSame('customer-request', $row->cancelReason);
+
+        $verifyEm->getConnection()->close();
+        $pool->close(Duration::seconds(1));
+        unlink($dbPath);
+    }
+
+    #[Test]
+    public function sameUlidUnderDifferentTenantsProducesDistinctRows(): void
+    {
+        $dbPath = tempnam(sys_get_temp_dir(), 'nexus-orders-view-isolation-');
+        self::assertIsString($dbPath);
+        $connParams = ['driver' => 'pdo_sqlite', 'path' => $dbPath];
+
+        $ormConfig = ORMSetup::createAttributeMetadataConfig(
+            paths: [dirname(__DIR__, 3) . '/src/Orders/Infrastructure/ReadModel'],
+        );
+        $ormConfig->enableNativeLazyObjects(true);
+
+        /** @var Channel<Connection> $connChannel */
+        $connChannel = new FiberChannel(2);
+        /** @var Channel<PooledEntityManager> $emChannel */
+        $emChannel = new FiberChannel(2);
+
+        $pool = new EntityManagerPool(
+            name: 'orders-isolation-test',
+            factory: new DefaultEntityManagerFactory($ormConfig),
+            connPool: new ConnectionPool(
+                name: 'orders-isolation-test-conn',
+                factory: new DriverManagerConnectionFactory($connParams),
+                config: new PoolConfig(max: 2, minIdle: 0),
+                channel: $connChannel,
+            ),
+            config: new EmPoolConfig(
+                clearOnReturn: true,
+                max: 2,
+                minIdle: 0,
+            ),
+            channel: $emChannel,
+        );
+
+        $schemaEm = $pool->take();
+        new SchemaTool($schemaEm)->createSchema([$schemaEm->getClassMetadata(OrderView::class)]);
+        $pool->release($schemaEm);
+
+        // Same ULID, two different tenants.
+        $orderId = OrderId::generate();
+        $acmeTenant = TenantId::fromString('acme');
+        $umbrellaTenant = TenantId::fromString('umbrella');
+
+        $acmeLines = [new OrderLine(Sku::fromString('WIDGET-01'), Quantity::of(2), Money::of(1999, 'EUR'))];
+        $umbrellaLines = [new OrderLine(Sku::fromString('GADGET-99'), Quantity::of(1), Money::of(5000, 'EUR'))];
+
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('orders-isolation-test', $runtime);
+
+        $bus = $system->spawn(Props::fromBehavior(ContextBusActor::behavior()), 'context-bus');
+        $projector = $system->spawn(
+            Props::fromBehavior(OrdersViewProjector::behavior(new OrdersReadModel($pool))),
+            OrdersViewProjector::ACTOR_NAME,
+        );
+
+        $bus->tell(new Subscribe($projector));
+        $bus->tell(new Publish(new OrderPlaced($acmeTenant, $orderId, $acmeLines, Money::of(3998, 'EUR'))));
+        $bus->tell(new Publish(new OrderPlaced($umbrellaTenant, $orderId, $umbrellaLines, Money::of(5000, 'EUR'))));
+
+        $runtime->scheduleOnce(Duration::millis(500), static function () use ($system): void {
+            $system->shutdown(Duration::seconds(1));
+        });
+        $system->run();
+
+        $verifyEm = new DefaultEntityManagerFactory($ormConfig)->create(DriverManager::getConnection($connParams));
+
+        // Two distinct composite-PK rows — same id, different tenant.
+        $rows = $verifyEm->getRepository(OrderView::class)->findAll();
+        self::assertCount(2, $rows);
+
+        // Acme's row is intact with acme data.
+        $acmeRow = $verifyEm->find(OrderView::class, ['id' => $orderId->value, 'tenantId' => 'acme']);
+        self::assertNotNull($acmeRow);
+        self::assertSame('acme', $acmeRow->tenantId);
+        self::assertSame(3998, $acmeRow->totalAmount);
+
+        // Umbrella's row exists independently with umbrella data.
+        $umbrellaRow = $verifyEm->find(OrderView::class, ['id' => $orderId->value, 'tenantId' => 'umbrella']);
+        self::assertNotNull($umbrellaRow);
+        self::assertSame('umbrella', $umbrellaRow->tenantId);
+        self::assertSame(5000, $umbrellaRow->totalAmount);
 
         $verifyEm->getConnection()->close();
         $pool->close(Duration::seconds(1));
