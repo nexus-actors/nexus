@@ -53,7 +53,8 @@ final class PersistenceEngine
      * @param RetentionPolicy|null $retentionPolicy Event/snapshot retention (default: keep all)
      * @param Ulid $writerId Writer identity stamped on persisted events and snapshots
      * @param ReplayFilter|null $replayFilter Filter for detecting writer conflicts during recovery
-     * @param null|Closure(ActorContext<object>, Signal): Behavior<object> $signalHandler Lifecycle signal handler attached to the resolved behavior
+     * @param Closure(ActorContext<object>, Signal): Behavior<object>|null $signalHandler Lifecycle signal handler attached to the resolved behavior
+     * @param Closure(object): void|null $eventPublisher Publisher called for each persisted event after fold, before thenRun. Null means no publishing.
      * @return Behavior The behavior to use when spawning the actor
      */
     public static function create(
@@ -68,6 +69,7 @@ final class PersistenceEngine
         Ulid $writerId = new Ulid(),
         ?ReplayFilter $replayFilter = null,
         ?Closure $signalHandler = null,
+        ?Closure $eventPublisher = null,
     ): Behavior {
         $strategy = $snapshotStrategy ?? SnapshotStrategy::never();
         $retention = $retentionPolicy ?? RetentionPolicy::none();
@@ -79,6 +81,7 @@ final class PersistenceEngine
             $emptyState,
             $commandHandler,
             $eventHandler,
+            $eventPublisher,
             $eventStore,
             $signalHandler,
             $snapshotStore,
@@ -122,6 +125,7 @@ final class PersistenceEngine
                     $persistenceId,
                     $commandHandler,
                     $eventHandler,
+                    $eventPublisher,
                     $eventStore,
                     $snapshotStore,
                     $strategy,
@@ -148,6 +152,7 @@ final class PersistenceEngine
                             $strategy,
                             $retention,
                             $writerId,
+                            $eventPublisher,
                         ),
                         EffectType::None => BehaviorWithState::same(),
                         EffectType::Unhandled => BehaviorWithState::same(),
@@ -166,7 +171,7 @@ final class PersistenceEngine
 
     /**
      * Handle a Persist effect: build envelopes, persist events, update state,
-     * check snapshot strategy, apply retention, execute side effects.
+     * check snapshot strategy, apply retention, publish events, execute side effects.
      */
     private static function handlePersist(
         Effect $effect,
@@ -179,6 +184,7 @@ final class PersistenceEngine
         SnapshotStrategy $strategy,
         RetentionPolicy $retention,
         Ulid $writerId,
+        ?Closure $eventPublisher = null,
     ): BehaviorWithState {
         // 1. Build EventEnvelopes with incrementing sequenceNr
         $envelopes = [];
@@ -209,7 +215,14 @@ final class PersistenceEngine
             $lastEvent = $event;
         }
 
-        // 4. Check snapshot strategy and save snapshot if triggered
+        // 4. Publish each persisted event (after fold, before thenRun side-effects)
+        if ($eventPublisher !== null) {
+            foreach ($effect->events as $event) {
+                $eventPublisher($event);
+            }
+        }
+
+        // 5. Check snapshot strategy and save snapshot if triggered
 
         /** @psalm-suppress MixedArgument $newState is object but Psalm loses type through closure */
         if (
@@ -226,18 +239,18 @@ final class PersistenceEngine
                 writerId: $writerId,
             ));
 
-            // 5. Apply retention policy: delete old events up to snapshot
+            // 6. Apply retention policy: delete old events up to snapshot
             if ($retention->deleteEventsToSnapshot) {
                 $eventStore->deleteUpTo($persistenceId, $newSeqNr);
             }
         }
 
-        // 6. Execute side effects (thenRun, thenReply)
+        // 7. Execute side effects (thenRun, thenReply)
         foreach ($effect->sideEffects as $sideEffect) {
             $sideEffect($newState);
         }
 
-        // 7. Return with updated state and sequenceNr
+        // 8. Return with updated state and sequenceNr
         return BehaviorWithState::next(['state' => $newState, 'sequenceNr' => $newSeqNr]);
     }
 

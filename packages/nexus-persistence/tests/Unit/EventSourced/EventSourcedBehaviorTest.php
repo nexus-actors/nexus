@@ -155,6 +155,24 @@ final class EventSourcedBehaviorTest extends TestCase
     }
 
     #[Test]
+    public function withEventPublisherReturnsNewImmutableInstance(): void
+    {
+        $original = EventSourcedBehavior::create(
+            $this->persistenceId,
+            $this->emptyState,
+            $this->commandHandler,
+            $this->eventHandler,
+        );
+
+        $withPublisher = $original->withEventPublisher(
+            static function (object $event): void {},
+        );
+
+        self::assertInstanceOf(EventSourcedBehavior::class, $withPublisher);
+        self::assertNotSame($original, $withPublisher);
+    }
+
+    #[Test]
     public function fullBuilderChainReturnsBehavior(): void
     {
         $behavior = EventSourcedBehavior::create(

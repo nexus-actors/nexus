@@ -1091,6 +1091,168 @@ final class PersistenceEngineTest extends TestCase
         self::assertSame(['apple', 'banana', 'cherry'], $recoveredState->items);
     }
 
+    // ========================================================================
+    // Tests: Event publisher
+    // ========================================================================
+
+    #[Test]
+    public function event_publisher_receives_each_persisted_event_in_order(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $published = [];
+        $thenRunState = null;
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$thenRunState): Effect {
+                if ($msg instanceof AddItem) {
+                    return Effect::persist(
+                        new ItemAdded($msg->item),
+                        new ItemAdded($msg->item . '-bonus'),
+                    )->thenRun(static function (object $newState) use (&$thenRunState): void {
+                        $thenRunState = $newState;
+                    });
+                }
+
+                return Effect::none();
+            },
+            static function (object $state, object $event): object {
+                if ($event instanceof ItemAdded) {
+                    return new ShoppingCart([...$state->items, $event->item]);
+                }
+
+                return $state;
+            },
+            $eventStore,
+            eventPublisher: static function (object $event) use (&$published): void {
+                $published[] = $event;
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new AddItem('apple')));
+
+        // Publisher should have received both events in order
+        self::assertCount(2, $published);
+        self::assertInstanceOf(ItemAdded::class, $published[0]);
+        self::assertSame('apple', $published[0]->item);
+        self::assertInstanceOf(ItemAdded::class, $published[1]);
+        self::assertSame('apple-bonus', $published[1]->item);
+
+        // thenRun must still see post-fold state (both events applied)
+        self::assertNotNull($thenRunState);
+        self::assertInstanceOf(ShoppingCart::class, $thenRunState);
+        self::assertSame(['apple', 'apple-bonus'], $thenRunState->items);
+    }
+
+    #[Test]
+    public function event_publisher_not_called_on_replay(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $publishCount = 0;
+
+        $commandHandler = static function (object $state, ActorContext $ctx, object $msg): Effect {
+            if ($msg instanceof AddItem) {
+                return Effect::persist(new ItemAdded($msg->item));
+            }
+
+            return Effect::none();
+        };
+
+        $eventHandler = static function (object $state, object $event): object {
+            if ($event instanceof ItemAdded) {
+                return new ShoppingCart([...$state->items, $event->item]);
+            }
+
+            return $state;
+        };
+
+        $publisher = static function (object $event) use (&$publishCount): void {
+            $publishCount++;
+        };
+
+        // First actor instance: persist two events (publisher fires twice)
+        $behavior1 = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            $commandHandler,
+            $eventHandler,
+            $eventStore,
+            eventPublisher: $publisher,
+        );
+
+        $cell1 = $this->createCell($behavior1);
+        $cell1->start();
+
+        $cell1->processMessage($this->envelope(new AddItem('apple')));
+        $cell1->processMessage($this->envelope(new AddItem('banana')));
+        $cell1->initiateStop();
+
+        self::assertSame(2, $publishCount);
+        $countAfterFirstInstance = $publishCount;
+
+        // Second actor instance: replays those two events — publisher must NOT fire
+        $behavior2 = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            $commandHandler,
+            $eventHandler,
+            $eventStore,
+            eventPublisher: $publisher,
+        );
+
+        $cell2 = $this->createCell($behavior2, '/user/cart-recovered');
+        $cell2->start();
+
+        // No new commands — replay only; publisher count must be unchanged
+        self::assertSame($countAfterFirstInstance, $publishCount);
+    }
+
+    #[Test]
+    public function event_publisher_not_called_for_effect_none_or_reply(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $publishCount = 0;
+        $replyCapture = new DeadLetterRef();
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg): Effect {
+                if ($msg instanceof DoNothing) {
+                    return Effect::none();
+                }
+
+                if ($msg instanceof GetItems) {
+                    return Effect::reply($msg->replyTo, new ItemsReply($state->items));
+                }
+
+                return Effect::none();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+            eventPublisher: static function (object $event) use (&$publishCount): void {
+                $publishCount++;
+            },
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DoNothing()));
+        $cell->processMessage($this->envelope(new GetItems($replyCapture)));
+
+        self::assertSame(0, $publishCount);
+
+        // Verify reply still worked
+        $captured = $replyCapture->captured();
+        self::assertCount(1, $captured);
+        self::assertInstanceOf(ItemsReply::class, $captured[0]);
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();

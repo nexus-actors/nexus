@@ -66,7 +66,8 @@ final readonly class EventSourcedBehavior
     /**
      * @psalm-suppress UnusedConstructor Called by create()
      *
-     * @param null|Closure(ActorContext<object>, Signal): Behavior<object> $signalHandler
+     * @param Closure(ActorContext<object>, Signal): Behavior<object>|null $signalHandler
+     * @param Closure(object): void|null $eventPublisher
      */
     private function __construct(
         private PersistenceId $persistenceId,
@@ -80,6 +81,7 @@ final readonly class EventSourcedBehavior
         private Ulid $writerId = new Ulid(),
         private ?ReplayFilter $replayFilter = null,
         private ?Closure $signalHandler = null,
+        private ?Closure $eventPublisher = null,
     ) {}
 
     /**
@@ -131,6 +133,25 @@ final readonly class EventSourcedBehavior
     public function withSignalHandler(Closure $handler): self
     {
         return clone($this, ['signalHandler' => $handler]);
+    }
+
+    /**
+     * Attach an event publisher invoked for each persisted event, after state is
+     * folded and before thenRun side-effects execute. Not called during recovery.
+     *
+     * Use this to publish domain events to a bus without hand-wiring a publish
+     * loop inside thenRun:
+     * ```php
+     * ->withEventPublisher(static function (object $event): void {
+     *     $bus->tell(new Publish($event));
+     * })
+     * ```
+     *
+     * @param Closure(object): void $publisher
+     */
+    public function withEventPublisher(Closure $publisher): self
+    {
+        return clone($this, ['eventPublisher' => $publisher]);
     }
 
     /** Set the strategy that determines when snapshots are taken (e.g. every N events). */
@@ -190,6 +211,7 @@ final readonly class EventSourcedBehavior
             $this->writerId,
             $this->replayFilter,
             $this->signalHandler,
+            $this->eventPublisher,
         );
     }
 }

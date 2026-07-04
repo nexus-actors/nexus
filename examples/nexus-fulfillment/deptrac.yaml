@@ -69,7 +69,10 @@ deptrac:
     # SharedKernel touches Nexus ONLY for the #[MessageType] attribute on
     # published contracts.
     SharedKernel: [Nexus]
-    Application: [Application, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    # Application may depend on Platform — AggregateEntityBehavior and other
+    # Platform/Actor helpers are shared application-framework utilities that
+    # bounded-context Application shells legitimately use (similar to Nexus).
+    Application: [Application, Domain, Platform, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     Infrastructure: [Application, Infrastructure, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     # Platform is the composition root and is deliberately ungoverned at the context level:
     # it wires all contexts together. Context fences (below) apply only between bounded contexts.
@@ -83,8 +86,9 @@ deptrac:
     # OrdersCtx and InventoryCtx do NOT list each other or FulfillmentCtx.
     #
     # Orders and Inventory are leaf contexts: no cross-context deps allowed.
-    OrdersCtx: [OrdersCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]
-    InventoryCtx: [InventoryCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]
+    # Platform added so Application shells can use Platform/Actor helpers.
+    OrdersCtx: [OrdersCtx, Domain, Application, Infrastructure, Platform, SharedKernel, Nexus]
+    InventoryCtx: [InventoryCtx, Domain, Application, Infrastructure, Platform, SharedKernel, Nexus]
     # Fulfillment/Application is the saga orchestrator: it legitimately
     # imports OrderRefFactory (Orders/Application), InventoryRefFactory
     # (Inventory/Application), and Orders domain commands CancelOrder +
