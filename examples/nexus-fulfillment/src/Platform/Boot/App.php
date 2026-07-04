@@ -18,12 +18,14 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrdersVie
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\ContextBusActor;
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Subscribe;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\Auth\DemoTokens;
+use Monadial\Nexus\Example\Fulfillment\Platform\Http\OrderRefFactoryResolver;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\ReadinessProbe;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\Routes;
 use Monadial\Nexus\Example\Fulfillment\Platform\Http\VoParamResolver;
 use Monadial\Nexus\Http\Auth\Exception\Unauthenticated;
 use Monadial\Nexus\Http\Auth\Middleware\AuthenticationMiddleware;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
+use Monadial\Nexus\Http\Exception\HttpException;
 use Monadial\Nexus\Http\Ws\CompiledApplication;
 use Monadial\Nexus\Http\Ws\WsApplication;
 use Monadial\Nexus\Logger\Formatter\LineFormatter;
@@ -94,10 +96,11 @@ final class App
                 $app->middleware(new ConnectionScopeMiddleware($doctrine->connPool));
                 $app->middleware(new EntityManagerScopeMiddleware($doctrine->emPool));
                 $app->middleware(new PoolExhaustedToServiceUnavailable(new Psr17Factory()));
-                $app->paramResolver(new VoParamResolver());
-                $app->paramResolver(new FromPrincipalResolver());
                 $app->paramResolver(new ConnectionResolver());
                 $app->paramResolver(new EntityManagerResolver());
+                $app->paramResolver(new FromPrincipalResolver());
+                $app->paramResolver(new OrderRefFactoryResolver($orders));
+                $app->paramResolver(new VoParamResolver());
 
                 $app->onException(
                     Unauthenticated::class,
@@ -118,6 +121,15 @@ final class App
                 );
 
                 $app->onException(
+                    HttpException::class,
+                    static fn(HttpException $e): Psr7Response => new Psr7Response(
+                        $e->status,
+                        ['content-type' => 'application/json'],
+                        (string) json_encode(['error' => $e->getMessage()]),
+                    ),
+                );
+
+                $app->onException(
                     Throwable::class,
                     static function (Throwable $e) use ($log): Psr7Response {
                         $log->error('unhandled exception', [
@@ -133,7 +145,7 @@ final class App
                     },
                 );
 
-                Routes::register($app, new ReadinessProbe($config->db), $orders);
+                Routes::register($app, new ReadinessProbe($config->db));
 
                 $compiled = $app->compile();
                 $log->info('worker startup: app compiled, accepting requests');

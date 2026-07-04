@@ -8,12 +8,13 @@ use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Example\Fulfillment\Orders\Infrastructure\ReadModel\OrderView;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Response\Response;
-use Nyholm\Psr7\Response as Psr7Response;
 use Psr\Http\Message\ResponseInterface;
 
+#[RequiresRole('ops')]
 final readonly class GetOrderHandler
 {
     public function __invoke(
@@ -22,10 +23,6 @@ final readonly class GetOrderHandler
         OrderId $id,
         EntityManagerInterface $em,
     ): ResponseInterface {
-        if (!$principal->hasRole('ops')) {
-            return new Psr7Response(403, ['Content-Type' => 'application/json'], '{"error":"role ops required"}');
-        }
-
         $tenant = (string) ($principal->claims()['tenant'] ?? '');
 
         /** @var OrderView|null $row */

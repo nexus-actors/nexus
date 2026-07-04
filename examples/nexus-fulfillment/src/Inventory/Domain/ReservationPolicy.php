@@ -17,4 +17,5 @@ final class ReservationPolicy
     {
         return $requested->value <= $item->available();
     }
+
 }

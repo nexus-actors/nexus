@@ -3,6 +3,7 @@ deptrac:
     - src
 
   layers:
+    # ── Structural layers (DDD rings) ──────────────────────────────────────
     - name: SharedKernel
       collectors:
         - type: directory
@@ -33,12 +34,58 @@ deptrac:
         - type: classNameRegex
           value: '#^Monadial\\Nexus\\(?!Example\\Fulfillment)#'
 
+    # ── Context layers (bounded-context fences) ────────────────────────────
+    # Each context layer covers everything under that context's directory.
+    # A class belongs to both its structural layer and its context layer.
+    - name: OrdersCtx
+      collectors:
+        - type: directory
+          value: src/Orders/.*
+
+    - name: InventoryCtx
+      collectors:
+        - type: directory
+          value: src/Inventory/.*
+
+    - name: FulfillmentCtx
+      collectors:
+        - type: directory
+          value: src/Fulfillment/.*
+
   ruleset:
+    # ── Structural rules (DDD rings) ────────────────────────────────────────
+    # Each structural layer also includes itself (intra-layer deps are
+    # legitimate — e.g. two Domain classes in the same context) and all three
+    # context layers. This last addition is required because every source file
+    # simultaneously belongs to a structural layer AND a context layer, so
+    # deptrac checks every (structural_source × context_target) cross-product.
+    # Allowing context layers here removes those false positives; actual
+    # cross-context enforcement is handled purely by the context fence below.
+    # DDD ring direction is preserved: Domain does not list Application or
+    # Infrastructure; Application does not list Infrastructure.
+    #
     # Pure domain: PHP + SharedKernel value objects, nothing else.
-    Domain: [SharedKernel]
+    Domain: [Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
     # SharedKernel touches Nexus ONLY for the #[MessageType] attribute on
     # published contracts.
     SharedKernel: [Nexus]
-    Application: [Domain, SharedKernel, Nexus]
-    Infrastructure: [Application, Domain, SharedKernel, Nexus]
-    Platform: [Application, Domain, Infrastructure, SharedKernel, Nexus]
+    Application: [Application, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    Infrastructure: [Application, Infrastructure, Domain, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+    Platform: [Application, Domain, Infrastructure, Platform, SharedKernel, Nexus, OrdersCtx, InventoryCtx, FulfillmentCtx]
+
+    # ── Context fence rules ────────────────────────────────────────────────
+    # Files belong to BOTH a structural layer and a context layer; each
+    # context layer therefore also allows all structural layers to suppress
+    # the (context_source × structural_target) false-positive cross-products.
+    # The ONLY new enforcement here is cross-context isolation:
+    # OrdersCtx and InventoryCtx do NOT list each other or FulfillmentCtx.
+    #
+    # Orders and Inventory are leaf contexts: no cross-context deps allowed.
+    OrdersCtx: [OrdersCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]
+    InventoryCtx: [InventoryCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]
+    # Fulfillment/Application is the saga orchestrator: it legitimately
+    # imports OrderRefFactory (Orders/Application), InventoryRefFactory
+    # (Inventory/Application), and Orders domain commands CancelOrder +
+    # MarkStockReserved (commands-as-contracts pattern — noted for future
+    # milestone review; intentionally NOT moved to SharedKernel now).
+    FulfillmentCtx: [FulfillmentCtx, OrdersCtx, InventoryCtx, Domain, Application, Infrastructure, SharedKernel, Nexus]

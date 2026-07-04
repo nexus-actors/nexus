@@ -12,6 +12,7 @@ use Monadial\Nexus\Example\Fulfillment\Orders\Domain\Command\CancelOrder;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\OrderId;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\TenantId;
 use Monadial\Nexus\Http\Auth\Attribute\FromPrincipal;
+use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
 use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Response\Response;
@@ -21,10 +22,9 @@ use Psr\Http\Message\ResponseInterface;
 
 use function json_encode;
 
+#[RequiresRole('ops')]
 final readonly class CancelOrderHandler
 {
-    public function __construct(private OrderRefFactory $orders) {}
-
     /**
      * @psalm-suppress NoValue -- ask() on ActorRef<object> returns Future<object>; reply
      *                            type is OrderAccepted|OrderRejected (union), not expressible
@@ -33,19 +33,16 @@ final readonly class CancelOrderHandler
     public function __invoke(
         #[FromPrincipal]
         Principal $principal,
+        OrderRefFactory $orders,
         OrderId $id,
     ): ResponseInterface {
-        if (!$principal->hasRole('ops')) {
-            return new Psr7Response(403, ['Content-Type' => 'application/json'], '{"error":"role ops required"}');
-        }
-
         try {
             $tenant = TenantId::fromString((string) ($principal->claims()['tenant'] ?? ''));
         } catch (InvalidArgumentException $e) {
             return Response::badRequest($e->getMessage());
         }
 
-        $reply = $this->orders->of($tenant, $id)
+        $reply = $orders->of($tenant, $id)
             ->ask(new CancelOrder($tenant, $id, 'api cancel'), Duration::seconds(2))
             ->await();
 
