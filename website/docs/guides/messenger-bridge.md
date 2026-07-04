@@ -410,6 +410,46 @@ bin/console nexus:messenger:produce order.placed '{"orderId":"A-42","amountCents
 
 See the [nexus-messenger-console package page](/docs/packages/messenger-console) for the full option reference and `bin/console` Application wiring example.
 
+### Swoole & threads
+
+For horizontal scaling within a single process, install `nexus-actors/messenger-console-swoole` and use the `nexus:messenger:consume-threads` command. It boots a Swoole thread pool where each thread owns its own `ActorSystem` and a fresh transport connection:
+
+```bash
+composer require nexus-actors/messenger-console-swoole
+```
+
+```php title="src/OrderConsumerBootstrap.php"
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Console\Swoole\ThreadedConsumerBootstrap;
+use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
+
+final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
+{
+    public function setup(ActorSystem $system): MessageRouter
+    {
+        $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
+
+        return new MapMessageRouter([OrderPlaced::class => $ref]);
+    }
+
+    public function receiver(): ReceiverInterface
+    {
+        // Fresh connection per thread — broker load-balances across threads
+        return new RedisTransport(Redis::connect(getenv('REDIS_URL')));
+    }
+}
+```
+
+```bash
+# 4 threads, each recycling after 10 000 messages
+bin/console nexus:messenger:consume-threads --threads=4 --limit=10000 --memory-limit=256M
+```
+
+**Key differences from `nexus:messenger:consume`:** limits are per-thread (not per process), the transport is constructed inside each thread (not injected at wiring time), and signal handling relies on the process manager (SIGTERM) rather than `pcntl`. See the [nexus-messenger-console-swoole package page](/docs/packages/messenger-console-swoole) for the full contract and option reference.
+
 ## Complete runnable example
 
 The [nexus-messenger-redis](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-messenger-redis) example in the monorepo demonstrates the full stack end-to-end:
