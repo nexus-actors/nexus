@@ -240,3 +240,15 @@ Files: rewrite `src/Orders/Domain/` (`Order` aggregate replaces OrderState/Order
 ### Deltas to renumbered tasks
 - **Task 5 (saga)**: `FulfillmentProcess` is an aggregate in the same style (`start()`, `confirmReservation()`, `rejectReservation()` recording the saga events; `SagaRules` is not built). The manager and side-effect wiring are unchanged. Saga has no rejection events (it never says no — late/duplicate messages record nothing).
 - **Task 6/7**: unchanged.
+
+---
+
+## AMENDMENT B (user directive, 2026-07-04): declarative actors — engine-level event publication
+
+The thin actors still carry ceremony (drain → rejection scan → publish loop → reply). Two-part cleanup, executed as Task 8 after the milestone whole-branch review:
+
+**Part 1 — framework seam (nexus-persistence):** `EventSourcedBehavior::withEventPublisher(Closure $publisher): self` — appended, defaulted, BC-safe (the `withSignalHandler` precedent, INCLUDING its lessons: parameter appended LAST everywhere positional callers exist; package-level unit tests for the new seam — publisher invoked once per persisted event AFTER the fold, never on replay, never on Effect::none/reply/unhandled; typed docblock `@param Closure(object): void`; ROOT monorepo gates (psalm+phpcs+cs) run on the touched package before commit). `PersistenceEngine` invokes the publisher for each event of a Persist effect after state fold, before thenRun side-effects.
+
+**Part 2 — example helper:** `src/Platform/Actor/AggregateEntityBehavior.php` — a builder taking (PersistenceId, empty aggregate, `array<class-string, Closure(TAgg, TCmd): void>` route map, `accepted: Closure(TAgg): object`, `rejected: Closure(TAgg, string): object`, stores, publisher closure, passivateAfter) and producing the full Behavior: routes commands, drains `releaseEvents()`, unknown → `Effect::unhandled()`, empty drain → `Effect::reply(accepted)`, rejection-marker drain → persist + reply rejected (reason from the marker), success drain → persist + reply accepted from `$next`; wires `withEventPublisher`, `withSignalHandler` passivation, snapshots/retention conventions. `OrderActor`/`InventoryItemActor` collapse to route-map declarations. The saga actor keeps its orchestration thenRun but adopts `withEventPublisher` for any future publication and drops any hand plumbing the helper subsumes (its side-effect dispatch stays — that is domain logic).
+
+Behavioral invariants FROZEN: every existing integration test must pass unmodified (replies, bus events, passivation, replay, unhandled routing). The bus-publication ordering moves from thenRun into the engine (publish before thenRun instead of inside it) — verify no test depends on the old interleaving; if one does, examine whether the dependency is accidental (fix the test with justification) or semantic (STOP, report).
