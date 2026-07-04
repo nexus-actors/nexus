@@ -11,6 +11,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Application\InventoryItemActor;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Application\InventoryRefFactory;
 use Monadial\Nexus\Example\Fulfillment\Inventory\Application\Reply\StockCommandAccepted;
+use Monadial\Nexus\Example\Fulfillment\Inventory\Application\Reply\StockCommandRejected;
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\ContextBusActor;
 use Monadial\Nexus\Example\Fulfillment\Platform\Bus\Subscribe;
 use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Inventory\ReleaseReservation;
@@ -122,8 +123,11 @@ final class InventoryItemActorTest extends TestCase
                 // Restock 50 units
                 $ref->ask(new Restock($tenantId, $sku, Quantity::of(50)), Duration::seconds(5))->await();
 
-                // Over-reserve: ask for 60 out of 50 available
-                $ref->ask(new ReserveStock($tenantId, $sku, $orderId1, Quantity::of(60)), Duration::seconds(5))->await();
+                // Over-reserve: ask for 60 out of 50 available — the caller
+                // receives a rejected reply while the rejection event goes to
+                // the journal and the bus.
+                $overReserveReply = $ref->ask(new ReserveStock($tenantId, $sku, $orderId1, Quantity::of(60)), Duration::seconds(5))->await();
+                self::assertInstanceOf(StockCommandRejected::class, $overReserveReply);
 
                 // Reserve within remaining stock — state is unchanged by rejected event
                 /** @var StockCommandAccepted $r */
