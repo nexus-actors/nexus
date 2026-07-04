@@ -28,6 +28,9 @@
                      (PlaceOrder | CancelOrder). PHP cannot express this as a single generic
                      type parameter, so ActorRef<object> is the necessary approximation. -->
                 <file name="src/Orders/Application/OrderRefFactory.php"/>
+                <!-- InventoryRefFactory caches refs to actors that accept a union of command types
+                     (Restock | ReserveStock | ReleaseReservation). Same reason as OrderRefFactory. -->
+                <file name="src/Inventory/Application/InventoryRefFactory.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>
