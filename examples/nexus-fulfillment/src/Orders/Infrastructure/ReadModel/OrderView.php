@@ -24,35 +24,31 @@ use function count;
 #[Index(columns: ['tenant_id', 'status'])]
 final class OrderView
 {
-    #[Id]
     #[Column]
-    private string $id;
-
-    #[Column(name: 'tenant_id')]
-    private string $tenantId;
-
-    #[Column]
-    private string $status;
+    public private(set) string $status;
 
     #[Column(name: 'total_amount')]
-    private int $totalAmount = 0;
+    public private(set) int $totalAmount = 0;
 
     #[Column(length: 3)]
-    private string $currency = 'EUR';
+    public private(set) string $currency = 'EUR';
 
     #[Column(name: 'line_count')]
-    private int $lineCount = 0;
+    public private(set) int $lineCount = 0;
 
     #[Column(name: 'cancel_reason', nullable: true)]
-    private ?string $cancelReason = null;
+    public private(set) ?string $cancelReason = null;
 
-    #[Column(name: 'updated_at')]
-    private DateTimeImmutable $updatedAt;
+    #[Column(name: 'updated_at', type: 'datetime_immutable')]
+    public private(set) DateTimeImmutable $updatedAt;
 
-    public function __construct(string $id, string $tenantId)
-    {
-        $this->id = $id;
-        $this->tenantId = $tenantId;
+    public function __construct(
+        #[Id]
+        #[Column]
+        public private(set) string $id,
+        #[Column(name: 'tenant_id')]
+        public private(set) string $tenantId,
+    ) {
         $this->status = 'placed';
         $this->updatedAt = new DateTimeImmutable();
     }
@@ -71,45 +67,5 @@ final class OrderView
         $this->status = 'cancelled';
         $this->cancelReason = $event->reason;
         $this->updatedAt = new DateTimeImmutable();
-    }
-
-    public function id(): string
-    {
-        return $this->id;
-    }
-
-    public function tenantId(): string
-    {
-        return $this->tenantId;
-    }
-
-    public function status(): string
-    {
-        return $this->status;
-    }
-
-    public function totalAmount(): int
-    {
-        return $this->totalAmount;
-    }
-
-    public function currency(): string
-    {
-        return $this->currency;
-    }
-
-    public function lineCount(): int
-    {
-        return $this->lineCount;
-    }
-
-    public function cancelReason(): ?string
-    {
-        return $this->cancelReason;
-    }
-
-    public function updatedAt(): DateTimeImmutable
-    {
-        return $this->updatedAt;
     }
 }

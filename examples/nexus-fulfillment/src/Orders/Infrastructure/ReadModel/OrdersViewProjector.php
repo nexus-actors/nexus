@@ -16,6 +16,8 @@ use Monadial\Nexus\Example\Fulfillment\SharedKernel\Contracts\Orders\OrderPlaced
  */
 final class OrdersViewProjector
 {
+    public const string ACTOR_NAME = 'orders-projector';
+
     /**
      * @psalm-suppress InvalidArgument -- bus subscribers are intentionally heterogeneous: the handler takes any object and filters
      */

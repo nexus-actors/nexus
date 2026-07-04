@@ -106,10 +106,12 @@ final class OrdersProjectionTest extends TestCase
         $bus = $system->spawn(Props::fromBehavior(ContextBusActor::behavior()), 'context-bus');
         $projector = $system->spawn(
             Props::fromBehavior(OrdersViewProjector::behavior(new OrdersReadModel($pool))),
-            'orders-projector',
+            OrdersViewProjector::ACTOR_NAME,
         );
 
         $bus->tell(new Subscribe($projector));
+        $bus->tell(new Publish(new OrderPlaced($tenantId, $orderId, $lines, Money::of(3998, 'EUR'))));
+        // duplicate delivery — proves upsert idempotency
         $bus->tell(new Publish(new OrderPlaced($tenantId, $orderId, $lines, Money::of(3998, 'EUR'))));
         $bus->tell(new Publish(new OrderCancelled($tenantId, $orderId, 'customer-request')));
 
@@ -127,12 +129,12 @@ final class OrdersProjectionTest extends TestCase
 
         $row = $verifyEm->find(OrderView::class, $orderId->value);
         self::assertNotNull($row);
-        self::assertSame('cancelled', $row->status());
-        self::assertSame('acme', $row->tenantId());
-        self::assertSame(3998, $row->totalAmount());
-        self::assertSame('EUR', $row->currency());
-        self::assertSame(1, $row->lineCount());
-        self::assertSame('customer-request', $row->cancelReason());
+        self::assertSame('cancelled', $row->status);
+        self::assertSame('acme', $row->tenantId);
+        self::assertSame(3998, $row->totalAmount);
+        self::assertSame('EUR', $row->currency);
+        self::assertSame(1, $row->lineCount);
+        self::assertSame('customer-request', $row->cancelReason);
 
         $verifyEm->getConnection()->close();
         $pool->close(Duration::seconds(1));
