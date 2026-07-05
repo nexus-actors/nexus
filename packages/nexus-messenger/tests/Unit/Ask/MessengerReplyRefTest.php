@@ -74,6 +74,11 @@ final class MessengerReplyRefTest extends TestCase
         $ref->tell(new stdClass()); // second tell must not fire the callback again
 
         self::assertSame(1, $ackCount, 'Ack must be fired exactly once regardless of how many times tell() is called');
+        self::assertCount(
+            2,
+            $sender->sent,
+            'Each tell() publishes a reply envelope (at-least-once); two calls send two envelopes',
+        );
     }
 
     #[Test]

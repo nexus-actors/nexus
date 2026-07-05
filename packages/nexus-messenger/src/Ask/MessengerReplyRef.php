@@ -35,6 +35,10 @@ use Throwable;
  * internal boolean guard (set up by ReceiverActor) prevents double-acking if tell()
  * is called more than once or if the pending entry was already expired.
  *
+ * **At-least-once publish:** calling tell() more than once publishes additional reply
+ * envelopes to the transport on every call (at-least-once delivery). Only the broker ack
+ * is one-shot — the asker's first-reply-wins registry drops any extras on the consumer side.
+ *
  * If `send()` throws, the callback is NOT fired, preserving the process-ack guarantee:
  * the broker message stays un-acked and will be redelivered or expired by ReceiverActor.
  *
