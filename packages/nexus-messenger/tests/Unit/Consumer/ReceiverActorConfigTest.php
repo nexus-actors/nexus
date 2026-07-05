@@ -34,4 +34,16 @@ final class ReceiverActorConfigTest extends TestCase
         self::assertSame(UnroutablePolicy::DeadLetters, $config->unroutablePolicy);
         self::assertSame(UnroutablePolicy::Reject, ReceiverActorConfig::default()->unroutablePolicy);
     }
+
+    #[Test]
+    public function withAskPendingTimeoutReturnsCopyWithUpdatedTimeout(): void
+    {
+        $config = ReceiverActorConfig::default()->withAskPendingTimeout(Duration::seconds(5));
+
+        self::assertTrue($config->askPendingTimeout->equals(Duration::seconds(5)));
+        self::assertTrue(ReceiverActorConfig::default()->askPendingTimeout->equals(Duration::seconds(30)));
+        // Other fields are unchanged.
+        self::assertTrue($config->pollInterval->equals(Duration::millis(100)));
+        self::assertSame(UnroutablePolicy::Reject, $config->unroutablePolicy);
+    }
 }

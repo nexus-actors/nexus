@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActor;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
@@ -82,6 +83,7 @@ final readonly class MessengerBridge
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
         ?Observability $observability = null,
+        ?ReplySenderLocator $replySenders = null,
     ): Props {
         return Props::fromBehavior(
             ReceiverActor::create(
@@ -92,6 +94,7 @@ final readonly class MessengerBridge
                 $processedListener,
                 $events,
                 $observability,
+                $replySenders,
             ),
         );
     }
@@ -119,6 +122,7 @@ final readonly class MessengerBridge
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
         ?Observability $observability = null,
+        ?ReplySenderLocator $replySenders = null,
     ): array {
         if ($count < 1) {
             throw new InvalidArgumentException('Receiver count must be at least 1.');
@@ -137,6 +141,7 @@ final readonly class MessengerBridge
                     $processedListener,
                     $events,
                     $observability,
+                    $replySenders,
                 ),
                 $namePrefix . '-' . $i,
             );

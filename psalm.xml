@@ -121,8 +121,9 @@
                 <file name="packages/nexus-doctrine-orm/src/Behavior/EntityRefFactory.php"/>
                 <!-- Timer scheduler infrastructure: the scheduled actor's message type is injected by ActorCell and not expressible at scheduler level -->
                 <file name="packages/nexus-core/src/Actor/DefaultTimerScheduler.php"/>
-                <!-- ReceiverActor: $deadLetters is a fan-in sink (any message type); $processedListener is a watchdog ref that accepts MessagesProcessed — both are semantically typed but not expressible as a single concrete ActorRef<T> -->
+                <!-- ReceiverActor / MessengerBridge: $deadLetters is a fan-in sink (any message type); $processedListener accepts MessagesProcessed — both are semantically typed but not expressible as a single concrete ActorRef<T> -->
                 <file name="packages/nexus-messenger/src/Consumer/ReceiverActor.php"/>
+                <file name="packages/nexus-messenger/src/MessengerBridge.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>
