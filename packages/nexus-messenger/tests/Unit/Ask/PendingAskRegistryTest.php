@@ -114,18 +114,20 @@ final class PendingAskRegistryTest extends TestCase
     #[Test]
     public function capacity_exception_message_includes_cap_and_current_count(): void
     {
-        $registry = new PendingAskRegistry(maxPending: 1);
+        $registry = new PendingAskRegistry(maxPending: 2);
         $slot1 = new RecordingFutureSlot();
         $slot2 = new RecordingFutureSlot();
+        $slot3 = new RecordingFutureSlot();
 
         $registry->register('ask-1', $slot1);
+        $registry->register('ask-2', $slot2);
 
         try {
-            $registry->register('ask-2', $slot2);
+            $registry->register('ask-3', $slot3);
             self::fail('Expected AskCapacityExceededException');
         } catch (AskCapacityExceededException $e) {
-            self::assertStringContainsString('1', $e->getMessage());
-            self::assertStringContainsString('1', $e->getMessage());
+            self::assertStringContainsString('max 2', $e->getMessage());
+            self::assertStringContainsString('current 2', $e->getMessage());
         }
     }
 

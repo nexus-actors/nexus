@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Messenger\Tests\Support;
 use Closure;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Exception\FutureException;
+use Override;
 
 /**
  * Test double for FutureSlot. Records resolved values and failures.
@@ -29,6 +30,7 @@ final class RecordingFutureSlot implements FutureSlot
     /**
      * @param R $value
      */
+    #[Override]
     public function resolve(object $value): void
     {
         if (!$this->resolved && !$this->cancelled) {
@@ -37,6 +39,7 @@ final class RecordingFutureSlot implements FutureSlot
         }
     }
 
+    #[Override]
     public function fail(FutureException $e): void
     {
         if (!$this->resolved && !$this->cancelled) {
@@ -45,6 +48,7 @@ final class RecordingFutureSlot implements FutureSlot
         }
     }
 
+    #[Override]
     public function cancel(): void
     {
         if (!$this->resolved) {
@@ -57,11 +61,13 @@ final class RecordingFutureSlot implements FutureSlot
         }
     }
 
+    #[Override]
     public function onCancel(Closure $callback): void
     {
         $this->cancelCallbacks[] = $callback;
     }
 
+    #[Override]
     public function isResolved(): bool
     {
         return $this->resolved;
@@ -70,6 +76,7 @@ final class RecordingFutureSlot implements FutureSlot
     /**
      * @return R
      */
+    #[Override]
     public function await(): object
     {
         if ($this->failure !== null) {
