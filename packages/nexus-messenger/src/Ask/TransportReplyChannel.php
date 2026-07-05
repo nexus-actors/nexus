@@ -18,8 +18,10 @@ use function method_exists;
  * - DeleteOnShutdown: best-effort teardown. Symfony Messenger has no universal
  *   queue-delete API, so teardown only happens when the transport exposes a
  *   reset() method (ResetInterface convention); otherwise close() is a no-op.
- *   Broker-side TTL/auto-delete on the queue remains the backstop for crashed
- *   processes that never reach close().
+ *   Note that reset() resets connection state — it does NOT delete the broker
+ *   queue. Broker-side TTL/auto-delete on the queue is the authoritative
+ *   cleanup for this lifecycle, and the backstop for crashed processes that
+ *   never reach close().
  *
  * @internal created via TransportReplyChannelFactory
  */
