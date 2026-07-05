@@ -5,15 +5,23 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Consumer;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\BackpressureCapable;
 use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\LocalActorRef;
+use Monadial\Nexus\Core\Mailbox\Envelope as CoreEnvelope;
+use Monadial\Nexus\Messenger\Ask\MessengerReplyRef;
+use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
 use Monadial\Nexus\Messenger\Event\MessageConsumed;
 use Monadial\Nexus\Messenger\Event\MessageDeadLettered;
 use Monadial\Nexus\Messenger\Event\MessageRejected;
 use Monadial\Nexus\Messenger\Lifecycle\MessagesProcessed;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
+use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
@@ -32,6 +40,14 @@ use Throwable;
  * or forwarded to dead letters per ReceiverActorConfig. When the receiver is
  * idle the next poll is scheduled after pollInterval; a busy tick re-polls
  * immediately.
+ *
+ * **Ask / process-ack path:** when a ReplySenderLocator is configured and an
+ * envelope carries both a CorrelationIdStamp and a ReplyToStamp, the actor
+ * delivers the message with a MessengerReplyRef as the senderRef so the
+ * responder actor can call `$ctx->reply($msg)`. The broker envelope is NOT
+ * acked until the responder publishes the reply. Pending asks are tracked in
+ * an in-actor map and rejected for redelivery if not answered within
+ * ReceiverActorConfig::$askPendingTimeout (default 30 s).
  *
  * Every drained envelope is traced with a Consumer span and counted via the
  * actor context's tracer/meter (no-ops when observability is disabled). When
@@ -68,18 +84,25 @@ final readonly class ReceiverActor
         ?ActorRef $processedListener = null,
         ?EventDispatcherInterface $events = null,
         ?Observability $observability = null,
+        ?ReplySenderLocator $replySenders = null,
     ): Behavior {
         $config ??= ReceiverActorConfig::default();
 
         return Behavior::setup(
-            static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability): Behavior {
+            static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability, $replySenders): Behavior {
                 $ctx->self()->tell(new Poll());
 
+                /** @var array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> */
+                $pendingAsks = [];
+                $warnedNoLocator = false;
+
                 return Behavior::receive(
-                    static function (ActorContext $ctx, object $message) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability): Behavior {
+                    static function (ActorContext $ctx, object $message) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability, $replySenders, &$pendingAsks, &$warnedNoLocator): Behavior {
                         if (!$message instanceof Poll) {
                             return Behavior::unhandled();
                         }
+
+                        self::expirePendingAsks($ctx, $receiver, $pendingAsks);
 
                         [$processed, $backpressured] = self::drainOnce(
                             $ctx,
@@ -89,6 +112,9 @@ final readonly class ReceiverActor
                             $deadLetters,
                             $events,
                             $observability,
+                            $replySenders,
+                            $pendingAsks,
+                            $warnedNoLocator,
                         );
 
                         if ($processed > 0 && $processedListener !== null) {
@@ -111,7 +137,8 @@ final readonly class ReceiverActor
     /**
      * @param ActorContext<object> $ctx
      * @param ActorRef<object>|null $deadLetters
-     * @return array{0: int, 1: bool} messages acked this tick, whether the tick stopped on backpressure
+     * @param array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> $pendingAsks
+     * @return array{0: int, 1: bool} messages counted this tick, whether the tick stopped on backpressure
      */
     private static function drainOnce(
         ActorContext $ctx,
@@ -120,7 +147,10 @@ final readonly class ReceiverActor
         ReceiverActorConfig $config,
         ?ActorRef $deadLetters,
         ?EventDispatcherInterface $events,
-        ?Observability $observability = null,
+        ?Observability $observability,
+        ?ReplySenderLocator $replySenders,
+        array &$pendingAsks,
+        bool &$warnedNoLocator,
     ): array {
         $processed = 0;
 
@@ -164,6 +194,163 @@ final readonly class ReceiverActor
                     continue;
                 }
 
+                // Ask path: both stamps present and a locator is configured.
+                $corrStamp = $envelope->last(CorrelationIdStamp::class);
+                $replyStamp = $envelope->last(ReplyToStamp::class);
+
+                if (
+                    $corrStamp instanceof CorrelationIdStamp
+                    && $replyStamp instanceof ReplyToStamp
+                    && $replySenders !== null
+                ) {
+                    $correlationId = $corrStamp->id;
+
+                    // Transports that redeliver un-acked messages (e.g. InMemoryTransport in tests,
+                    // real brokers with visibility timeouts) return this envelope on every get() until
+                    // it is acked or rejected. Skip re-processing if we already have a pending entry.
+                    if (isset($pendingAsks[$correlationId])) {
+                        $span?->setAttribute('nexus.messenger.outcome', 'ask_already_pending');
+
+                        continue;
+                    }
+
+                    $replySender = $replySenders->senderFor($replyStamp->channel);
+
+                    if ($replySender === null) {
+                        self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                            'nexus.messenger.asks.unroutable_reply_to',
+                            '{message}',
+                            'Ask envelopes rejected because the reply-to channel is not in the configured locator',
+                        )->add(1, ['nexus.message.type' => $inner::class]));
+                        $ctx->log()->warning(
+                            'Unknown reply-to channel',
+                            ['channel' => $replyStamp->channel, 'type' => $inner::class],
+                        );
+                        $receiver->reject($envelope);
+                        $span?->setAttribute('nexus.messenger.outcome', 'reply_to_rejected');
+
+                        continue;
+                    }
+
+                    if (!($target instanceof LocalActorRef)) {
+                        // Documented limitation: non-local targets cannot carry a reply ref through
+                        // their transport. Deliver as plain tell + immediate ack.
+                        $ctx->log()->warning(
+                            'Ask envelope delivered to non-local target; process-ack not supported — reply impossible',
+                            ['target' => (string) $target->path()],
+                        );
+                        $target->tell($inner);
+                        $receiver->ack($envelope);
+                        $processed++;
+                        self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                            'nexus.messenger.messages.consumed',
+                            '{message}',
+                            'Broker messages delivered to a target actor and acked',
+                        )->add(1, ['nexus.message.type' => $inner::class]));
+                        $span?->setAttribute('nexus.messenger.outcome', 'ask_non_local');
+                        self::swallow(static fn(): mixed => $events?->dispatch(
+                            new MessageConsumed($inner, (string) $target->path()),
+                        ));
+
+                        continue;
+                    }
+
+                    // LocalActorRef: create the process-ack reply ref and deliver with senderRef.
+                    $fired = false;
+                    $ackCallback = static function () use ($receiver, $envelope, &$fired): void {
+                        if ($fired) {
+                            return;
+                        }
+
+                        $fired = true;
+
+                        try {
+                            $receiver->ack($envelope);
+                        } catch (Throwable) {
+                            // Ack failure is a transport issue; the message will be redelivered.
+                        }
+                    };
+                    $disarm = static function () use (&$fired): void {
+                        $fired = true;
+                    };
+
+                    $replyRef = new MessengerReplyRef(
+                        $replySender,
+                        $correlationId,
+                        $ackCallback,
+                        $observability ?? new NoopObservability(),
+                        $events,
+                    );
+
+                    $coreEnvelope = CoreEnvelope::of($inner, ActorPath::root(), $target->path())
+                        ->withCorrelationId($correlationId)
+                        ->withSenderRef($replyRef);
+
+                    $result = $target->offerEnvelope($coreEnvelope);
+
+                    if ($result !== EnqueueResult::Accepted) {
+                        if ($result === EnqueueResult::Dropped) {
+                            self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                                'nexus.messenger.enqueue.dropped',
+                                '{message}',
+                                'Broker messages left un-acked because the target mailbox was closed or dropped them',
+                            )->add(1, ['nexus.message.type' => $inner::class]));
+                            $ctx->log()->warning(
+                                'Target mailbox dropped the message; leaving un-acked for redelivery',
+                                ['type' => $inner::class],
+                            );
+                        } else {
+                            self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                                'nexus.messenger.enqueue.backpressured',
+                                '{message}',
+                                'Broker messages not acked because the target mailbox did not accept them',
+                            )->add(1, ['nexus.message.type' => $inner::class]));
+                            $ctx->log()->debug(
+                                'Mailbox backpressured, pausing broker consumption',
+                                ['type' => $inner::class],
+                            );
+                        }
+
+                        $span?->setAttribute(
+                            'nexus.messenger.outcome',
+                            $result === EnqueueResult::Dropped
+                                ? 'dropped'
+                                : 'backpressured',
+                        );
+
+                        return [$processed, true];
+                    }
+
+                    $pendingAsks[$correlationId] = [
+                        'deadline' => microtime(true) + $config->askPendingTimeout->toSecondsFloat(),
+                        'disarm' => $disarm,
+                        'envelope' => $envelope,
+                    ];
+                    $processed++;
+                    self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                        'nexus.messenger.messages.consumed',
+                        '{message}',
+                        'Broker messages delivered to a target actor and acked',
+                    )->add(1, ['nexus.message.type' => $inner::class]));
+                    $span?->setAttribute('nexus.messenger.outcome', 'ask_pending');
+                    self::swallow(static fn(): mixed => $events?->dispatch(
+                        new MessageConsumed($inner, (string) $target->path()),
+                    ));
+
+                    continue;
+                }
+
+                // Ask stamps present but no locator: deliver as plain tell with one-time warning.
+                if (
+                    $corrStamp instanceof CorrelationIdStamp
+                    && $replyStamp instanceof ReplyToStamp
+                    && !$warnedNoLocator
+                ) {
+                    $warnedNoLocator = true;
+                    $ctx->log()->warning('Ask received but no ReplySenderLocator configured');
+                }
+
+                // Normal path.
                 if ($target instanceof BackpressureCapable) {
                     $result = $target->offer($inner);
 
@@ -220,6 +407,45 @@ final readonly class ReceiverActor
         }
 
         return [$processed, false];
+    }
+
+    /**
+     * Expire pending ask entries that have exceeded the configured timeout, rejecting
+     * their broker envelopes for redelivery and disarming the ack callback.
+     *
+     * @param ActorContext<object> $ctx
+     * @param array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> $pendingAsks
+     */
+    private static function expirePendingAsks(
+        ActorContext $ctx,
+        ReceiverInterface $receiver,
+        array &$pendingAsks,
+    ): void {
+        if ($pendingAsks === []) {
+            return;
+        }
+
+        $now = microtime(true);
+
+        foreach ($pendingAsks as $correlationId => $entry) {
+            if ($now <= $entry['deadline']) {
+                continue;
+            }
+
+            ($entry['disarm'])();
+            self::swallow(static fn(): mixed => $receiver->reject($entry['envelope']));
+            self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                'nexus.messenger.asks.responder_expired',
+                '{message}',
+                'Ask envelopes rejected for redelivery because the responder did not reply within the deadline',
+            )->add(1));
+            $ctx->log()->warning(
+                'Ask responder did not reply within deadline; rejecting for redelivery',
+                ['correlation_id' => $correlationId],
+            );
+
+            unset($pendingAsks[$correlationId]);
+        }
     }
 
     /**

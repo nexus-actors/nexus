@@ -80,6 +80,26 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
     }
 
     /**
+     * Deliver a pre-formed envelope directly to the mailbox, returning the enqueue result.
+     *
+     * Mirrors {@see enqueueEnvelope()} but exposes the result so callers can react to
+     * backpressure or a dropped delivery without a separate offer() that strips the
+     * envelope context (senderRef, correlationId, etc.). Used by the Messenger bridge's
+     * ask-aware receiver path to support process-ack with backpressure visibility.
+     *
+     * @return EnqueueResult Accepted on success, Dropped when the mailbox is closed
+     */
+    #[NoDiscard]
+    public function offerEnvelope(Envelope $envelope): EnqueueResult
+    {
+        try {
+            return $this->mailbox->enqueue($envelope);
+        } catch (MailboxClosedException) {
+            return EnqueueResult::Dropped;
+        }
+    }
+
+    /**
      * @template R of object
      * @param T $message
      * @return Future<R>
