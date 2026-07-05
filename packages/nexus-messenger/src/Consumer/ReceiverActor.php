@@ -257,7 +257,7 @@ final readonly class ReceiverActor
 
                     // LocalActorRef: create the process-ack reply ref and deliver with senderRef.
                     $fired = false;
-                    $ackCallback = static function () use ($receiver, $envelope, &$fired): void {
+                    $ackCallback = static function () use ($receiver, $envelope, &$fired, &$pendingAsks, $correlationId): void {
                         if ($fired) {
                             return;
                         }
@@ -269,6 +269,11 @@ final readonly class ReceiverActor
                         } catch (Throwable) {
                             // Ack failure is a transport issue; the message will be redelivered.
                         }
+
+                        // Prune from the pending map so that the expiry path never sees an
+                        // already-acked entry — otherwise expiry would call reject() on the
+                        // same envelope (double settlement) and emit a false responder_expired count.
+                        unset($pendingAsks[$correlationId]);
                     };
                     $disarm = static function () use (&$fired): void {
                         $fired = true;
@@ -438,6 +443,8 @@ final readonly class ReceiverActor
                 'nexus.messenger.asks.responder_expired',
                 '{message}',
                 'Ask envelopes rejected for redelivery because the responder did not reply within the deadline',
+            // No attributes: nexus.message.type is unavailable at expiry (not stored in the pending entry);
+            // correlation IDs are unbounded and must never be used as metric dimensions (high-cardinality).
             )->add(1));
             $ctx->log()->warning(
                 'Ask responder did not reply within deadline; rejecting for redelivery',

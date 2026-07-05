@@ -14,6 +14,7 @@ use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
+use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
@@ -236,6 +237,83 @@ final class AskResponderTest extends TestCase
         self::assertInstanceOf(Ping::class, $received[0]);
         self::assertCount(1, $requestTransport->getAcknowledged());
         self::assertCount(0, $requestTransport->getRejected());
+    }
+
+    /**
+     * Regression: a successfully acked ask must be pruned from the pending map immediately
+     * so expiry never sees it. Without the fix, expiry calls reject() on an already-acked
+     * envelope (double settlement — AMQP protocol error) and emits a false
+     * nexus.messenger.asks.responder_expired count.
+     *
+     * Set askPendingTimeout to 100 ms; responder replies immediately. After 300 ms the
+     * timeout window has passed multiple times. The expiry counter must remain zero and
+     * no envelope must be rejected.
+     */
+    #[Test]
+    public function ackedAskIsPrunedFromPendingMapNoSpuriousExpiry(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('ask-prune', $runtime);
+        $requestTransport = new InMemoryTransport();
+        $replySender = new RecordingSender();
+        $observability = new RecordingObservability();
+
+        $correlationId = 'prune-corr-001';
+        $replyChannel = 'replies';
+
+        $requestTransport->send(
+            (new Envelope(new Ping('prune-req')))
+                ->with(new CorrelationIdStamp($correlationId))
+                ->with(new ReplyToStamp($replyChannel)),
+        );
+
+        // Responder replies immediately on Ping — ack happens well before any expiry tick.
+        $target = $system->spawn(
+            Props::fromBehavior(Behavior::receive(
+                static function (ActorContext $ctx, object $msg): Behavior {
+                    if ($msg instanceof Ping) {
+                        $ctx->sender()?->tell(new Pong('reply'));
+                    }
+
+                    return Behavior::same();
+                },
+            )),
+            'fast-responder',
+        );
+
+        $locator = new MapReplySenderLocator([$replyChannel => $replySender]);
+
+        $system->spawn(
+            Props::fromBehavior(ReceiverActor::create(
+                $requestTransport,
+                new MapMessageRouter([Ping::class => $target]),
+                ReceiverActorConfig::default()
+                    ->withPollInterval(Duration::millis(20))
+                    ->withAskPendingTimeout(Duration::millis(100)),
+                null,
+                null,
+                null,
+                $observability,
+                $locator,
+            )),
+            'receiver',
+        );
+
+        $runtime->scheduleOnce(
+            Duration::millis(300),
+            static function () use ($system): void {
+                $system->shutdown(Duration::seconds(1));
+            },
+        );
+        $system->run();
+
+        self::assertCount(1, $requestTransport->getAcknowledged(), 'Request must be acked after reply');
+        self::assertCount(0, $requestTransport->getRejected(), 'Acked ask must not reach expiry — zero redeliveries');
+        self::assertSame(
+            0,
+            $observability->meter->sum('nexus.messenger.asks.responder_expired'),
+            'Expiry counter must be zero — acked ask was pruned from the pending map',
+        );
     }
 
     /**
