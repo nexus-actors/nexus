@@ -1,0 +1,297 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
+
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeResponse;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipState;
+use Monadial\Nexus\Cluster\Tcp\Membership\MemberStatus;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipTick;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\HeartbeatTick;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
+use Monadial\Nexus\Cluster\Tcp\Membership\NodeDown;
+use Monadial\Nexus\Cluster\Tcp\Membership\NodeSuspected;
+use Monadial\Nexus\Cluster\Tcp\Membership\NodeUp;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerSelector;
+use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
+use Monadial\Nexus\Cluster\Tcp\Membership\SendGossip;
+use Monadial\Nexus\Cluster\Tcp\Membership\SuspicionReason;
+use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEffectInterpreter;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEventPublisher;
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
+use Override;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+
+use function array_slice;
+use function count;
+
+#[CoversClass(MembershipActor::class)]
+#[CoversClass(MembershipState::class)]
+final class MembershipActorTest extends TestCase
+{
+    private StepRuntime $runtime;
+
+    private ActorSystem $system;
+
+    private RecordingEffectInterpreter $effects;
+
+    private RecordingEventPublisher $events;
+
+    private NodeAddress $peer;
+
+    private NodeEndpoint $peerEndpoint;
+
+    private int $probeSeq = 0;
+
+    #[Test]
+    public function initialViewContainsSelfAsUp(): void
+    {
+        $ref = $this->spawnActor();
+
+        $view = $this->queryView($ref);
+
+        self::assertCount(1, $view->upNodes());
+        self::assertTrue($view->has(new NodeAddress('production', 'eu', 'payments', 'node-1')));
+    }
+
+    #[Test]
+    public function handshakeAddsPeerUpAndProducesHandshakeResponse(): void
+    {
+        $ref = $this->spawnActor();
+
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+
+        $upEvents = $this->events->ofType(NodeUp::class);
+        self::assertCount(1, $upEvents);
+        self::assertTrue($upEvents[0]->node->toPathPrefix() === $this->peer->toPathPrefix());
+
+        $responses = $this->effects->ofType(HandshakeResponse::class);
+        self::assertCount(1, $responses);
+        self::assertTrue($responses[0]->accepted);
+
+        $view = $this->queryView($ref);
+        self::assertTrue($view->has($this->peer));
+        self::assertSame(MemberStatus::Up, $view->members[$this->peer->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function unexpectedLinkCloseMovesPeerToSuspectAndPublishesNodeSuspected(): void
+    {
+        $ref = $this->spawnActor();
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        $this->events->clear();
+        $this->effects->clear();
+
+        $ref->tell(new PeerLinkClosed($this->peer, intentional: false));
+        $this->runtime->drain();
+
+        $suspected = $this->events->ofType(NodeSuspected::class);
+        self::assertCount(1, $suspected);
+        self::assertSame(SuspicionReason::Connection, $suspected[0]->reason);
+
+        $view = $this->queryView($ref);
+        self::assertSame(MemberStatus::Suspect, $view->members[$this->peer->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function intentionalLinkClosePublishesNothingAndLeavesPeerUp(): void
+    {
+        $ref = $this->spawnActor();
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        $this->events->clear();
+        $this->effects->clear();
+
+        $ref->tell(new PeerLinkClosed($this->peer, intentional: true));
+        $this->runtime->drain();
+
+        self::assertSame([], $this->events->events());
+        self::assertSame([], $this->effects->effects());
+
+        $view = $this->queryView($ref);
+        self::assertSame(MemberStatus::Up, $view->members[$this->peer->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function heartbeatTickEmitsSendGossipForUpPeers(): void
+    {
+        $ref = $this->spawnActor();
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        $this->effects->clear();
+
+        $ref->tell(new HeartbeatTick());
+        $this->runtime->drain();
+
+        $gossip = $this->effects->ofType(SendGossip::class);
+        self::assertNotEmpty($gossip);
+        self::assertContains($this->peer->toPathPrefix(), $gossip[0]->targets);
+    }
+
+    #[Test]
+    public function gossipTickEmitsSendGossipForUpPeers(): void
+    {
+        $ref = $this->spawnActor();
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        $this->effects->clear();
+
+        $ref->tell(new GossipTick());
+        $this->runtime->drain();
+
+        self::assertNotEmpty($this->effects->ofType(SendGossip::class));
+    }
+
+    #[Test]
+    public function scheduledTicksFireUnderRuntimeAndEmitGossip(): void
+    {
+        $ref = $this->spawnActor(heartbeatInterval: Duration::seconds(1), gossipInterval: Duration::seconds(5));
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        $this->effects->clear();
+
+        // No tick has fired yet: handshake only produced a HandshakeResponse.
+        self::assertSame([], $this->effects->ofType(SendGossip::class));
+
+        $this->runtime->advanceTime(Duration::seconds(1));
+        $this->runtime->drain();
+
+        self::assertNotEmpty($this->effects->ofType(SendGossip::class));
+    }
+
+    #[Test]
+    public function stateEvolvesAcrossMessages(): void
+    {
+        $ref = $this->spawnActor();
+
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+        self::assertCount(2, $this->queryView($ref)->members);
+
+        $this->events->clear();
+        $ref->tell(new LeaveReceived($this->peer));
+        $this->runtime->drain();
+
+        self::assertCount(1, $this->events->ofType(NodeDown::class));
+        $view = $this->queryView($ref);
+        self::assertCount(1, $view->members);
+        self::assertFalse($view->has($this->peer));
+    }
+
+    #[Override]
+    protected function setUp(): void
+    {
+        $this->runtime = new StepRuntime();
+        $this->system = ActorSystem::create('membership-test', $this->runtime, clock: $this->runtime->clock());
+        $this->effects = new RecordingEffectInterpreter();
+        $this->events = new RecordingEventPublisher();
+        $this->peer = new NodeAddress('production', 'eu', 'payments', 'node-2');
+        $this->peerEndpoint = NodeEndpoint::fromString('10.0.0.2:7355');
+    }
+
+    private function handshakeFromPeer(): HandshakeReceived
+    {
+        return new HandshakeReceived(
+            $this->peer,
+            $this->peerEndpoint,
+            new Handshake(
+                'production',
+                [
+                    'application' => $this->peer->application,
+                    'cluster' => $this->peer->cluster,
+                    'datacenter' => $this->peer->datacenter,
+                    'node' => $this->peer->node,
+                ],
+                (string) $this->peerEndpoint,
+            ),
+        );
+    }
+
+    /**
+     * @return ActorRef<object>
+     */
+    private function spawnActor(?Duration $heartbeatInterval = null, ?Duration $gossipInterval = null): ActorRef
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: new NodeAddress('production', 'eu', 'payments', 'node-1'),
+            bindEndpoint: NodeEndpoint::fromString('0.0.0.0:7355'),
+            advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
+            seeds: [NodeEndpoint::fromString('10.0.0.9:7355')],
+        );
+
+        $selector = new class implements PeerSelector {
+            #[Override]
+            public function select(array $peers, int $count): array
+            {
+                return array_slice($peers, 0, $count);
+            }
+        };
+
+        $actor = new MembershipActor(
+            new MembershipService($topology),
+            new PhiAccrualDetector(),
+            $selector,
+            $this->effects,
+            $this->events,
+            $this->runtime->clock(),
+            $heartbeatInterval,
+            $gossipInterval,
+        );
+
+        $ref = $this->system->spawn($actor->props(), 'membership');
+        $this->runtime->drain();
+
+        return $ref;
+    }
+
+    /**
+     * @param ActorRef<object> $ref
+     */
+    private function queryView(ActorRef $ref): ClusterView
+    {
+        $captured = [];
+
+        /** @var Behavior<ClusterView> $behavior */
+        $behavior = Behavior::receive(
+            static function (ActorContext $ctx, object $msg) use (&$captured): Behavior {
+                if ($msg instanceof ClusterView) {
+                    $captured[] = $msg;
+                }
+
+                return Behavior::same();
+            },
+        );
+
+        /** @var ActorRef<ClusterView> $probe */
+        $probe = $this->system->spawn(Props::fromBehavior($behavior), 'probe-' . $this->probeSeq++);
+
+        $ref->tell(new GetClusterView($probe));
+        $this->runtime->drain();
+
+        self::assertGreaterThan(0, count($captured), 'GetClusterView produced no reply.');
+
+        return $captured[count($captured) - 1];
+    }
+}
