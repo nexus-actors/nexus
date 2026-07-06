@@ -105,6 +105,20 @@ final class MsgpackCodecTest extends TestCase
         $codec->unpack("\xcd");
     }
 
+    #[Test]
+    public function purePathTrailingBytesThrowsUnexpectedValueException(): void
+    {
+        $codec = new MsgpackCodec(false);
+        // Pack a valid array, then append garbage to create trailing bytes.
+        $validArray = $codec->pack(['id' => 42]);
+        $malformedBytes = $validArray . "\xff";
+
+        $this->expectException(UnexpectedValueException::class);
+        $this->expectExceptionMessage('Unexpected trailing bytes after msgpack value');
+
+        $codec->unpack($malformedBytes);
+    }
+
     // -------------------------------------------------------------------------
     // Native ext-msgpack backend (skipped when the extension is absent)
     // -------------------------------------------------------------------------
