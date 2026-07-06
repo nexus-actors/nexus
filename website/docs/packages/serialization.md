@@ -5,6 +5,7 @@ related:
   - packages/core
   - packages/messenger
   - packages/persistence
+  - packages/serialization-msgpack
   - packages/worker-pool
 ---
 
@@ -52,9 +53,11 @@ $wire = $serializer->serialize(new OrderPlaced('ord-1', 99.99));
 $msg  = $serializer->deserialize($wire, 'order.placed');
 ```
 
-Use `PhpNativeSerializer` when both sender and receiver share the same codebase. Use `ValinorMessageSerializer` when messages cross process or language boundaries.
+Use `PhpNativeSerializer` when both sender and receiver share the same codebase. Use `ValinorMessageSerializer` when messages cross process or language boundaries. For compact binary payloads on high-volume queues, add [nexus-serialization-msgpack](./serialization-msgpack.md) — same `MessageSerializer` contract, MessagePack wire format.
 
 ## See also
 
+- [nexus-serialization-msgpack](./serialization-msgpack.md) — binary MessagePack `MessageSerializer` with format-choice guidance
+- [nexus-observability-serialization](./observability-serialization.md) — tracing decorator: spans + `nexus.serialization.*` metrics for any `MessageSerializer`
 - [nexus-persistence](./persistence.md) — event stores accept a custom `MessageSerializer`
 - [nexus-worker-pool](./worker-pool.md) — `WorkerActorRef::tell()` messages should carry `#[MessageType]` for forward compatibility
