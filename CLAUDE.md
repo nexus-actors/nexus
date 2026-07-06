@@ -25,11 +25,13 @@ make shell          # Interactive bash in PHP container
 - `php` — Full environment (Xdebug + Swoole) for development
 - `php-fiber` — Fiber-only for unit/integration tests and CI
 - `php-swoole` — Swoole-only for Swoole and worker-pool tests and CI
+- `php-swoole-debug` — Swoole + Xdebug for step-debugging coroutine/cluster tests (kept separate so CI's `php-swoole` stays Xdebug-free). Run suites under it with `make test-cluster-debug` / `make test-swoole-debug` (both set `XDEBUG_TRIGGER=1`; point your IDE listener at port 9003)
 
 **Dockerfile targets** (`docker/Dockerfile`):
 - `php-fiber` — PHP 8.5 CLI + Xdebug
 - `php-swoole` — PHP 8.5 CLI + Swoole 6.0
 - `php-full` — Both Xdebug and Swoole
+- `php-swoole-debug` — `php-swoole` + Xdebug (dev OPcache); Xdebug hooks `zend_execute_ex` so JIT is disabled and step-debugging across a coroutine yield boundary is limited
 
 ## Commands
 

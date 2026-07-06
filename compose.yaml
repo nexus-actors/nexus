@@ -23,6 +23,22 @@ services:
     environment:
       - XDEBUG_MODE=${XDEBUG_MODE:-debug}
 
+  php-swoole-debug:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: php-swoole-debug
+    volumes:
+      - .:/app
+      - ../phpdoc-templates-plugin:/phpdoc-templates-plugin
+    working_dir: /app
+    environment:
+      - XDEBUG_MODE=${XDEBUG_MODE:-debug}
+    # host.docker.internal resolves to the host on Docker Desktop automatically;
+    # host-gateway makes the Xdebug client_host work on Linux too.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   php-swoole:
     build:
       context: .

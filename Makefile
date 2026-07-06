@@ -46,6 +46,12 @@ test-messenger: ## Messenger integration tests
 test-cluster: ## Cluster TCP integration tests (Swoole, real sockets)
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
 
+test-cluster-debug: ## Cluster TCP integration tests under Xdebug (php-swoole-debug; set a breakpoint + IDE listener on :9003)
+	docker compose exec -e XDEBUG_TRIGGER=1 php-swoole-debug vendor/bin/phpunit --testsuite=integration-cluster
+
+test-swoole-debug: ## Swoole integration tests under Xdebug (php-swoole-debug; set a breakpoint + IDE listener on :9003)
+	docker compose exec -e XDEBUG_TRIGGER=1 php-swoole-debug vendor/bin/phpunit --testsuite=integration-swoole
+
 test-cluster-loopback: ## Cluster TCP loopback integration tests (plain php container, no ext-swoole required)
 	$(DC) vendor/bin/phpunit --testsuite=integration-cluster-loopback
 
@@ -111,4 +117,4 @@ docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default P
 
 PORT ?= 8081
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-debug test-swoole-debug test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve

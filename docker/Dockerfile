@@ -114,3 +114,36 @@ RUN docker-php-ext-enable swoole
 COPY docker/opcache.ini /usr/local/etc/php/conf.d/zz-opcache.ini
 
 CMD ["tail", "-f", "/dev/null"]
+
+# ── Target: php-swoole-debug (php-swoole + Xdebug for coroutine step-debugging) ──
+# Dedicated debug image built ON TOP of php-swoole, so the CI `php-swoole`
+# target stays lean (JIT enabled, no Xdebug overhead). Xdebug 3.x can step
+# into Swoole coroutines, with two caveats worth knowing: it hooks
+# zend_execute_ex (which disables JIT — hence the JIT warning), and a single
+# debug session is shared across coroutines, so stepping across a coroutine
+# yield boundary is limited. Activate per run with XDEBUG_TRIGGER=1 (config
+# uses start_with_request=trigger) and have your IDE listen on port 9003.
+# See https://openswoole.com/article/debug-openswoole-coroutines-with-xdebug
+# and https://bytepursuits.com/xdebug-swoole-docker-container
+FROM php-swoole AS php-swoole-debug
+
+ARG XDEBUG_MODE=debug
+ARG XDEBUG_START_WITH_REQUEST=trigger
+ARG XDEBUG_CLIENT_HOST=host.docker.internal
+ARG XDEBUG_CLIENT_PORT=9003
+
+RUN pecl install xdebug \
+    && docker-php-ext-enable xdebug
+
+RUN echo "xdebug.mode=${XDEBUG_MODE}" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+    && echo "xdebug.start_with_request=${XDEBUG_START_WITH_REQUEST}" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+    && echo "xdebug.client_host=${XDEBUG_CLIENT_HOST}" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+    && echo "xdebug.client_port=${XDEBUG_CLIENT_PORT}" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini \
+    && echo "xdebug.log_level=0" >> /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini
+
+# Drop the prod OPcache override copied by php-swoole so volume-mounted code
+# changes take effect while debugging (validate_timestamps=1). Xdebug disables
+# JIT at load anyway, so the prod JIT/timestamp settings are moot here.
+RUN rm -f /usr/local/etc/php/conf.d/zzz-opcache-prod.ini
+
+CMD ["tail", "-f", "/dev/null"]
