@@ -14,7 +14,7 @@ Location-transparent `ActorRef` backed by a Symfony Messenger `SenderInterface`;
 
 `MessengerActorRef<T>` implements `ActorRef<T>` so actor code that already knows how to `tell()` a local ref can publish to AMQP, Redis, or any other Messenger transport without changes. The ref is fully decoupled from Symfony Framework and `symfony/console`.
 
-In v1, `ask()` is not supported — broker request/reply requires correlation stamps and a reply transport. Calling `ask()` throws `UnsupportedOperationException` immediately.
+`ask()` supports broker request/reply when the ref is constructed with an `AskSupport` instance (the sixth constructor parameter, or the `askSupport:` named argument to `MessengerBridge::producer()`). Without `AskSupport`, `ask()` throws `UnsupportedOperationException` immediately.
 
 **Observability:** when an `Observability` instance is provided (the fourth constructor parameter), each `tell()` is wrapped in a `messenger.send` Producer span and the `nexus.messenger.messages.sent` counter is incremented. Telemetry errors are swallowed so they never interrupt the send.
 
@@ -38,6 +38,7 @@ new MessengerActorRef(
     sourcePath: ?ActorPath $sourcePath = null,
     observability: Observability $observability = new NoopObservability(),
     events: ?EventDispatcherInterface $events = null,
+    askSupport: ?AskSupport $askSupport = null,
 );
 ```
 
@@ -48,13 +49,14 @@ new MessengerActorRef(
 | `$sourcePath` | `?ActorPath` | `null` | When set, attaches a `SourceActorPathStamp` to every outbound envelope for provenance tracking. |
 | `$observability` | `Observability` | `NoopObservability` | OTel instrumentation. Pass the `Observability` from the actor system to enable spans and counters. |
 | `$events` | `?EventDispatcherInterface` | `null` | PSR-14 dispatcher. When set, a `MessagePublished` event is dispatched after each successful send. |
+| `$askSupport` | `?AskSupport` | `null` | Enables `ask()`. Build via `MessengerBridge::askSupport()` and pass here. When `null`, `ask()` throws `UnsupportedOperationException`. |
 
 ## Methods
 
 | Method | Returns | Description |
 |---|---|---|
 | `tell(object $message): void` | `void` | Publish a message to the transport. When observability is enabled, emits a `messenger.send` Producer span and increments `nexus.messenger.messages.sent`. Dispatches `MessagePublished` if an event dispatcher is configured. |
-| `ask(object $message, Duration $timeout): Future` | never | Always throws `UnsupportedOperationException`. Broker request/reply is deferred beyond v1. |
+| `ask(object $message, Duration $timeout): Future` | `Future<R>` | When `AskSupport` is configured: publishes the envelope with `CorrelationIdStamp` + `ReplyToStamp`, registers a future slot, and returns a `Future` that resolves when the reply arrives. Throws `UnsupportedOperationException` if `AskSupport` is not configured, or `AskCapacityExceededException` if the pending registry is at capacity. Must be called inside a fiber — use `->await()` to block until the reply or timeout. |
 | `path(): ActorPath` | `ActorPath` | Returns the synthetic path `/messenger/<senderName>`. Not resolvable from the actor system. |
 | `isAlive(): bool` | `bool` | Always returns `true` — liveness is delegated to the transport layer. |
 
@@ -79,6 +81,16 @@ $orders->tell(new OrderPlaced('A-42'));
 // → emits messenger.send span
 // → increments nexus.messenger.messages.sent{nexus.message.type="OrderPlaced"}
 // → dispatches MessagePublished($message, 'orders-out')
+
+// With ask/reply
+$askSupport = MessengerBridge::askSupport($system, $channelFactory);
+$orders = MessengerBridge::producer($transport, 'orders-out', askSupport: $askSupport);
+// Inside a fiber:
+/** @var Pong $reply */
+$reply = $orders->ask(new Ping('hello'), Duration::seconds(5))->await();
+// → emits messenger.ask span
+// → increments nexus.messenger.asks.sent
+// → dispatches AskStarted($message, $correlationId)
 ```
 
 Messages sent via `tell()` must carry `#[MessageType]` (enforced by the nexus-psalm plugin when sending to a `MessengerActorRef`).
@@ -92,5 +104,7 @@ Messages sent via `tell()` must carry `#[MessageType]` (enforced by the nexus-ps
 - [nexus-messenger package](../../packages/messenger) — bridge overview, install, and full wiring guide
 - [ActorRef](actor-ref) — the interface this class implements
 - [Messenger bridge guide](../../guides/messenger-bridge) — end-to-end wiring walkthrough
-- [Exceptions — UnsupportedOperationException](../exceptions.md#unsupportedoperationexception) — thrown by `ask()` in v1
+- [Exceptions — UnsupportedOperationException](../exceptions.md#unsupportedoperationexception) — thrown by `ask()` when no `AskSupport` is configured
+- [Exceptions — AskCapacityExceededException](../exceptions.md#askcapacityexceededexception) — thrown by `ask()` when the pending registry is at capacity
+- [Configuration — AskSupport](../config.md#asksupport) — ask reply channel and capacity options
 - [Attributes — #[MessageType]](../attributes.md#messagetype) — required on messages sent via this ref

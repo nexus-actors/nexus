@@ -609,13 +609,27 @@ Extends `LogicException`.
 
 Extends `NexusException`.
 
-**When thrown:** `MessengerActorRef::ask()` is called. Broker request/reply requires correlation stamps and a dedicated reply transport; this is deferred beyond v1.
+**When thrown:** `MessengerActorRef::ask()` is called without an `AskSupport` configured, or `MessengerReplyRef::ask()` is called (reply refs are send-only).
 
-**Cause:** Actor code called `ask()` on a `MessengerActorRef`. The `ActorRef` interface requires `ask()` but the Messenger transport layer cannot fulfil a synchronous reply in v1.
+**Cause:** `ask()` was called on a `MessengerActorRef` that was constructed without passing an `AskSupport` instance (the sixth constructor parameter / `askSupport:` named argument to `MessengerBridge::producer()`).
 
-**Recovery:** Use `tell()` instead and model the reply as a separate inbound message routed back through a `ReceiverActor`. If you need request/reply semantics across a broker, implement a correlation-stamp pattern manually.
+**Recovery:** Wire `AskSupport` via `MessengerBridge::askSupport($system, $channelFactory)` and pass it to `MessengerBridge::producer(..., askSupport: $askSupport)`. See the [Request/reply guide](../guides/messenger-bridge#requestreply-over-the-broker).
 
-**See also:** [MessengerActorRef](./classes/messenger-actor-ref.md) — the ref class that throws this exception
+**See also:** [MessengerActorRef](./classes/messenger-actor-ref.md), [AskCapacityExceededException](#askcapacityexceededexception)
+
+### AskCapacityExceededException
+
+`Monadial\Nexus\Messenger\Exception\AskCapacityExceededException`
+
+Extends `NexusException`.
+
+**When thrown:** `MessengerActorRef::ask()` is called when the `PendingAskRegistry` is already at its configured capacity (default 10 000 concurrent asks).
+
+**Cause:** The process has accumulated more in-flight ask futures than `maxPending` allows. No broker message is sent — the exception is thrown before any I/O.
+
+**Recovery:** Let the future queue drain before issuing new asks, or increase `maxPending` when calling `MessengerBridge::askSupport(..., maxPending: N)`. If the registry stays full, investigate slow responders or missing timeouts.
+
+**See also:** [MessengerActorRef](./classes/messenger-actor-ref.md#methods), [Configuration — AskSupport](./config.md#asksupport)
 
 ---
 
