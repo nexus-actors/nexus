@@ -65,9 +65,28 @@ Commit: `feat(cluster-tcp): gossip membership with phi-accrual and connection-de
 - Integration (Swoole sockets, suite `integration-cluster`): 2-node real-socket boot/join/tell/ask; kill -9 one node → other reaches Down within give-up window; handshake rejection (wrong cluster name).
 Commit: `feat(cluster-tcp): ClusterRef with TCP asks, inbound routing, and ClusterNode bootstrap`
 
-### Task C1.7: Observability + example + comprehensive docs + landing + PR
+### Task C1.7: Cluster observability — full instrumentation (user-requested emphasis 2026-07-06)
 
-- Metrics/spans/events per spec §12 wired through ClusterNode (fail-safe); PSR-3 logging at every membership transition (join/suspect/down/leave with peer + reason context), handshake rejections (warning), reconnect attempts (debug), frame protocol errors (warning).
+Dedicated task; spec §12 is the floor, this inventory is the deliverable. All telemetry fail-safe (swallow pattern), all attrs low-cardinality (peer = NodeAddress path prefix, bounded by cluster size). TDD with recording doubles; one loopback integration test asserting the full happy-path telemetry set, one asserting failure-path telemetry (suspect→down).
+
+**Traces** (context propagates through the `MessagePayload.trace` carrier — the SAME W3C map the bridge uses, so a Symfony→broker→NexusA→TCP→NexusB call is ONE trace):
+- `cluster.send` (Producer kind; attrs `nexus.cluster.peer`, `nexus.message.type`, `messaging.system` = 'nexus-tcp') around outbound MESSAGE frames; self-short-circuit sends produce NO span (local delivery — counted instead).
+- `cluster.receive` (Consumer kind; parent extracted from frame trace map) around inbound dispatch.
+- `cluster.ask` (Producer; ends on publish, resolution tracked via metrics — mirrors messenger.ask).
+- `cluster.handshake` (Internal; outcome attr accepted/rejected/reason).
+
+**Metrics:**
+- Transport: `nexus.cluster.frames.sent|received` (`{frame}`, attr `frame.type`), `nexus.cluster.bytes.sent|received` histograms (`By`), `nexus.cluster.peers.connected` gauge, `nexus.cluster.reconnects` (`{attempt}`, attr peer), `nexus.cluster.send_buffer.dropped` (`{message}`), `nexus.cluster.handshake.rejected` (attr reason).
+- Membership: `nexus.cluster.nodes` gauge (attr status up|suspect), `nexus.cluster.phi` observable gauge per peer, `nexus.cluster.nodes.suspected|recovered|pruned` counters, `nexus.cluster.gossip.rounds` counter, `nexus.cluster.heartbeats.sent|received`.
+- Messaging: `nexus.cluster.messages.sent|received|local_shortcircuit` (`{message}`, attrs peer + type), `nexus.cluster.messages.unroutable`, `nexus.cluster.asks.sent|resolved|timed_out|capacity_rejected` + `nexus.cluster.asks.pending` gauge + `nexus.cluster.ask.duration` histogram (`ms`, recorded at resolution).
+
+**PSR-14 events:** `NodeUp`, `NodeDown`, `NodeSuspected(NodeAddress, string $reason /* phi|connection */)`, `PeerConnected/PeerDisconnected(NodeAddress)`.
+
+**PSR-3 logging:** membership transitions info (join/suspect/down/leave/recovered with peer + reason), handshake rejections warning (peer endpoint + reason), reconnect attempts debug (attempt #, backoff), frame protocol errors warning, send-buffer overflow warning (once per peer per episode, not per message).
+
+Commit: `feat(cluster-tcp): full transport, membership, and messaging observability`
+
+### Task C1.8: Example + comprehensive docs + landing + PR
 - **Example**: dedicated `examples/nexus-cluster-tcp/` — two-node compose (Swoole image), node A exposes a greeter actor, node B `refFor()`s it and tells/asks on a timer; stdout shows membership events + traces; README (run steps, what to observe: join, kill-node failure detection timing, ask round-trip). Runtime-tested in the php-swoole container where possible.
 - **Comprehensive docs**: package page (`website/docs/packages/cluster-tcp.md`), "Clustering over TCP" guide chapter (topology config, seeds-in-k8s incl. headless-service snippet, TLS setup, decision table broker-edge vs TCP mesh, failure-detection tuning, consistency caveats), reference pages (ClusterNode, ClusterTopology, PhiAccrualDetector config, NodeEndpoint), CLAUDE.md, CHANGELOG, sidebars + cross-links (packages/cluster.md, packages/messenger.md, operations/observability).
 - **Landing**: new `landing/src/pages/cluster.astro` integration subpage mirroring messenger.astro's structure (hero, feature sections with real code snippets verified against shipped signatures, honest "what it does not do" box: no split-brain/quorum, AP receptionist) + Nav/MobileNav registration; landing build gate.
