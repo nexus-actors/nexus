@@ -81,13 +81,15 @@ final readonly class MessengerBridge
         ReplyChannelFactory $factory,
         ?int $maxPending = null,
         ?Duration $replyPollInterval = null,
+        Observability $observability = new NoopObservability(),
+        ?EventDispatcherInterface $events = null,
     ): AskSupport {
         $registry = $maxPending !== null
             ? new PendingAskRegistry($maxPending)
             : new PendingAskRegistry();
         $pollInterval = $replyPollInterval ?? Duration::millis(20);
 
-        return new AskSupport($system, $factory, $registry, $pollInterval);
+        return new AskSupport($system, $factory, $registry, $pollInterval, $observability, $events);
     }
 
     /**
