@@ -71,9 +71,9 @@ final readonly class InventoryReserved
 }
 ```
 
-### ask() limitation
+### ask()
 
-`MessengerActorRef::ask()` throws `UnsupportedOperationException` in v1. Broker request/reply requires correlation stamps and a reply transport — this is deferred to a future release. If you need request/response today, send the reply via a separate topic and route the response back into an actor using a `ReceiverActor`.
+`MessengerActorRef::ask()` supports broker request/reply when wired with an `AskSupport` instance via `MessengerBridge::askSupport()`. Without it, `ask()` throws `UnsupportedOperationException`. See the [Request/reply over the broker](#requestreply-over-the-broker) chapter for the full walkthrough.
 
 ## Consuming into actors
 
@@ -449,6 +449,190 @@ bin/console nexus:messenger:consume-threads --threads=4 --limit=10000 --memory-l
 ```
 
 **Key differences from `nexus:messenger:consume`:** limits are per-thread (not per process), the transport is constructed inside each thread (not injected at wiring time), and signal handling relies on the process manager (SIGTERM) rather than `pcntl`. See the [nexus-messenger-console-swoole package page](/docs/packages/messenger-console-swoole) for the full contract and option reference.
+
+## Request/reply over the broker
+
+The bridge supports broker request/reply: an actor asks a question, the request travels over a broker transport, a responder processes it and publishes a reply to a dedicated reply queue, and the original fiber resumes with the reply object. Both sides can be Nexus actors or plain Symfony Messenger consumers.
+
+### Nexus↔Nexus walkthrough
+
+```php title="src/bootstrap.php"
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
+use Monadial\Nexus\Messenger\Ask\ReplyQueueLifecycle;
+use Monadial\Nexus\Messenger\Ask\TransportReplyChannelFactory;
+use Monadial\Nexus\Messenger\MessengerBridge;
+use Monadial\Nexus\Runtime\Duration;
+
+// --- Asker side ---
+
+$channelFactory = new TransportReplyChannelFactory(
+    $amqpFactory,
+    $serializer,
+    'amqp://broker/nexus-replies-{name}-{instance}?queue[ttl]=300000',
+    'orders-replies',
+    ReplyQueueLifecycle::Ephemeral,
+);
+
+$askSupport = MessengerBridge::askSupport($system, $channelFactory);
+$ordersOut  = MessengerBridge::producer($requestTransport, 'orders-out', askSupport: $askSupport);
+
+// Spawn a fiber-based actor that asks the broker
+$system->spawn(
+    Props::fromBehavior(Behavior::setup(static function ($ctx) use ($ordersOut): Behavior {
+        $ctx->scheduleOnce(Duration::millis(0), new DoWork());
+
+        return Behavior::receive(static function ($ctx, object $msg) use ($ordersOut): Behavior {
+            if ($msg instanceof DoWork) {
+                /** @var Pong $reply */
+                $reply = $ordersOut->ask(new Ping('hello'), Duration::seconds(10))->await();
+                $ctx->log()->info('Got reply', ['body' => $reply->body]);
+            }
+
+            return Behavior::same();
+        });
+    })),
+    'asker',
+);
+
+// --- Responder side (separate process or separate actor) ---
+
+$replySenders = new MapReplySenderLocator(['orders-replies' => $replyTransport]);
+
+$system->spawn(
+    MessengerBridge::receiverProps(
+        $requestTransport,
+        new MapMessageRouter([Ping::class => $pingHandlerActor]),
+        replySenders: $replySenders,
+    ),
+    'orders-receiver',
+);
+```
+
+The responder actor receives `Ping` and replies via `$ctx->sender()`:
+
+```php title="src/PingHandlerActor.php"
+use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\ActorHandler;
+
+final class PingHandlerActor implements ActorHandler
+{
+    public function handle(ActorContext $ctx, object $message): Behavior
+    {
+        if ($message instanceof Ping) {
+            // $ctx->sender() is a MessengerReplyRef — tell() publishes the reply
+            // to the reply transport and acks the original broker envelope.
+            $ctx->sender()?->tell(new Pong('ok'));
+        }
+
+        return Behavior::same();
+    }
+}
+```
+
+**Deferred reply — always capture `$ctx->sender()` during the ask-message handler.** The sender is per-envelope and is only available while the ask message is being processed. If you schedule a self-message to reply asynchronously, capture the sender ref first:
+
+```php title="src/AsyncResponderActor.php"
+public function handle(ActorContext $ctx, object $message): Behavior
+{
+    if ($message instanceof Ping) {
+        // Capture the reply ref NOW — it is only set on this message's envelope.
+        $replyTo = $ctx->sender();
+
+        // Schedule async work; $replyTo stays in scope via closure capture.
+        $ctx->scheduleOnce(Duration::millis(50), new DoWorkAndReply($replyTo));
+    }
+
+    if ($message instanceof DoWorkAndReply) {
+        $message->replyTo?->tell(new Pong('deferred-ok'));
+    }
+
+    return Behavior::same();
+}
+```
+
+A scheduled self-message (`Poll`, `DoWork`, etc.) has no sender — `$ctx->sender()` returns `null` on those envelopes.
+
+### Plain Symfony responder (AMQP interop)
+
+Any Symfony Messenger consumer can answer a Nexus ask using only two headers on the reply envelope. No Nexus consumer classes are needed on the responder side.
+
+```php title="src/ForeignResponder.php"
+// The request envelope carries two headers on the wire:
+//   X-Nexus-Correlation-Id  — the correlation ID to echo back
+//   X-Nexus-Reply-To        — a LOGICAL name; resolve it via your own configured map
+//                             NEVER construct a transport DSN from the wire value (SSRF hardening)
+
+foreach ($requestTransport->get() as $requestEnvelope) {
+    $encoded = $serializer->encode($requestEnvelope);
+    $headers = $encoded['headers'];
+
+    $correlationId = $headers['X-Nexus-Correlation-Id'] ?? null;
+    $replyTo       = $headers['X-Nexus-Reply-To'] ?? null;
+
+    if ($correlationId === null || $replyTo === null) {
+        $requestTransport->ack($requestEnvelope);
+        continue;
+    }
+
+    // Resolve via your own static map — never pass $replyTo directly to a transport factory.
+    $replySenders = ['orders-replies' => $replyTransport];
+    $sender = $replySenders[$replyTo] ?? null;
+
+    if ($sender === null) {
+        $requestTransport->reject($requestEnvelope);
+        continue;
+    }
+
+    // Build and send the reply envelope: copy the correlation ID, set the type header.
+    $encodedReply = [
+        'body'    => serialize(new Pong('foreign-pong')),
+        'headers' => [
+            'type'                   => 'pong',
+            'X-Nexus-Correlation-Id' => $correlationId,
+        ],
+    ];
+    $sender->send($serializer->decode($encodedReply));
+    $requestTransport->ack($requestEnvelope);
+}
+```
+
+The two headers and their wire semantics are the only contract a plain responder needs. The `X-Nexus-Reply-To` value is a logical queue name — the responder must resolve it through its own configured sender map. Never construct a transport from a wire-supplied string.
+
+### Reply channel lifecycle
+
+| Lifecycle | Queue created | Queue torn down | Use when |
+|---|---|---|---|
+| `Ephemeral` | By Nexus on first ask | Left to broker (TTL / auto-delete) | Broker supports per-queue TTL or auto-delete. Default. |
+| `DeleteOnShutdown` | By Nexus on first ask | Best-effort via `reset()` on `AskSupport::close()` | You control the broker and can tolerate best-effort cleanup. |
+| `Persistent` | Pre-provisioned externally | Never | Queue creation is slow or costly (SQS). **Warning:** all instances sharing the queue compete for replies. Use only with a single consumer per channel name. Do not use `{instance}` in the DSN template. |
+
+:::tip SQS
+On AWS SQS, prefer `Persistent`: SQS queue creation is an asynchronous API call that takes several seconds and has per-queue costs. Pre-provision the reply SQS URL and reference it as the Persistent DSN.
+:::
+
+### Wiring with ConsumeCommand
+
+`ConsumeCommand` (from `nexus-messenger-console`) accepts a `ReplySenderLocator` as the last constructor argument:
+
+```php title="bin/worker.php"
+use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
+use Monadial\Nexus\Messenger\Console\ConsumeCommand;
+
+$app->add(new ConsumeCommand(
+    $runtime,
+    $requestTransport,
+    $consumerSetup,
+    replySenders: new MapReplySenderLocator([
+        'orders-replies' => $replyTransport,
+    ]),
+));
+```
+
+This is a constructor parameter, not a command-line option — the locator is configured at wiring time.
 
 ## Complete runnable example
 

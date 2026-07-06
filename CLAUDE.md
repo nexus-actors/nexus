@@ -362,13 +362,18 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 
 Two-way bridge to standalone `symfony/messenger` transports (no framework-bundle, no console).
 
-- `MessengerActorRef<T>` — `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport, `ask()` throws `UnsupportedOperationException` (v1). Messages need `#[MessageType]` (Psalm-enforced).
+- `MessengerActorRef<T>` — `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport; `ask()` requires `AskSupport` (throws `UnsupportedOperationException` without it). Messages need `#[MessageType]` (Psalm-enforced).
 - `MessengerGateway` — explicit `publish(object, array $stamps = [])` egress service.
-- `ReceiverActor` — supervised poll→route→ack loop per `ReceiverInterface`. Acks only on `EnqueueResult::Accepted` (via the core `BackpressureCapable` seam); backpressured/dropped enqueues are not acked so the broker redelivers (at-least-once). Unroutable messages: `reject()` by default, dead-letters opt-in (`ReceiverActorConfig`).
+- `ReceiverActor` — supervised poll→route→ack loop per `ReceiverInterface`. Acks only on `EnqueueResult::Accepted` (via the core `BackpressureCapable` seam); backpressured/dropped enqueues are not acked so the broker redelivers (at-least-once). Unroutable messages: `reject()` by default, dead-letters opt-in (`ReceiverActorConfig`). Ask path: when a `ReplySenderLocator` is configured and an envelope carries both `CorrelationIdStamp` and `ReplyToStamp`, delivers with a `MessengerReplyRef` as the sender; process-ack fires only after responder replies; `askPendingTimeout` (default 30 s) guards against non-replying actors.
 - `MessageRouter` — pluggable inbound routing: `MapMessageRouter` (class → ref, default), `StampMessageRouter` (TargetActorPathStamp → ref; cluster seam).
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer` + `TypeRegistry`; bridge stamps travel as headers.
 - `LifecycleWatchdog` — worker recycling: triggers graceful `ActorSystem::shutdown()` on memory/uptime/message-count thresholds (`LifecycleThresholds`).
-- `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `spawnReceivers(ActorSystem, int $count, string $namePrefix, ...)` (N competing in-process consumers over one transport), `watchdogProps()`.
+- `MessengerBridge` — static wiring facade: `producer()`, `gateway()`, `receiverProps()`, `spawnReceivers(ActorSystem, int $count, string $namePrefix, ...)` (N competing in-process consumers over one transport), `watchdogProps()`, `askSupport(ActorSystem, ReplyChannelFactory, ?int $maxPending, ?Duration $replyPollInterval, ...)`.
+- `AskSupport` — broker ask/reply orchestrator: lazy `ReplyChannel` lifecycle, `PendingAskRegistry` (default cap 10 000), timeout scheduling. Created via `MessengerBridge::askSupport()`.
+- `TransportReplyChannelFactory` — builds reply channels from a DSN template; `{instance}` and `{name}` placeholders; `ReplyQueueLifecycle` enum (Ephemeral/DeleteOnShutdown/Persistent). Persistent: no setup/teardown, single-consumer per queue.
+- `MapReplySenderLocator` — static map from logical channel name → `SenderInterface`; SSRF hardening: wire `X-Nexus-Reply-To` value is a lookup key only, never a DSN.
+- `MessengerReplyRef` — reply-only `ActorRef`; `tell()` publishes reply + fires ack callback; `ask()` throws `UnsupportedOperationException`. Injected as `$ctx->sender()` by `ReceiverActor` on ask envelopes.
+- Wire headers: `X-Nexus-Correlation-Id` (correlation ID), `X-Nexus-Reply-To` (logical channel name). Plain Symfony responders need only these two headers — no Nexus consumer classes required on the responder side.
 
 ### Messenger Console (nexus-messenger-console)
 

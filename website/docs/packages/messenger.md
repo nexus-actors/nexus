@@ -14,16 +14,23 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 
 ## What's in this package
 
-- `MessengerActorRef<T>` — location-transparent `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport
+- `MessengerActorRef<T>` — location-transparent `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport; `ask()` is enabled when an `AskSupport` is configured (throws `UnsupportedOperationException` without one)
 - `MessengerGateway` — explicit `publish()` egress service over the same sender
-- `ReceiverActor` — supervised poll→route→ack loop, one per Messenger `ReceiverInterface`
-- `ReceiverActorConfig` — poll interval and unroutable policy (reject vs dead letters)
+- `ReceiverActor` — supervised poll→route→ack loop, one per Messenger `ReceiverInterface`; handles ask envelopes when a `ReplySenderLocator` is configured
+- `ReceiverActorConfig` — poll interval, unroutable policy, and ask pending timeout (default 30 s)
 - `MessageRouter` — pluggable inbound routing; `MapMessageRouter` (message class → ref) is the default, `StampMessageRouter` (target-path stamp → ref) is the cluster seam
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer`
 - `LifecycleWatchdog` + `LifecycleThresholds` — worker recycling via graceful shutdown on memory/uptime/message-count limits
-- `MessengerBridge` — static wiring facade (`producer()`, `gateway()`, `receiverProps()`, `spawnReceivers()`, `watchdogProps()`)
+- `MessengerBridge` — static wiring facade (`producer()`, `gateway()`, `receiverProps()`, `spawnReceivers()`, `watchdogProps()`, `askSupport()`)
+- `AskSupport` — orchestrates broker ask/reply: lazy reply channel lifecycle, `PendingAskRegistry`, and timeout scheduling; wired via `MessengerBridge::askSupport()`
+- `PendingAskRegistry` — first-reply-wins registry for pending ask futures (default capacity: 10 000)
+- `ReplyQueueLifecycle` — enum: `Ephemeral` (broker TTL/auto-delete), `DeleteOnShutdown` (best-effort teardown on close), `Persistent` (pre-provisioned; single consumer per queue)
+- `TransportReplyChannelFactory` — builds reply channels from a DSN template via a Messenger transport factory; supports `{instance}` and `{name}` placeholders
+- `MapReplySenderLocator` — static map from logical channel name to `SenderInterface`; SSRF-safe: wire values resolve via this map only, never as DSNs
+- `MessengerReplyRef` — reply-only `ActorRef` that publishes the reply to the configured sender and fires the process-ack; injected as `$ctx->sender()` by `ReceiverActor`
+- `CorrelationIdStamp` / `ReplyToStamp` — outbound ask stamps; travel as `X-Nexus-Correlation-Id` and `X-Nexus-Reply-To` headers on the wire
 - `SourceActorPathStamp` / `TargetActorPathStamp` / `TraceContextStamp` — provenance, routing, and trace-context stamps
-- `UnsupportedOperationException` — thrown by `MessengerActorRef::ask()` (broker request/reply is deferred beyond v1)
+- `UnsupportedOperationException` — thrown by `MessengerActorRef::ask()` when no `AskSupport` is configured, and by `MessengerReplyRef::ask()` (reply refs are send-only)
 
 ## Install
 
@@ -42,7 +49,65 @@ $orders->tell(new OrderPlaced('A-42')); // identical to a local tell()
 MessengerBridge::gateway($transport)->publish(new OrderPlaced('A-42'));
 ```
 
-Messages sent through `MessengerActorRef::tell()` must carry `#[MessageType]` (enforced by the nexus-psalm plugin). `ask()` throws `UnsupportedOperationException` in v1.
+Messages sent through `MessengerActorRef::tell()` must carry `#[MessageType]` (enforced by the nexus-psalm plugin). For broker request/reply, see the [Request/reply (ask)](#requestreply-ask) section below.
+
+## Request/reply (ask)
+
+`MessengerActorRef::ask()` enables broker request/reply when wired with an `AskSupport` instance. Without it the call throws `UnsupportedOperationException`.
+
+```php
+// 1. Build a reply channel factory (once per process)
+use Monadial\Nexus\Messenger\Ask\ReplyQueueLifecycle;
+use Monadial\Nexus\Messenger\Ask\TransportReplyChannelFactory;
+use Monadial\Nexus\Messenger\MessengerBridge;
+
+$channelFactory = new TransportReplyChannelFactory(
+    $amqpFactory,
+    $serializer,
+    'amqp://broker/replies-{name}-{instance}?queue[ttl]=60000',
+    'orders-replies',
+    ReplyQueueLifecycle::Ephemeral,
+);
+
+// 2. Wire AskSupport and the producer
+$askSupport = MessengerBridge::askSupport($system, $channelFactory);
+$ref = MessengerBridge::producer($requestTransport, 'orders-out', askSupport: $askSupport);
+
+// 3. On the responder side — pass a ReplySenderLocator to receiverProps()
+use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
+
+$system->spawn(
+    MessengerBridge::receiverProps(
+        $transport,
+        $router,
+        replySenders: new MapReplySenderLocator(['orders-replies' => $replyTransport]),
+    ),
+    'orders-receiver',
+);
+
+// 4. Ask — must be called inside a fiber
+$reply = $ref->ask(new Ping('hello'), Duration::seconds(5))->await();
+```
+
+### Reply channel lifecycle
+
+| Lifecycle | Queue created by Nexus | Torn down by Nexus | Notes |
+|---|---|---|---|
+| `Ephemeral` | Yes — on first ask | No — left to broker TTL / auto-delete | Default. Requires the broker to support per-queue TTL or auto-delete. |
+| `DeleteOnShutdown` | Yes — on first ask | Best-effort on `AskSupport::close()` | `close()` calls `reset()` on the transport if available; broker-side TTL remains the authoritative backstop for crashed processes. |
+| `Persistent` | No — pre-provisioned | Never | For SQS and brokers where queue creation is slow or costly. **Single consumer per channel name**: all instances sharing the queue compete for replies. Do not use `{instance}` in the DSN template. |
+
+:::tip SQS and slow queue creation
+On AWS SQS, prefer `Persistent`: queue creation is an asynchronous API call that takes several seconds and incurs per-queue costs. Pre-provision the reply queue and reference it by name in the DSN.
+:::
+
+### Ask semantics
+
+- **At-least-once publish.** Both request and reply travel over a broker transport; either can be redelivered.
+- **First-reply-wins.** The `PendingAskRegistry` resolves the future on the first matching reply; duplicate or late replies are acked and dropped silently.
+- **Timeout does not cancel remote work.** When the deadline passes, `AskTimeoutException` fails the future — but the responder continues and will publish a reply that is simply dropped. Build idempotent responders.
+- **Capacity fail-fast.** When the registry is at `maxPending` (default 10 000), `AskCapacityExceededException` is thrown before any message is sent. Shed load at the call site.
+- **Process-ack.** `ReceiverActor` holds the broker envelope un-acked until the responder calls `$ctx->sender()->tell($reply)`. If the responder does not reply within `askPendingTimeout` (default 30 s), the envelope is rejected for redelivery.
 
 ## Consumer — broker → actor
 
@@ -108,8 +173,17 @@ Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 
 | `nexus.messenger.enqueue.backpressured` | Consumer | Incremented each time a full mailbox causes a poll pause |
 | `nexus.messenger.enqueue.dropped` | Consumer | Incremented when the target mailbox is closed or drops the message; it stays un-acked for redelivery |
 | `nexus.messenger.worker.recycles` | Watchdog | Incremented when a threshold breach triggers graceful shutdown |
+| `nexus.messenger.asks.sent` | Producer (ask) | Incremented when an ask request is published to the transport |
+| `nexus.messenger.asks.resolved` | Reply consumer | Incremented when an ask future is resolved with a matching reply |
+| `nexus.messenger.asks.timed_out` | Producer (ask) | Incremented when an ask expires without receiving a reply |
+| `nexus.messenger.asks.capacity_rejected` | Producer (ask) | Incremented when an ask is rejected because the pending registry is at capacity |
+| `nexus.messenger.asks.pending` | Reply consumer | **Gauge** — current number of in-flight asks awaiting a reply |
+| `nexus.messenger.asks.unroutable_reply_to` | Consumer | Incremented when an ask envelope is rejected because the reply-to channel is not in the `ReplySenderLocator` |
+| `nexus.messenger.asks.responder_expired` | Consumer | Incremented when a pending ask envelope is rejected for redelivery because the responder did not reply within `askPendingTimeout` |
+| `nexus.messenger.replies.sent` | Consumer (responder) | Incremented when a reply is published back to the requester transport |
+| `nexus.messenger.replies.dropped` | Reply consumer | Incremented when a reply envelope is dropped — missing `CorrelationIdStamp` or unknown correlation ID |
 
-All counters carry a `nexus.message.type` attribute with the message class name.
+All counters carry a `nexus.message.type` attribute with the message class name, except `nexus.messenger.asks.pending` (gauge), `nexus.messenger.asks.timed_out`, and `nexus.messenger.asks.responder_expired` (correlation IDs are high-cardinality and excluded).
 
 ### Spans
 
@@ -118,7 +192,7 @@ All counters carry a `nexus.message.type` attribute with the message class name.
 | `messenger.send` | Producer | `messaging.system`, `nexus.message.type`, `nexus.messenger.sender` |
 | `messenger.receive` | Consumer | `messaging.system`, `nexus.message.type`, `nexus.messenger.outcome` |
 
-`nexus.messenger.outcome` values: `acked`, `backpressured`, `dead_lettered`, `dropped`, `rejected`.
+`nexus.messenger.outcome` values: `acked`, `ask_already_pending`, `ask_non_local`, `ask_pending`, `backpressured`, `dead_lettered`, `dropped`, `rejected`, `reply_to_rejected`.
 
 ### PSR-14 events
 
@@ -131,6 +205,10 @@ All events live in `Monadial\Nexus\Messenger\Event`.
 | `MessageRejected` | An unroutable message is rejected | `$message` |
 | `MessageDeadLettered` | An unroutable message goes to dead letters | `$message` |
 | `WorkerRecyclingTriggered` | Just before watchdog shuts the system down | `$reason` |
+| `AskStarted` | After an ask request is published to the transport | `$message`, `$correlationId` |
+| `AskResolved` | After a reply arrives and the ask future is resolved | `$correlationId`, `$reply` |
+| `AskTimedOut` | After an ask deadline passes without a reply | `$correlationId` |
+| `ReplyPublished` | After a responder publishes a reply back to the transport | `$message`, `$correlationId` |
 
 ## See also
 

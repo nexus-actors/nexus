@@ -9,7 +9,7 @@ related:
 
 # Configuration reference
 
-This page documents every configuration value object in Nexus: `MailboxConfig`, `OverflowStrategy`, `SupervisionStrategy`, `WorkerPoolConfig`, and `SwooleConfig`.
+This page documents every configuration value object in Nexus: `MailboxConfig`, `OverflowStrategy`, `SupervisionStrategy`, `WorkerPoolConfig`, `SwooleConfig`, `ReceiverActorConfig`, `LifecycleThresholds`, `ReplyQueueLifecycle`, and `AskSupport`.
 
 ## MailboxConfig
 
@@ -221,7 +221,7 @@ $config = ReceiverActorConfig::default()
 
 | Method | Description |
 |---|---|
-| `ReceiverActorConfig::default()` | `pollInterval` = 100 ms, `unroutablePolicy` = `Reject`. |
+| `ReceiverActorConfig::default()` | `pollInterval` = 100 ms, `unroutablePolicy` = `Reject`, `askPendingTimeout` = 30 s. |
 
 ### Modifier methods
 
@@ -229,6 +229,7 @@ $config = ReceiverActorConfig::default()
 |---|---|---|
 | `withPollInterval(Duration $pollInterval)` | `ReceiverActorConfig` | Override how long the actor waits before the next poll when idle or backpressured. |
 | `withUnroutablePolicy(UnroutablePolicy $policy)` | `ReceiverActorConfig` | Override what happens to messages that `MessageRouter::route()` returns `null` for. |
+| `withAskPendingTimeout(Duration $timeout)` | `ReceiverActorConfig` | Override the deadline after which an un-answered ask envelope is rejected for redelivery. |
 
 ### Parameters
 
@@ -236,6 +237,74 @@ $config = ReceiverActorConfig::default()
 |---|---|---|---|
 | `$pollInterval` | `Duration` | `Duration::millis(100)` | Wait between idle or backpressured poll ticks. Busy ticks re-poll immediately. |
 | `$unroutablePolicy` | `UnroutablePolicy` | `UnroutablePolicy::Reject` | `Reject` — reject back to transport; `DeadLetters` — forward to the dead-letters ref and ack. |
+| `$askPendingTimeout` | `Duration` | `Duration::seconds(30)` | How long the receiver holds a broker envelope un-acked while waiting for the responder actor to publish a reply. When the deadline passes, the envelope is rejected for redelivery and `nexus.messenger.asks.responder_expired` is incremented. |
+
+---
+
+## ReplyQueueLifecycle
+
+`ReplyQueueLifecycle` is a pure enum that controls how the reply queue behind a `TransportReplyChannelFactory` is created and torn down.
+
+| Case | Queue created by Nexus | Queue torn down by Nexus | Notes |
+|---|---|---|---|
+| `Ephemeral` | Yes — on the first ask call | No — left to the broker (TTL / auto-delete) | **Default.** Requires the broker to support per-queue TTL or auto-delete. |
+| `DeleteOnShutdown` | Yes — on the first ask call | Best-effort via `reset()` on `AskSupport::close()` | Broker-side TTL is the authoritative backstop; `reset()` only resets connection state, it does not delete the queue. |
+| `Persistent` | No — externally pre-provisioned | Never | Use for SQS and brokers where queue creation is slow or costly. **Warning:** all instances that share the queue name compete for replies. Use only one consumer per channel name. The DSN template must not contain `{instance}`. |
+
+```php
+use Monadial\Nexus\Messenger\Ask\ReplyQueueLifecycle;
+use Monadial\Nexus\Messenger\Ask\TransportReplyChannelFactory;
+
+$factory = new TransportReplyChannelFactory(
+    $transportFactory,
+    $serializer,
+    'amqp://broker/replies-{name}-{instance}?queue[ttl]=300000',
+    'orders-replies',
+    ReplyQueueLifecycle::Ephemeral,  // or DeleteOnShutdown, Persistent
+);
+```
+
+---
+
+## AskSupport
+
+`AskSupport` coordinates broker ask/reply on the asker side: it lazily creates the reply channel, spawns the `nexus-ask-replies` consumer actor, registers pending ask futures, and schedules timeouts. The idiomatic way to build one is `MessengerBridge::askSupport()`.
+
+```php title="src/bootstrap.php"
+use Monadial\Nexus\Messenger\MessengerBridge;
+use Monadial\Nexus\Runtime\Duration;
+
+$askSupport = MessengerBridge::askSupport(
+    system: $system,
+    factory: $channelFactory,
+    maxPending: 5_000,                     // optional; default 10 000
+    replyPollInterval: Duration::millis(10), // optional; default 20 ms
+    observability: $observability,          // optional; default NoopObservability
+    events: $eventDispatcher,               // optional; default null
+);
+
+$ref = MessengerBridge::producer($transport, 'orders-out', askSupport: $askSupport);
+```
+
+### MessengerBridge::askSupport() parameters
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `$system` | `ActorSystem` | — | The actor system; used to spawn the `nexus-ask-replies` consumer and schedule timeouts. |
+| `$factory` | `ReplyChannelFactory` | — | Factory that creates the reply transport channel. Typically a `TransportReplyChannelFactory`. |
+| `$maxPending` | `?int` | `10 000` | Maximum number of concurrent in-flight asks. When reached, `ask()` throws `AskCapacityExceededException` immediately. |
+| `$replyPollInterval` | `?Duration` | `Duration::millis(20)` | How often the `ReplyConsumer` actor polls the reply channel when idle. Busy ticks (replies found) re-poll immediately. |
+| `$observability` | `Observability` | `NoopObservability` | OTel instrumentation for ask metrics and spans. |
+| `$events` | `?EventDispatcherInterface` | `null` | PSR-14 dispatcher for `AskStarted`, `AskResolved`, `AskTimedOut`, and `ReplyPublished` events. |
+
+### AskSupport methods
+
+| Method | Description |
+|---|---|
+| `replyChannelName(): string` | Return the logical reply channel name, lazily creating the channel and spawning the consumer actor on the first call. Idempotent. |
+| `ask(object $message, Duration $timeout, string $correlationId): Future` | Register a pending ask and schedule its timeout. Throws `AskCapacityExceededException` at capacity. |
+| `registry(): PendingAskRegistry` | Access the underlying pending-ask registry (for monitoring or testing). |
+| `close(): void` | Release the reply channel. Call during `ActorSystem` shutdown to release transport resources. |
 
 ---
 
