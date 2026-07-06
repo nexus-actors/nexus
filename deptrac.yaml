@@ -152,6 +152,11 @@ deptrac:
         - type: directory
           value: packages/nexus-observability-persistence/src/.*
 
+    - name: ObservabilitySerialization
+      collectors:
+        - type: directory
+          value: packages/nexus-observability-serialization/src/.*
+
     - name: ObservabilityWorkerPool
       collectors:
         - type: directory
@@ -295,6 +300,9 @@ deptrac:
     ObservabilityPersistence:
       - Observability
       - Persistence
+    ObservabilitySerialization:
+      - Observability
+      - Serialization
     ObservabilityWorkerPool:
       - Core
       - Observability
