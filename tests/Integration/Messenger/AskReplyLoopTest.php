@@ -15,11 +15,13 @@ use Monadial\Nexus\Messenger\Ask\ReplyChannel;
 use Monadial\Nexus\Messenger\Ask\ReplyChannelFactory;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActor;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
+use Monadial\Nexus\Messenger\Event\AskTimedOut;
 use Monadial\Nexus\Messenger\Exception\AskCapacityExceededException;
 use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Exception\FutureException;
@@ -130,15 +132,14 @@ final class AskReplyLoopTest extends TestCase
         $system = ActorSystem::create('ask-timeout', $runtime);
 
         [$requestTransport, $replyTransport, $channelName] = $this->makeTransports();
-        $registry = new PendingAskRegistry();
         $observability = new RecordingObservability();
-        // Pass observability to AskSupport so the timeout callback can increment the counter.
-        $askSupport = new AskSupport(
+        $dispatcher = new RecordingDispatcher();
+        // Use the factory so observability and events forwarding is exercised.
+        $askSupport = MessengerBridge::askSupport(
             $system,
             $this->makeFactory($replyTransport, $channelName),
-            $registry,
-            Duration::millis(20),
-            $observability,
+            observability: $observability,
+            events: $dispatcher,
         );
 
         // Silent responder — never replies.
@@ -192,8 +193,10 @@ final class AskReplyLoopTest extends TestCase
         $system->run();
 
         self::assertInstanceOf(FutureException::class, $caught, 'ask() must throw on timeout');
-        self::assertSame(0, $registry->count(), 'Registry must be emptied after timeout');
+        self::assertSame(0, $askSupport->registry()->count(), 'Registry must be emptied after timeout');
         self::assertSame(1, $observability->meter->sum('nexus.messenger.asks.timed_out'));
+        self::assertCount(1, $dispatcher->events);
+        self::assertInstanceOf(AskTimedOut::class, $dispatcher->events[0]);
     }
 
     /**
@@ -216,12 +219,6 @@ final class AskReplyLoopTest extends TestCase
             Duration::millis(20),
         );
 
-        $ref = MessengerBridge::producer($requestTransport, 'orders-out', askSupport: $askSupport);
-
-        // Seed two reply envelopes with the same correlation ID onto the reply transport
-        // BEFORE the future is registered, so they arrive after registration.
-        // We do this lazily inside the fiber (after ask() registers the slot).
-        $correlationId = null;
         $observability = new RecordingObservability();
         $refWithObs = MessengerBridge::producer(
             $requestTransport,
@@ -398,7 +395,7 @@ final class AskReplyLoopTest extends TestCase
     private function makeFactory(InMemoryTransport $replyTransport, string $channelName): ReplyChannelFactory
     {
         return new class ($replyTransport, $channelName) implements ReplyChannelFactory {
-            public function __construct(private readonly InMemoryTransport $transport, private readonly string $name,) {}
+            public function __construct(private readonly InMemoryTransport $transport, private readonly string $name) {}
 
             public function create(): ReplyChannel
             {

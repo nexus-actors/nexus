@@ -126,7 +126,7 @@ final readonly class ReplyConsumer
             if ($resolved) {
                 self::swallow(static fn(): mixed => $ctx->meter()->counter(
                     'nexus.messenger.asks.resolved',
-                    '{message}',
+                    '{ask}',
                     'Ask requests successfully resolved with a reply',
                 )->add(1));
                 self::swallow(static fn(): mixed => $events?->dispatch(new AskResolved($corrStamp->id, $inner)));

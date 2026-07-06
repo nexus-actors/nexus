@@ -152,7 +152,10 @@ final readonly class MessengerActorRef implements ActorRef
             $envelope = $envelope->with(new SourceActorPathStamp((string) $this->sourcePath));
         }
 
+        $span = null;
+
         if ($this->observability->isEnabled()) {
+            $span = $this->startSpan($message, 'messenger.ask', 'ask');
             $envelope = $this->injectTraceContext($envelope);
         }
 
@@ -161,8 +164,11 @@ final readonly class MessengerActorRef implements ActorRef
         } catch (Throwable $e) {
             // Clean up the registered slot so the timeout never fires on a ghost entry.
             $this->askSupport->registry()->remove($correlationId);
+            $this->recordError($span, $e);
 
             throw $e;
+        } finally {
+            $this->safely(static fn(): mixed => $span?->end());
         }
 
         $this->safely(fn(): mixed => $this->observability->meter()->counter(
@@ -200,14 +206,14 @@ final readonly class MessengerActorRef implements ActorRef
         }
     }
 
-    private function startSpan(object $message): ?Span
+    private function startSpan(object $message, string $spanName = 'messenger.send', string $operation = 'send'): ?Span
     {
         try {
             return $this->observability->tracer()->startSpan(
-                'messenger.send',
+                $spanName,
                 SpanKind::Producer,
                 [
-                    'messaging.operation' => 'send',
+                    'messaging.operation' => $operation,
                     'messaging.system' => 'symfony-messenger',
                     'nexus.message.type' => $message::class,
                     'nexus.messenger.sender' => $this->senderName,

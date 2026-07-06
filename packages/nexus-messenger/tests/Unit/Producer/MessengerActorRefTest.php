@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Tests\Unit\Producer;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Messenger\Ask\AskSupport;
+use Monadial\Nexus\Messenger\Ask\PendingAskRegistry;
+use Monadial\Nexus\Messenger\Ask\ReplyChannel;
+use Monadial\Nexus\Messenger\Ask\ReplyChannelFactory;
 use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
@@ -16,10 +21,13 @@ use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingSender;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
+use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 #[CoversClass(MessengerActorRef::class)]
 final class MessengerActorRefTest extends TestCase
@@ -129,6 +137,67 @@ final class MessengerActorRefTest extends TestCase
 
         self::assertInstanceOf(TraceContextStamp::class, $stamp);
         self::assertSame(['traceparent' => 'fake-trace-id'], $stamp->carrier);
+    }
+
+    #[Test]
+    public function askRecordsSpanNamedMessengerAskAndEndsIt(): void
+    {
+        $runtime = new FiberRuntime();
+        $system = ActorSystem::create('test-ask-span', $runtime);
+        $replyTransport = new InMemoryTransport();
+        $channelName = 'test-replies';
+
+        $factory = new class ($replyTransport, $channelName) implements ReplyChannelFactory {
+            public function __construct(private readonly InMemoryTransport $transport, private readonly string $name,) {}
+
+            public function create(): ReplyChannel
+            {
+                $transport = $this->transport;
+                $name = $this->name;
+
+                return new class ($transport, $name) implements ReplyChannel {
+                    public function __construct(
+                        private readonly InMemoryTransport $transport,
+                        private readonly string $name,
+                    ) {}
+
+                    public function name(): string
+                    {
+                        return $this->name;
+                    }
+
+                    public function receiver(): ReceiverInterface
+                    {
+                        return $this->transport;
+                    }
+
+                    public function close(): void
+                    {
+                        // No-op: InMemoryTransport has no lifecycle to clean up.
+                    }
+                };
+            }
+        };
+
+        $askSupport = new AskSupport($system, $factory, new PendingAskRegistry(), Duration::millis(20));
+        $observability = new RecordingObservability();
+        $ref = new MessengerActorRef(new RecordingSender(), 'orders-out', null, $observability, null, $askSupport);
+
+        $ref->ask(new stdClass(), Duration::seconds(1));
+
+        self::assertCount(1, $observability->tracer->spans);
+
+        $span = $observability->tracer->spans[0];
+
+        self::assertSame('messenger.ask', $span->name);
+        self::assertSame(SpanKind::Producer, $span->kind);
+        self::assertSame([
+            'messaging.operation' => 'ask',
+            'messaging.system' => 'symfony-messenger',
+            'nexus.message.type' => stdClass::class,
+            'nexus.messenger.sender' => 'orders-out',
+        ], $span->attributes);
+        self::assertTrue($span->ended);
     }
 
     #[Test]
