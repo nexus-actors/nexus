@@ -142,6 +142,12 @@ $events = app(\Illuminate\Contracts\Events\Dispatcher::class);
 
 ---
 
+## Ask/reply
+
+The console worker also answers broker-based asks. `bin/console` wires a `MapReplySenderLocator(['replies' => $repliesTransport])` into `ConsumeCommand`, mapping the logical channel name `replies` to a second Redis Stream (`REPLY_STREAM`, default `replies`). Any asker — a Nexus `MessengerActorRef::ask()` or a plain Symfony producer — stamps its request with the `X-Nexus-Correlation-Id` and `X-Nexus-Reply-To` headers; the receiver then delivers the message with a reply ref as the sender, the responder actor answers via `$ctx->sender()?->tell(...)`, and the request is acked only after the reply is published (process-ack). The reply-to header carries a logical name only — reply destinations are always resolved through the configured locator, never constructed from wire values.
+
+---
+
 ## Environment variables
 
 | Variable          | Default              | Description |

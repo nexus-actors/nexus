@@ -14,6 +14,7 @@
  * Environment variables:
  *   REDIS_DSN         redis://redis:6379  (default)
  *   REDIS_STREAM      orders              (default)
+ *   REPLY_STREAM      replies             (default)
  *   CONSUMER_GROUP    nexus-workers       (default)
  */
 
@@ -24,6 +25,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Example\MessengerRedis\Actor\OrderProcessor;
 use Monadial\Nexus\Example\MessengerRedis\Event\StdoutDispatcher;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
 use Monadial\Nexus\Messenger\Console\CallbackConsumerSetup;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Console\ProduceCommand;
@@ -55,12 +57,19 @@ $serializer = new NexusMessengerSerializer(
 // ---------------------------------------------------------------------------
 // 2. Redis transport
 // ---------------------------------------------------------------------------
-$dsn    = (string) ($_SERVER['REDIS_DSN'] ?? 'redis://redis:6379');
-$stream = (string) ($_SERVER['REDIS_STREAM'] ?? 'orders');
-$group  = (string) ($_SERVER['CONSUMER_GROUP'] ?? 'nexus-workers');
+$dsn         = (string) ($_SERVER['REDIS_DSN'] ?? 'redis://redis:6379');
+$stream      = (string) ($_SERVER['REDIS_STREAM'] ?? 'orders');
+$replyStream = (string) ($_SERVER['REPLY_STREAM'] ?? 'replies');
+$group       = (string) ($_SERVER['CONSUMER_GROUP'] ?? 'nexus-workers');
 
 $connection = Connection::fromDsn($dsn . '/' . $stream, ['group' => $group]);
 $transport  = new RedisTransport($connection, $serializer);
+
+// Reply transport for broker ask/reply. Askers stamp X-Nexus-Reply-To with the
+// LOGICAL channel name "replies"; the locator below maps it to this transport —
+// wire values are never used to construct transports (SSRF hardening).
+$repliesConnection = Connection::fromDsn($dsn . '/' . $replyStream, ['group' => $group]);
+$repliesTransport  = new RedisTransport($repliesConnection, $serializer);
 
 // ---------------------------------------------------------------------------
 // 3. PSR-3 logger and PSR-14 dispatcher
@@ -90,6 +99,7 @@ $app->addCommand(new ConsumeCommand(
     }),
     logger: $logger,
     events: $events,
+    replySenders: new MapReplySenderLocator(['replies' => $repliesTransport]),
 ));
 
 $app->addCommand(new ProduceCommand($transport, $serializer, $typeRegistry));
