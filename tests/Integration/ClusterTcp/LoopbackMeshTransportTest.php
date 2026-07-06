@@ -8,6 +8,7 @@ use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackPeerLink;
 use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
@@ -20,6 +21,7 @@ use RuntimeException;
 
 #[CoversClass(LoopbackHub::class)]
 #[CoversClass(LoopbackMeshTransport::class)]
+#[CoversClass(LoopbackPeerLink::class)]
 final class LoopbackMeshTransportTest extends TestCase
 {
     /**
@@ -276,7 +278,35 @@ final class LoopbackMeshTransportTest extends TestCase
     }
 
     /**
-     * TDD SCENARIO 9: LoopbackMeshTransport implements MeshTransport.
+     * TDD SCENARIO 9: close() on the server transport unregisters its listener from the hub
+     * so subsequent connect() attempts to that endpoint fail.
+     */
+    #[Test]
+    public function connectingAfterServerClosesThrows(): void
+    {
+        $hub = new LoopbackHub();
+        $nodeA = new LoopbackMeshTransport($hub, new FiberRuntime());
+        $endpoint = new NodeEndpoint('127.0.0.1', 7009);
+
+        // Serve on nodeA
+        $nodeA->serve($endpoint, static function (PeerLink $link): void {});
+
+        // Create a client and verify connection works
+        $clientA = new LoopbackMeshTransport($hub, new FiberRuntime());
+        $link1 = $clientA->connect($endpoint);
+        self::assertNotNull($link1);
+
+        // Close the server
+        $nodeA->close();
+
+        // Create another client and verify connection fails
+        $clientB = new LoopbackMeshTransport($hub, new FiberRuntime());
+        $this->expectException(RuntimeException::class);
+        $clientB->connect($endpoint);
+    }
+
+    /**
+     * TDD SCENARIO 10: LoopbackMeshTransport implements MeshTransport.
      */
     #[Test]
     public function loopbackTransportImplementsMeshTransport(): void
