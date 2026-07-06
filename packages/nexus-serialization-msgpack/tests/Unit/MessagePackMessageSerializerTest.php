@@ -95,6 +95,7 @@ final class MessagePackMessageSerializerTest extends TestCase
 
         self::assertNotSame($bytes, $json);
         self::assertLessThan(strlen($json), strlen($bytes));
+        self::assertMatchesRegularExpression('/[\x00-\x1f\x80-\xff]/', $bytes);
     }
 
     #[Test]
