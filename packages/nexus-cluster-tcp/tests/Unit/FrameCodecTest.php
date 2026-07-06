@@ -233,6 +233,33 @@ final class FrameCodecTest extends TestCase
         self::assertSame($binaryPayload, $result['frames'][0]->payload);
     }
 
+    #[Test]
+    public function frameAtExactMaxFrameSizeBoundaryIsAccepted(): void
+    {
+        $codec = new FrameCodec(100);
+        // Frame with 99-byte payload + 1-byte type = 100-byte body (exactly at boundary)
+        $payload = str_repeat('x', 99);
+        $frame = new Frame(FrameType::Message, $payload);
+        $encoded = $codec->encode($frame);
+
+        $result = $codec->decodeStream($encoded);
+
+        self::assertCount(1, $result['frames']);
+        self::assertSame(FrameType::Message, $result['frames'][0]->type);
+        self::assertSame($payload, $result['frames'][0]->payload);
+        self::assertSame('', $result['rest']);
+    }
+
+    #[Test]
+    public function zeroLengthFrameBodyThrowsProtocolException(): void
+    {
+        $this->expectException(ProtocolException::class);
+
+        // Frame body length of 0 (invalid; minimum is 1 for type byte)
+        $buffer = pack('N', 0);
+        $this->codec->decodeStream($buffer);
+    }
+
     protected function setUp(): void
     {
         $this->codec = new FrameCodec();

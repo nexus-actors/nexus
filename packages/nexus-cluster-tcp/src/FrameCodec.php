@@ -84,6 +84,12 @@ final class FrameCodec
                 );
             }
 
+            if ($bodyLength < 1) {
+                throw new ProtocolException(
+                    sprintf('Frame body length %d is invalid; minimum is 1 (type byte).', $bodyLength),
+                );
+            }
+
             // Need 4-byte length prefix + body
             if (strlen($buffer) < 4 + $bodyLength) {
                 break;
