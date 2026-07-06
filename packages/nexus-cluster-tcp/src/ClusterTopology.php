@@ -100,91 +100,29 @@ final readonly class ClusterTopology
 
     public function withHeartbeatInterval(Duration $heartbeatInterval): self
     {
-        return new self(
-            clusterName: $this->clusterName,
-            self: $this->self,
-            bindEndpoint: $this->bindEndpoint,
-            advertiseEndpoint: $this->advertiseEndpoint,
-            seeds: $this->seeds,
-            heartbeatInterval: $heartbeatInterval,
-            phiThreshold: $this->phiThreshold,
-            gossipInterval: $this->gossipInterval,
-            reconnectInitialBackoff: $this->reconnectInitialBackoff,
-            reconnectMaxBackoff: $this->reconnectMaxBackoff,
-            singleNode: $this->singleNode,
-            tls: $this->tls,
-        );
+        return clone($this, ['heartbeatInterval' => $heartbeatInterval]);
     }
 
     public function withGossipInterval(Duration $gossipInterval): self
     {
-        return new self(
-            clusterName: $this->clusterName,
-            self: $this->self,
-            bindEndpoint: $this->bindEndpoint,
-            advertiseEndpoint: $this->advertiseEndpoint,
-            seeds: $this->seeds,
-            heartbeatInterval: $this->heartbeatInterval,
-            phiThreshold: $this->phiThreshold,
-            gossipInterval: $gossipInterval,
-            reconnectInitialBackoff: $this->reconnectInitialBackoff,
-            reconnectMaxBackoff: $this->reconnectMaxBackoff,
-            singleNode: $this->singleNode,
-            tls: $this->tls,
-        );
+        return clone($this, ['gossipInterval' => $gossipInterval]);
     }
 
     public function withPhiThreshold(float $phiThreshold): self
     {
-        return new self(
-            clusterName: $this->clusterName,
-            self: $this->self,
-            bindEndpoint: $this->bindEndpoint,
-            advertiseEndpoint: $this->advertiseEndpoint,
-            seeds: $this->seeds,
-            heartbeatInterval: $this->heartbeatInterval,
-            phiThreshold: $phiThreshold,
-            gossipInterval: $this->gossipInterval,
-            reconnectInitialBackoff: $this->reconnectInitialBackoff,
-            reconnectMaxBackoff: $this->reconnectMaxBackoff,
-            singleNode: $this->singleNode,
-            tls: $this->tls,
-        );
+        return clone($this, ['phiThreshold' => $phiThreshold]);
     }
 
     public function withReconnectBackoff(Duration $initialBackoff, Duration $maxBackoff): self
     {
-        return new self(
-            clusterName: $this->clusterName,
-            self: $this->self,
-            bindEndpoint: $this->bindEndpoint,
-            advertiseEndpoint: $this->advertiseEndpoint,
-            seeds: $this->seeds,
-            heartbeatInterval: $this->heartbeatInterval,
-            phiThreshold: $this->phiThreshold,
-            gossipInterval: $this->gossipInterval,
-            reconnectInitialBackoff: $initialBackoff,
-            reconnectMaxBackoff: $maxBackoff,
-            singleNode: $this->singleNode,
-            tls: $this->tls,
-        );
+        return clone($this, [
+            'reconnectInitialBackoff' => $initialBackoff,
+            'reconnectMaxBackoff' => $maxBackoff,
+        ]);
     }
 
     public function withTls(?TlsConfig $tls): self
     {
-        return new self(
-            clusterName: $this->clusterName,
-            self: $this->self,
-            bindEndpoint: $this->bindEndpoint,
-            advertiseEndpoint: $this->advertiseEndpoint,
-            seeds: $this->seeds,
-            heartbeatInterval: $this->heartbeatInterval,
-            phiThreshold: $this->phiThreshold,
-            gossipInterval: $this->gossipInterval,
-            reconnectInitialBackoff: $this->reconnectInitialBackoff,
-            reconnectMaxBackoff: $this->reconnectMaxBackoff,
-            singleNode: $this->singleNode,
-            tls: $tls,
-        );
+        return clone($this, ['tls' => $tls]);
     }
 }
