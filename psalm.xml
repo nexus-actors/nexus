@@ -10,6 +10,7 @@
     <projectFiles>
         <directory name="packages/nexus-app/src" />
         <directory name="packages/nexus-cluster/src" />
+        <directory name="packages/nexus-cluster-tcp/src" />
         <directory name="packages/nexus-core/src" />
         <directory name="packages/nexus-doctrine-dbal/src" />
         <directory name="packages/nexus-doctrine-orm/src" />
@@ -44,6 +45,17 @@
             staged files and can miss `Swoole\WebSocket\Frame` etc. Point at
             swoole/ide-helper so Psalm resolves those classes deterministically.
         -->
+        <!-- Swoole\Coroutine\Server and Server\Connection live in swoole_library (pure PHP),
+             not in swoole/ide-helper's native-ext stubs. Add them explicitly so Psalm
+             resolves these classes when analyzing nexus-cluster-tcp/src/Swoole/.
+             Client and Socket are native-ext classes; their stubs give Psalm the correct
+             return types (e.g. Client::connect():bool, Client::exportSocket():Socket|false,
+             Socket::recv():string|false) that the extension reflection alone does not always
+             expose at Psalm's analysis time. -->
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Coroutine/Client.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Coroutine/Socket.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole_library/src/core/Coroutine/Server.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole_library/src/core/Coroutine/Server/Connection.php" />
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Server.php" />
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/Frame.php" />
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/WebSocket/CloseFrame.php" />
@@ -80,6 +92,15 @@
                 <directory name="packages/nexus-http-toolkit/src" />
             </errorLevel>
         </PossiblyUnusedParam>
+
+        <!-- SwoolePeerLink::$clientOwner holds a Swoole\Coroutine\Client reference purely
+             to prevent PHP's GC from running Client::__destruct(), which closes the
+             underlying socket. The property is never read; holding it is the entire purpose. -->
+        <UnusedProperty>
+            <errorLevel type="suppress">
+                <file name="packages/nexus-cluster-tcp/src/Swoole/SwoolePeerLink.php" />
+            </errorLevel>
+        </UnusedProperty>
 
         <!-- Logger Mdc methods are public API surface — Psalm can't see
              user-code calls. -->
