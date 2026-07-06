@@ -23,6 +23,7 @@ jobs:
           - { local: 'nexus-core',                 remote: 'core' }
           - { local: 'nexus-serialization',        remote: 'serialization' }
           - { local: 'nexus-serialization-msgpack', remote: 'serialization-msgpack' }
+          - { local: 'nexus-observability-serialization', remote: 'observability-serialization' }
           - { local: 'nexus-runtime',              remote: 'runtime' }
           - { local: 'nexus-runtime-fiber',        remote: 'runtime-fiber' }
           - { local: 'nexus-runtime-swoole',       remote: 'runtime-swoole' }

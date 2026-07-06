@@ -32,6 +32,7 @@
             <directory>packages/nexus-observability-logger/tests/Unit</directory>
             <directory>packages/nexus-observability-otel/tests/Unit</directory>
             <directory>packages/nexus-observability-persistence/tests/Unit</directory>
+            <directory>packages/nexus-observability-serialization/tests/Unit</directory>
             <directory>packages/nexus-observability-worker-pool/tests/Unit</directory>
             <directory>packages/nexus-observability-doctrine/tests/Unit</directory>
         </testsuite>
@@ -143,6 +144,7 @@
             <directory>packages/nexus-observability-logger/src</directory>
             <directory>packages/nexus-observability-otel/src</directory>
             <directory>packages/nexus-observability-persistence/src</directory>
+            <directory>packages/nexus-observability-serialization/src</directory>
             <directory>packages/nexus-observability-worker-pool/src</directory>
             <directory>packages/nexus-observability-doctrine/src</directory>
             <directory>packages/nexus-observability-swoole/src</directory>
