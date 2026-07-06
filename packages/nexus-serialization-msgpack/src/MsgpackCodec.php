@@ -55,6 +55,7 @@ final readonly class MsgpackCodec
             return msgpack_pack($data);
         }
 
+        // rybakit defaults to FORCE_FLOAT64 — floats round-trip bit-exact
         return (new Packer())->pack($data);
     }
 
@@ -64,13 +65,27 @@ final readonly class MsgpackCodec
      * @return array<mixed>
      *
      * @throws UnexpectedValueException when the decoded value is not an array
+     *                                  or when trailing bytes are detected (pure path only)
+     *
+     * @note The native ext-msgpack backend does not detect trailing bytes — this is a pure-path-only check.
      */
     public function unpack(string $bytes): array
     {
-        /** @psalm-suppress UndefinedFunction */
-        $result = $this->useExtension
-            ? msgpack_unpack($bytes)
-            : (new BufferUnpacker($bytes))->unpack();
+        if ($this->useExtension) {
+            /** @psalm-suppress UndefinedFunction */
+            $result = msgpack_unpack($bytes);
+        } else {
+            $unpacker = new BufferUnpacker($bytes);
+            /** @psalm-suppress MixedAssignment */
+            $result = $unpacker->unpack();
+
+            if ($unpacker->hasRemaining()) {
+                throw new UnexpectedValueException(sprintf(
+                    'Unexpected trailing bytes after msgpack value (%d bytes remaining).',
+                    $unpacker->getRemainingCount(),
+                ));
+            }
+        }
 
         if (!is_array($result)) {
             throw new UnexpectedValueException(sprintf(
