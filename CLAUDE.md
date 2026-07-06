@@ -108,6 +108,7 @@ nexus-core (no dependencies — foundational)
 ├── nexus-runtime-step     → Core only (deterministic test runtime)
 ├── nexus-app              → Core only (PSR-11 bootstrap)
 ├── nexus-serialization    → Core only
+│   ├── nexus-serialization-msgpack → Serialization only (+ rybakit/msgpack; opt-in ext-msgpack for speed)
 │   ├── nexus-persistence  → Core, Serialization
 │   │   ├── nexus-persistence-dbal     → Persistence, Core, Serialization
 │   │   └── nexus-persistence-doctrine → Persistence, Core, Serialization

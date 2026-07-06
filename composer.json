@@ -26,6 +26,7 @@
         "psr/http-server-middleware": "^1.0",
         "psr/log": "^3.0",
         "psr/simple-cache": "^3.0",
+        "rybakit/msgpack": "^0.9",
         "symfony/console": "^8.0",
         "symfony/messenger": "^8.0",
         "symfony/uid": "^8.0"
@@ -59,6 +60,7 @@
             "Monadial\\Nexus\\Runtime\\Step\\": "packages/nexus-runtime-step/src/",
             "Monadial\\Nexus\\Runtime\\Swoole\\": "packages/nexus-runtime-swoole/src/",
             "Monadial\\Nexus\\Serialization\\": "packages/nexus-serialization/src/",
+            "Monadial\\Nexus\\Serialization\\Msgpack\\": "packages/nexus-serialization-msgpack/src/",
             "Monadial\\Nexus\\Psalm\\": "packages/nexus-psalm/src/",
             "Monadial\\Nexus\\Cluster\\": "packages/nexus-cluster/src/",
             "Monadial\\Nexus\\Messenger\\": "packages/nexus-messenger/src/",
@@ -98,6 +100,7 @@
             "Monadial\\Nexus\\Runtime\\Step\\Tests\\": "packages/nexus-runtime-step/tests/",
             "Monadial\\Nexus\\Runtime\\Swoole\\Tests\\": "packages/nexus-runtime-swoole/tests/",
             "Monadial\\Nexus\\Serialization\\Tests\\": "packages/nexus-serialization/tests/",
+            "Monadial\\Nexus\\Serialization\\Msgpack\\Tests\\": "packages/nexus-serialization-msgpack/tests/",
             "Monadial\\Nexus\\Psalm\\Tests\\": "packages/nexus-psalm/tests/",
             "Monadial\\Nexus\\Tests\\Integration\\": "tests/Integration/",
             "Monadial\\Nexus\\Tests\\Performance\\": "tests/Performance/",
