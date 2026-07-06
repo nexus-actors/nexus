@@ -404,8 +404,17 @@ final class MembershipService
 
             $mergedRecord = $merged->members[$key];
 
-            if ($mergedRecord->status === MemberStatus::Up) {
-                $events[] = new NodeUp($mergedRecord->address, $mergedRecord->endpoint);
+            $events[] = match ($mergedRecord->status) {
+                MemberStatus::Up => new NodeUp($mergedRecord->address, $mergedRecord->endpoint),
+                MemberStatus::Suspect => new NodeSuspected($mergedRecord->address, SuspicionReason::Gossip),
+                MemberStatus::Down => new NodeDown($mergedRecord->address),
+            };
+
+            if ($mergedRecord->status === MemberStatus::Suspect) {
+                $newSuspectSince[$key] ??= $mergedRecord->lastSeen;
+            } elseif ($mergedRecord->status === MemberStatus::Down) {
+                $merged = $merged->withoutNode($mergedRecord->address);
+                unset($newSuspectSince[$key]);
             }
         }
 

@@ -309,6 +309,77 @@ final class MembershipServiceTest extends TestCase
     }
 
     #[Test]
+    public function gossipMergeLearnsNewSuspectMemberEmitsNodeSuspected(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $now = $this->clock->now();
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $third->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Suspect->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $now,
+        );
+
+        self::assertTrue($t1->newView->has($third));
+        self::assertSame(MemberStatus::Suspect, $t1->newView->members[$third->toPathPrefix()]->status);
+        self::assertCount(1, $t1->events);
+        self::assertInstanceOf(NodeSuspected::class, $t1->events[0]);
+        self::assertSame(SuspicionReason::Gossip, $t1->events[0]->reason);
+        self::assertArrayHasKey($third->toPathPrefix(), $t1->newSuspectSince);
+    }
+
+    #[Test]
+    public function gossipMergeLearnsNewDownMemberEmitsNodeDown(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $third->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Down->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        self::assertFalse($t1->newView->has($third));
+        self::assertCount(1, $t1->events);
+        self::assertInstanceOf(NodeDown::class, $t1->events[0]);
+        self::assertArrayNotHasKey($third->toPathPrefix(), $t1->newSuspectSince);
+    }
+
+    #[Test]
     public function unexpectedLinkCloseSuspectsPeer(): void
     {
         $service = $this->service();
