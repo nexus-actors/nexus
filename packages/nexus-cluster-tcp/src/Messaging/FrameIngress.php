@@ -44,10 +44,6 @@ final class FrameIngress
 
     /**
      * @param (Closure(Frame): void)|null $fallback Optional handler for non-Message frames.
-     *
-     * @psalm-suppress MixedPropertyTypeCoercion The callable-to-Closure coercion via first-class
-     *                                           callable syntax is safe here; Psalm cannot infer
-     *                                           the specific Closure(Frame): void signature.
      */
     public function __construct(
         private readonly InboxRouter $router,
@@ -56,6 +52,11 @@ final class FrameIngress
         ?callable $fallback = null,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
+        /**
+         * @psalm-suppress MixedPropertyTypeCoercion The callable-to-Closure coercion via first-class
+         *                                           callable syntax is safe here; Psalm cannot infer
+         *                                           the specific Closure(Frame): void signature.
+         */
         $this->fallback = $fallback !== null
             ? $fallback(...)
             : null;

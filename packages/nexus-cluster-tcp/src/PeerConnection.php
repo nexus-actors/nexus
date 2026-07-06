@@ -59,6 +59,8 @@ final class PeerConnection
     /**
      * Enqueue a frame for delivery. If connected, sends immediately. If reconnecting,
      * buffers up to the queue cap; frames beyond the cap are dropped and counted.
+     * Overflow uses a drop-newest strategy: the incoming frame is discarded while
+     * already-buffered frames are retained.
      */
     public function sendFrame(Frame $frame): void
     {
@@ -120,13 +122,26 @@ final class PeerConnection
 
         try {
             $link = $this->transport->connect($this->endpoint);
-            $this->link = $link;
-            $this->flushQueue($link);
-            $this->wireLink($link);
         } catch (RuntimeException) {
             $this->runtime->scheduleOnce($currentBackoff, function () use ($currentBackoff): void {
                 $this->attemptConnect($this->growBackoff($currentBackoff));
             });
+
+            return;
+        }
+
+        $this->link = $link;
+        $this->wireLink($link);
+
+        try {
+            $this->flushQueue($link);
+        } catch (RuntimeException) {
+            if (!$this->intentionallyClosed) {
+                $this->link = null;
+                $this->runtime->scheduleOnce($this->initialBackoff, function (): void {
+                    $this->attemptConnect($this->initialBackoff);
+                });
+            }
         }
     }
 

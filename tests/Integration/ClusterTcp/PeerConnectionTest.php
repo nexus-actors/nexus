@@ -225,6 +225,78 @@ final class PeerConnectionTest extends TestCase
     }
 
     /**
+     * TDD SCENARIO 6: Frames queued while disconnected are flushed to the server on reconnect.
+     *
+     * Verifies that the outbound queue's purpose is actually realised: after peer death the
+     * client connection buffers frames, and on the next successful connect() those buffered
+     * frames are delivered in order via flushQueue().
+     *
+     * The server transport remains registered in the LoopbackHub throughout, so the second
+     * connect() succeeds with the same onAccept listener (new PeerLink, same endpoint).
+     */
+    #[Test]
+    public function bufferedFramesAreFlushedOnReconnect(): void
+    {
+        $runtime = new FiberRuntime();
+        $hub = new LoopbackHub();
+        $serverTransport = new LoopbackMeshTransport($hub, $runtime);
+        $clientTransport = new LoopbackMeshTransport($hub, $runtime);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(8006));
+
+        /** @var list<PeerLink> $serverLinks */
+        $serverLinks = [];
+        /** @var list<Frame> $serverReceived */
+        $serverReceived = [];
+
+        $serverTransport->serve(
+            $endpoint,
+            static function (PeerLink $link) use (&$serverLinks, &$serverReceived): void {
+                $serverLinks[] = $link;
+                $link->onFrame(static function (Frame $frame) use (&$serverReceived): void {
+                    $serverReceived[] = $frame;
+                });
+            },
+        );
+
+        $conn = new PeerConnection(
+            $endpoint,
+            $clientTransport,
+            $runtime,
+            Duration::millis(10),   // fast backoff so reconnect fires well before T=150ms
+            Duration::millis(100),
+        );
+
+        // At T=20ms: server closes its first accepted link (simulates peer death).
+        $runtime->scheduleOnce(
+            Duration::millis(20),
+            static function () use (&$serverLinks): void {
+                $serverLinks[0]?->close();
+            },
+        );
+
+        // At T=25ms: client has seen onClose (async but within same event-loop cycle after T=20ms)
+        // and $this->link is now null. sendFrame() must queue the frame, not drop it.
+        $runtime->scheduleOnce(
+            Duration::millis(25),
+            static function () use ($conn): void {
+                $conn->sendFrame(new Frame(FrameType::Ping, 'queued-while-down'));
+            },
+        );
+
+        // Shutdown at T=150ms; reconnect fires at approximately T=30-35ms, well before this.
+        $runtime->scheduleOnce(Duration::millis(150), static function () use ($runtime): void {
+            $runtime->shutdown(Duration::seconds(1));
+        });
+
+        $runtime->run();
+
+        self::assertCount(2, $serverLinks, 'Server should accept a second connection after peer death.');
+        self::assertSame(0, $conn->drops(), 'No frames should be dropped — queue cap not exceeded.');
+        self::assertCount(1, $serverReceived, 'Buffered frame must be delivered to server after reconnect.');
+        self::assertSame('queued-while-down', $serverReceived[0]->payload);
+    }
+
+    /**
      * TDD SCENARIO 5: Frames sent while reconnecting buffer up to the queue cap.
      * Frames beyond the cap are dropped and counted via drops().
      */
