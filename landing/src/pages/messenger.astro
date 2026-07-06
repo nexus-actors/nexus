@@ -89,6 +89,35 @@ $system->spawn(MessengerBridge::watchdogProps(
 // On breach: graceful shutdown, WorkerRecyclingTriggered event dispatched.
 // Your process manager restarts the process; the broker holds unacked messages.`;
 
+const askCode = `<?php
+use Monadial\\Nexus\\Messenger\\Ask\\MapReplySenderLocator;
+use Monadial\\Nexus\\Messenger\\Ask\\ReplyQueueLifecycle;
+use Monadial\\Nexus\\Messenger\\Ask\\TransportReplyChannelFactory;
+use Monadial\\Nexus\\Messenger\\MessengerBridge;
+use Monadial\\Nexus\\Runtime\\Duration;
+
+// 1. Build a reply channel factory — ephemeral queue, TTL-backed.
+$channelFactory = new TransportReplyChannelFactory(
+    $amqpFactory,
+    $serializer,
+    'amqp://broker/nexus-replies-{name}-{instance}?queue[ttl]=300000',
+    'orders-replies',
+    ReplyQueueLifecycle::Ephemeral,
+);
+
+// 2. Create AskSupport — spawns the reply-consumer actor lazily on the first ask().
+$askSupport = MessengerBridge::askSupport($system, $channelFactory);
+
+// 3. Wire it into the producer — ask() is now available.
+$ordersRef = MessengerBridge::producer($requestTransport, 'orders-out', askSupport: $askSupport);
+
+// 4. In your actor handler — identical call to a local ask().
+/** @var OrderConfirmed \\$reply */
+\\$reply = \\$ordersRef->ask(new PlaceOrder(\\$orderId), Duration::seconds(10))->await();
+
+// Responder side: plain Symfony (no Nexus dependency).
+// Reply by publishing to X-Nexus-Reply-To with X-Nexus-Correlation-Id echoed back.`;
+
 const traceCode = `<?php
 // TraceContextStamp carries the W3C traceparent across the broker boundary.
 // MessengerActorRef injects it on every tell(); ReceiverActor extracts it.
@@ -266,6 +295,37 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
     <CodeBlock code={traceCode} lang="php" title="distributed trace across a broker" />
   </section>
 
+  <!-- Request/reply over the broker -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Request/reply over the broker.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">MessengerActorRef::ask()</code> works over any
+        Messenger transport when wired with an
+        <code class="font-mono">AskSupport</code> instance. Correlation IDs and logical
+        reply-to channel names travel as
+        <code class="font-mono">X-Nexus-Correlation-Id</code> /
+        <code class="font-mono">X-Nexus-Reply-To</code> headers.
+        The original broker envelope is acked only after the responder publishes its reply —
+        crash-safe, at-least-once delivery end-to-end.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Timeout and return-type parity with local <code class="font-mono">ask()</code></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Ephemeral TTL-backed reply queues — no queue leak on restart</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> First-reply-wins dedup; bounded pending registry (default 10 000, fail-fast at capacity)</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Full <code class="font-mono">messenger.ask</code> OTel span + PSR-14 events</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Plain Symfony responders need only the two headers — no Nexus dependency on the responder side</li>
+      </ul>
+      <a
+        href={docsUrl('/guides/messenger-bridge#requestreply-over-the-broker')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Request/reply walkthrough →
+      </a>
+    </div>
+    <CodeBlock code={askCode} lang="php" title="bootstrap.php — ask/reply wiring" />
+  </section>
+
   <!-- PSR-14 events -->
   <section class="max-w-6xl mx-auto px-4 py-16">
     <div class="max-w-2xl mb-10">
@@ -338,18 +398,9 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
   <!-- What the bridge is not -->
   <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
     <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
-      <h2 class="text-2xl font-bold mb-4">What the bridge does not do.</h2>
-      <p class="text-slate-600 dark:text-slate-300 mb-4">
-        <code class="font-mono">ask()</code> is not supported on
-        <code class="font-mono">MessengerActorRef</code> in v1 — calling it throws
-        <code class="font-mono">UnsupportedOperationException</code> at runtime. Broker
-        request/reply requires correlation stamps and a reply transport — that pattern is
-        deferred beyond the initial release. For request/reply within a single process,
-        use a local <code class="font-mono">ActorRef</code> and
-        <code class="font-mono">ask()</code> as normal.
-      </p>
+      <h2 class="text-2xl font-bold mb-4">When not to use the bridge.</h2>
       <p class="text-slate-600 dark:text-slate-300">
-        The bridge is also not a replacement for Symfony Messenger's own workers.
+        The bridge is not a replacement for Symfony Messenger's own workers.
         If you have an existing Messenger-based application with no actor requirements,
         continue using Messenger directly. The bridge earns its complexity when you
         need actor supervision, backpressure propagation, or location transparency
