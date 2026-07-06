@@ -49,7 +49,7 @@ $msg = $serializer->deserialize($bytes, 'order.placed');
 
 Serialization requires the message class to be registered in the `TypeRegistry` (via `#[MessageType]` + `registerFromAttribute()` or explicit `register()`) and throws `MessageSerializationException` otherwise. Deserialization resolves `$type` through the registry first and falls back to treating it as a literal class name; malformed bytes or structurally wrong payloads throw `MessageDeserializationException`.
 
-Objects are normalized to arrays via a JSON round-trip before packing — the same shape Valinor maps back — so anything `json_encode()` can represent (including `JsonSerializable` value objects with a matching Valinor constructor) works.
+Objects are normalized to arrays with Valinor's array normalizer — the symmetric partner of the mapper used for hydration — before packing. Because both directions share Valinor's type rules, enums, `DateTimeInterface`, and nested value objects round-trip faithfully, unlike a naive `json_encode()`/`json_decode()` normalization.
 
 ## Codec fallback and trailing-byte safety
 

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Serialization\Msgpack\Tests\Unit;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
 use Monadial\Nexus\Serialization\Msgpack\MsgpackCodec;
+use Monadial\Nexus\Serialization\Msgpack\Tests\Fixture\MsgpackRichMessage;
+use Monadial\Nexus\Serialization\Msgpack\Tests\Fixture\MsgpackShipmentStatus;
 use Monadial\Nexus\Serialization\Msgpack\Tests\Fixture\MsgpackTestMessage;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -33,6 +36,28 @@ final class MessagePackMessageSerializerTest extends TestCase
         self::assertInstanceOf(MsgpackTestMessage::class, $restored);
         self::assertSame($original->text, $restored->text);
         self::assertSame($original->number, $restored->number);
+    }
+
+    #[Test]
+    public function richTypesRoundtripViaValinorNormalizer(): void
+    {
+        $registry = new TypeRegistry();
+        $registry->register(MsgpackRichMessage::class, 'msgpack.rich');
+        $serializer = new MessagePackMessageSerializer($registry, codec: new MsgpackCodec(false));
+
+        $original = new MsgpackRichMessage(
+            'shipped order',
+            new DateTimeImmutable('2026-07-06T18:00:00+00:00'),
+            MsgpackShipmentStatus::Shipped,
+        );
+
+        $bytes = $serializer->serialize($original);
+        $restored = $serializer->deserialize($bytes, 'msgpack.rich');
+
+        self::assertInstanceOf(MsgpackRichMessage::class, $restored);
+        self::assertSame('shipped order', $restored->text);
+        self::assertEquals($original->occurredAt, $restored->occurredAt);
+        self::assertSame(MsgpackShipmentStatus::Shipped, $restored->status);
     }
 
     #[Test]
