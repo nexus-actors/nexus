@@ -40,7 +40,8 @@ make test                # All test suites
 make test-unit           # Unit tests only (all packages)
 make test-fiber          # Fiber integration tests
 make test-swoole         # Swoole integration tests (uses php-swoole container)
-make test-cluster        # Cluster integration tests (uses php-swoole container)
+make test-cluster        # Cluster TCP integration tests (real sockets, php-swoole container)
+make test-cluster-loopback # Cluster TCP loopback tests (plain php container, no ext-swoole needed)
 make test-persistence    # Persistence unit + integration tests
 make test-serialization  # Serialization integration tests
 make mutation            # Infection mutation testing (min 80% MSI, 90% covered)
@@ -116,6 +117,7 @@ nexus-core (no dependencies — foundational)
 │       ├── nexus-messenger-console → Core, Messenger, Runtime, Serialization, Observability (+ symfony/console)
 │       └── nexus-messenger-console-swoole → Core, Messenger, MessengerConsole, Runtime, RuntimeSwoole, Serialization, WorkerPool, WorkerPoolSwoole (+ opis/closure)
 ├── nexus-cluster          → Core only (remote contracts)
+│   └── nexus-cluster-tcp      → Cluster, Core, Runtime, RuntimeSwoole, Serialization, SerializationMsgpack, Observability (Swoole TCP mesh; ext-swoole in suggest)
 ├── nexus-worker-pool      → Core, Runtime
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
 ├── nexus-psalm            → (standalone Psalm plugin)
@@ -359,6 +361,17 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 - `ClusterTransport` interface — `send(NodeAddress $target, string $data): void`. For future TCP inter-node transport.
 - `NodeDirectory` interface — Maps actor paths to `NodeAddress` for multi-machine routing.
 - `NodeHashRing` — Consistent hash ring mapping actor names to `NodeAddress` instances.
+
+### Cluster TCP Transport (nexus-cluster-tcp)
+
+Swoole TCP mesh implementation of `nexus-cluster` contracts (C1 track, in progress). ext-swoole is in `suggest`, not `require` — loopback/unit tests run in the plain `php` container.
+
+- `NodeEndpoint(host, port)` — Network endpoint VO; `fromString('host:port')` with port-range validation (0–65535).
+- `EndpointResolver` — Interface: `resolve(NodeAddress): ?NodeEndpoint`. Map grows via gossip.
+- `MapEndpointResolver` — Immutable resolver backed by a pre-built `array<string, NodeEndpoint>` keyed by `NodeAddress::toPathPrefix()`.
+- `MutableEndpointRegistry` — Mutable `EndpointResolver` with `register(NodeAddress, NodeEndpoint)`. Used by the membership service at runtime.
+- `TlsConfig(certFile, keyFile, ?caFile, verifyPeer)` — Optional TLS for Swoole SSL options.
+- `ClusterTopology` — Config VO: `clusterName`, `self` (NodeAddress), `bindEndpoint`/`advertiseEndpoint` (NAT-friendly), `seeds` (list<NodeEndpoint>), timing (`heartbeatInterval` 1 s, `gossipInterval` 1 s), `phiThreshold` 8.0, `reconnectInitialBackoff`/`reconnectMaxBackoff`. Factory + withers. Validation: clusterName non-empty; seeds non-empty unless `singleNode: true`.
 
 ### Messenger Bridge (nexus-messenger)
 

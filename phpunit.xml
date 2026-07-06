@@ -13,6 +13,7 @@
             <directory>packages/nexus-serialization/tests/Unit</directory>
             <directory>packages/nexus-serialization-msgpack/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
+            <directory>packages/nexus-cluster-tcp/tests/Unit</directory>
             <directory>packages/nexus-messenger/tests/Unit</directory>
             <directory>packages/nexus-messenger-console/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
@@ -59,6 +60,12 @@
         </testsuite>
         <testsuite name="integration-doctrine-swoole">
             <directory>tests/Integration/Doctrine/Swoole</directory>
+        </testsuite>
+        <testsuite name="integration-cluster">
+            <directory>tests/Integration/ClusterTcp</directory>
+        </testsuite>
+        <testsuite name="integration-cluster-loopback">
+            <directory>tests/Integration/ClusterTcp</directory>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -122,6 +129,7 @@
             <directory>packages/nexus-serialization/src</directory>
             <directory>packages/nexus-serialization-msgpack/src</directory>
             <directory>packages/nexus-cluster/src</directory>
+            <directory>packages/nexus-cluster-tcp/src</directory>
             <directory>packages/nexus-messenger/src</directory>
             <directory>packages/nexus-messenger-console/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>

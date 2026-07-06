@@ -43,8 +43,11 @@ test-serialization: ## Serialization integration tests
 test-messenger: ## Messenger integration tests
 	$(DC) vendor/bin/phpunit --testsuite=integration-messenger
 
-test-cluster: ## Cluster integration tests
+test-cluster: ## Cluster TCP integration tests (Swoole, real sockets)
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=integration-cluster
+
+test-cluster-loopback: ## Cluster TCP loopback integration tests (plain php container, no ext-swoole required)
+	$(DC) vendor/bin/phpunit --testsuite=integration-cluster-loopback
 
 test-doctrine: ## Doctrine DBAL pool + ORM pool + EntityBehavior integration tests
 	docker compose exec -T php-fiber vendor/bin/phpunit --testsuite=integration-doctrine-fiber
@@ -108,4 +111,4 @@ docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default P
 
 PORT ?= 8081
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve

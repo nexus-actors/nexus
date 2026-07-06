@@ -57,6 +57,11 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster/src/.*
 
+    - name: ClusterTcp
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/.*
+
     - name: Messenger
       collectors:
         - type: directory
@@ -215,6 +220,14 @@ deptrac:
       - WorkerPool
     Cluster:
       - Core
+    ClusterTcp:
+      - Cluster
+      - Core
+      - Observability
+      - Runtime
+      - RuntimeSwoole
+      - Serialization
+      - SerializationMsgpack
     Messenger:
       - Core
       - Observability
