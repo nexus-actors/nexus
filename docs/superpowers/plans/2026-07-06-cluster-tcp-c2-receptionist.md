@@ -28,8 +28,10 @@ Commit: `feat(cluster-tcp): service keys and replicated receptionist registry`
 - Loopback integration tests (Fiber): register on A → find on B (after ≤2 gossip rounds, TestClock-driven) returns ClusterRef → tell through it lands on A's actor; ask through a found ref; subscribe sees grow + shrink on node kill (view Down injection); death-watch auto-deregister propagates; anti-entropy heals a dropped delta (lossy loopback decorator swallows one gossip frame).
 Commit: `feat(cluster-tcp): receptionist with gossip replication and anti-entropy`
 
-### Task C2.3: Swoole socket proof + docs + PR
+### Task C2.3: Swoole socket proof + example + docs + landing + PR
 
 - One real-socket test (suite `integration-cluster`, timeouts): 2 nodes, register on A, find+tell from B, kill A, B's subscriber listing shrinks within give-up+gossip window.
-- Docs: receptionist sections on the cluster package page + guide (register/find/subscribe walkthrough, consistency caveats box, ServiceKey conventions), reference page `receptionist.md`, CLAUDE.md, CHANGELOG. Site build gate.
+- **Example**: extend `examples/nexus-cluster-tcp/` — node A registers its greeter under `ServiceKey::of('greeter')`; node B discovers via `Find` instead of `refFor()` (replace the manual wiring — the example should showcase the receptionist as the primary pattern, manual refs as the fallback note); subscriber printing listing changes on node kill; README updated.
+- **Comprehensive docs**: receptionist sections on the cluster package page + guide (register/find/subscribe walkthrough, consistency caveats box, ServiceKey conventions, subscription lifecycle), reference page `receptionist.md` + config additions, CLAUDE.md, CHANGELOG. PSR-3 logging documented (registration broadcast/heal/prune events at debug/info). Site build gate.
+- **Landing**: update `landing/src/pages/cluster.astro` — receptionist feature section (Find/Subscribe snippet verified against shipped API) replacing any "manual discovery" phrasing from C1; landing build gate.
 - Full battery; push; PR `feat: cluster receptionist — replicated service discovery` (stacked on C1's branch/PR if unmerged).
