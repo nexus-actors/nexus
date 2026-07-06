@@ -19,6 +19,7 @@
  *   CONSUMER_GROUP    nexus-workers       (default)
  *   RECEIVER_COUNT    3                   (default; competing consumers)
  *   MESSAGE_LIMIT     50                  (default; watchdog recycles after N messages)
+ *   SERIALIZER        php-native          (default; also: json, msgpack)
  *
  * Competing consumers:
  *   Each ReceiverActor is an independent Fiber that reads from the same
@@ -42,6 +43,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Example\MessengerRedis\Actor\OrderProcessor;
 use Monadial\Nexus\Example\MessengerRedis\Event\StdoutDispatcher;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Monadial\Nexus\Example\MessengerRedis\Serialization\SerializerFactory;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
 use Monadial\Nexus\Messenger\MessengerBridge;
@@ -49,7 +51,6 @@ use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
@@ -70,13 +71,16 @@ $logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
 $events = new StdoutDispatcher();
 
 // ---------------------------------------------------------------------------
-// 3. Serializer — explicit allow-list prevents PHP Object Injection (CWE-502)
+// 3. Serializer — SERIALIZER env picks the format (php-native | json | msgpack);
+//    the php-native path keeps the explicit unserialize allow-list (CWE-502).
+//    Pass an enabled Observability (e.g. from nexus-actors/observability-otel)
+//    to trace msgpack serialization via TracingMessageSerializer.
 // ---------------------------------------------------------------------------
 $typeRegistry = new TypeRegistry();
 $typeRegistry->registerFromAttribute(OrderPlaced::class);
 
 $serializer = new NexusMessengerSerializer(
-    new PhpNativeSerializer(allowedClasses: [OrderPlaced::class]),
+    SerializerFactory::fromEnvironment($typeRegistry, [OrderPlaced::class]),
     $typeRegistry,
 );
 

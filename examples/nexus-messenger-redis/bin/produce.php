@@ -14,14 +14,15 @@
  *   REDIS_STREAM   orders              (default)
  *   CONSUMER_GROUP nexus-workers       (default; the stream group is created
  *                                       automatically by the transport)
+ *   SERIALIZER     php-native          (default; also: json, msgpack)
  */
 
 declare(strict_types=1);
 
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Monadial\Nexus\Example\MessengerRedis\Serialization\SerializerFactory;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
@@ -29,13 +30,14 @@ use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
 require __DIR__ . '/../vendor/autoload.php';
 
 // ---------------------------------------------------------------------------
-// 1. Serializer — explicit allow-list prevents PHP Object Injection (CWE-502)
+// 1. Serializer — SERIALIZER env picks the format (php-native | json | msgpack);
+//    the php-native path keeps the explicit unserialize allow-list (CWE-502)
 // ---------------------------------------------------------------------------
 $typeRegistry = new TypeRegistry();
 $typeRegistry->registerFromAttribute(OrderPlaced::class);
 
 $serializer = new NexusMessengerSerializer(
-    new PhpNativeSerializer(allowedClasses: [OrderPlaced::class]),
+    SerializerFactory::fromEnvironment($typeRegistry, [OrderPlaced::class]),
     $typeRegistry,
 );
 

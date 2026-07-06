@@ -26,6 +26,7 @@ services:
       REDIS_DSN: "redis://redis:6379"
       REDIS_STREAM: "orders"
       CONSUMER_GROUP: "nexus-workers"
+      SERIALIZER: "${SERIALIZER:-php-native}"
     depends_on:
       redis:
         condition: service_healthy
