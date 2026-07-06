@@ -27,6 +27,7 @@ This is **a standalone Composer project** living inside the Nexus monorepo under
 | **At-least-once delivery** | Ack fires only after the actor mailbox accepts the envelope |
 | **Worker recycling** | `LifecycleWatchdog` shuts down gracefully after N messages; your process manager restarts the worker |
 | **Serialization allow-list** | `PhpNativeSerializer([OrderPlaced::class])` prevents PHP Object Injection (CWE-502) |
+| **Binary payloads** | `SERIALIZER=msgpack` switches to `MessagePackMessageSerializer` (compact MessagePack bodies) |
 | **PSR-14 events** | `StdoutDispatcher` prints `MessageConsumed` and `WorkerRecyclingTriggered` |
 | **PSR-3 logging** | Monolog forwarded to stdout, passed into `ActorSystem::create()` |
 | **Stable wire names** | `#[MessageType('order-placed')]` + `TypeRegistry` decouple the wire type from the PHP class name |
@@ -148,6 +149,32 @@ The console worker also answers broker-based asks. `bin/console` wires a `MapRep
 
 ---
 
+## Binary payloads with MessagePack
+
+The serializer is built in `src/Serialization/SerializerFactory.php`, shared by all three bin scripts. The `SERIALIZER` environment variable switches the message body format — producer and worker must use the same value:
+
+```bash
+# Publish and consume with MessagePack bodies
+SERIALIZER=msgpack docker compose run --rm app php bin/produce.php 20
+SERIALIZER=msgpack docker compose run --rm app php bin/worker.php
+```
+
+| Value | Serializer | Wire format |
+|-------|------------|-------------|
+| `php-native` (default) | `PhpNativeSerializer` with allow-list | PHP `serialize()` — PHP-only, fastest |
+| `json` | `ValinorMessageSerializer` | JSON — human-readable, interoperable |
+| `msgpack` | `MessagePackMessageSerializer` | MessagePack — compact binary, interoperable |
+
+**What to observe:**
+
+- **Payload size** — inspect the stream entries with `docker compose exec redis redis-cli XRANGE orders - + COUNT 1`. MessagePack bodies drop field-name quoting, braces, and whitespace; the `OrderPlaced` body shrinks noticeably versus JSON and PHP-native. Redis Streams carries raw binary bytes without any escaping.
+- **Serialization telemetry** — the msgpack path is wrapped in `TracingMessageSerializer` when an enabled `Observability` is passed to `SerializerFactory::fromEnvironment()`. The bin scripts default to no observability; wire `nexus-actors/observability-otel` and pass its `Observability` instance to see `serialization.serialize` / `serialization.deserialize` spans plus the `nexus.serialization.operations`, `nexus.serialization.bytes`, `nexus.serialization.duration`, and `nexus.serialization.failures` metrics — the bytes histogram makes the msgpack size drop directly measurable.
+- **Backend selection** — `MessagePackMessageSerializer` uses the native `ext-msgpack` extension when loaded and falls back to the pure-PHP `rybakit/msgpack` library otherwise (both are wire-compatible). This example's image has no ext-msgpack, so the pure-PHP path runs.
+
+> **Transport caveat:** Redis Streams (and AMQP, and Doctrine with a BLOB column) are binary-safe. Text-oriented transports — Amazon SQS most prominently — reject or mangle raw binary bodies; stick to `json` there or base64-encode the body at the transport boundary.
+
+---
+
 ## Environment variables
 
 | Variable          | Default              | Description |
@@ -157,6 +184,7 @@ The console worker also answers broker-based asks. `bin/console` wires a `MapRep
 | `CONSUMER_GROUP`  | `nexus-workers`      | Redis consumer group name |
 | `RECEIVER_COUNT`  | `3`                  | Number of competing ReceiverActors |
 | `MESSAGE_LIMIT`   | `50`                 | Watchdog recycles after this many messages |
+| `SERIALIZER`      | `php-native`         | Message body format: `php-native`, `json` (Valinor), or `msgpack` |
 
 ---
 
