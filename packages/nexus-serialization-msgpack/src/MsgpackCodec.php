@@ -56,7 +56,7 @@ final readonly class MsgpackCodec
         }
 
         // rybakit defaults to FORCE_FLOAT64 — floats round-trip bit-exact
-        return (new Packer())->pack($data);
+        return new Packer()->pack($data);
     }
 
     /**
