@@ -10,10 +10,15 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
 use Monadial\Nexus\Messenger\Console\CallbackConsumerSetup;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
+use Monadial\Nexus\Messenger\Console\Tests\Unit\Fixture\PingMessage;
+use Monadial\Nexus\Messenger\Console\Tests\Unit\Fixture\PongMessage;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -152,6 +157,64 @@ final class ConsumeCommandTest extends TestCase
         self::assertSame(Command::SUCCESS, $exitCode);
         self::assertCount(2, $received);
         self::assertCount(2, $transport->getAcknowledged());
+    }
+
+    #[Test]
+    public function askStampedMessageIsRepliedViaConfiguredReplySenderLocator(): void
+    {
+        $transport = new InMemoryTransport();
+        $replyTransport = new InMemoryTransport();
+
+        $transport->send(
+            (new Envelope(new PingMessage('ask-1')))
+                ->with(new CorrelationIdStamp('console-corr-1'))
+                ->with(new ReplyToStamp('replies')),
+        );
+
+        $command = new ConsumeCommand(
+            new FiberRuntime(),
+            $transport,
+            new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
+                $ref = $system->spawn(
+                    Props::fromBehavior(Behavior::receive(
+                        static function (ActorContext $ctx, object $msg): Behavior {
+                            if ($msg instanceof PingMessage) {
+                                $ctx->sender()?->tell(new PongMessage('pong-' . $msg->id));
+                            }
+
+                            return Behavior::same();
+                        },
+                    )),
+                    'responder',
+                );
+
+                return new MapMessageRouter([PingMessage::class => $ref]);
+            }),
+            replySenders: new MapReplySenderLocator(['replies' => $replyTransport]),
+        );
+
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute([
+            '--limit' => '1',
+            '--poll-interval' => '20',
+        ]);
+
+        self::assertSame(Command::SUCCESS, $exitCode);
+
+        // The request was acked only via the reply path (process-ack).
+        self::assertCount(1, $transport->getAcknowledged());
+        self::assertCount(0, $transport->getRejected());
+
+        // The reply landed on the reply transport with the correlation stamp copied.
+        $sent = $replyTransport->getSent();
+        self::assertCount(1, $sent);
+        $corrStamp = $sent[0]->last(CorrelationIdStamp::class);
+        self::assertInstanceOf(CorrelationIdStamp::class, $corrStamp);
+        self::assertSame('console-corr-1', $corrStamp->id);
+        $replyMessage = $sent[0]->getMessage();
+        self::assertInstanceOf(PongMessage::class, $replyMessage);
+        self::assertSame('pong-ask-1', $replyMessage->body);
     }
 
     #[Test]

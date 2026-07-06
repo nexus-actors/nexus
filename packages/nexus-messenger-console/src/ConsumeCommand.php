@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Messenger\Console;
 
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Consumer\UnroutablePolicy;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
@@ -56,6 +57,11 @@ use function sprintf;
  *
  * A plain {@see MessageRouter} is also accepted when actor refs are already available at wiring time.
  *
+ * Pass a {@see ReplySenderLocator} as the trailing constructor argument to
+ * enable broker ask/reply: envelopes carrying both X-Nexus-Correlation-Id and
+ * X-Nexus-Reply-To are delivered with a reply ref as the sender, and the
+ * broker envelope is acked only after the responder actor publishes its reply.
+ *
  * @psalm-api
  */
 #[AsCommand(
@@ -73,6 +79,7 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
         private readonly ?Observability $observability = null,
         private readonly ?LoggerInterface $logger = null,
         private readonly ?EventDispatcherInterface $events = null,
+        private readonly ?ReplySenderLocator $replySenders = null,
     ) {
         parent::__construct();
     }
@@ -212,6 +219,7 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
             $watchdogRef,
             $this->events,
             $this->observability,
+            $this->replySenders,
         );
 
         $limitParts = [];
