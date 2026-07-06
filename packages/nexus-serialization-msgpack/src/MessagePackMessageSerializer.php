@@ -6,7 +6,9 @@ namespace Monadial\Nexus\Serialization\Msgpack;
 
 use CuyZ\Valinor\Mapper\TreeMapper;
 use CuyZ\Valinor\MapperBuilder;
-use JsonException;
+use CuyZ\Valinor\Normalizer\Format;
+use CuyZ\Valinor\Normalizer\Normalizer;
+use CuyZ\Valinor\NormalizerBuilder;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
@@ -18,11 +20,13 @@ use Throwable;
 /**
  * @psalm-api
  *
- * Serializer using MessagePack encoding and Valinor for type-safe deserialization.
+ * Serializer using MessagePack encoding and Valinor for type-safe reconstruction.
  *
- * Messages are normalized to an array via a JSON round-trip, then packed with
- * MessagePack. Deserialization unpacks the bytes and uses Valinor's mapper for
- * strict type reconstruction.
+ * Messages are normalized to an array with Valinor's array normalizer — the
+ * symmetric partner of the mapper used on the way back — then packed with
+ * MessagePack. This handles enums, DateTimeInterface, and nested value objects
+ * that a naive JSON round-trip cannot map back. Deserialization unpacks the
+ * bytes and hydrates via the mapper.
  *
  * @example
  *   $registry = new TypeRegistry();
@@ -34,15 +38,19 @@ use Throwable;
 final readonly class MessagePackMessageSerializer implements MessageSerializer
 {
     private TreeMapper $mapper;
+    private Normalizer $normalizer;
 
     public function __construct(
         private TypeRegistry $registry,
         ?MapperBuilder $mapperBuilder = null,
         private MsgpackCodec $codec = new MsgpackCodec(),
+        ?NormalizerBuilder $normalizerBuilder = null,
     ) {
         $this->mapper = ($mapperBuilder ?? new MapperBuilder())
             ->allowPermissiveTypes()
             ->mapper();
+        $this->normalizer = ($normalizerBuilder ?? new NormalizerBuilder())
+            ->normalizer(Format::array());
     }
 
     /**
@@ -61,12 +69,8 @@ final readonly class MessagePackMessageSerializer implements MessageSerializer
 
         try {
             /** @var array<string, mixed> $array */
-            $array = json_decode(json_encode($message, JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
-            throw new MessageSerializationException($className, $e->getMessage(), $e);
-        }
+            $array = $this->normalizer->normalize($message);
 
-        try {
             return $this->codec->pack($array);
         } catch (Throwable $e) {
             throw new MessageSerializationException($className, $e->getMessage(), $e);
