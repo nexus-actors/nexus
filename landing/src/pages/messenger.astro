@@ -184,7 +184,7 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any Messenger <code class="font-mono">SenderInterface</code> — AMQP, Redis, SQS, Doctrine, in-memory</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Optional <code class="font-mono">sourcePath</code> stamps the sender's actor path on every envelope</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">MessengerBridge::producer()</code> — no container, plain factory</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">NexusMessengerSerializer</code> — Nexus-backed wire format with an explicit <code class="font-mono">allowedClasses</code> allow-list; swappable for any Symfony <code class="font-mono">SerializerInterface</code></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">NexusMessengerSerializer</code> — Nexus-backed wire format with an explicit <code class="font-mono">allowedClasses</code> allow-list, or binary MessagePack bodies via <code class="font-mono">nexus-serialization-msgpack</code>; swappable for any Symfony <code class="font-mono">SerializerInterface</code></li>
       </ul>
     </div>
     <CodeBlock code={producerCode} lang="php" title="src/Actor/OrderActor.php" />

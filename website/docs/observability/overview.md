@@ -18,6 +18,7 @@ Nexus observability ships as a set of focused packages:
 | `nexus-observability-actor` | `ActorSystemMetrics` — live-actor, dead-letter, and running-state gauges |
 | `nexus-observability-http` | `ServerSpanMiddleware` (server spans) and `HttpMetricsListener` (request duration and active count) |
 | `nexus-observability-persistence` | Tracing decorators for event stores, snapshot stores, and durable-state stores |
+| `nexus-observability-serialization` | `TracingMessageSerializer` — spans and `nexus.serialization.*` metrics for any `MessageSerializer` |
 | `nexus-observability-worker-pool` | `TracingWorkerTransport` — context propagation and metrics across worker threads |
 | `nexus-observability-logger` | `TraceCorrelationProcessor` — stamps trace/span IDs onto log records |
 | `nexus-observability-doctrine` | `DbalPoolMetricsListener`, `OrmPoolMetricsListener`, and `Sql\TracingDriverMiddleware` |

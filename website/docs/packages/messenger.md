@@ -4,6 +4,7 @@ related:
   - packages/core
   - packages/messenger-console
   - packages/serialization
+  - packages/serialization-msgpack
   - packages/cluster
   - guides/messenger-bridge
 ---
@@ -19,7 +20,7 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 - `ReceiverActor` — supervised poll→route→ack loop, one per Messenger `ReceiverInterface`; handles ask envelopes when a `ReplySenderLocator` is configured
 - `ReceiverActorConfig` — poll interval, unroutable policy, and ask pending timeout (default 30 s)
 - `MessageRouter` — pluggable inbound routing; `MapMessageRouter` (message class → ref) is the default, `StampMessageRouter` (target-path stamp → ref) is the cluster seam
-- `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer`
+- `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer` — JSON, PHP-native, or binary MessagePack via [nexus-serialization-msgpack](./serialization-msgpack.md)
 - `LifecycleWatchdog` + `LifecycleThresholds` — worker recycling via graceful shutdown on memory/uptime/message-count limits
 - `MessengerBridge` — static wiring facade (`producer()`, `gateway()`, `receiverProps()`, `spawnReceivers()`, `watchdogProps()`, `askSupport()`)
 - `AskSupport` — orchestrates broker ask/reply: lazy reply channel lifecycle, `PendingAskRegistry`, and timeout scheduling; wired via `MessengerBridge::askSupport()`
