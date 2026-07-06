@@ -10,6 +10,9 @@ use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Messenger\Ask\AskSupport;
+use Monadial\Nexus\Messenger\Ask\PendingAskRegistry;
+use Monadial\Nexus\Messenger\Ask\ReplyChannelFactory;
 use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActor;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
@@ -39,6 +42,14 @@ use Symfony\Component\Messenger\Transport\Sender\SenderInterface;
  * $orders = MessengerBridge::producer($transport, 'orders-out');
  * ```
  *
+ * Example (ask/reply):
+ * ```php
+ * $askSupport = MessengerBridge::askSupport($system, $channelFactory);
+ * $ref = MessengerBridge::producer($requestSender, 'orders-out', askSupport: $askSupport);
+ * // inside a fiber:
+ * $reply = $ref->ask(new Ping('hello'), Duration::seconds(5))->await();
+ * ```
+ *
  * @psalm-api
  */
 final readonly class MessengerBridge
@@ -56,6 +67,30 @@ final readonly class MessengerBridge
     }
 
     /**
+     * Create an AskSupport instance that enables broker ask/reply on a MessengerActorRef.
+     *
+     * The returned AskSupport lazily creates a reply channel and spawns the
+     * nexus-ask-replies consumer actor on the first ask() call. Pass it to
+     * {@see producer()} as the trailing $askSupport argument.
+     *
+     * @param int|null $maxPending maximum number of concurrent pending asks (default 10 000)
+     * @param Duration|null $replyPollInterval how often the reply consumer polls the reply channel (default 20 ms)
+     */
+    public static function askSupport(
+        ActorSystem $system,
+        ReplyChannelFactory $factory,
+        ?int $maxPending = null,
+        ?Duration $replyPollInterval = null,
+    ): AskSupport {
+        $registry = $maxPending !== null
+            ? new PendingAskRegistry($maxPending)
+            : new PendingAskRegistry();
+        $pollInterval = $replyPollInterval ?? Duration::millis(20);
+
+        return new AskSupport($system, $factory, $registry, $pollInterval);
+    }
+
+    /**
      * @template T of object
      * @return MessengerActorRef<T>
      * @psalm-suppress InvalidReturnType,InvalidReturnStatement Psalm cannot infer T through MessengerActorRef<object> constructor
@@ -66,8 +101,9 @@ final readonly class MessengerBridge
         ?ActorPath $sourcePath = null,
         Observability $observability = new NoopObservability(),
         ?EventDispatcherInterface $events = null,
+        ?AskSupport $askSupport = null,
     ): MessengerActorRef {
-        return new MessengerActorRef($sender, $name, $sourcePath, $observability, $events);
+        return new MessengerActorRef($sender, $name, $sourcePath, $observability, $events, $askSupport);
     }
 
     /**
