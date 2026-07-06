@@ -83,10 +83,10 @@ final readonly class ClusterRef implements ActorRef
         $correlationId = bin2hex(random_bytes(16));
         $replyPath = $this->self->temporaryAskReplyPath($correlationId);
 
+        $encoded = $this->codec->encode($message);
+
         /** @var Future<R> $future */
         $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath);
-
-        $encoded = $this->codec->encode($message);
 
         $this->sink->send($this->target, new MessagePayload(
             targetPath: (string) $this->targetPath,

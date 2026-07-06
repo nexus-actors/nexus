@@ -234,9 +234,14 @@ final class ClusterMessagingTest extends TestCase
 
         $runtime->advanceTime(Duration::seconds(5));
 
-        $this->expectException(AskTimeoutException::class);
+        try {
+            $future->await();
+            self::fail('Expected AskTimeoutException to be thrown');
+        } catch (AskTimeoutException) {
+            // Expected timeout exception
+        }
 
-        $future->await();
+        self::assertSame(0, $askRegistry->count());
     }
 
     #[Test]
