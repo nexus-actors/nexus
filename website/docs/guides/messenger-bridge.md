@@ -211,6 +211,36 @@ $serializer = new NexusMessengerSerializer(
 
 `NexusMessengerSerializer` always requires a `TypeRegistry`. When both producer and consumer share the same codebase and you want a simpler setup, you can back it with `PhpNativeSerializer` — but always provide an explicit allow-list to prevent PHP object injection: `new PhpNativeSerializer(allowedClasses: [OrderPlaced::class, PaymentReceived::class])`. Use `ValinorMessageSerializer` for cross-service, cross-language, or cross-deployment message exchange.
 
+### Choosing a format
+
+Three `MessageSerializer` implementations plug into `NexusMessengerSerializer`:
+
+- **`PhpNativeSerializer`** — fastest; PHP-only wire format; requires an explicit `allowedClasses` list. Same codebase on both ends, trusted data.
+- **`ValinorMessageSerializer`** — JSON; human-readable and interoperable. Cross-service exchange, text-only transports (e.g. Amazon SQS), debugging.
+- **`MessagePackMessageSerializer`** ([nexus-serialization-msgpack](/docs/packages/serialization-msgpack)) — compact binary MessagePack with the same Valinor-backed decoding; smallest payloads for high-volume queues. Binary-safe transports only — Redis Streams, AMQP, and Doctrine carry raw bytes fine; SQS does not.
+
+The bridge stamps always travel as plain string headers regardless of the body format, so switching serializers never affects routing, tracing, or ask/reply correlation.
+
+### Tracing serialization
+
+Wrap any of the three in `TracingMessageSerializer` ([nexus-observability-serialization](/docs/packages/observability-serialization)) to get a span per serialize/deserialize plus operation, byte-size, and duration metrics:
+
+```php title="src/Serialization/TracedSerializerSetup.php" verify:lint-only
+use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
+use Monadial\Nexus\Observability\Serialization\TracingMessageSerializer;
+use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
+
+$serializer = new NexusMessengerSerializer(
+    new TracingMessageSerializer(
+        new MessagePackMessageSerializer($registry),
+        $observability,
+    ),
+    $registry,
+);
+```
+
+The `nexus.serialization.bytes` histogram makes format comparisons measurable — switch serializers and watch payload sizes move. When observability is disabled the decorator delegates directly with zero overhead.
+
 ## Recycling workers
 
 Long-running PHP processes accumulate memory over time and can hold fragmented OPcache. The `LifecycleWatchdog` replaces the `--limit`, `--memory-limit`, and `--time-limit` options of `messenger:consume` with in-process threshold checks that trigger a graceful `ActorSystem::shutdown()`.
