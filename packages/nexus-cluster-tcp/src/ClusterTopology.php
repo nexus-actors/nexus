@@ -25,9 +25,9 @@ use function count;
  * $topology = ClusterTopology::create(
  *     clusterName: 'production',
  *     self: new NodeAddress('prod', 'eu', 'payments', 'node-1'),
- *     bindEndpoint: new NodeEndpoint('0.0.0.0', 7355),
- *     advertiseEndpoint: new NodeEndpoint('10.0.0.1', 7355),
- *     seeds: [new NodeEndpoint('10.0.0.2', 7355)],
+ *     bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+ *     advertiseEndpoint: new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355)),
+ *     seeds: [new NodeEndpoint(Host::of('10.0.0.2'), Port::of(7355))],
  * );
  */
 final readonly class ClusterTopology

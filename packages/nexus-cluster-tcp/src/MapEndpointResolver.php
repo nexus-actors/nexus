@@ -16,7 +16,7 @@ use Override;
  *
  * @example
  * $resolver = new MapEndpointResolver([
- *     $address->toPathPrefix() => new NodeEndpoint('10.0.0.1', 7355),
+ *     $address->toPathPrefix() => new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355)),
  * ]);
  */
 final readonly class MapEndpointResolver implements EndpointResolver

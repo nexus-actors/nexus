@@ -18,7 +18,7 @@ use Override;
  *
  * @example
  * $registry = new MutableEndpointRegistry();
- * $registry->register($address, new NodeEndpoint('10.0.0.1', 7355));
+ * $registry->register($address, new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355)));
  * $endpoint = $registry->resolve($address); // NodeEndpoint
  */
 final class MutableEndpointRegistry implements EndpointResolver

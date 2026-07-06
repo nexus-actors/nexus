@@ -9,6 +9,8 @@ use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\TlsConfig;
+use Monadial\Nexus\Core\Net\Host;
+use Monadial\Nexus\Core\Net\Port;
 use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -209,8 +211,8 @@ final class ClusterTopologyTest extends TestCase
     protected function setUp(): void
     {
         $this->self = new NodeAddress('prod', 'eu', 'payments', 'node-1');
-        $this->bindEndpoint = new NodeEndpoint('0.0.0.0', 7355);
-        $this->advertiseEndpoint = new NodeEndpoint('10.0.0.1', 7355);
-        $this->seeds = [new NodeEndpoint('10.0.0.2', 7355)];
+        $this->bindEndpoint = new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355));
+        $this->advertiseEndpoint = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
+        $this->seeds = [new NodeEndpoint(Host::of('10.0.0.2'), Port::of(7355))];
     }
 }

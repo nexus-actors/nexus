@@ -12,6 +12,8 @@ use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackPeerLink;
 use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
+use Monadial\Nexus\Core\Net\Host;
+use Monadial\Nexus\Core\Net\Port;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -34,7 +36,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7001);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7001));
 
         /** @var PeerLink|null $acceptedLink */
         $acceptedLink = null;
@@ -65,7 +67,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7002);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7002));
 
         $nodeA->serve($endpoint, static function (PeerLink $link): void {});
 
@@ -86,7 +88,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7003);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7003));
 
         /** @var PeerLink|null $serverLink */
         $serverLink = null;
@@ -118,7 +120,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7004);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7004));
 
         /** @var list<Frame> $serverReceived */
         $serverReceived = [];
@@ -154,7 +156,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7005);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7005));
 
         /** @var list<Frame> $serverReceived */
         $serverReceived = [];
@@ -205,7 +207,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7006);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7006));
 
         $serverCloseFired = false;
 
@@ -239,7 +241,7 @@ final class LoopbackMeshTransportTest extends TestCase
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, $runtime);
         $nodeB = new LoopbackMeshTransport($hub, $runtime);
-        $endpoint = new NodeEndpoint('127.0.0.1', 7007);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7007));
 
         $clientCloseFired = false;
 
@@ -271,7 +273,7 @@ final class LoopbackMeshTransportTest extends TestCase
     {
         $hub = new LoopbackHub();
         $nodeB = new LoopbackMeshTransport($hub, new FiberRuntime());
-        $endpoint = new NodeEndpoint('127.0.0.1', 7008);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7008));
 
         $this->expectException(RuntimeException::class);
         $nodeB->connect($endpoint);
@@ -286,7 +288,7 @@ final class LoopbackMeshTransportTest extends TestCase
     {
         $hub = new LoopbackHub();
         $nodeA = new LoopbackMeshTransport($hub, new FiberRuntime());
-        $endpoint = new NodeEndpoint('127.0.0.1', 7009);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7009));
 
         // Serve on nodeA
         $nodeA->serve($endpoint, static function (PeerLink $link): void {});

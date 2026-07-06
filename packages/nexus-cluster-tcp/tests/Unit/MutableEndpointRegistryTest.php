@@ -7,6 +7,8 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\MutableEndpointRegistry;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Core\Net\Host;
+use Monadial\Nexus\Core\Net\Port;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -28,7 +30,7 @@ final class MutableEndpointRegistryTest extends TestCase
     {
         $registry = new MutableEndpointRegistry();
         $address = new NodeAddress('prod', 'eu', 'payments', 'node-1');
-        $endpoint = new NodeEndpoint('10.0.0.1', 7355);
+        $endpoint = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
 
         $registry->register($address, $endpoint);
 
@@ -40,8 +42,8 @@ final class MutableEndpointRegistryTest extends TestCase
     {
         $registry = new MutableEndpointRegistry();
         $address = new NodeAddress('prod', 'eu', 'payments', 'node-1');
-        $first = new NodeEndpoint('10.0.0.1', 7355);
-        $second = new NodeEndpoint('10.0.0.2', 7356);
+        $first = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
+        $second = new NodeEndpoint(Host::of('10.0.0.2'), Port::of(7356));
 
         $registry->register($address, $first);
         $registry->register($address, $second);
@@ -55,7 +57,7 @@ final class MutableEndpointRegistryTest extends TestCase
         $registry = new MutableEndpointRegistry();
         $address = new NodeAddress('prod', 'eu', 'payments', 'node-1');
         $sameAddress = new NodeAddress('prod', 'eu', 'payments', 'node-1');
-        $endpoint = new NodeEndpoint('10.0.0.1', 7355);
+        $endpoint = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
 
         $registry->register($address, $endpoint);
 
@@ -68,8 +70,8 @@ final class MutableEndpointRegistryTest extends TestCase
         $registry = new MutableEndpointRegistry();
         $address1 = new NodeAddress('prod', 'eu', 'payments', 'node-1');
         $address2 = new NodeAddress('prod', 'eu', 'payments', 'node-2');
-        $endpoint1 = new NodeEndpoint('10.0.0.1', 7355);
-        $endpoint2 = new NodeEndpoint('10.0.0.2', 7355);
+        $endpoint1 = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
+        $endpoint2 = new NodeEndpoint(Host::of('10.0.0.2'), Port::of(7355));
 
         $registry->register($address1, $endpoint1);
         $registry->register($address2, $endpoint2);

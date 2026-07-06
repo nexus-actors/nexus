@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp;
 
 use InvalidArgumentException;
+use Monadial\Nexus\Core\Net\Host;
+use Monadial\Nexus\Core\Net\Port;
 use Override;
 use Stringable;
 
+use function ctype_digit;
 use function sprintf;
-use function str_starts_with;
 use function strrpos;
 use function substr;
 
@@ -28,20 +30,13 @@ use function substr;
  */
 final readonly class NodeEndpoint implements Stringable
 {
-    public function __construct(public string $host, public int $port,) {
-        if ($host === '') {
-            throw new InvalidArgumentException('NodeEndpoint host must not be empty.');
-        }
-
-        if ($port < 0 || $port > 65535) {
-            throw new InvalidArgumentException(
-                sprintf('NodeEndpoint port %d is out of valid range 0–65535.', $port),
-            );
-        }
-    }
+    public function __construct(public Host $host, public Port $port) {}
 
     /**
      * Parse a 'host:port' string into a NodeEndpoint.
+     *
+     * Splits on the last colon so unbracketed IPv4 addresses work correctly.
+     * IPv6 bracket form (`[::1]:7355`) is out of scope for v1.
      *
      * @throws InvalidArgumentException when the string is malformed or the port is out of range.
      */
@@ -55,30 +50,26 @@ final readonly class NodeEndpoint implements Stringable
             );
         }
 
-        $host = substr($hostPort, 0, $colonPos);
-        $portString = substr($hostPort, $colonPos + 1);
+        $hostPart = substr($hostPort, 0, $colonPos);
+        $portPart = substr($hostPort, $colonPos + 1);
 
-        if ($host === '') {
+        if ($hostPart === '') {
             throw new InvalidArgumentException(
                 sprintf("Invalid endpoint string '%s': host part must not be empty.", $hostPort),
             );
         }
 
-        $normalizedPort = str_starts_with($portString, '-')
-            ? substr($portString, 1)
-            : $portString;
-
-        if ($normalizedPort === '' || !ctype_digit($normalizedPort)) {
+        if ($portPart === '' || !ctype_digit($portPart)) {
             throw new InvalidArgumentException(
                 sprintf(
                     "Invalid endpoint string '%s': port part '%s' is not a valid integer.",
                     $hostPort,
-                    $portString,
+                    $portPart,
                 ),
             );
         }
 
-        return new self($host, (int) $portString);
+        return new self(Host::of($hostPart), Port::of((int) $portPart));
     }
 
     #[Override]
