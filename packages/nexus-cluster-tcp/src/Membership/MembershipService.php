@@ -10,9 +10,7 @@ use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
-use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
 use Monadial\Nexus\Runtime\Duration;
-use Psr\Clock\ClockInterface;
 
 use function count;
 use function explode;
@@ -21,315 +19,402 @@ use function min;
 /**
  * @psalm-api
  *
- * Plain (non-actor) state machine that folds link events, handshakes, gossip,
- * and Leave notices into an immutable ClusterView, and drives phi-accrual +
- * connection-death failure detection. The owning actor (C1.6) supplies wall
- * time via the injected clock and pumps `tick()` on the gossip/heartbeat timer;
- * this class stays pure and deterministic under a TestClock.
+ * Pure membership transition functions. Each method takes the current membership
+ * state (ClusterView, suspectSince timestamps, self incarnation) plus an event
+ * input, applies the appropriate state-machine logic, and returns a
+ * MembershipTransition describing the new state, emitted events, and outbound
+ * effects. No I/O is performed; the owning actor (C1.6d) executes the effects.
+ *
+ * The PhiAccrualDetector is mutable and owned by the actor; it is passed in to
+ * liveness/tick transitions so that heartbeat timestamps are recorded (the
+ * detector's phi calculation requires every arrival to be fed in).
+ *
+ * State the actor must track across transitions:
+ *   - ClusterView                      — returned as newView in every transition.
+ *   - array<string,DateTimeImmutable>  — returned as newSuspectSince; records when
+ *                                        each peer entered Suspect so applyTick can
+ *                                        evaluate the give-up window.
+ *   - int $selfIncarnation             — returned as newSelfIncarnation; bumped by
+ *                                        applyRejoin.
  *
  * Transitions:
- *   - handshake accept / gossip merge / any inbound frame → member Up (or recover).
- *   - phi > threshold → Up → Suspect (reason Phi).
- *   - unexpected link close → Up → Suspect (reason Connection); an intentional
- *     local close is ignored so we do not suspect a peer we chose to disconnect.
- *   - Suspect longer than the give-up window → Down (removed from the view).
- *   - Leave → Down (removed immediately).
- *
- * View changes are broadcast to `onViewChange` listeners as `MembershipEvent`s.
+ *   - applyHandshake  — validate peer, record liveness, merge view → HandshakeResponse effect.
+ *   - applyGossip     — decode enriched GossipPayload, merge view.
+ *   - applyLiveness   — record any inbound frame (frame / ping / pong), feed detector.
+ *   - applyLinkClosed — suspect peer on unexpected close; no-op on intentional close.
+ *   - applyLeave      — remove peer immediately.
+ *   - applyRejoin     — bump local incarnation.
+ *   - applyTick       — phi failure detection + give-up window + SendGossip effect.
  */
 final class MembershipService
 {
     private const int PROTOCOL_VERSION = 1;
 
-    private ClusterView $view;
-
     private readonly string $selfKey;
 
     private readonly Duration $downAfter;
 
-    private int $selfIncarnation = 1;
-
-    /** @var array<string, DateTimeImmutable> */
-    private array $suspectSince = [];
-
-    /** @var list<callable(ClusterView, list<MembershipEvent>): void> */
-    private array $listeners = [];
-
-    public function __construct(
-        private readonly ClusterTopology $topology,
-        private readonly ClockInterface $clock,
-        private readonly PhiAccrualDetector $detector,
-        private readonly PeerSelector $peerSelector,
-        ?Duration $downAfter = null,
-    ) {
+    public function __construct(private readonly ClusterTopology $topology, ?Duration $downAfter = null)
+    {
         $this->selfKey = $topology->self->toPathPrefix();
         $this->downAfter = $downAfter ?? Duration::seconds(10);
-        $this->view = ClusterView::empty()->withMember(new MemberRecord(
-            $topology->self,
-            $topology->advertiseEndpoint,
-            $this->selfIncarnation,
-            MemberStatus::Up,
-            $this->clock->now(),
-        ));
-    }
-
-    public function currentView(): ClusterView
-    {
-        return $this->view;
     }
 
     /**
-     * @param callable(ClusterView, list<MembershipEvent>): void $listener
+     * Build the initial MembershipTransition: self is Up at incarnation 1, no
+     * suspicions, no events, no effects. The actor uses this as its starting state.
      */
-    public function onViewChange(callable $listener): void
+    public function initialState(DateTimeImmutable $now): MembershipTransition
     {
-        $this->listeners[] = $listener;
+        $view = ClusterView::empty()->withMember(new MemberRecord(
+            $this->topology->self,
+            $this->topology->advertiseEndpoint,
+            1,
+            MemberStatus::Up,
+            $now,
+        ));
+
+        return new MembershipTransition($view, [], [], [], 1);
     }
 
-    public function onHandshake(
+    /**
+     * Apply an inbound handshake from a peer. Validates cluster name and protocol
+     * version; if invalid returns a rejection HandshakeResponse and leaves state
+     * unchanged. On success, records liveness, merges the peer's view, and
+     * returns an accepted HandshakeResponse containing the local post-merge view.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     */
+    public function applyHandshake(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        PhiAccrualDetector $detector,
         NodeAddress $peer,
         NodeEndpoint $endpoint,
         string $clusterName,
         int $protocolVersion,
         ClusterView $theirView,
-    ): HandshakeAck {
+        DateTimeImmutable $now,
+    ): MembershipTransition {
         if ($clusterName !== $this->topology->clusterName) {
-            return new HandshakeAck(false, 'Cluster name mismatch.', []);
+            return new MembershipTransition(
+                $view,
+                [],
+                [new HandshakeResponse(false, 'Cluster name mismatch.', [])],
+                $suspectSince,
+                $selfIncarnation,
+            );
         }
 
         if ($protocolVersion !== self::PROTOCOL_VERSION) {
-            return new HandshakeAck(false, 'Protocol version mismatch.', []);
+            return new MembershipTransition(
+                $view,
+                [],
+                [new HandshakeResponse(false, 'Protocol version mismatch.', [])],
+                $suspectSince,
+                $selfIncarnation,
+            );
         }
 
-        $now = $this->clock->now();
-        $events = $this->recordLiveness($peer, $endpoint, $now);
+        [$view1, $suspectSince1, $events1] = $this->recordLiveness(
+            $view,
+            $suspectSince,
+            $detector,
+            $peer,
+            $endpoint,
+            $now,
+        );
+        [$view2, $suspectSince2, $events2] = $this->mergeView($view1, $suspectSince1, $theirView);
 
-        foreach ($this->mergeView($theirView) as $event) {
-            $events[] = $event;
-        }
-
-        $this->notify($events);
-
-        return new HandshakeAck(true, null, $this->viewToMap());
-    }
-
-    public function onGossip(NodeAddress $peer, GossipPayload $payload): void
-    {
-        $this->notify($this->mergeView($this->viewFromGossip($payload, $this->clock->now())));
-    }
-
-    public function onPing(NodeAddress $peer): void
-    {
-        $this->notify($this->recordLiveness($peer, null, $this->clock->now()));
-    }
-
-    public function onPong(NodeAddress $peer): void
-    {
-        $this->notify($this->recordLiveness($peer, null, $this->clock->now()));
-    }
-
-    public function onFrameFromPeer(NodeAddress $peer, NodeEndpoint $endpoint): void
-    {
-        $this->notify($this->recordLiveness($peer, $endpoint, $this->clock->now()));
-    }
-
-    public function onLinkClosed(NodeAddress $peer, bool $intentional): void
-    {
-        if ($intentional) {
-            return;
-        }
-
-        $key = $peer->toPathPrefix();
-
-        if ($key === $this->selfKey || !$this->view->has($peer)) {
-            return;
-        }
-
-        if ($this->view->members[$key]->status !== MemberStatus::Up) {
-            return;
-        }
-
-        $now = $this->clock->now();
-        $this->view = $this->view->withStatus($peer, MemberStatus::Suspect, $now);
-        $this->suspectSince[$key] = $now;
-
-        $this->notify([new NodeSuspected($peer, SuspicionReason::Connection)]);
-    }
-
-    public function onLeave(NodeAddress $peer): void
-    {
-        $key = $peer->toPathPrefix();
-
-        if ($key === $this->selfKey || !$this->view->has($peer)) {
-            return;
-        }
-
-        $this->view = $this->view->withoutNode($peer);
-        unset($this->suspectSince[$key]);
-
-        $this->notify([new NodeDown($peer)]);
+        return new MembershipTransition(
+            $view2,
+            [...$events1, ...$events2],
+            [new HandshakeResponse(true, null, $this->viewToMap($view2))],
+            $suspectSince2,
+            $selfIncarnation,
+        );
     }
 
     /**
-     * Bump the local incarnation on rejoin so peers holding a stale record for
-     * this node accept the fresher entry during gossip merge.
+     * Apply an inbound GossipPayload from a peer. Decodes the enriched member
+     * list (including incarnation and status) and merges it into the current view.
+     * Unlike applyLiveness, gossip does not feed the phi detector.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
      */
-    public function rejoin(): void
-    {
-        ++$this->selfIncarnation;
-        $this->view = $this->view->withMember(new MemberRecord(
+    public function applyGossip(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        NodeAddress $peer,
+        GossipPayload $payload,
+        DateTimeImmutable $now,
+    ): MembershipTransition {
+        $incoming = $this->gossipToView($payload, $now);
+        [$newView, $newSuspectSince, $events] = $this->mergeView($view, $suspectSince, $incoming);
+
+        return new MembershipTransition($newView, $events, [], $newSuspectSince, $selfIncarnation);
+    }
+
+    /**
+     * Record liveness for a peer from any inbound frame (frame, ping, or pong).
+     * Feeds the phi detector, adds the peer to the view if new (requires a
+     * non-null endpoint), or recovers the peer from Suspect to Up if already known.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     */
+    public function applyLiveness(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        PhiAccrualDetector $detector,
+        NodeAddress $peer,
+        ?NodeEndpoint $endpoint,
+        DateTimeImmutable $now,
+    ): MembershipTransition {
+        [$newView, $newSuspectSince, $events] = $this->recordLiveness(
+            $view,
+            $suspectSince,
+            $detector,
+            $peer,
+            $endpoint,
+            $now,
+        );
+
+        return new MembershipTransition($newView, $events, [], $newSuspectSince, $selfIncarnation);
+    }
+
+    /**
+     * Handle a TCP link closure. An intentional close (local initiative) is a
+     * no-op — we do not suspect a peer we chose to disconnect. An unexpected close
+     * moves an Up peer to Suspect with reason Connection.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     */
+    public function applyLinkClosed(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        NodeAddress $peer,
+        bool $intentional,
+        DateTimeImmutable $now,
+    ): MembershipTransition {
+        if ($intentional) {
+            return new MembershipTransition($view, [], [], $suspectSince, $selfIncarnation);
+        }
+
+        $key = $peer->toPathPrefix();
+
+        if ($key === $this->selfKey || !$view->has($peer)) {
+            return new MembershipTransition($view, [], [], $suspectSince, $selfIncarnation);
+        }
+
+        if ($view->members[$key]->status !== MemberStatus::Up) {
+            return new MembershipTransition($view, [], [], $suspectSince, $selfIncarnation);
+        }
+
+        $newSuspectSince = $suspectSince;
+        $newSuspectSince[$key] = $now;
+
+        return new MembershipTransition(
+            $view->withStatus($peer, MemberStatus::Suspect, $now),
+            [new NodeSuspected($peer, SuspicionReason::Connection)],
+            [],
+            $newSuspectSince,
+            $selfIncarnation,
+        );
+    }
+
+    /**
+     * Handle a Leave notice from a peer. Removes the peer from the view
+     * immediately and emits NodeDown regardless of its current status.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     */
+    public function applyLeave(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        NodeAddress $peer,
+    ): MembershipTransition {
+        $key = $peer->toPathPrefix();
+
+        if ($key === $this->selfKey || !$view->has($peer)) {
+            return new MembershipTransition($view, [], [], $suspectSince, $selfIncarnation);
+        }
+
+        $newSuspectSince = $suspectSince;
+        unset($newSuspectSince[$key]);
+
+        return new MembershipTransition(
+            $view->withoutNode($peer),
+            [new NodeDown($peer)],
+            [],
+            $newSuspectSince,
+            $selfIncarnation,
+        );
+    }
+
+    /**
+     * Bump the local incarnation number on rejoin. Inserts a fresh self-record
+     * with the higher incarnation so peers holding a stale record will accept the
+     * newer entry during gossip merge.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     */
+    public function applyRejoin(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        DateTimeImmutable $now,
+    ): MembershipTransition {
+        $newIncarnation = $selfIncarnation + 1;
+        $newView = $view->withMember(new MemberRecord(
             $this->topology->self,
             $this->topology->advertiseEndpoint,
-            $this->selfIncarnation,
+            $newIncarnation,
             MemberStatus::Up,
-            $this->clock->now(),
+            $now,
         ));
+
+        return new MembershipTransition($newView, [], [], $suspectSince, $newIncarnation);
     }
 
     /**
-     * Run failure detection and produce this round's gossip payloads (one per
-     * randomly selected Up peer, capped at three).
+     * Run one failure-detection and gossip tick. Iterates all non-self members:
+     * moves Up peers whose phi exceeds the threshold to Suspect (reason: Phi),
+     * and removes Suspect peers past the give-up window with NodeDown. Returns a
+     * SendGossip effect for up to three randomly-selected Up peers.
      *
-     * @return list<GossipPayload>
+     * @param array<string, DateTimeImmutable> $suspectSince
      */
-    public function tick(DateTimeImmutable $now): array
-    {
+    public function applyTick(
+        ClusterView $view,
+        array $suspectSince,
+        int $selfIncarnation,
+        PhiAccrualDetector $detector,
+        PeerSelector $peerSelector,
+        DateTimeImmutable $now,
+    ): MembershipTransition {
         $events = [];
+        $newView = $view;
+        $newSuspectSince = $suspectSince;
 
-        foreach ($this->view->nodes() as $record) {
+        foreach ($view->nodes() as $record) {
             $key = $record->address->toPathPrefix();
 
             if ($key === $this->selfKey) {
                 continue;
             }
 
-            if (
-                $record->status === MemberStatus::Up
-                && $this->detector->phi($key, $now) > $this->topology->phiThreshold
-            ) {
-                $this->view = $this->view->withStatus($record->address, MemberStatus::Suspect, $now);
-                $this->suspectSince[$key] = $now;
+            if ($record->status === MemberStatus::Up && $detector->phi($key, $now) > $this->topology->phiThreshold) {
+                $newView = $newView->withStatus($record->address, MemberStatus::Suspect, $now);
+                $newSuspectSince[$key] = $now;
                 $events[] = new NodeSuspected($record->address, SuspicionReason::Phi);
 
                 continue;
             }
 
             if ($record->status === MemberStatus::Suspect) {
-                $since = $this->suspectSince[$key] ?? $now;
-                $this->suspectSince[$key] = $since;
+                $since = $newSuspectSince[$key] ?? $now;
+                $newSuspectSince[$key] = $since;
 
                 if (self::elapsedMillis($now, $since) >= (float) $this->downAfter->toMillis()) {
-                    $this->view = $this->view->withoutNode($record->address);
-                    unset($this->suspectSince[$key]);
+                    $newView = $newView->withoutNode($record->address);
+                    unset($newSuspectSince[$key]);
                     $events[] = new NodeDown($record->address);
                 }
             }
         }
 
-        $this->notify($events);
+        $effects = $this->buildGossipEffects($newView, $peerSelector);
 
-        return $this->buildGossip();
+        return new MembershipTransition($newView, $events, $effects, $newSuspectSince, $selfIncarnation);
     }
 
     /**
-     * @return list<GossipPayload>
+     * Record a liveness event for a peer: feed the phi detector and update the
+     * view (add new member, or recover from Suspect to Up). Returns the updated
+     * view, suspectSince map, and any membership events.
+     *
+     * @param array<string, DateTimeImmutable> $suspectSince
+     *
+     * @return array{ClusterView, array<string, DateTimeImmutable>, list<MembershipEvent>}
      */
-    private function buildGossip(): array
-    {
-        $candidates = [];
-
-        foreach ($this->view->upNodes() as $record) {
-            $key = $record->address->toPathPrefix();
-
-            if ($key !== $this->selfKey) {
-                $candidates[] = $key;
-            }
-        }
-
-        if (count($candidates) === 0) {
-            return [];
-        }
-
-        $selected = $this->peerSelector->select($candidates, min(3, count($candidates)));
-        $map = $this->viewToMap();
-
-        $payloads = [];
-
-        foreach ($selected as $_peer) {
-            $payloads[] = new GossipPayload($map, []);
-        }
-
-        return $payloads;
-    }
-
-    /**
-     * @return list<MembershipEvent>
-     */
-    private function recordLiveness(NodeAddress $peer, ?NodeEndpoint $endpoint, DateTimeImmutable $now): array
-    {
+    private function recordLiveness(
+        ClusterView $view,
+        array $suspectSince,
+        PhiAccrualDetector $detector,
+        NodeAddress $peer,
+        ?NodeEndpoint $endpoint,
+        DateTimeImmutable $now,
+    ): array {
         $key = $peer->toPathPrefix();
-        $this->detector->heartbeat($key, $now);
+        $detector->heartbeat($key, $now);
 
         if ($key === $this->selfKey) {
-            return [];
+            return [$view, $suspectSince, []];
         }
 
-        if ($this->view->has($peer)) {
-            $record = $this->view->members[$key];
+        if ($view->has($peer)) {
+            $record = $view->members[$key];
             $recovered = $record->status !== MemberStatus::Up;
-
-            $this->view = $this->view->withStatus($peer, MemberStatus::Up, $now);
+            $newView = $view->withStatus($peer, MemberStatus::Up, $now);
 
             if (!$recovered) {
-                return [];
+                return [$newView, $suspectSince, []];
             }
 
-            unset($this->suspectSince[$key]);
+            $newSuspectSince = $suspectSince;
+            unset($newSuspectSince[$key]);
 
-            return [new NodeUp($record->address, $record->endpoint)];
+            return [$newView, $newSuspectSince, [new NodeUp($record->address, $record->endpoint)]];
         }
 
         if ($endpoint === null) {
-            return [];
+            return [$view, $suspectSince, []];
         }
 
-        $this->view = $this->view->withMember(new MemberRecord($peer, $endpoint, 1, MemberStatus::Up, $now));
+        $newView = $view->withMember(new MemberRecord($peer, $endpoint, 1, MemberStatus::Up, $now));
 
-        return [new NodeUp($peer, $endpoint)];
+        return [$newView, $suspectSince, [new NodeUp($peer, $endpoint)]];
     }
 
     /**
-     * Merge an incoming view and emit membership events for all status changes:
-     * NodeUp for newly-learned Up members, and NodeUp/NodeSuspected/NodeDown
-     * when a known member's status changes as a result of the merge.
+     * Merge an incoming view into the current view. Emits NodeUp for newly-learned
+     * Up members, and NodeUp/NodeSuspected/NodeDown for status changes on known
+     * members. Updates suspectSince accordingly.
      *
-     * @return list<MembershipEvent>
+     * @param array<string, DateTimeImmutable> $suspectSince
+     *
+     * @return array{ClusterView, array<string, DateTimeImmutable>, list<MembershipEvent>}
      */
-    private function mergeView(ClusterView $incoming): array
+    private function mergeView(ClusterView $view, array $suspectSince, ClusterView $incoming): array
     {
-        $before = $this->view;
-        $this->view = $this->view->merge($incoming);
-
+        $before = $view;
+        $merged = $view->merge($incoming);
         $events = [];
+        $newSuspectSince = $suspectSince;
 
         foreach ($incoming->members as $key => $record) {
             if ($key === $this->selfKey || $before->has($record->address)) {
                 continue;
             }
 
-            $merged = $this->view->members[$key];
+            $mergedRecord = $merged->members[$key];
 
-            if ($merged->status === MemberStatus::Up) {
-                $events[] = new NodeUp($merged->address, $merged->endpoint);
+            if ($mergedRecord->status === MemberStatus::Up) {
+                $events[] = new NodeUp($mergedRecord->address, $mergedRecord->endpoint);
             }
         }
 
         foreach ($before->members as $key => $beforeRecord) {
-            if ($key === $this->selfKey || !isset($this->view->members[$key])) {
+            if ($key === $this->selfKey || !isset($merged->members[$key])) {
                 continue;
             }
 
-            $afterRecord = $this->view->members[$key];
+            $afterRecord = $merged->members[$key];
 
             if ($beforeRecord->status === $afterRecord->status) {
                 continue;
@@ -342,40 +427,60 @@ final class MembershipService
             };
 
             if ($afterRecord->status === MemberStatus::Up) {
-                unset($this->suspectSince[$key]);
+                unset($newSuspectSince[$key]);
             } elseif ($afterRecord->status === MemberStatus::Suspect) {
-                $this->suspectSince[$key] ??= $afterRecord->lastSeen;
+                $newSuspectSince[$key] ??= $afterRecord->lastSeen;
             } else {
-                $this->view = $this->view->withoutNode($afterRecord->address);
-                unset($this->suspectSince[$key]);
+                $merged = $merged->withoutNode($afterRecord->address);
+                unset($newSuspectSince[$key]);
             }
         }
 
-        return $events;
+        return [$merged, $newSuspectSince, $events];
     }
 
-    private function viewFromGossip(GossipPayload $payload, DateTimeImmutable $now): ClusterView
+    /**
+     * Convert a GossipPayload to a ClusterView using local `$now` as lastSeen for
+     * all received members (the sender's timestamps are irrelevant to merge
+     * tie-breaking, which uses incarnation and status rank as primary criteria).
+     * Self is excluded from the resulting view.
+     */
+    private function gossipToView(GossipPayload $payload, DateTimeImmutable $now): ClusterView
     {
         $view = ClusterView::empty();
 
-        foreach ($payload->view as $prefix => $hostPort) {
-            if ($prefix === $this->selfKey) {
+        foreach ($payload->members as $member) {
+            $addressKey = $member['address'];
+
+            if ($addressKey === $this->selfKey) {
                 continue;
             }
 
-            $address = self::nodeAddressFromPathPrefix($prefix);
+            $address = self::nodeAddressFromPathPrefix($addressKey);
 
             if ($address === null) {
                 continue;
             }
 
             try {
-                $endpoint = NodeEndpoint::fromString($hostPort);
+                $endpoint = NodeEndpoint::fromString($member['endpoint']);
             } catch (InvalidArgumentException) {
                 continue;
             }
 
-            $view = $view->withMember(new MemberRecord($address, $endpoint, 1, MemberStatus::Up, $now));
+            $status = self::statusFromInt($member['status']);
+
+            if ($status === null) {
+                continue;
+            }
+
+            $view = $view->withMember(new MemberRecord(
+                $address,
+                $endpoint,
+                $member['incarnation'],
+                $status,
+                $now,
+            ));
         }
 
         return $view;
@@ -384,11 +489,11 @@ final class MembershipService
     /**
      * @return array<string, string>
      */
-    private function viewToMap(): array
+    private function viewToMap(ClusterView $view): array
     {
         $map = [];
 
-        foreach ($this->view->members as $key => $record) {
+        foreach ($view->members as $key => $record) {
             $map[$key] = (string) $record->endpoint;
         }
 
@@ -396,17 +501,50 @@ final class MembershipService
     }
 
     /**
-     * @param list<MembershipEvent> $events
+     * @return list<array{address: string, endpoint: string, incarnation: int, status: int}>
      */
-    private function notify(array $events): void
+    private function viewToGossipMembers(ClusterView $view): array
     {
-        if (count($events) === 0) {
-            return;
+        $members = [];
+
+        foreach ($view->nodes() as $record) {
+            $members[] = [
+                'address' => $record->address->toPathPrefix(),
+                'endpoint' => (string) $record->endpoint,
+                'incarnation' => $record->incarnation,
+                'status' => $record->status->rank(),
+            ];
         }
 
-        foreach ($this->listeners as $listener) {
-            $listener($this->view, $events);
+        return $members;
+    }
+
+    /**
+     * @return list<MembershipEffect>
+     */
+    private function buildGossipEffects(ClusterView $view, PeerSelector $peerSelector): array
+    {
+        $candidates = [];
+
+        foreach ($view->upNodes() as $record) {
+            $key = $record->address->toPathPrefix();
+
+            if ($key !== $this->selfKey) {
+                $candidates[] = $key;
+            }
         }
+
+        if (count($candidates) === 0) {
+            return [];
+        }
+
+        $selected = $peerSelector->select($candidates, min(3, count($candidates)));
+
+        if ($selected === []) {
+            return [];
+        }
+
+        return [new SendGossip($selected, new GossipPayload($this->viewToGossipMembers($view), []))];
     }
 
     private static function nodeAddressFromPathPrefix(string $prefix): ?NodeAddress
@@ -423,5 +561,19 @@ final class MembershipService
     private static function elapsedMillis(DateTimeImmutable $now, DateTimeImmutable $since): float
     {
         return ((float) $now->format('U.u') - (float) $since->format('U.u')) * 1000.0;
+    }
+
+    /**
+     * Convert a gossip status integer back to MemberStatus.
+     * Integers correspond to MemberStatus::rank(): Up = 1, Suspect = 2, Down = 3.
+     */
+    private static function statusFromInt(int $statusInt): ?MemberStatus
+    {
+        return match ($statusInt) {
+            1 => MemberStatus::Up,
+            2 => MemberStatus::Suspect,
+            3 => MemberStatus::Down,
+            default => null,
+        };
     }
 }

@@ -7,15 +7,17 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeResponse;
 use Monadial\Nexus\Cluster\Tcp\Membership\MemberRecord;
-use Monadial\Nexus\Cluster\Tcp\Membership\MembershipEvent;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipTransition;
 use Monadial\Nexus\Cluster\Tcp\Membership\MemberStatus;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeDown;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeSuspected;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeUp;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerSelector;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
+use Monadial\Nexus\Cluster\Tcp\Membership\SendGossip;
 use Monadial\Nexus\Cluster\Tcp\Membership\SuspicionReason;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
@@ -26,9 +28,13 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function array_column;
 use function array_slice;
 
 #[CoversClass(MembershipService::class)]
+#[CoversClass(MembershipTransition::class)]
+#[CoversClass(HandshakeResponse::class)]
+#[CoversClass(SendGossip::class)]
 #[CoversClass(NodeUp::class)]
 #[CoversClass(NodeDown::class)]
 #[CoversClass(NodeSuspected::class)]
@@ -40,74 +46,131 @@ final class MembershipServiceTest extends TestCase
 
     private NodeEndpoint $peerEndpoint;
 
-    /** @var list<MembershipEvent> */
-    private array $events = [];
+    private PhiAccrualDetector $detector;
+
+    private PeerSelector $peerSelector;
 
     #[Test]
-    public function initialViewContainsSelfAsUp(): void
+    public function initialStateContainsSelfAsUp(): void
     {
-        $service = $this->service();
+        $t = $this->service()->initialState($this->clock->now());
 
-        self::assertCount(1, $service->currentView()->upNodes());
+        self::assertCount(1, $t->newView->upNodes());
+        self::assertSame(1, $t->newSelfIncarnation);
+        self::assertSame([], $t->events);
+        self::assertSame([], $t->effects);
     }
 
     #[Test]
     public function handshakeAcceptedAddsPeerAndEmitsNodeUp(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
 
-        $ack = $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 1, ClusterView::empty());
+        $t1 = $service->applyHandshake(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            'production',
+            1,
+            ClusterView::empty(),
+            $this->clock->now(),
+        );
 
-        self::assertTrue($ack->accepted);
-        self::assertNull($ack->reason);
-        self::assertTrue($service->currentView()->has($this->peer));
-        self::assertInstanceOf(NodeUp::class, $this->events[0]);
+        self::assertCount(1, $t1->effects);
+        $effect = $t1->effects[0];
+        self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertTrue($effect->accepted);
+        self::assertNull($effect->reason);
+        self::assertTrue($t1->newView->has($this->peer));
+        self::assertCount(1, $t1->events);
+        self::assertInstanceOf(NodeUp::class, $t1->events[0]);
     }
 
     #[Test]
     public function handshakeRejectsClusterNameMismatch(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
 
-        $ack = $service->onHandshake($this->peer, $this->peerEndpoint, 'staging', 1, ClusterView::empty());
+        $t1 = $service->applyHandshake(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            'staging',
+            1,
+            ClusterView::empty(),
+            $this->clock->now(),
+        );
 
-        self::assertFalse($ack->accepted);
-        self::assertSame('Cluster name mismatch.', $ack->reason);
-        self::assertFalse($service->currentView()->has($this->peer));
+        self::assertCount(1, $t1->effects);
+        $effect = $t1->effects[0];
+        self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertFalse($effect->accepted);
+        self::assertSame('Cluster name mismatch.', $effect->reason);
+        self::assertFalse($t1->newView->has($this->peer));
     }
 
     #[Test]
     public function handshakeRejectsProtocolVersionMismatch(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
 
-        $ack = $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 2, ClusterView::empty());
+        $t1 = $service->applyHandshake(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            'production',
+            2,
+            ClusterView::empty(),
+            $this->clock->now(),
+        );
 
-        self::assertFalse($ack->accepted);
-        self::assertSame('Protocol version mismatch.', $ack->reason);
+        $effect = $t1->effects[0];
+        self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertFalse($effect->accepted);
+        self::assertSame('Protocol version mismatch.', $effect->reason);
     }
 
     #[Test]
     public function handshakeMergesPeerView(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
         $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
         $thirdEndpoint = NodeEndpoint::fromString('10.0.0.3:7355');
         $theirView = ClusterView::empty()->withMember(
-            new MemberRecord(
-                $third,
-                $thirdEndpoint,
-                1,
-                MemberStatus::Up,
-                $this->clock->now(),
-            ),
+            new MemberRecord($third, $thirdEndpoint, 1, MemberStatus::Up, $this->clock->now()),
         );
 
-        $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 1, $theirView);
+        $t1 = $service->applyHandshake(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            'production',
+            1,
+            $theirView,
+            $this->clock->now(),
+        );
 
-        self::assertTrue($service->currentView()->has($third));
+        self::assertTrue($t1->newView->has($third));
         // events[0] = NodeUp(peer) from recordLiveness; events[1] = NodeUp(third) from mergeView
-        $event = $this->events[1];
+        self::assertCount(2, $t1->events);
+        $event = $t1->events[1];
         self::assertInstanceOf(NodeUp::class, $event);
         self::assertEquals($third, $event->node);
     }
@@ -116,160 +179,462 @@ final class MembershipServiceTest extends TestCase
     public function mergeViewEmitsNodeUpWhenSuspectPeerRecovers(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
         $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
         $thirdEndpoint = NodeEndpoint::fromString('10.0.0.3:7355');
 
         // Establish third as Up then suspect it via unexpected link close.
-        $service->onFrameFromPeer($third, $thirdEndpoint);
-        $service->onLinkClosed($third, intentional: false);
-        $this->events = [];
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $third,
+            $thirdEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $third,
+            false,
+            $this->clock->now(),
+        );
 
-        // A handshake from peer-2 carries node-3 as Up with a higher incarnation (rejoin).
+        // A handshake from peer carries node-3 as Up with a higher incarnation (rejoin).
         $theirView = ClusterView::empty()->withMember(
             new MemberRecord($third, $thirdEndpoint, 2, MemberStatus::Up, $this->clock->now()),
         );
-        $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 1, $theirView);
+        $t3 = $service->applyHandshake(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            'production',
+            1,
+            $theirView,
+            $this->clock->now(),
+        );
 
         // events[0] = NodeUp(peer) from recordLiveness; events[1] = NodeUp(third) from status-change detection
-        $event = $this->events[1];
+        self::assertCount(2, $t3->events);
+        $event = $t3->events[1];
         self::assertInstanceOf(NodeUp::class, $event);
         self::assertEquals($third, $event->node);
-        self::assertSame(MemberStatus::Up, $service->currentView()->members[$third->toPathPrefix()]->status);
+        self::assertSame(MemberStatus::Up, $t3->newView->members[$third->toPathPrefix()]->status);
     }
 
     #[Test]
     public function gossipMergeLearnsNewNodes(): void
     {
         $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
         $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
-        $payload = new GossipPayload([$third->toPathPrefix() => '10.0.0.3:7355'], []);
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $third->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Up->rank(),
+                ],
+            ],
+            registrations: [],
+        );
 
-        $service->onGossip($this->peer, $payload);
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
 
-        self::assertTrue($service->currentView()->has($third));
-        self::assertInstanceOf(NodeUp::class, $this->events[0]);
+        self::assertTrue($t1->newView->has($third));
+        self::assertCount(1, $t1->events);
+        self::assertInstanceOf(NodeUp::class, $t1->events[0]);
+    }
+
+    #[Test]
+    public function gossipPropagatesSuspectStatus(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        // Establish node-3 as Up locally first.
+        $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $thirdEndpoint = NodeEndpoint::fromString('10.0.0.3:7355');
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $third,
+            $thirdEndpoint,
+            $this->clock->now(),
+        );
+
+        // A gossip arrives saying node-3 is Suspect at the same incarnation.
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $third->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Suspect->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t2 = $service->applyGossip(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        self::assertSame(MemberStatus::Suspect, $t2->newView->members[$third->toPathPrefix()]->status);
+        self::assertCount(1, $t2->events);
+        self::assertInstanceOf(NodeSuspected::class, $t2->events[0]);
+        self::assertSame(SuspicionReason::Gossip, $t2->events[0]->reason);
     }
 
     #[Test]
     public function unexpectedLinkCloseSuspectsPeer(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $this->events = [];
+        $t0 = $service->initialState($this->clock->now());
 
-        $service->onLinkClosed($this->peer, intentional: false);
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
 
-        self::assertSame(MemberStatus::Suspect, $service->currentView()->members[$this->peer->toPathPrefix()]->status);
-        self::assertInstanceOf(NodeSuspected::class, $this->events[0]);
-        self::assertSame(SuspicionReason::Connection, $this->events[0]->reason);
+        self::assertSame(MemberStatus::Suspect, $t2->newView->members[$this->peer->toPathPrefix()]->status);
+        self::assertCount(1, $t2->events);
+        self::assertInstanceOf(NodeSuspected::class, $t2->events[0]);
+        self::assertSame(SuspicionReason::Connection, $t2->events[0]->reason);
     }
 
     #[Test]
     public function intentionalLinkCloseDoesNotSuspectPeer(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $this->events = [];
+        $t0 = $service->initialState($this->clock->now());
 
-        $service->onLinkClosed($this->peer, intentional: true);
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            true,
+            $this->clock->now(),
+        );
 
-        self::assertSame(MemberStatus::Up, $service->currentView()->members[$this->peer->toPathPrefix()]->status);
-        self::assertSame([], $this->events);
+        self::assertSame(MemberStatus::Up, $t2->newView->members[$this->peer->toPathPrefix()]->status);
+        self::assertSame([], $t2->events);
     }
 
     #[Test]
     public function phiThresholdMovesPeerToSuspect(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
+        $t0 = $service->initialState($this->clock->now());
 
-        foreach ([1000, 2000, 3000, 4000, 5000] as $ms) {
-            $this->clock->set($this->clock->now()->modify("+1000 milliseconds"));
-            $service->onPing($this->peer);
+        $t = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+
+        for ($i = 0; $i < 5; $i++) {
+            $this->clock->set($this->clock->now()->modify('+1000 milliseconds'));
+            $t = $service->applyLiveness(
+                $t->newView,
+                $t->newSuspectSince,
+                $t->newSelfIncarnation,
+                $this->detector,
+                $this->peer,
+                null,
+                $this->clock->now(),
+            );
         }
 
-        $this->events = [];
         $this->clock->set($this->clock->now()->modify('+6000 milliseconds'));
-        $service->tick($this->clock->now());
+        $t = $service->applyTick(
+            $t->newView,
+            $t->newSuspectSince,
+            $t->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
 
-        self::assertSame(MemberStatus::Suspect, $service->currentView()->members[$this->peer->toPathPrefix()]->status);
-        self::assertInstanceOf(NodeSuspected::class, $this->events[0]);
-        self::assertSame(SuspicionReason::Phi, $this->events[0]->reason);
+        self::assertSame(MemberStatus::Suspect, $t->newView->members[$this->peer->toPathPrefix()]->status);
+        self::assertCount(1, $t->events);
+        self::assertInstanceOf(NodeSuspected::class, $t->events[0]);
+        self::assertSame(SuspicionReason::Phi, $t->events[0]->reason);
     }
 
     #[Test]
     public function suspectPeerRecoversOnFrame(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $service->onLinkClosed($this->peer, intentional: false);
-        $this->events = [];
+        $t0 = $service->initialState($this->clock->now());
 
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
+        $t3 = $service->applyLiveness(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
 
-        self::assertSame(MemberStatus::Up, $service->currentView()->members[$this->peer->toPathPrefix()]->status);
-        self::assertInstanceOf(NodeUp::class, $this->events[0]);
+        self::assertSame(MemberStatus::Up, $t3->newView->members[$this->peer->toPathPrefix()]->status);
+        self::assertCount(1, $t3->events);
+        self::assertInstanceOf(NodeUp::class, $t3->events[0]);
     }
 
     #[Test]
     public function suspectPeerGoesDownAfterGiveUpWindow(): void
     {
         $service = $this->service(downAfter: Duration::seconds(10));
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $service->onLinkClosed($this->peer, intentional: false);
-        $this->events = [];
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
 
         $this->clock->set($this->clock->now()->modify('+11 seconds'));
-        $service->tick($this->clock->now());
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
 
-        self::assertFalse($service->currentView()->has($this->peer));
-        self::assertInstanceOf(NodeDown::class, $this->events[0]);
+        self::assertFalse($t3->newView->has($this->peer));
+        self::assertCount(1, $t3->events);
+        self::assertInstanceOf(NodeDown::class, $t3->events[0]);
     }
 
     #[Test]
     public function suspectPeerStaysWithinGiveUpWindow(): void
     {
         $service = $this->service(downAfter: Duration::seconds(10));
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $service->onLinkClosed($this->peer, intentional: false);
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
 
         $this->clock->set($this->clock->now()->modify('+5 seconds'));
-        $service->tick($this->clock->now());
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
 
-        self::assertTrue($service->currentView()->has($this->peer));
+        self::assertTrue($t3->newView->has($this->peer));
     }
 
     #[Test]
     public function leaveRemovesPeerAndEmitsNodeDown(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
-        $this->events = [];
+        $t0 = $service->initialState($this->clock->now());
 
-        $service->onLeave($this->peer);
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLeave($t1->newView, $t1->newSuspectSince, $t1->newSelfIncarnation, $this->peer);
 
-        self::assertFalse($service->currentView()->has($this->peer));
-        self::assertInstanceOf(NodeDown::class, $this->events[0]);
+        self::assertFalse($t2->newView->has($this->peer));
+        self::assertCount(1, $t2->events);
+        self::assertInstanceOf(NodeDown::class, $t2->events[0]);
     }
 
     #[Test]
     public function tickGossipsToSelectedPeers(): void
     {
         $service = $this->service();
-        $service->onFrameFromPeer($this->peer, $this->peerEndpoint);
+        $t0 = $service->initialState($this->clock->now());
+
         $other = new NodeAddress('production', 'eu', 'payments', 'node-3');
-        $service->onFrameFromPeer($other, NodeEndpoint::fromString('10.0.0.3:7355'));
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLiveness(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->detector,
+            $other,
+            NodeEndpoint::fromString('10.0.0.3:7355'),
+            $this->clock->now(),
+        );
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
 
-        $payloads = $service->tick($this->clock->now());
+        self::assertCount(1, $t3->effects);
+        $effect = $t3->effects[0];
+        self::assertInstanceOf(SendGossip::class, $effect);
+        self::assertCount(2, $effect->targets);
+        self::assertContains($this->peer->toPathPrefix(), $effect->targets);
+    }
 
-        self::assertCount(2, $payloads);
-        self::assertArrayHasKey($this->peer->toPathPrefix(), $payloads[0]->view);
+    #[Test]
+    public function tickGossipPayloadContainsMemberAddresses(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyTick(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertCount(1, $t2->effects);
+        $effect = $t2->effects[0];
+        self::assertInstanceOf(SendGossip::class, $effect);
+        $addresses = array_column($effect->payload->members, 'address');
+        self::assertContains($this->peer->toPathPrefix(), $addresses);
     }
 
     #[Test]
     public function tickWithNoPeersProducesNoGossip(): void
     {
-        self::assertSame([], $this->service()->tick($this->clock->now()));
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyTick(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertSame([], $t1->effects);
     }
 
     #[Test]
@@ -277,11 +642,18 @@ final class MembershipServiceTest extends TestCase
     {
         $service = $this->service();
         $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
-        $before = $service->currentView()->members[$self->toPathPrefix()]->incarnation;
+        $t0 = $service->initialState($this->clock->now());
+        $before = $t0->newView->members[$self->toPathPrefix()]->incarnation;
 
-        $service->rejoin();
+        $t1 = $service->applyRejoin(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->clock->now(),
+        );
 
-        self::assertSame($before + 1, $service->currentView()->members[$self->toPathPrefix()]->incarnation);
+        self::assertSame($before + 1, $t1->newView->members[$self->toPathPrefix()]->incarnation);
+        self::assertSame($before + 1, $t1->newSelfIncarnation);
     }
 
     protected function setUp(): void
@@ -289,7 +661,14 @@ final class MembershipServiceTest extends TestCase
         $this->clock = new TestClock();
         $this->peer = new NodeAddress('production', 'eu', 'payments', 'node-2');
         $this->peerEndpoint = NodeEndpoint::fromString('10.0.0.2:7355');
-        $this->events = [];
+        $this->detector = new PhiAccrualDetector();
+        $this->peerSelector = new class implements PeerSelector {
+            #[Override]
+            public function select(array $peers, int $count): array
+            {
+                return array_slice($peers, 0, $count);
+            }
+        };
     }
 
     private function service(?Duration $downAfter = null): MembershipService
@@ -302,21 +681,6 @@ final class MembershipServiceTest extends TestCase
             seeds: [NodeEndpoint::fromString('10.0.0.9:7355')],
         );
 
-        $selector = new class implements PeerSelector {
-            #[Override]
-            public function select(array $peers, int $count): array
-            {
-                return array_slice($peers, 0, $count);
-            }
-        };
-
-        $service = new MembershipService($topology, $this->clock, new PhiAccrualDetector(), $selector, $downAfter);
-        $service->onViewChange(function (ClusterView $_view, array $events): void {
-            foreach ($events as $event) {
-                $this->events[] = $event;
-            }
-        });
-
-        return $service;
+        return new MembershipService($topology, $downAfter);
     }
 }

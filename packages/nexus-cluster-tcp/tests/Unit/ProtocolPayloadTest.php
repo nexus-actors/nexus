@@ -117,14 +117,25 @@ final class ProtocolPayloadTest extends TestCase
     }
 
     #[Test]
-    public function gossipPayloadHoldsViewAndEmptyRegistrations(): void
+    public function gossipPayloadHoldsMembersAndEmptyRegistrations(): void
     {
         $gp = new GossipPayload(
-            view: ['prod/eu/svc/n1' => '10.0.0.1:7355'],
+            members: [
+                [
+                    'address' => 'prod/eu/svc/n1',
+                    'endpoint' => '10.0.0.1:7355',
+                    'incarnation' => 1,
+                    'status' => 1,
+                ],
+            ],
             registrations: [],
         );
 
-        self::assertSame(['prod/eu/svc/n1' => '10.0.0.1:7355'], $gp->view);
+        self::assertCount(1, $gp->members);
+        self::assertSame('prod/eu/svc/n1', $gp->members[0]['address']);
+        self::assertSame('10.0.0.1:7355', $gp->members[0]['endpoint']);
+        self::assertSame(1, $gp->members[0]['incarnation']);
+        self::assertSame(1, $gp->members[0]['status']);
         self::assertSame([], $gp->registrations);
     }
 
