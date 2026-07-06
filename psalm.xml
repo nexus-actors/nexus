@@ -145,6 +145,10 @@
                 <!-- ReceiverActor / MessengerBridge: $deadLetters is a fan-in sink (any message type); $processedListener accepts MessagesProcessed — both are semantically typed but not expressible as a single concrete ActorRef<T> -->
                 <file name="packages/nexus-messenger/src/Consumer/ReceiverActor.php"/>
                 <file name="packages/nexus-messenger/src/MessengerBridge.php"/>
+                <!-- Cluster inbound routing: the local registry, delivery seam, and reply sender carry refs by identity; the remote caller's message type is not expressible at the routing boundary (Akka Typed: ActorRef[Nothing]) -->
+                <file name="packages/nexus-cluster-tcp/src/Messaging/InboundDelivery.php"/>
+                <file name="packages/nexus-cluster-tcp/src/Messaging/LocalActorRegistry.php"/>
+                <file name="packages/nexus-cluster-tcp/src/Messaging/LocalDelivery.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>
