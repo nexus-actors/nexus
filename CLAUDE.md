@@ -184,6 +184,8 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 
 **`ActorCell<T>`** (`Actor/ActorCell.php`) — Internal engine implementing `ActorContext<T>`. Manages the behavior state machine, children map, watchers, stash buffer, and message processing. States: `New → Starting → Running → {Suspended, Stopping} → Stopped`.
 
+**`Net\Host`** / **`Net\Port`** (`Net/Host.php`, `Net/Port.php`) — Framework-wide network value objects (pure PHP, no new deps). `Host::of(string)` accepts IPv4/IPv6 literals and RFC 1123 hostnames; exposes `isIp()`/`isIpv6()`. `Port::of(int)` validates 0–65535 (port 0 = OS-assigned). Used by `nexus-cluster-tcp`'s `NodeEndpoint` and reusable by the http stack.
+
 ### Actor Definition Patterns
 
 **Closure-based (simplest):**
