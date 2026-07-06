@@ -12,5 +12,5 @@ namespace Monadial\Nexus\Cluster\Tcp;
  */
 final readonly class Frame
 {
-    public function __construct(public FrameType $type, public string $payload,) {}
+    public function __construct(public FrameType $type, public string $payload) {}
 }

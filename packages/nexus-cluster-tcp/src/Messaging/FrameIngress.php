@@ -1,0 +1,98 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Cluster\Tcp\Messaging;
+
+use Closure;
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\Frame;
+use Monadial\Nexus\Cluster\Tcp\FrameType;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+
+/**
+ * @psalm-api
+ *
+ * Decodes inbound cluster frames and routes {@see FrameType::Message} frames to the
+ * {@see InboxRouter}. Each instance is associated with one peer (the `$origin` address
+ * is fixed at construction).
+ *
+ * {@see FrameType::Message} frames are deserialized to a {@see MessagePayload} VO via the
+ * injected serializer and handed to {@see InboxRouter::route()} with the peer's node address
+ * as the origin. All other frame types are forwarded to the optional `$fallback` handler or
+ * silently ignored — they are the responsibility of the membership/handshake layer.
+ *
+ * Usage:
+ *   $ingress = new FrameIngress($router, $peerAddress, $serializer);
+ *   $peerLink->onFrame(fn(Frame $frame) => $ingress->ingest($frame));
+ */
+final class FrameIngress
+{
+    /**
+     * The well-known cluster type name for MessagePayload, set via its #[MessageType] attribute.
+     *
+     * @see \Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload
+     */
+    private const string MESSAGE_PAYLOAD_TYPE = 'cluster.message';
+
+    /** @var Closure(Frame): void|null */
+    private readonly ?Closure $fallback;
+
+    /**
+     * @param (Closure(Frame): void)|null $fallback Optional handler for non-Message frames.
+     *
+     * @psalm-suppress MixedPropertyTypeCoercion The callable-to-Closure coercion via first-class
+     *                                           callable syntax is safe here; Psalm cannot infer
+     *                                           the specific Closure(Frame): void signature.
+     */
+    public function __construct(
+        private readonly InboxRouter $router,
+        private readonly NodeAddress $origin,
+        private readonly MessageSerializer $payloadSerializer,
+        ?callable $fallback = null,
+        private readonly LoggerInterface $logger = new NullLogger(),
+    ) {
+        $this->fallback = $fallback !== null
+            ? $fallback(...)
+            : null;
+    }
+
+    /**
+     * Process one inbound frame. {@see FrameType::Message} frames are decoded and routed;
+     * other frame types are passed to the fallback handler (if any) or ignored.
+     */
+    public function ingest(Frame $frame): void
+    {
+        if ($frame->type !== FrameType::Message) {
+            if ($this->fallback !== null) {
+                ($this->fallback)($frame);
+            }
+
+            return;
+        }
+
+        try {
+            $payload = $this->payloadSerializer->deserialize($frame->payload, self::MESSAGE_PAYLOAD_TYPE);
+        } catch (MessageDeserializationException $e) {
+            $this->logger->debug('FrameIngress: dropping undecodable Message frame', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        if (!$payload instanceof MessagePayload) {
+            $this->logger->debug('FrameIngress: deserializer returned unexpected type for cluster.message', [
+                'type' => $payload::class,
+            ]);
+
+            return;
+        }
+
+        $this->router->route($this->origin, $payload);
+    }
+}

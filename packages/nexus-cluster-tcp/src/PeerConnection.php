@@ -1,0 +1,171 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Cluster\Tcp;
+
+use Closure;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
+use RuntimeException;
+
+use function count;
+
+/**
+ * @psalm-api
+ *
+ * Manages one outbound connection to a peer node. Owns a single PeerLink (obtained
+ * via MeshTransport::connect()), a bounded outbound frame queue, and an exponential-backoff
+ * reconnect loop.
+ *
+ * Peer-death vs. intentional-close distinction: the `intentionallyClosed` flag is set
+ * BEFORE closing the underlying PeerLink so the `onClose` callback never triggers a
+ * reconnect when the local node chose to disconnect.
+ *
+ * Reconnect backoff: starts at `$initialBackoff`, doubles on each failed attempt up to
+ * `$maxBackoff`. Resets to `$initialBackoff` after a successful connection is established
+ * and then lost (peer death).
+ *
+ * Outbound queue: frames sent while disconnected are buffered up to `$queueCap`.
+ * Frames beyond the cap are silently dropped and counted via `drops()`.
+ */
+final class PeerConnection
+{
+    private const int DEFAULT_QUEUE_CAP = 100;
+
+    private ?PeerLink $link = null;
+
+    private bool $intentionallyClosed = false;
+
+    private int $drops = 0;
+
+    /** @var list<Frame> */
+    private array $queue = [];
+
+    /** @var list<Closure(Frame): void> */
+    private array $frameHandlers = [];
+
+    public function __construct(
+        private readonly NodeEndpoint $endpoint,
+        private readonly MeshTransport $transport,
+        private readonly Runtime $runtime,
+        private readonly Duration $initialBackoff,
+        private readonly Duration $maxBackoff,
+        private readonly int $queueCap = self::DEFAULT_QUEUE_CAP,
+    ) {
+        $this->attemptConnect($this->initialBackoff);
+    }
+
+    /**
+     * Enqueue a frame for delivery. If connected, sends immediately. If reconnecting,
+     * buffers up to the queue cap; frames beyond the cap are dropped and counted.
+     */
+    public function sendFrame(Frame $frame): void
+    {
+        if ($this->intentionallyClosed) {
+            return;
+        }
+
+        if ($this->link !== null) {
+            $this->link->sendFrame($frame);
+
+            return;
+        }
+
+        if (count($this->queue) >= $this->queueCap) {
+            ++$this->drops;
+
+            return;
+        }
+
+        $this->queue[] = $frame;
+    }
+
+    /**
+     * Register a handler invoked for every frame arriving from the peer.
+     *
+     * @param callable(Frame): void $onFrame
+     */
+    public function onFrame(callable $onFrame): void
+    {
+        $this->frameHandlers[] = $onFrame(...);
+    }
+
+    /**
+     * Intentionally close this connection. Stops the reconnect loop and closes the
+     * underlying link. Queued frames are discarded. Idempotent.
+     */
+    public function close(): void
+    {
+        $this->intentionallyClosed = true;
+        $link = $this->link;
+        $this->link = null;
+        $this->queue = [];
+        $link?->close();
+    }
+
+    /**
+     * Number of frames dropped due to queue overflow during reconnect.
+     */
+    public function drops(): int
+    {
+        return $this->drops;
+    }
+
+    private function attemptConnect(Duration $currentBackoff): void
+    {
+        if ($this->intentionallyClosed) {
+            return;
+        }
+
+        try {
+            $link = $this->transport->connect($this->endpoint);
+            $this->link = $link;
+            $this->flushQueue($link);
+            $this->wireLink($link);
+        } catch (RuntimeException) {
+            $this->runtime->scheduleOnce($currentBackoff, function () use ($currentBackoff): void {
+                $this->attemptConnect($this->growBackoff($currentBackoff));
+            });
+        }
+    }
+
+    private function wireLink(PeerLink $link): void
+    {
+        $link->onFrame(function (Frame $frame): void {
+            foreach ($this->frameHandlers as $handler) {
+                $handler($frame);
+            }
+        });
+
+        $link->onClose(function (): void {
+            if ($this->intentionallyClosed) {
+                return;
+            }
+
+            $this->link = null;
+            $this->runtime->scheduleOnce($this->initialBackoff, function (): void {
+                $this->attemptConnect($this->initialBackoff);
+            });
+        });
+    }
+
+    private function flushQueue(PeerLink $link): void
+    {
+        $queued = $this->queue;
+        $this->queue = [];
+
+        foreach ($queued as $frame) {
+            $link->sendFrame($frame);
+        }
+    }
+
+    private function growBackoff(Duration $current): Duration
+    {
+        $doubled = $current->multipliedBy(2);
+
+        return $doubled->isGreaterThan($this->maxBackoff)
+            ? $this->maxBackoff
+            : $doubled;
+    }
+}

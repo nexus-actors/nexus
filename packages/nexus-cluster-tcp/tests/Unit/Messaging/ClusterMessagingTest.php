@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRefFactory;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterReplyRef;
 use Monadial\Nexus\Cluster\Tcp\Messaging\DeliveryOutcome;
+use Monadial\Nexus\Cluster\Tcp\Messaging\FrameIngress;
 use Monadial\Nexus\Cluster\Tcp\Messaging\InboxRouter;
 use Monadial\Nexus\Cluster\Tcp\Messaging\LocalActorRegistry;
 use Monadial\Nexus\Cluster\Tcp\Messaging\LocalDelivery;
@@ -36,6 +37,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+#[CoversClass(FrameIngress::class)]
 #[CoversClass(LocalActorRegistry::class)]
 #[CoversClass(LocalDelivery::class)]
 #[CoversClass(ClusterMessageCodec::class)]
@@ -385,6 +387,31 @@ final class ClusterMessagingTest extends TestCase
             DeliveryOutcome::Unroutable,
             $delivery->deliver('/user/ghost', new Ping('x'), null),
         );
+    }
+
+    #[Test]
+    public function selfNodeUnroutableTellIsCountedViaLocalDelivery(): void
+    {
+        $localDelivery = new LocalDelivery(new LocalActorRegistry()); // empty — actor not exposed
+        $node = $this->node('node-a');
+
+        $clusterRef = new ClusterRef(
+            $node,
+            $node, // same node = self-node path
+            ActorPath::fromString(self::PATH),
+            new RecordingOutboundSink(),
+            $localDelivery,
+            new TcpAskRegistry(new TestRuntime()),
+            $this->codec(),
+            new SpyTraceContextInjector(),
+            static fn(): bool => true,
+        );
+
+        $clusterRef->tell(new Ping('lost'));
+
+        // The tell is self-node: it goes straight to LocalDelivery without a frame.
+        // Since the actor is not in the registry, LocalDelivery must count the drop.
+        self::assertSame(1, $localDelivery->drops());
     }
 
     #[Test]

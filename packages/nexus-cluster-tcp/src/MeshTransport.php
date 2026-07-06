@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp;
 
+use RuntimeException;
+
 /**
  * @psalm-api
  *
@@ -27,7 +29,7 @@ interface MeshTransport
      * For LoopbackMeshTransport: throws RuntimeException immediately if no
      * server is registered in the shared hub for $endpoint.
      *
-     * @throws \RuntimeException when no server is listening at $endpoint.
+     * @throws RuntimeException when no server is listening at $endpoint.
      */
     public function connect(NodeEndpoint $endpoint): PeerLink;
 

@@ -16,10 +16,16 @@ use Override;
  * Default {@see InboundDelivery} for a single-`ActorSystem` node: resolves the target via
  * a {@see LocalActorRegistry} and enqueues the message through the envelope-preserving
  * delivery seam so an injected reply sender survives on the mailbox as the message sender.
+ *
+ * Unroutable delivers (registry miss or mailbox rejection) are counted via {@see drops()}.
+ * This covers both inbound remote frames (routed via {@see InboxRouter}) and self-node tells
+ * from {@see ClusterRef} that bypass the remote path.
  */
-final readonly class LocalDelivery implements InboundDelivery
+final class LocalDelivery implements InboundDelivery
 {
-    public function __construct(private LocalActorRegistry $registry) {}
+    private int $drops = 0;
+
+    public function __construct(private readonly LocalActorRegistry $registry) {}
 
     /**
      * @param ActorRef<object>|null $replySender
@@ -30,6 +36,8 @@ final readonly class LocalDelivery implements InboundDelivery
         $ref = $this->registry->resolve($targetPath);
 
         if ($ref === null) {
+            ++$this->drops;
+
             return DeliveryOutcome::Unroutable;
         }
 
@@ -40,8 +48,22 @@ final readonly class LocalDelivery implements InboundDelivery
             $envelope = $envelope->withSenderRef($replySender);
         }
 
-        return $ref->offerEnvelope($envelope) === EnqueueResult::Accepted
+        $result = $ref->offerEnvelope($envelope) === EnqueueResult::Accepted
             ? DeliveryOutcome::Delivered
             : DeliveryOutcome::Unroutable;
+
+        if ($result === DeliveryOutcome::Unroutable) {
+            ++$this->drops;
+        }
+
+        return $result;
+    }
+
+    /**
+     * Number of unroutable delivers (registry miss or mailbox rejection).
+     */
+    public function drops(): int
+    {
+        return $this->drops;
     }
 }
