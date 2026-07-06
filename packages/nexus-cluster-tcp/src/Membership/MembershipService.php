@@ -299,7 +299,9 @@ final class MembershipService
     }
 
     /**
-     * Merge an incoming view and emit NodeUp for members newly learned as Up.
+     * Merge an incoming view and emit membership events for all status changes:
+     * NodeUp for newly-learned Up members, and NodeUp/NodeSuspected/NodeDown
+     * when a known member's status changes as a result of the merge.
      *
      * @return list<MembershipEvent>
      */
@@ -319,6 +321,33 @@ final class MembershipService
 
             if ($merged->status === MemberStatus::Up) {
                 $events[] = new NodeUp($merged->address, $merged->endpoint);
+            }
+        }
+
+        foreach ($before->members as $key => $beforeRecord) {
+            if ($key === $this->selfKey || !isset($this->view->members[$key])) {
+                continue;
+            }
+
+            $afterRecord = $this->view->members[$key];
+
+            if ($beforeRecord->status === $afterRecord->status) {
+                continue;
+            }
+
+            $events[] = match ($afterRecord->status) {
+                MemberStatus::Up => new NodeUp($afterRecord->address, $afterRecord->endpoint),
+                MemberStatus::Suspect => new NodeSuspected($afterRecord->address, SuspicionReason::Gossip),
+                MemberStatus::Down => new NodeDown($afterRecord->address),
+            };
+
+            if ($afterRecord->status === MemberStatus::Up) {
+                unset($this->suspectSince[$key]);
+            } elseif ($afterRecord->status === MemberStatus::Suspect) {
+                $this->suspectSince[$key] ??= $afterRecord->lastSeen;
+            } else {
+                $this->view = $this->view->withoutNode($afterRecord->address);
+                unset($this->suspectSince[$key]);
             }
         }
 

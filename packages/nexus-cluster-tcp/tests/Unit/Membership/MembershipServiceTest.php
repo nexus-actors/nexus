@@ -92,10 +92,11 @@ final class MembershipServiceTest extends TestCase
     {
         $service = $this->service();
         $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $thirdEndpoint = NodeEndpoint::fromString('10.0.0.3:7355');
         $theirView = ClusterView::empty()->withMember(
             new MemberRecord(
                 $third,
-                NodeEndpoint::fromString('10.0.0.3:7355'),
+                $thirdEndpoint,
                 1,
                 MemberStatus::Up,
                 $this->clock->now(),
@@ -105,6 +106,35 @@ final class MembershipServiceTest extends TestCase
         $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 1, $theirView);
 
         self::assertTrue($service->currentView()->has($third));
+        // events[0] = NodeUp(peer) from recordLiveness; events[1] = NodeUp(third) from mergeView
+        $event = $this->events[1];
+        self::assertInstanceOf(NodeUp::class, $event);
+        self::assertEquals($third, $event->node);
+    }
+
+    #[Test]
+    public function mergeViewEmitsNodeUpWhenSuspectPeerRecovers(): void
+    {
+        $service = $this->service();
+        $third = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $thirdEndpoint = NodeEndpoint::fromString('10.0.0.3:7355');
+
+        // Establish third as Up then suspect it via unexpected link close.
+        $service->onFrameFromPeer($third, $thirdEndpoint);
+        $service->onLinkClosed($third, intentional: false);
+        $this->events = [];
+
+        // A handshake from peer-2 carries node-3 as Up with a higher incarnation (rejoin).
+        $theirView = ClusterView::empty()->withMember(
+            new MemberRecord($third, $thirdEndpoint, 2, MemberStatus::Up, $this->clock->now()),
+        );
+        $service->onHandshake($this->peer, $this->peerEndpoint, 'production', 1, $theirView);
+
+        // events[0] = NodeUp(peer) from recordLiveness; events[1] = NodeUp(third) from status-change detection
+        $event = $this->events[1];
+        self::assertInstanceOf(NodeUp::class, $event);
+        self::assertEquals($third, $event->node);
+        self::assertSame(MemberStatus::Up, $service->currentView()->members[$third->toPathPrefix()]->status);
     }
 
     #[Test]
