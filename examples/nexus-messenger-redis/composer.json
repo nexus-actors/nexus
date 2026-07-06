@@ -7,12 +7,17 @@
     "require": {
         "php": ">=8.5",
         "ext-redis": "*",
+        "cuyz/valinor": "^2.3",
         "monolog/monolog": "^3.0",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
+        "rybakit/msgpack": "^0.9",
         "symfony/console": "^7.4 || ^8.0",
         "symfony/messenger": "^7.4 || ^8.0",
         "symfony/redis-messenger": "^7.4 || ^8.0"
+    },
+    "suggest": {
+        "ext-msgpack": "Native msgpack extension — faster packing when SERIALIZER=msgpack"
     },
     "autoload": {
         "files": [
@@ -25,9 +30,11 @@
             "Monadial\\Nexus\\Messenger\\": "/nexus-packages/nexus-messenger/src/",
             "Monadial\\Nexus\\Messenger\\Console\\": "/nexus-packages/nexus-messenger-console/src/",
             "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
+            "Monadial\\Nexus\\Observability\\Serialization\\": "/nexus-packages/nexus-observability-serialization/src/",
             "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "/nexus-packages/nexus-runtime-fiber/src/",
-            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/"
+            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/",
+            "Monadial\\Nexus\\Serialization\\Msgpack\\": "/nexus-packages/nexus-serialization-msgpack/src/"
         }
     },
     "config": {
