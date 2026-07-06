@@ -94,7 +94,7 @@ final class SwooleMeshTransport implements MeshTransport
         $server = new Server($host->value, 0, $ssl, false);
 
         if ($this->tls !== null) {
-            $server->set($this->serverTlsSettings($this->tls));
+            $server->set($this->buildTlsSettings($this->tls));
         }
 
         $this->prebound = $server;
@@ -123,10 +123,8 @@ final class SwooleMeshTransport implements MeshTransport
 
         $this->prebound = null;
 
-        if ($this->tls === null) {
-            // No TLS — nothing to set
-        } else {
-            $server->set($this->serverTlsSettings($this->tls));
+        if ($this->tls !== null) {
+            $server->set($this->buildTlsSettings($this->tls));
         }
 
         $this->servers[] = $server;
@@ -161,7 +159,7 @@ final class SwooleMeshTransport implements MeshTransport
         $client = new Client($sockType);
 
         if ($this->tls !== null) {
-            $client->set($this->clientTlsSettings($this->tls));
+            $client->set($this->buildTlsSettings($this->tls));
         }
 
         $connected = $client->connect($endpoint->host->value, $endpoint->port->value, 5.0);
@@ -220,43 +218,22 @@ final class SwooleMeshTransport implements MeshTransport
     }
 
     /**
-     * Build the Swoole server SSL settings array from a TlsConfig.
+     * Build the Swoole SSL settings array from a TlsConfig.
      * Keys are sorted alphabetically per the project's coding standard.
      *
      * @return array<string, mixed>
      */
-    private function serverTlsSettings(TlsConfig $tls): array
+    private function buildTlsSettings(TlsConfig $tls): array
     {
-        $settings = [
-            'ssl_cert_file' => $tls->certFile,
-            'ssl_key_file' => $tls->keyFile,
-            'ssl_verify_peer' => $tls->verifyPeer,
-        ];
+        $settings = [];
 
         if ($tls->caFile !== null) {
             $settings['ssl_cafile'] = $tls->caFile;
         }
 
-        return $settings;
-    }
-
-    /**
-     * Build the Swoole client SSL settings array from a TlsConfig.
-     * Keys are sorted alphabetically per the project's coding standard.
-     *
-     * @return array<string, mixed>
-     */
-    private function clientTlsSettings(TlsConfig $tls): array
-    {
-        $settings = [
-            'ssl_cert_file' => $tls->certFile,
-            'ssl_key_file' => $tls->keyFile,
-            'ssl_verify_peer' => $tls->verifyPeer,
-        ];
-
-        if ($tls->caFile !== null) {
-            $settings['ssl_cafile'] = $tls->caFile;
-        }
+        $settings['ssl_cert_file'] = $tls->certFile;
+        $settings['ssl_key_file'] = $tls->keyFile;
+        $settings['ssl_verify_peer'] = $tls->verifyPeer;
 
         return $settings;
     }

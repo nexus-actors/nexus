@@ -63,6 +63,8 @@ final class SwoolePeerLink implements PeerLink
      */
     private array $pendingFrames = [];
 
+    private readonly FrameCodec $codec;
+
     public function __construct(
         private readonly Socket $socket,
         private readonly Runtime $runtime,
@@ -75,6 +77,7 @@ final class SwoolePeerLink implements PeerLink
          */
         private readonly ?Client $clientOwner = null,
     ) {
+        $this->codec = new FrameCodec();
         $this->startReceiveLoop();
     }
 
@@ -98,8 +101,7 @@ final class SwoolePeerLink implements PeerLink
             return;
         }
 
-        $codec = new FrameCodec();
-        $this->socket->sendAll($codec->encode($frame));
+        $this->socket->sendAll($this->codec->encode($frame));
     }
 
     #[Override]
@@ -152,7 +154,6 @@ final class SwoolePeerLink implements PeerLink
     private function startReceiveLoop(): void
     {
         $this->runtime->spawn(function (): void {
-            $codec = new FrameCodec();
             $buffer = '';
 
             while (true) {
@@ -167,7 +168,7 @@ final class SwoolePeerLink implements PeerLink
                 $buffer .= $data;
 
                 try {
-                    $result = $codec->decodeStream($buffer);
+                    $result = $this->codec->decodeStream($buffer);
                 } catch (ProtocolException) {
                     $this->notifyClose();
 
