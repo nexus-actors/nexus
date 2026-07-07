@@ -30,6 +30,44 @@ final class PhiAccrualDetectorTest extends TestCase
         self::assertSame(0.0, $detector->phi('peer', $this->at(500)));
     }
 
+    /**
+     * Regression: two nodes that mutually seed each other each hold two connections
+     * to the peer at boot, so a Handshake (and every frame) arrives twice within
+     * ~1 ms. Recording that near-zero gap as a real interval would poison the window
+     * — with a short (fast-detection) minStdDev the first heartbeat tick then reports
+     * a high phi and the alive peer is falsely suspected. The duplicate must be
+     * coalesced.
+     */
+    #[Test]
+    public function burstHeartbeatsDoNotPoisonPhi(): void
+    {
+        $detector = new PhiAccrualDetector(minStdDev: 200.0);
+        $detector->heartbeat('peer', $this->at(0));
+        $detector->heartbeat('peer', $this->at(1)); // duplicate from the second connection
+
+        // At the first heartbeat tick the peer is alive; phi must not indicate failure.
+        self::assertSame(0.0, $detector->phi('peer', $this->at(1000)));
+    }
+
+    /**
+     * The coalescing must not weaken real detection: after a boot burst followed by
+     * steady heartbeats, a genuinely silent peer still crosses the high threshold.
+     */
+    #[Test]
+    public function realDetectionSurvivesABootBurst(): void
+    {
+        $detector = new PhiAccrualDetector(minStdDev: 200.0);
+        $detector->heartbeat('peer', $this->at(0));
+        $detector->heartbeat('peer', $this->at(1)); // coalesced boot duplicate
+
+        foreach ([1000, 2000, 3000, 4000, 5000] as $ms) {
+            $detector->heartbeat('peer', $this->at($ms));
+        }
+
+        self::assertLessThan(1.0, $detector->phi('peer', $this->at(5300)));
+        self::assertGreaterThan(8.0, $detector->phi('peer', $this->at(9000)));
+    }
+
     #[Test]
     public function steadyArrivalsStayBelowThresholdShortlyAfterLastBeat(): void
     {

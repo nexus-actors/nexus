@@ -37,6 +37,18 @@ use const M_PI;
  */
 final class PhiAccrualDetector
 {
+    /**
+     * Minimum interval (ms) recorded into the window. Heartbeats arriving closer
+     * together than this are treated as a single observation: their near-zero gap
+     * is not a real heartbeat cadence and would poison the window's mean/stddev,
+     * spuriously inflating phi. This happens legitimately at boot when two nodes
+     * mutually seed each other — each side then holds two connections to the peer,
+     * so a Handshake (and every frame) arrives twice within microseconds. The
+     * duplicate still refreshes liveness (`lastArrivalMs`) but does not record a
+     * degenerate interval. Well below any realistic heartbeat interval.
+     */
+    private const float MIN_SAMPLE_INTERVAL_MS = 50.0;
+
     /** @var array<string, list<float>> */
     private array $windows = [];
 
@@ -59,10 +71,14 @@ final class PhiAccrualDetector
         $nowMs = self::toMillis($now);
 
         if (isset($this->lastArrivalMs[$peer])) {
-            $this->windows[$peer][] = $nowMs - $this->lastArrivalMs[$peer];
+            $interval = $nowMs - $this->lastArrivalMs[$peer];
 
-            if (count($this->windows[$peer]) > $this->maxWindowSize) {
-                array_shift($this->windows[$peer]);
+            if ($interval >= self::MIN_SAMPLE_INTERVAL_MS) {
+                $this->windows[$peer][] = $interval;
+
+                if (count($this->windows[$peer]) > $this->maxWindowSize) {
+                    array_shift($this->windows[$peer]);
+                }
             }
         }
 
