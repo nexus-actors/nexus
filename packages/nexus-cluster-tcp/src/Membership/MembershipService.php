@@ -101,7 +101,7 @@ final class MembershipService
             return new MembershipTransition(
                 $view,
                 [],
-                [new HandshakeResponse(false, 'Cluster name mismatch.', [])],
+                [new HandshakeResponse($peer, false, 'Cluster name mismatch.', [])],
                 $suspectSince,
                 $selfIncarnation,
             );
@@ -111,7 +111,7 @@ final class MembershipService
             return new MembershipTransition(
                 $view,
                 [],
-                [new HandshakeResponse(false, 'Protocol version mismatch.', [])],
+                [new HandshakeResponse($peer, false, 'Protocol version mismatch.', [])],
                 $suspectSince,
                 $selfIncarnation,
             );
@@ -130,7 +130,7 @@ final class MembershipService
         return new MembershipTransition(
             $view2,
             [...$events1, ...$events2],
-            [new HandshakeResponse(true, null, $this->viewToMap($view2))],
+            [new HandshakeResponse($peer, true, null, $this->viewToMap($view2))],
             $suspectSince2,
             $selfIncarnation,
         );
@@ -142,6 +142,7 @@ final class MembershipService
      * Unlike applyLiveness, gossip does not feed the phi detector.
      *
      * @param array<string, DateTimeImmutable> $suspectSince
+     * @psalm-suppress UnusedParam $peer retained for API symmetry; gossip-source validation is a future extension.
      */
     public function applyGossip(
         ClusterView $view,

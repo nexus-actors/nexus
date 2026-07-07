@@ -42,7 +42,10 @@ final readonly class ClusterTopology
         public NodeEndpoint $advertiseEndpoint,
         public array $seeds,
         public Duration $heartbeatInterval,
+        public Duration $maxNoHeartbeat,
         public float $phiThreshold,
+        public Duration $phiMinStdDev,
+        public int $phiSampleSize,
         public Duration $gossipInterval,
         public Duration $reconnectInitialBackoff,
         public Duration $reconnectMaxBackoff,
@@ -89,7 +92,10 @@ final readonly class ClusterTopology
             advertiseEndpoint: $advertiseEndpoint,
             seeds: $seeds,
             heartbeatInterval: $heartbeatInterval ?? Duration::seconds(1),
+            maxNoHeartbeat: Duration::seconds(10),
             phiThreshold: $phiThreshold,
+            phiMinStdDev: Duration::millis(500),
+            phiSampleSize: 200,
             gossipInterval: $gossipInterval ?? Duration::seconds(1),
             reconnectInitialBackoff: $reconnectInitialBackoff ?? Duration::millis(100),
             reconnectMaxBackoff: $reconnectMaxBackoff ?? Duration::seconds(30),
@@ -124,5 +130,19 @@ final readonly class ClusterTopology
     public function withTls(?TlsConfig $tls): self
     {
         return clone($this, ['tls' => $tls]);
+    }
+
+    public function withFailureDetection(
+        ?int $sampleSize = null,
+        ?Duration $minStdDev = null,
+        ?Duration $maxNoHeartbeat = null,
+        ?float $phiThreshold = null,
+    ): self {
+        return clone($this, [
+            'maxNoHeartbeat' => $maxNoHeartbeat ?? $this->maxNoHeartbeat,
+            'phiMinStdDev' => $minStdDev ?? $this->phiMinStdDev,
+            'phiSampleSize' => $sampleSize ?? $this->phiSampleSize,
+            'phiThreshold' => $phiThreshold ?? $this->phiThreshold,
+        ]);
     }
 }

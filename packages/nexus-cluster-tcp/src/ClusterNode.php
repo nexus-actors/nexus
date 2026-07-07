@@ -1,0 +1,766 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Monadial\Nexus\Cluster\Tcp;
+
+use Closure;
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
+use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\EventDispatcherMembershipEventPublisher;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
+use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipReceived;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
+use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
+use Monadial\Nexus\Cluster\Tcp\Membership\RandomPeerSelector;
+use Monadial\Nexus\Cluster\Tcp\Membership\TcpMembershipEffectInterpreter;
+use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterMessageCodec;
+use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
+use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRefFactory;
+use Monadial\Nexus\Cluster\Tcp\Messaging\FrameIngress;
+use Monadial\Nexus\Cluster\Tcp\Messaging\InboxRouter;
+use Monadial\Nexus\Cluster\Tcp\Messaging\LocalActorRegistry;
+use Monadial\Nexus\Cluster\Tcp\Messaging\LocalDelivery;
+use Monadial\Nexus\Cluster\Tcp\Messaging\NoopTraceContextExtractor;
+use Monadial\Nexus\Cluster\Tcp\Messaging\NoopTraceContextInjector;
+use Monadial\Nexus\Cluster\Tcp\Messaging\OutboundSink;
+use Monadial\Nexus\Cluster\Tcp\Messaging\TcpAskRegistry;
+use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
+use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Swoole\SwooleMeshTransport;
+use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
+use Monadial\Nexus\Serialization\MessageSerializer;
+use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
+use Monadial\Nexus\Serialization\TypeRegistry;
+use Override;
+use Throwable;
+
+use function array_keys;
+use function array_values;
+use function count;
+use function explode;
+use function extension_loaded;
+use function ltrim;
+use function preg_replace;
+
+/**
+ * @psalm-api
+ *
+ * The cluster node bootstrap: wires all C1.6a–d components into a running cluster node.
+ *
+ * Boot the node after creating the ActorSystem but before calling `$system->run()`. The
+ * node's membership actor schedules its own heartbeat / gossip ticks, so once the runtime
+ * loop starts everything is self-driving.
+ *
+ * Transport selection: SwooleMeshTransport when ext-swoole is loaded AND the system runtime
+ * is SwooleRuntime; LoopbackMeshTransport with a fresh hub otherwise. Pass an explicit
+ * `$transport` to override — this is the hook for multi-node loopback integration tests.
+ *
+ * Circular boot dependency is resolved with a lazy sender: the `TcpMembershipEffectInterpreter`
+ * receives a closure that captures `$selfNode` by reference. `$selfNode` is null during the
+ * assembly phase but is set before `$system->run()` fires any actor messages, so the closure
+ * always finds a populated node when actually called.
+ *
+ * Rejoin after Down is not wired in C1 (no `RejoinRequested` message). A node that
+ * transitions to Down must restart the process to re-join.
+ *
+ * @example
+ *   $runtime = new FiberRuntime();
+ *   $system  = ActorSystem::create('my-cluster', $runtime);
+ *   $node    = ClusterNode::boot($system, $topology);
+ *   $node->expose($ref);
+ *   $system->run();
+ */
+final class ClusterNode
+{
+    /** @var array<string, PeerLink> Accepted inbound links keyed by NodeAddress::toPathPrefix() */
+    private array $acceptedLinks = [];
+
+    /** @var array<string, PeerConnection> Outbound connections keyed by (string) NodeEndpoint */
+    private array $outboundConns = [];
+
+    private function __construct(
+        private readonly NodeAddress $selfAddress,
+        private readonly ClusterTopology $topology,
+        private readonly LocalActorRegistry $localRegistry,
+        private readonly ClusterRefFactory $refFactory,
+        private readonly ActorRef $membershipRef,
+        private readonly MeshTransport $transport,
+        private readonly MutableEndpointRegistry $endpointRegistry,
+        private readonly MessageSerializer $frameSerializer,
+        private readonly Runtime $runtime,
+        private readonly ActorSystem $system,
+    ) {}
+
+    /**
+     * Boot a cluster node from the given topology, wiring all collaborators.
+     *
+     * @param TypeRegistry|null $userTypes Optional registry pre-populated with the caller's
+     *        user-defined message types (e.g. for cross-node tell/ask). Boot adds the cluster
+     *        wire protocol types (Handshake, HandshakeAck, GossipPayload, etc.) into this
+     *        same registry so one shared registry covers all serialization needs.
+     *        Pass `null` to use a protocol-only registry (sufficient for membership-only setups).
+     * @param MeshTransport|null $transport Optional transport override (e.g. LoopbackMeshTransport
+     *        with a shared hub for multi-node integration tests). Auto-selects SwooleMeshTransport
+     *        when ext-swoole is loaded; falls back to a fresh LoopbackMeshTransport.
+     */
+    public static function boot(
+        ActorSystem $system,
+        ClusterTopology $topology,
+        ?TypeRegistry $userTypes = null,
+        ?MeshTransport $transport = null,
+    ): self {
+        $runtime = $system->runtime();
+
+        // 1. Cluster frame serializer — shared registry for cluster wire types + user message types.
+        $frameSerializer = self::buildSerializer($userTypes);
+
+        // 2. Endpoint registry — grows at runtime via gossip / handshake.
+        $endpointRegistry = new MutableEndpointRegistry();
+
+        // 3. Message delivery collaborators.
+        $localRegistry = new LocalActorRegistry();
+        $localDelivery = new LocalDelivery($localRegistry);
+        $askRegistry = new TcpAskRegistry($runtime);
+
+        // 4. User-message codec — same registry as the frame serializer so user types
+        //    registered by the caller are reachable on both the encode and decode paths.
+        $codec = new ClusterMessageCodec($frameSerializer, $userTypes ?? new TypeRegistry());
+
+        // 5. Transport (override or auto-select).
+        $meshTransport = $transport ?? self::selectTransport($runtime, $topology);
+
+        // 6. Lazy sender closure: resolved after the node is constructed.
+        //    The closure is never invoked before $system->run(); by then $selfNode is non-null.
+        /** @var ClusterNode|null $selfNode */
+        $selfNode = null;
+
+        /**
+         * @psalm-suppress TypeDoesNotContainType Psalm cannot track by-ref mutation of $selfNode
+         *                 across the closure boundary; the variable is always set before first call.
+         * @psalm-suppress MixedMethodCall Same root cause: Psalm types $selfNode as null inside the closure.
+         */
+        $sender = static function (string $prefix, Frame $frame) use (&$selfNode): void {
+            if ($selfNode !== null) {
+                $selfNode->sendByPrefix($prefix, $frame);
+            }
+        };
+
+        // 7. Outbound sink for user messages (ClusterRef::tell / ask).
+        $outboundSink = self::buildOutboundSink($sender, $frameSerializer);
+
+        // 8. Inbox router + ref factory.
+        $inboxRouter = new InboxRouter(
+            $localDelivery,
+            $askRegistry,
+            $codec,
+            $outboundSink,
+            new NoopTraceContextExtractor(),
+            new NoopTraceContextInjector(),
+        );
+
+        $refFactory = new ClusterRefFactory($topology->self, $outboundSink, $localDelivery, $askRegistry, $codec);
+
+        // 9. Membership collaborators.
+        $effectInterpreter = new TcpMembershipEffectInterpreter($topology, $frameSerializer, $sender);
+        $eventPublisher = new EventDispatcherMembershipEventPublisher($system->eventDispatcher());
+
+        $service = new MembershipService($topology, $topology->maxNoHeartbeat);
+        $detector = new PhiAccrualDetector(
+            $topology->phiSampleSize,
+            (float) $topology->phiMinStdDev->toMillis(),
+        );
+
+        $membershipActor = new MembershipActor(
+            service: $service,
+            detector: $detector,
+            selector: new RandomPeerSelector(),
+            effectInterpreter: $effectInterpreter,
+            eventPublisher: $eventPublisher,
+            clock: $system->clock(),
+            heartbeatInterval: $topology->heartbeatInterval,
+            gossipInterval: $topology->gossipInterval,
+        );
+
+        $nodeSlug = (string) preg_replace('/[^a-zA-Z0-9_-]/', '-', $topology->self->node);
+        $membershipRef = $system->spawn($membershipActor->props(), 'cluster-membership-' . $nodeSlug);
+
+        // 10. Construct the node — the lazy $sender can now be resolved via $selfNode.
+        $selfNode = new self(
+            selfAddress: $topology->self,
+            topology: $topology,
+            localRegistry: $localRegistry,
+            refFactory: $refFactory,
+            membershipRef: $membershipRef,
+            transport: $meshTransport,
+            endpointRegistry: $endpointRegistry,
+            frameSerializer: $frameSerializer,
+            runtime: $runtime,
+            system: $system,
+        );
+
+        // 11. Start serving: wire the inbound accept pump.
+        $meshTransport->serve(
+            $topology->bindEndpoint,
+            static function (PeerLink $link) use ($selfNode, $inboxRouter): void {
+                $selfNode->wireInboundLink($link, $inboxRouter);
+            },
+        );
+
+        // 12. Dial seeds.
+        foreach ($topology->seeds as $seedEndpoint) {
+            $selfNode->dialSeed($seedEndpoint, $inboxRouter);
+        }
+
+        return $selfNode;
+    }
+
+    /**
+     * Expose a local actor for delivery from remote peers.
+     *
+     * @param ActorRef<object> $ref
+     */
+    public function expose(ActorRef $ref): void
+    {
+        $this->localRegistry->expose($ref);
+    }
+
+    /**
+     * Return a ClusterRef that routes messages to the actor at `$path` on `$node`.
+     *
+     * @return ClusterRef<object>
+     */
+    public function refFor(NodeAddress $node, ActorPath $path): ClusterRef
+    {
+        return $this->refFactory->refFor($node, $path);
+    }
+
+    /**
+     * Asynchronously query the current cluster view.
+     *
+     * Sends a {@see GetClusterView} message to the membership actor; the view will be
+     * delivered to `$replyTo` on the next event-loop tick. Use this from timer callbacks
+     * (where {@see view()} cannot yield) by pre-spawning a collector actor.
+     *
+     * @param ActorRef<ClusterView> $replyTo
+     */
+    public function queryViewAsync(ActorRef $replyTo): void
+    {
+        $this->membershipRef->tell(new GetClusterView($replyTo));
+    }
+
+    /**
+     * Return this node's own NodeAddress.
+     */
+    public function self(): NodeAddress
+    {
+        return $this->selfAddress;
+    }
+
+    /**
+     * Query the current cluster view from the membership actor.
+     * Must be called from within the runtime event loop (inside a scheduleOnce callback).
+     * Returns ClusterView::empty() when the actor has not yet replied within two yields.
+     */
+    public function view(): ClusterView
+    {
+        /** @var ClusterView|null $captured */
+        $captured = null;
+
+        /**
+         * @psalm-suppress InvalidArgument Behavior::receive generic constraint; the closure
+         *                 handles a heterogeneous reply (ClusterView) from the membership actor.
+         */
+        $viewBehavior = Behavior::receive(
+            static function ($ctx, object $msg) use (&$captured): Behavior {
+                if ($msg instanceof ClusterView) {
+                    $captured = $msg;
+                }
+
+                return Behavior::stopped();
+            },
+        );
+
+        /** @var ActorRef<ClusterView> $replyRef */
+        $replyRef = $this->system->spawnAnonymous(Props::fromBehavior($viewBehavior));
+        $this->membershipRef->tell(new GetClusterView($replyRef));
+
+        // Yield twice to let the membership actor process the message and the reply
+        // actor receive it. Works under FiberRuntime and SwooleRuntime.
+        $this->runtime->yield();
+        $this->runtime->yield();
+
+        return $captured ?? ClusterView::empty();
+    }
+
+    /**
+     * Broadcast Leave to all connected peers, close all connections, and close the transport.
+     * Call before or during ActorSystem shutdown to signal graceful departure.
+     */
+    public function shutdown(): void
+    {
+        $leavePayload = new LeavePayload($this->selfAddress->toPathPrefix());
+        $leaveBytes = $this->frameSerializer->serialize($leavePayload);
+        $leaveFrame = new Frame(FrameType::Leave, $leaveBytes);
+
+        foreach ($this->acceptedLinks as $link) {
+            $link->sendFrame($leaveFrame);
+        }
+
+        foreach ($this->outboundConns as $conn) {
+            $conn->sendFrame($leaveFrame);
+            $conn->close();
+        }
+
+        $this->acceptedLinks = [];
+        $this->outboundConns = [];
+
+        $this->transport->close();
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal routing
+    // -------------------------------------------------------------------------
+
+    /**
+     * Route a frame to the peer identified by NodeAddress path-prefix. Prefers an
+     * outbound PeerConnection (lazily created from the endpoint registry) so that
+     * frames arrive at the peer's wireInboundLink handler, which has ingress set up
+     * after the initial handshake. Falls back to the accepted inbound link only when
+     * the endpoint is not yet known (e.g. very early in the handshake sequence).
+     * Called by the lazy $sender closure in boot().
+     *
+     * @internal Used by the $sender closure injected into TcpMembershipEffectInterpreter.
+     */
+    public function sendByPrefix(string $prefix, Frame $frame): void
+    {
+        $endpoint = $this->endpointRegistry->resolveByPrefix($prefix);
+
+        if ($endpoint !== null) {
+            $key = (string) $endpoint;
+
+            if (!isset($this->outboundConns[$key])) {
+                $this->outboundConns[$key] = new PeerConnection(
+                    $endpoint,
+                    $this->transport,
+                    $this->runtime,
+                    $this->topology->reconnectInitialBackoff,
+                    $this->topology->reconnectMaxBackoff,
+                );
+            }
+
+            $this->outboundConns[$key]->sendFrame($frame);
+
+            return;
+        }
+
+        // Endpoint not yet in registry — fall back to the accepted inbound link.
+        if (isset($this->acceptedLinks[$prefix])) {
+            $this->acceptedLinks[$prefix]->sendFrame($frame);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Frame pump wiring
+    // -------------------------------------------------------------------------
+
+    /**
+     * Wire the frame pump for an accepted inbound PeerLink.
+     */
+    private function wireInboundLink(PeerLink $link, InboxRouter $inboxRouter): void
+    {
+        /** @var NodeAddress|null $peerAddr Learned from the first Handshake frame. */
+        $peerAddr = null;
+
+        /** @var FrameIngress|null $ingress Created once peerAddr is known. */
+        $ingress = null;
+
+        $link->onFrame(function (Frame $frame) use ($link, &$peerAddr, &$ingress, $inboxRouter): void {
+            if ($frame->type === FrameType::Handshake) {
+                $parsed = $this->parseHandshakeFrame($frame);
+
+                if ($parsed !== null) {
+                    [$peerAddr, $peerEndpoint, $handshake] = $parsed;
+                    $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
+                    $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                }
+
+                return;
+            }
+
+            if ($frame->type === FrameType::HandshakeAck) {
+                $this->applyHandshakeAckView($frame);
+
+                return;
+            }
+
+            if ($peerAddr === null) {
+                return; // Not yet identified; ignore frames until Handshake arrives.
+            }
+
+            if ($frame->type === FrameType::Gossip) {
+                $this->processGossipFrame($frame, $peerAddr);
+
+                return;
+            }
+
+            if ($frame->type === FrameType::Leave) {
+                $this->processLeaveFrame($frame, $peerAddr);
+
+                return;
+            }
+
+            if ($frame->type === FrameType::Message && $ingress !== null) {
+                $ingress->ingest($frame);
+                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+
+                return;
+            }
+
+            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+        });
+
+        $link->onClose(function () use (&$peerAddr): void {
+            if ($peerAddr !== null) {
+                $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
+            }
+        });
+    }
+
+    /**
+     * Dial a seed endpoint: create an outbound PeerConnection, wire per-connection state
+     * (peerAddr + ingress) via reference capture, and send our Handshake as the first frame.
+     */
+    private function dialSeed(NodeEndpoint $seedEndpoint, InboxRouter $inboxRouter): void
+    {
+        $key = (string) $seedEndpoint;
+
+        if (isset($this->outboundConns[$key])) {
+            return; // Already dialed (e.g. shared hub in test multi-boot scenario).
+        }
+
+        $conn = new PeerConnection(
+            $seedEndpoint,
+            $this->transport,
+            $this->runtime,
+            $this->topology->reconnectInitialBackoff,
+            $this->topology->reconnectMaxBackoff,
+        );
+
+        $this->outboundConns[$key] = $conn;
+
+        /** @var NodeAddress|null $peerAddr Learned from the first Handshake on this connection. */
+        $peerAddr = null;
+
+        /** @var FrameIngress|null $ingress Created once peerAddr is known. */
+        $ingress = null;
+
+        $conn->onFrame(function (Frame $frame) use (&$peerAddr, &$ingress, $inboxRouter): void {
+            if ($frame->type === FrameType::Handshake) {
+                $parsed = $this->parseHandshakeFrame($frame);
+
+                if ($parsed !== null) {
+                    [$peerAddr, $peerEndpoint, $handshake] = $parsed;
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
+                    $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                }
+
+                return;
+            }
+
+            if ($frame->type === FrameType::HandshakeAck) {
+                $this->applyHandshakeAckView($frame);
+
+                return;
+            }
+
+            if ($peerAddr === null) {
+                return;
+            }
+
+            if ($frame->type === FrameType::Gossip) {
+                $this->processGossipFrame($frame, $peerAddr);
+
+                return;
+            }
+
+            if ($frame->type === FrameType::Leave) {
+                $this->processLeaveFrame($frame, $peerAddr);
+
+                return;
+            }
+
+            if ($frame->type === FrameType::Message && $ingress !== null) {
+                $ingress->ingest($frame);
+                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+
+                return;
+            }
+
+            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+        });
+
+        // Send our Handshake as the first frame so the seed can identify us.
+        $conn->sendFrame(new Frame(
+            FrameType::Handshake,
+            $this->frameSerializer->serialize($this->buildSelfHandshake()),
+        ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Frame parsing helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Parse a Handshake frame payload, register the peer's endpoint, and return
+     * the parsed address, endpoint, and Handshake as a tuple.
+     *
+     * @return array{NodeAddress, NodeEndpoint, Handshake}|null
+     */
+    private function parseHandshakeFrame(Frame $frame): ?array
+    {
+        try {
+            $obj = $this->frameSerializer->deserialize($frame->payload, 'cluster.handshake');
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (!$obj instanceof Handshake) {
+            return null;
+        }
+
+        $peerAddr = new NodeAddress(
+            $obj->node['cluster'] ?? 'unknown',
+            $obj->node['datacenter'] ?? 'unknown',
+            $obj->node['application'] ?? 'unknown',
+            $obj->node['node'] ?? 'unknown',
+        );
+
+        try {
+            $peerEndpoint = NodeEndpoint::fromString($obj->advertise);
+        } catch (Throwable) {
+            return null;
+        }
+
+        $this->endpointRegistry->register($peerAddr, $peerEndpoint);
+
+        return [$peerAddr, $peerEndpoint, $obj];
+    }
+
+    /**
+     * Apply the view snapshot in a HandshakeAck to register endpoints for members
+     * we haven't seen yet. Fast-paths endpoint discovery without waiting for gossip.
+     */
+    private function applyHandshakeAckView(Frame $frame): void
+    {
+        try {
+            $obj = $this->frameSerializer->deserialize($frame->payload, 'cluster.handshake_ack');
+        } catch (Throwable) {
+            return;
+        }
+
+        if (!$obj instanceof HandshakeAck || !$obj->accepted) {
+            return;
+        }
+
+        foreach ($obj->view as $prefix => $endpointStr) {
+            try {
+                $addr = self::parseNodeAddress($prefix);
+                $endpoint = NodeEndpoint::fromString($endpointStr);
+
+                if ($addr !== null) {
+                    $this->endpointRegistry->register($addr, $endpoint);
+                }
+            } catch (Throwable) {
+                // Skip malformed entries; gossip will provide them later.
+            }
+        }
+    }
+
+    /**
+     * Process an inbound Gossip frame: register member endpoints and tell membership actor.
+     */
+    private function processGossipFrame(Frame $frame, NodeAddress $peerAddr): void
+    {
+        try {
+            $obj = $this->frameSerializer->deserialize($frame->payload, 'cluster.gossip');
+        } catch (Throwable) {
+            return;
+        }
+
+        if (!$obj instanceof GossipPayload) {
+            return;
+        }
+
+        foreach ($obj->members as $member) {
+            try {
+                $addr = self::parseNodeAddress($member['address']);
+                $endpoint = NodeEndpoint::fromString($member['endpoint']);
+
+                if ($addr !== null) {
+                    $this->endpointRegistry->register($addr, $endpoint);
+                }
+            } catch (Throwable) {
+                // Skip malformed members.
+            }
+        }
+
+        $this->membershipRef->tell(new GossipReceived($peerAddr, $obj));
+    }
+
+    /**
+     * Parse a Leave frame payload to identify the actual leaving node, then notify
+     * the membership actor and forward the frame to all other accepted peers.
+     *
+     * Forwarding covers star topologies where the leaving node has no direct TCP
+     * connection to every peer: the intermediate node (e.g. A in a B→A←C star)
+     * relays the Leave so B and C both learn about each other's departures.
+     *
+     * sendByPrefix is used for forwarding so frames arrive at the recipient's
+     * wireInboundLink handler (which has proper ingress) rather than an outbound
+     * PeerConnection handler that may have $ingress = null.
+     */
+    private function processLeaveFrame(Frame $frame, ?NodeAddress $senderAddr): void
+    {
+        try {
+            $payload = $this->frameSerializer->deserialize($frame->payload, 'cluster.leave');
+        } catch (Throwable) {
+            return;
+        }
+
+        if (!$payload instanceof LeavePayload) {
+            return;
+        }
+
+        $leavingAddr = self::parseNodeAddress($payload->node);
+
+        if ($leavingAddr === null || $leavingAddr->toPathPrefix() === $this->selfAddress->toPathPrefix()) {
+            return;
+        }
+
+        $this->membershipRef->tell(new LeaveReceived($leavingAddr));
+
+        // Forward to all accepted peers except the leaving node and the frame sender.
+        $leavingPrefix = $leavingAddr->toPathPrefix();
+        $senderPrefix = $senderAddr?->toPathPrefix();
+
+        foreach (array_keys($this->acceptedLinks) as $prefix) {
+            if ($prefix !== $leavingPrefix && $prefix !== $senderPrefix) {
+                $this->sendByPrefix($prefix, $frame);
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Static factory helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Build a Handshake payload announcing this node's identity and advertise endpoint.
+     */
+    private function buildSelfHandshake(): Handshake
+    {
+        $self = $this->topology->self;
+
+        return new Handshake(
+            clusterName: $this->topology->clusterName,
+            node: [
+                'application' => $self->application,
+                'cluster' => $self->cluster,
+                'datacenter' => $self->datacenter,
+                'node' => $self->node,
+            ],
+            advertise: (string) $this->topology->advertiseEndpoint,
+        );
+    }
+
+    /**
+     * Build the cluster frame serializer: MessagePack with all wire payload VOs registered, plus
+     * any user-defined types pre-populated in `$userTypes`. Cluster wire types are always added.
+     *
+     * The caller's `$userTypes` is mutated in-place (cluster types appended), so the same
+     * registry instance can be reused for the user-message codec without extra copying.
+     */
+    private static function buildSerializer(?TypeRegistry $userTypes): MessageSerializer
+    {
+        $registry = $userTypes ?? new TypeRegistry();
+        $registry->registerFromAttribute(GossipPayload::class);
+        $registry->registerFromAttribute(Handshake::class);
+        $registry->registerFromAttribute(HandshakeAck::class);
+        $registry->registerFromAttribute(LeavePayload::class);
+        $registry->registerFromAttribute(MessagePayload::class);
+
+        return new MessagePackMessageSerializer($registry);
+    }
+
+    /**
+     * Auto-select the transport based on available extensions and runtime type.
+     * Override via the $transport parameter in boot() for tests.
+     *
+     * @psalm-suppress UndefinedClass  SwooleMeshTransport / SwooleRuntime are optional; only loaded with ext-swoole.
+     * @psalm-suppress InvalidArgument Same reason: SwooleRuntime class string unavailable without ext-swoole.
+     */
+    private static function selectTransport(Runtime $runtime, ClusterTopology $topology): MeshTransport
+    {
+        if (extension_loaded('swoole') && $runtime instanceof SwooleRuntime) {
+            return new SwooleMeshTransport($runtime, $topology->tls);
+        }
+
+        return new LoopbackMeshTransport(new LoopbackHub(), $runtime);
+    }
+
+    /**
+     * Build an OutboundSink that routes MessagePayload frames via the shared sender closure.
+     * User messages flow over the same connections as membership frames, sharing peer identity.
+     *
+     * @param Closure(string, Frame): void $sender
+     */
+    private static function buildOutboundSink(Closure $sender, MessageSerializer $frameSerializer): OutboundSink
+    {
+        return new class ($sender, $frameSerializer) implements OutboundSink {
+            public function __construct(
+                private readonly Closure $sender,
+                private readonly MessageSerializer $frameSerializer,
+            ) {}
+
+            #[Override]
+            public function send(NodeAddress $target, MessagePayload $payload): void
+            {
+                $bytes = $this->frameSerializer->serialize($payload);
+                ($this->sender)($target->toPathPrefix(), new Frame(FrameType::Message, $bytes));
+            }
+        };
+    }
+
+    /**
+     * Parse a NodeAddress from a path-prefix string: `/cluster/{cluster}/{dc}/{app}/{node}`.
+     * Returns null on malformed input.
+     */
+    private static function parseNodeAddress(string $pathPrefix): ?NodeAddress
+    {
+        $parts = array_values(array_filter(explode('/', ltrim($pathPrefix, '/'))));
+
+        if (count($parts) !== 5 || $parts[0] !== 'cluster') {
+            return null;
+        }
+
+        return new NodeAddress($parts[1], $parts[2], $parts[3], $parts[4]);
+    }
+}

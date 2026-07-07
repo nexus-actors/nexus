@@ -149,6 +149,8 @@
                 <file name="packages/nexus-cluster-tcp/src/Messaging/InboundDelivery.php"/>
                 <file name="packages/nexus-cluster-tcp/src/Messaging/LocalActorRegistry.php"/>
                 <file name="packages/nexus-cluster-tcp/src/Messaging/LocalDelivery.php"/>
+                <!-- ClusterNode::$membershipRef accepts a heterogeneous union of membership messages; expose() takes any actor ref (typed by caller) -->
+                <file name="packages/nexus-cluster-tcp/src/ClusterNode.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>

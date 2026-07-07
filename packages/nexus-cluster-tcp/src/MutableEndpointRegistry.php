@@ -39,4 +39,13 @@ final class MutableEndpointRegistry implements EndpointResolver
     {
         $this->endpoints[$address->toPathPrefix()] = $endpoint;
     }
+
+    /**
+     * Resolve by raw path-prefix string (e.g. from gossip target lists which carry
+     * path-prefix strings rather than NodeAddress objects).
+     */
+    public function resolveByPrefix(string $pathPrefix): ?NodeEndpoint
+    {
+        return $this->endpoints[$pathPrefix] ?? null;
+    }
 }

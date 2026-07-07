@@ -45,7 +45,10 @@ final class ClusterTopologyTest extends TestCase
         self::assertSame($this->advertiseEndpoint, $topology->advertiseEndpoint);
         self::assertSame($this->seeds, $topology->seeds);
         self::assertEquals(Duration::seconds(1), $topology->heartbeatInterval);
+        self::assertEquals(Duration::seconds(10), $topology->maxNoHeartbeat);
         self::assertSame(8.0, $topology->phiThreshold);
+        self::assertEquals(Duration::millis(500), $topology->phiMinStdDev);
+        self::assertSame(200, $topology->phiSampleSize);
         self::assertEquals(Duration::seconds(1), $topology->gossipInterval);
         self::assertFalse($topology->singleNode);
         self::assertNull($topology->tls);
@@ -206,6 +209,53 @@ final class ClusterTopologyTest extends TestCase
 
         self::assertSame([], $topology->seeds);
         self::assertTrue($topology->singleNode);
+    }
+
+    #[Test]
+    public function withFailureDetectionChangesAllFourKnobs(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $modified = $topology->withFailureDetection(
+            sampleSize: 100,
+            minStdDev: Duration::millis(300),
+            maxNoHeartbeat: Duration::seconds(20),
+            phiThreshold: 10.0,
+        );
+
+        self::assertNotSame($topology, $modified);
+        self::assertSame(100, $modified->phiSampleSize);
+        self::assertEquals(Duration::millis(300), $modified->phiMinStdDev);
+        self::assertEquals(Duration::seconds(20), $modified->maxNoHeartbeat);
+        self::assertSame(10.0, $modified->phiThreshold);
+        // originals unchanged
+        self::assertSame(200, $topology->phiSampleSize);
+        self::assertSame(8.0, $topology->phiThreshold);
+    }
+
+    #[Test]
+    public function withFailureDetectionWithNullsPreservesDefaults(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $modified = $topology->withFailureDetection();
+
+        self::assertSame(200, $modified->phiSampleSize);
+        self::assertEquals(Duration::millis(500), $modified->phiMinStdDev);
+        self::assertEquals(Duration::seconds(10), $modified->maxNoHeartbeat);
+        self::assertSame(8.0, $modified->phiThreshold);
     }
 
     protected function setUp(): void

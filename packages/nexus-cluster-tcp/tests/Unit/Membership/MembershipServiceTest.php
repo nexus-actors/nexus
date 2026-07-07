@@ -83,6 +83,7 @@ final class MembershipServiceTest extends TestCase
         self::assertCount(1, $t1->effects);
         $effect = $t1->effects[0];
         self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertSame($this->peer, $effect->peer);
         self::assertTrue($effect->accepted);
         self::assertNull($effect->reason);
         self::assertTrue($t1->newView->has($this->peer));
@@ -112,6 +113,7 @@ final class MembershipServiceTest extends TestCase
         self::assertCount(1, $t1->effects);
         $effect = $t1->effects[0];
         self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertSame($this->peer, $effect->peer);
         self::assertFalse($effect->accepted);
         self::assertSame('Cluster name mismatch.', $effect->reason);
         self::assertFalse($t1->newView->has($this->peer));
@@ -138,6 +140,7 @@ final class MembershipServiceTest extends TestCase
 
         $effect = $t1->effects[0];
         self::assertInstanceOf(HandshakeResponse::class, $effect);
+        self::assertSame($this->peer, $effect->peer);
         self::assertFalse($effect->accepted);
         self::assertSame('Protocol version mismatch.', $effect->reason);
     }
