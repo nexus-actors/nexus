@@ -7,6 +7,10 @@ namespace Monadial\Nexus\Cluster\Tcp;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Override;
 
+use function array_shift;
+use function count;
+use function max;
+
 /**
  * @psalm-api
  *
@@ -23,8 +27,23 @@ use Override;
  */
 final class MutableEndpointRegistry implements EndpointResolver
 {
+    /**
+     * Hard cap on distinct endpoints retained. Endpoints are learned from unauthenticated
+     * gossip, so an unbounded map is a memory-exhaustion vector: a peer can gossip an endless
+     * stream of fabricated addresses. When the cap is reached the oldest entry is evicted
+     * (insertion-order FIFO). The default comfortably exceeds any realistic cluster size.
+     */
+    private const int DEFAULT_MAX_ENTRIES = 10_000;
+
     /** @var array<string, NodeEndpoint> */
     private array $endpoints = [];
+
+    private readonly int $maxEntries;
+
+    public function __construct(int $maxEntries = self::DEFAULT_MAX_ENTRIES)
+    {
+        $this->maxEntries = max(1, $maxEntries);
+    }
 
     #[Override]
     public function resolve(NodeAddress $address): ?NodeEndpoint
@@ -34,10 +53,19 @@ final class MutableEndpointRegistry implements EndpointResolver
 
     /**
      * Register or overwrite the endpoint for the given node address.
+     *
+     * Registering a new address at capacity evicts the oldest retained entry so the map stays
+     * bounded; re-registering an existing address only refreshes its endpoint (no eviction).
      */
     public function register(NodeAddress $address, NodeEndpoint $endpoint): void
     {
-        $this->endpoints[$address->toPathPrefix()] = $endpoint;
+        $key = $address->toPathPrefix();
+
+        if (!isset($this->endpoints[$key]) && count($this->endpoints) >= $this->maxEntries) {
+            array_shift($this->endpoints);
+        }
+
+        $this->endpoints[$key] = $endpoint;
     }
 
     /**
