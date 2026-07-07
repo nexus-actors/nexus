@@ -24,7 +24,8 @@ final class FakeObservability implements Observability
 {
     private Context $context;
 
-    public function __construct(private readonly Tracer $tracer, ?Context $context = null,) {
+    public function __construct(private readonly Tracer $tracer, ?Context $context = null)
+    {
         $this->context = $context ?? Context::root();
     }
 

@@ -142,7 +142,8 @@ final class InboxRouter
     /**
      * @param array<string, scalar> $attributes
      */
-    private function safeStartSpan(string $name, SpanKind $kind, array $attributes, ?Context $parent = null,): Span {
+    private function safeStartSpan(string $name, SpanKind $kind, array $attributes, ?Context $parent = null): Span
+    {
         try {
             return $this->tracer->startSpan($name, $kind, $attributes, $parent);
         } catch (Throwable) {
@@ -155,13 +156,15 @@ final class InboxRouter
         try {
             $span->recordException($e);
             $span->setStatus(StatusCode::Error, $e->getMessage());
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 
     private function safeEnd(Span $span): void
     {
         try {
             $span->end();
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 }

@@ -426,7 +426,7 @@ final class ClusterNode
      *
      * Receptionist pattern for service discovery. Arrives in the C2 track.
      *
-     * @throws \BadMethodCallException Always.
+     * @throws BadMethodCallException Always.
      */
     public function receptionist(): never
     {
@@ -758,14 +758,16 @@ final class ClusterNode
     {
         try {
             $span->setAttribute($key, $value);
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 
     private function safeEndSpan(Span $span): void
     {
         try {
             $span->end();
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 
     // -------------------------------------------------------------------------

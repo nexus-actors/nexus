@@ -279,8 +279,7 @@ final class ClusterTracingTest extends TestCase
                 SpanKind $kind = SpanKind::Internal,
                 array $attributes = [],
                 ?Context $parent = null,
-            ): Span
-            {
+            ): Span {
                 throw new RuntimeException('tracer broken');
             }
         };
@@ -304,8 +303,7 @@ final class ClusterTracingTest extends TestCase
                 SpanKind $kind = SpanKind::Internal,
                 array $attributes = [],
                 ?Context $parent = null,
-            ): Span
-            {
+            ): Span {
                 throw new RuntimeException('tracer broken');
             }
         };
@@ -329,8 +327,7 @@ final class ClusterTracingTest extends TestCase
                 SpanKind $kind = SpanKind::Internal,
                 array $attributes = [],
                 ?Context $parent = null,
-            ): Span
-            {
+            ): Span {
                 throw new RuntimeException('tracer broken');
             }
         };

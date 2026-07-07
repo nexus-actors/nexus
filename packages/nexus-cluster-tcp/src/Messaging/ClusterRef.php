@@ -174,13 +174,15 @@ final readonly class ClusterRef implements ActorRef
         try {
             $span->recordException($e);
             $span->setStatus(StatusCode::Error, $e->getMessage());
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 
     private function safeEnd(Span $span): void
     {
         try {
             $span->end();
-        } catch (Throwable) {}
+        } catch (Throwable) {
+        }
     }
 }
