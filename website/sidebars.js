@@ -57,6 +57,7 @@ const sidebars = {
         'guides/saga',
         'guides/standalone-integration',
         'guides/messenger-bridge',
+        'guides/clustering-over-tcp',
       ],
     },
     {
@@ -238,6 +239,7 @@ const sidebars = {
           label: 'Scaling',
           items: [
             'packages/cluster',
+            'packages/cluster-tcp',
             'packages/worker-pool',
             'packages/worker-pool-swoole',
           ],

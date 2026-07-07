@@ -216,3 +216,4 @@ All events live in `Monadial\Nexus\Messenger\Event`.
 - [Messenger bridge guide](/docs/guides/messenger-bridge)
 - [Standalone integration](/docs/guides/standalone-integration)
 - [Redis example app](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-messenger-redis) — competing consumers, worker recycling, and PSR-14 events end-to-end
+- [nexus-cluster-tcp](./cluster-tcp.md) — direct Swoole TCP mesh clustering: sub-millisecond actor-to-actor calls without a broker; compare the trade-offs in the [Clustering over TCP guide](../guides/clustering-over-tcp.md)

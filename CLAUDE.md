@@ -368,14 +368,17 @@ DurableStateBehavior::create($persistenceId, $emptyState, $commandHandler)
 
 ### Cluster TCP Transport (nexus-cluster-tcp)
 
-Swoole TCP mesh implementation of `nexus-cluster` contracts (C1 track, in progress). ext-swoole is in `suggest`, not `require` — loopback/unit tests run in the plain `php` container.
+Swoole TCP mesh implementation of `nexus-cluster` contracts. ext-swoole is in `suggest`, not `require` — loopback/unit tests run in the plain `php` container.
 
-- `NodeEndpoint(host, port)` — Network endpoint VO; `fromString('host:port')` with port-range validation (0–65535).
-- `EndpointResolver` — Interface: `resolve(NodeAddress): ?NodeEndpoint`. Map grows via gossip.
-- `MapEndpointResolver` — Immutable resolver backed by a pre-built `array<string, NodeEndpoint>` keyed by `NodeAddress::toPathPrefix()`.
-- `MutableEndpointRegistry` — Mutable `EndpointResolver` with `register(NodeAddress, NodeEndpoint)`. Used by the membership service at runtime.
-- `TlsConfig(certFile, keyFile, ?caFile, verifyPeer)` — Optional TLS for Swoole SSL options.
-- `ClusterTopology` — Config VO: `clusterName`, `self` (NodeAddress), `bindEndpoint`/`advertiseEndpoint` (NAT-friendly), `seeds` (list<NodeEndpoint>), timing (`heartbeatInterval` 1 s, `gossipInterval` 1 s), `phiThreshold` 8.0, `reconnectInitialBackoff`/`reconnectMaxBackoff`. Factory + withers. Validation: clusterName non-empty; seeds non-empty unless `singleNode: true`.
+- `ClusterNode` — Bootstrap entry point. `ClusterNode::boot(ActorSystem, ClusterTopology, ?TypeRegistry, ?MeshTransport, ?Observability, ?LoggerInterface): self`. Auto-selects `SwooleMeshTransport` when ext-swoole + SwooleRuntime are detected; falls back to `LoopbackMeshTransport` for tests. Must be called before `$system->run()`. Methods: `expose(ActorRef)` (register local actor for remote delivery), `refFor(NodeAddress, ActorPath): ClusterRef` (location-transparent ref), `view(): ClusterView` (sync snapshot; call from event loop), `queryViewAsync(ActorRef<ClusterView>)` (async; safe from timer callbacks), `self(): NodeAddress`, `shutdown()` (broadcasts Leave, closes all links).
+- `ClusterTopology` — Immutable config VO. `ClusterTopology::create(clusterName, self, bindEndpoint, advertiseEndpoint, seeds, ?heartbeatInterval, phiThreshold=8.0, ...)`. Fields: `heartbeatInterval` (1 s), `gossipInterval` (1 s), `maxNoHeartbeat` (10 s), `phiThreshold` (8.0), `phiSampleSize` (200), `phiMinStdDev` (500 ms), `reconnectInitialBackoff` (100 ms), `reconnectMaxBackoff` (30 s), `singleNode`, `tls`. Withers: `withHeartbeatInterval()`, `withGossipInterval()`, `withPhiThreshold()`, `withReconnectBackoff(initial, max)`, `withTls(?TlsConfig)`, `withFailureDetection(?sampleSize, ?minStdDev, ?maxNoHeartbeat, ?phiThreshold)`. Validation: clusterName non-empty; seeds non-empty unless `singleNode: true`.
+- `ClusterRef<T>` — Location-transparent `ActorRef<T>`. `tell()` short-circuits locally (no frame); serialises to `MessagePayload` frame (MessagePack) for remote peers, opens `cluster.send` Producer span. `ask(message, Duration): Future` — registers correlation ID in `TcpAskRegistry`, stamps a reply path, sends request frame, returns `Future`; throws `AskCapacityExceededException` when registry is at capacity, `AskTimeoutException` on timeout.
+- `MembershipActor` + `PhiAccrualDetector` — Internal gossip loop + Hayashibara phi-accrual failure detector. Gossip frames double as heartbeats; the detector feeds on their inter-arrival times. Marks peers `Up`, `Suspect`, `Down`. TCP EOF → immediate `Suspect(Connection)`; `maxNoHeartbeat` exceeded → `Down`. Graceful `shutdown()` (Leave frame) → immediate `Down` with no phi wait.
+- PSR-14 events (all `final readonly`): `NodeUp(node, endpoint)`, `NodeDown(node)`, `NodeSuspected(node, reason: Connection|Gossip|Phi)`, `PeerConnected(peer, endpoint)`, `PeerDisconnected(peer)` — dispatched through `ActorSystem`'s event dispatcher.
+- `NodeEndpoint` — Network endpoint VO; `fromString('host:port')` with port-range validation (0–65535). `new NodeEndpoint(Host::of(...), Port::of(...))` for programmatic construction.
+- `EndpointResolver` — Interface: `resolve(NodeAddress): ?NodeEndpoint`. Implementations: `MapEndpointResolver` (immutable pre-built map) and `MutableEndpointRegistry` (mutable; grows at runtime via gossip handshakes).
+- `TlsConfig(certFile, keyFile, ?caFile, verifyPeer)` — Optional TLS for Swoole SSL. Never expose plaintext cluster ports to untrusted networks.
+- Observability: `cluster.handshake` (Internal), `cluster.send`/`cluster.ask` (Producer) spans with W3C trace-context propagation; `nexus.cluster.messages.sent`, `nexus.cluster.messages.local_shortcircuit`, `nexus.cluster.asks.sent`, `nexus.cluster.asks.capacity_rejected`, `nexus.cluster.bytes.sent` (histogram), `nexus.cluster.frames.sent`, `nexus.cluster.handshake.rejected` metrics.
 
 ### Messenger Bridge (nexus-messenger)
 

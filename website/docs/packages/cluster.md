@@ -1,6 +1,7 @@
 ---
 title: nexus-cluster
 related:
+  - packages/cluster-tcp
   - packages/worker-pool
   - packages/worker-pool-swoole
   - packages/messenger
@@ -42,6 +43,7 @@ echo $target->toString(); // prod/eu-west-1/orders/node-0
 
 ## See also
 
+- [nexus-cluster-tcp](./cluster-tcp.md) — the shipped TCP mesh implementation of these contracts: gossip membership, phi-accrual failure detection, location-transparent `ClusterRef` tell/ask, TLS
 - [nexus-worker-pool](./worker-pool.md) — same-machine multi-core scaling
 - [nexus-worker-pool-swoole](./worker-pool-swoole.md) — Swoole thread pool implementation
 - [Scaling overview](../scaling/overview.md) — topology guide
