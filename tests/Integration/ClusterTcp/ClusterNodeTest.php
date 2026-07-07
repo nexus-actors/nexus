@@ -12,9 +12,12 @@ use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
+use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Pong;
+use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Core\Net\Port;
 use Monadial\Nexus\Runtime\Duration;
@@ -386,8 +389,176 @@ final class ClusterNodeTest extends TestCase
         $this->system->run();
 
         self::assertCount(2, $capturedViews, 'Both A and B view queries should have been answered');
-        self::assertLessThanOrEqual(2, count($capturedViews[0]->members), 'A should see ≤2 members after C leaves');
-        self::assertLessThanOrEqual(2, count($capturedViews[1]->members), 'B should see ≤2 members after C leaves');
+        self::assertSame(2, count($capturedViews[0]->members), 'A should see exactly 2 members after C leaves');
+        self::assertSame(2, count($capturedViews[1]->members), 'B should see exactly 2 members after C leaves');
+    }
+
+    // -------------------------------------------------------------------------
+    // Scenario 6: cross-cluster ask round-trip
+    // -------------------------------------------------------------------------
+
+    /**
+     * TDD SCENARIO 6: ask() from node A to an actor on node B receives the reply after
+     * the handshake is complete and the actor replies via $ctx->sender()->tell().
+     *
+     * The ask is issued inside an actor behavior (which runs in a Fiber) so Future::await()
+     * can suspend and resume cooperatively. The timeout is 500ms — well above the loopback RTT.
+     */
+    #[Test]
+    public function askFromAToBRoundTrip(): void
+    {
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 50));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 50));
+
+        $topologyB = $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA]);
+        $topologyA = $this->fastTopology('test-cluster', $addrA, $endpointA, [$endpointB]);
+
+        // Boot B first so it is already serving when A dials it.
+        $nodeB = ClusterNode::boot(
+            $this->system,
+            $topologyB,
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $topologyA,
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        /** @var Pong|null $captured */
+        $captured = null;
+
+        // Pong actor on B: replies to inbound asks via $ctx->sender() (a ClusterReplyRef on the ask path).
+        $pongBehavior = Behavior::receive(
+            static function ($ctx, object $msg): Behavior {
+                if ($msg instanceof Ping) {
+                    $ctx->sender()?->tell(new Pong($msg->text));
+                }
+
+                return Behavior::same();
+            },
+        );
+        $pongRef = $this->system->spawn(Props::fromBehavior($pongBehavior), 'pong-actor-ask');
+        $nodeB->expose($pongRef);
+
+        // Asker actor on A: triggered by a Ping, issues the cross-cluster ask and captures the Pong.
+        // Running inside a Fiber, Future::await() suspends cooperatively until the reply frame arrives.
+        $pongPath = $pongRef->path();
+        $askerBehavior = Behavior::receive(
+            static function ($ctx, object $msg) use (&$captured, $nodeA, $addrB, $pongPath): Behavior {
+                if ($msg instanceof Ping) {
+                    $clusterRef = $nodeA->refFor($addrB, $pongPath);
+                    $reply = $clusterRef->ask(new Ping('ask-hello'), Duration::millis(500))->await();
+
+                    if ($reply instanceof Pong) {
+                        $captured = $reply;
+                    }
+                }
+
+                return Behavior::same();
+            },
+        );
+        $askerRef = $this->system->spawn(Props::fromBehavior($askerBehavior), 'asker-actor');
+
+        // T=600ms: handshake + first gossip round-trip complete — trigger the cross-cluster ask.
+        $this->runtime->scheduleOnce(
+            Duration::millis(600),
+            static function () use ($askerRef): void {
+                $askerRef->tell(new Ping('go'));
+            },
+        );
+
+        // T=1500ms: shutdown — the ask (500ms budget) completes well before this.
+        $this->runtime->scheduleOnce(Duration::millis(1500), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertNotNull($captured, 'Ask should have received a Pong reply from node B');
+        self::assertSame('ask-hello', $captured->text);
+    }
+
+    // -------------------------------------------------------------------------
+    // Scenario 7: ask timeout
+    // -------------------------------------------------------------------------
+
+    /**
+     * TDD SCENARIO 7: ask() to a path with no registered actor on the remote node times out
+     * with AskTimeoutException after the specified budget elapses.
+     *
+     * The message is delivered to B but dropped (no actor at that path in B's local registry).
+     * The ask registry timeout fires, fails the Future, and the awaiting fiber receives
+     * AskTimeoutException.
+     */
+    #[Test]
+    public function askTimesOutWhenNoActorAtTargetPath(): void
+    {
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 60));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 60));
+
+        $topologyB = $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA]);
+        $topologyA = $this->fastTopology('test-cluster', $addrA, $endpointA, [$endpointB]);
+
+        ClusterNode::boot(
+            $this->system,
+            $topologyB,
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $topologyA,
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        /** @var bool $timedOut */
+        $timedOut = false;
+
+        // Dead path: nothing is exposed at this path on node B.
+        $deadPath = ActorPath::fromString('/nexus/user/nonexistent-actor');
+
+        // Asker actor: asks a non-existent path on B and captures the timeout.
+        $askerBehavior = Behavior::receive(
+            static function ($ctx, object $msg) use (&$timedOut, $nodeA, $addrB, $deadPath): Behavior {
+                if ($msg instanceof Ping) {
+                    $clusterRef = $nodeA->refFor($addrB, $deadPath);
+
+                    try {
+                        $clusterRef->ask(new Ping('will-timeout'), Duration::millis(150))->await();
+                    } catch (AskTimeoutException) {
+                        $timedOut = true;
+                    }
+                }
+
+                return Behavior::same();
+            },
+        );
+        $askerRef = $this->system->spawn(Props::fromBehavior($askerBehavior), 'timeout-asker');
+
+        // T=600ms: handshake complete — trigger the ask.
+        $this->runtime->scheduleOnce(
+            Duration::millis(600),
+            static function () use ($askerRef): void {
+                $askerRef->tell(new Ping('go'));
+            },
+        );
+
+        // T=1500ms: shutdown — well after the 150ms timeout fires at T≈750ms.
+        $this->runtime->scheduleOnce(Duration::millis(1500), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertTrue($timedOut, 'Ask to non-existent path should have timed out with AskTimeoutException');
     }
 
     protected function setUp(): void
@@ -414,6 +585,7 @@ final class ClusterNodeTest extends TestCase
     {
         $registry = new TypeRegistry();
         $registry->registerFromAttribute(Ping::class);
+        $registry->registerFromAttribute(Pong::class);
 
         return $registry;
     }

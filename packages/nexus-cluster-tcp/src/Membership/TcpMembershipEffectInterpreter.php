@@ -91,17 +91,6 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
 
     private function buildSelfHandshake(): Handshake
     {
-        $self = $this->topology->self;
-
-        return new Handshake(
-            clusterName: $this->topology->clusterName,
-            node: [
-                'application' => $self->application,
-                'cluster' => $self->cluster,
-                'datacenter' => $self->datacenter,
-                'node' => $self->node,
-            ],
-            advertise: (string) $this->topology->advertiseEndpoint,
-        );
+        return Handshake::forSelf($this->topology);
     }
 }

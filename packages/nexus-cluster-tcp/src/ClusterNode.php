@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp;
 
+use BadMethodCallException;
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
@@ -95,6 +96,9 @@ final class ClusterNode
     /** @var array<string, PeerConnection> Outbound connections keyed by (string) NodeEndpoint */
     private array $outboundConns = [];
 
+    /** @var array<string, true> Path-prefixes for which a Leave has already been processed; prevents duplicate delivery on relay-back. */
+    private array $processedLeaves = [];
+
     private function __construct(
         private readonly NodeAddress $selfAddress,
         private readonly ClusterTopology $topology,
@@ -139,8 +143,9 @@ final class ClusterNode
         $localDelivery = new LocalDelivery($localRegistry);
         $askRegistry = new TcpAskRegistry($runtime);
 
-        // 4. User-message codec — same registry as the frame serializer so user types
-        //    registered by the caller are reachable on both the encode and decode paths.
+        // 4. User-message codec. When $userTypes is non-null it shares the registry with the
+        //    frame serializer so user types are reachable on both encode and decode paths.
+        //    Falls back to a separate empty TypeRegistry when null (membership-only setups).
         $codec = new ClusterMessageCodec($frameSerializer, $userTypes ?? new TypeRegistry());
 
         // 5. Transport (override or auto-select).
@@ -321,6 +326,7 @@ final class ClusterNode
 
         foreach ($this->acceptedLinks as $link) {
             $link->sendFrame($leaveFrame);
+            $link->close();
         }
 
         foreach ($this->outboundConns as $conn) {
@@ -379,6 +385,18 @@ final class ClusterNode
     // -------------------------------------------------------------------------
     // Frame pump wiring
     // -------------------------------------------------------------------------
+
+    /**
+     * @psalm-api
+     *
+     * Receptionist pattern for service discovery. Arrives in the C2 track.
+     *
+     * @throws \BadMethodCallException Always.
+     */
+    public function receptionist(): never
+    {
+        throw new BadMethodCallException('receptionist arrives in C2');
+    }
 
     /**
      * Wire the frame pump for an accepted inbound PeerLink.
@@ -655,10 +673,18 @@ final class ClusterNode
             return;
         }
 
+        // Dedup: if we have already processed a Leave for this node, skip re-delivery and relay.
+        $leavingPrefix = $leavingAddr->toPathPrefix();
+
+        if (isset($this->processedLeaves[$leavingPrefix])) {
+            return;
+        }
+
+        $this->processedLeaves[$leavingPrefix] = true;
+
         $this->membershipRef->tell(new LeaveReceived($leavingAddr));
 
         // Forward to all accepted peers except the leaving node and the frame sender.
-        $leavingPrefix = $leavingAddr->toPathPrefix();
         $senderPrefix = $senderAddr?->toPathPrefix();
 
         foreach (array_keys($this->acceptedLinks) as $prefix) {
@@ -677,18 +703,7 @@ final class ClusterNode
      */
     private function buildSelfHandshake(): Handshake
     {
-        $self = $this->topology->self;
-
-        return new Handshake(
-            clusterName: $this->topology->clusterName,
-            node: [
-                'application' => $self->application,
-                'cluster' => $self->cluster,
-                'datacenter' => $self->datacenter,
-                'node' => $self->node,
-            ],
-            advertise: (string) $this->topology->advertiseEndpoint,
-        );
+        return Handshake::forSelf($this->topology);
     }
 
     /**

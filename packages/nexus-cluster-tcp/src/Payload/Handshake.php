@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Payload;
 
+use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Serialization\MessageType;
 
 /**
@@ -28,4 +29,23 @@ final readonly class Handshake
         public string $advertise,
         public int $protocolVersion = 1,
     ) {}
+
+    /**
+     * Build a Handshake payload announcing the given topology's identity and advertise endpoint.
+     */
+    public static function forSelf(ClusterTopology $topology): self
+    {
+        $self = $topology->self;
+
+        return new self(
+            clusterName: $topology->clusterName,
+            node: [
+                'application' => $self->application,
+                'cluster' => $self->cluster,
+                'datacenter' => $self->datacenter,
+                'node' => $self->node,
+            ],
+            advertise: (string) $topology->advertiseEndpoint,
+        );
+    }
 }
