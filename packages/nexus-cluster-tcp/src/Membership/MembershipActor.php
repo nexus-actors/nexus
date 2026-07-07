@@ -17,6 +17,9 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Actor\StatefulActorHandler;
+use Monadial\Nexus\Core\Lifecycle\PostStop;
+use Monadial\Nexus\Core\Lifecycle\PreRestart;
+use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
@@ -82,8 +85,8 @@ final class MembershipActor implements StatefulActorHandler
 
         $behavior = Behavior::setup(
             static function (ActorContext $ctx) use ($actor, $heartbeatInterval, $gossipInterval): Behavior {
-                $ctx->scheduleRepeatedly($heartbeatInterval, $heartbeatInterval, new HeartbeatTick());
-                $ctx->scheduleRepeatedly($gossipInterval, $gossipInterval, new GossipTick());
+                $hb = $ctx->scheduleRepeatedly($heartbeatInterval, $heartbeatInterval, new HeartbeatTick());
+                $gp = $ctx->scheduleRepeatedly($gossipInterval, $gossipInterval, new GossipTick());
 
                 return Behavior::withState(
                     $actor->initialState(),
@@ -93,7 +96,14 @@ final class MembershipActor implements StatefulActorHandler
 
                         return $actor->handle($c, $msg, $typedState);
                     },
-                );
+                )->onSignal(static function (ActorContext $ctx, Signal $signal) use ($hb, $gp): Behavior {
+                    if ($signal instanceof PostStop || $signal instanceof PreRestart) {
+                        $hb->cancel();
+                        $gp->cancel();
+                    }
+
+                    return Behavior::same();
+                });
             },
         );
 

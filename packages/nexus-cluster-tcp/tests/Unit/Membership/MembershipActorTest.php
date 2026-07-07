@@ -13,11 +13,13 @@ use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipState;
 use Monadial\Nexus\Cluster\Tcp\Membership\MemberStatus;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipTick;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\HeartbeatTick;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
+use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeDown;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeSuspected;
 use Monadial\Nexus\Cluster\Tcp\Membership\NodeUp;
@@ -26,6 +28,7 @@ use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
 use Monadial\Nexus\Cluster\Tcp\Membership\SendGossip;
 use Monadial\Nexus\Cluster\Tcp\Membership\SuspicionReason;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEffectInterpreter;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEventPublisher;
@@ -181,6 +184,93 @@ final class MembershipActorTest extends TestCase
     }
 
     #[Test]
+    public function timersStopFiringAfterActorIsStopped(): void
+    {
+        $ref = $this->spawnActor(heartbeatInterval: Duration::seconds(1), gossipInterval: Duration::seconds(1));
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+
+        // Confirm gossip fires while alive.
+        $this->runtime->advanceTime(Duration::seconds(1));
+        $this->runtime->drain();
+        self::assertNotEmpty($this->effects->ofType(SendGossip::class));
+        $this->effects->clear();
+
+        // Stop the actor. PostStop cancels both Cancellables.
+        $this->system->stop($ref);
+        $this->runtime->drain();
+
+        // Advance past the tick interval. Cancelled timers must not enqueue HeartbeatTick
+        // or GossipTick, so no new SendGossip effects can be produced.
+        $this->runtime->advanceTime(Duration::seconds(1));
+        $this->runtime->drain();
+
+        self::assertSame([], $this->effects->ofType(SendGossip::class));
+    }
+
+    #[Test]
+    public function livenessObservedRecoversSuspectPeerToUpAndPublishesNodeUp(): void
+    {
+        $ref = $this->spawnActor();
+        $ref->tell($this->handshakeFromPeer());
+        $this->runtime->drain();
+
+        // Move peer to Suspect via unexpected link close.
+        $ref->tell(new PeerLinkClosed($this->peer, intentional: false));
+        $this->runtime->drain();
+
+        $view = $this->queryView($ref);
+        self::assertSame(MemberStatus::Suspect, $view->members[$this->peer->toPathPrefix()]->status);
+
+        $this->events->clear();
+
+        // PeerLivenessObserved for a known peer (endpoint null = already tracked).
+        $ref->tell(new PeerLivenessObserved($this->peer));
+        $this->runtime->drain();
+
+        // Peer must recover to Up and emit NodeUp.
+        $upEvents = $this->events->ofType(NodeUp::class);
+        self::assertCount(1, $upEvents);
+        self::assertSame($this->peer->toPathPrefix(), $upEvents[0]->node->toPathPrefix());
+
+        $view = $this->queryView($ref);
+        self::assertSame(MemberStatus::Up, $view->members[$this->peer->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function gossipReceivedMergesNewMemberAndPublishesNodeUp(): void
+    {
+        $ref = $this->spawnActor();
+        $this->events->clear();
+
+        $thirdPeer = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $gossip = new GossipPayload(
+            [
+                [
+                    'address' => $thirdPeer->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => 1,
+                ],
+            ],
+            [],
+        );
+
+        $ref->tell(new GossipReceived($this->peer, $gossip));
+        $this->runtime->drain();
+
+        // View must now include the gossiped member.
+        $view = $this->queryView($ref);
+        self::assertTrue($view->has($thirdPeer));
+        self::assertSame(MemberStatus::Up, $view->members[$thirdPeer->toPathPrefix()]->status);
+
+        // A NodeUp event must have been published for the newly learned member.
+        $upEvents = $this->events->ofType(NodeUp::class);
+        self::assertCount(1, $upEvents);
+        self::assertSame($thirdPeer->toPathPrefix(), $upEvents[0]->node->toPathPrefix());
+    }
+
+    #[Test]
     public function stateEvolvesAcrossMessages(): void
     {
         $ref = $this->spawnActor();
@@ -197,6 +287,10 @@ final class MembershipActorTest extends TestCase
         $view = $this->queryView($ref);
         self::assertCount(1, $view->members);
         self::assertFalse($view->has($this->peer));
+
+        // selfIncarnation carries across the multi-message sequence: self must still be incarnation 1.
+        $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
+        self::assertSame(1, $view->members[$self->toPathPrefix()]->incarnation);
     }
 
     #[Override]
