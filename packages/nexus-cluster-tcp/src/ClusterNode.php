@@ -47,6 +47,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
@@ -69,6 +70,7 @@ use function explode;
 use function extension_loaded;
 use function ltrim;
 use function preg_replace;
+use function strlen;
 
 /**
  * @psalm-api
@@ -189,7 +191,7 @@ final class ClusterNode
         };
 
         // 7. Outbound sink for user messages (ClusterRef::tell / ask).
-        $outboundSink = self::buildOutboundSink($sender, $frameSerializer);
+        $outboundSink = self::buildOutboundSink($sender, $frameSerializer, $meter);
 
         // 8. Inbox router + ref factory — wire real or noop trace seams from $observability.
         $traceInjector = $observability->isEnabled()
@@ -462,7 +464,7 @@ final class ClusterNode
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
-                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
@@ -550,7 +552,7 @@ final class ClusterNode
 
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
-                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
@@ -848,22 +850,68 @@ final class ClusterNode
     /**
      * Build an OutboundSink that routes MessagePayload frames via the shared sender closure.
      * User messages flow over the same connections as membership frames, sharing peer identity.
+     * Instruments nexus.cluster.frames.sent and nexus.cluster.bytes.sent via the injected meter.
+     *
+     * Note: nexus.cluster.send_buffer.dropped is not emitted on this path because drop detection
+     * requires PeerConnection queue-overflow visibility, which is not threaded to this sink.
+     * MeshOutboundSink retains all three send-side metrics for its own direct callers.
      *
      * @param Closure(string, Frame): void $sender
      */
-    private static function buildOutboundSink(Closure $sender, MessageSerializer $frameSerializer): OutboundSink
+    private static function buildOutboundSink(
+        Closure $sender,
+        MessageSerializer $frameSerializer,
+        Meter $meter,
+    ): OutboundSink
     {
-        return new class ($sender, $frameSerializer) implements OutboundSink {
+        return new class ($sender, $frameSerializer, $meter) implements OutboundSink {
+            private ?Counter $framesSent = null;
+
+            private ?Histogram $bytesSent = null;
+
             public function __construct(
                 private readonly Closure $sender,
                 private readonly MessageSerializer $frameSerializer,
+                private readonly Meter $meter,
             ) {}
 
             #[Override]
             public function send(NodeAddress $target, MessagePayload $payload): void
             {
                 $bytes = $this->frameSerializer->serialize($payload);
+                $this->safely(fn(): mixed => $this->bytesSentHistogram()->record(strlen($bytes)));
                 ($this->sender)($target->toPathPrefix(), new Frame(FrameType::Message, $bytes));
+                $this->safely(fn(): mixed => $this->framesSentCounter()->add(1, ['frame.type' => 'message']));
+            }
+
+            /**
+             * @param callable(): mixed $fn
+             */
+            private function safely(callable $fn): void
+            {
+                try {
+                    $fn();
+                } catch (Throwable) {
+                    // Telemetry must never break transport.
+                }
+            }
+
+            private function framesSentCounter(): Counter
+            {
+                return $this->framesSent ??= $this->meter->counter(
+                    'nexus.cluster.frames.sent',
+                    '{frame}',
+                    'Cluster frames sent to remote peers',
+                );
+            }
+
+            private function bytesSentHistogram(): Histogram
+            {
+                return $this->bytesSent ??= $this->meter->histogram(
+                    'nexus.cluster.bytes.sent',
+                    'By',
+                    'Bytes sent in outbound cluster frames',
+                );
             }
         };
     }

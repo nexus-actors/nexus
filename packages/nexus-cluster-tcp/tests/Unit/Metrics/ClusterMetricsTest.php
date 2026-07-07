@@ -213,6 +213,24 @@ final class ClusterMetricsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // TcpAskRegistry — asks.pending observable gauge
+    // -------------------------------------------------------------------------
+
+    #[Test]
+    public function asksPendingGaugeReflectsLiveCount(): void
+    {
+        $meter = new RecordingMeter();
+        $runtime = new TestRuntime();
+        $registry = new TcpAskRegistry($runtime, meter: $meter);
+
+        // Two registers trigger lazy gauge registration and populate the registry.
+        $registry->register('corr-g1', Duration::seconds(5), ActorPath::fromString(self::PATH));
+        $registry->register('corr-g2', Duration::seconds(5), ActorPath::fromString(self::PATH));
+
+        self::assertSame(2, $meter->observableGaugeValue('nexus.cluster.asks.pending'));
+    }
+
+    // -------------------------------------------------------------------------
     // MembershipActor — nodes.suspected
     // -------------------------------------------------------------------------
 
@@ -324,13 +342,13 @@ final class ClusterMetricsTest extends TestCase
     #[Test]
     public function noopMeterProducesNoRecordingAndDoesNotBreakOperations(): void
     {
-        // Just confirm operations complete without error when NoopMeter is in use.
-        $ref = $this->remoteRef($this->node('node-a'), $this->node('node-b'), new RecordingOutboundSink());
+        // With NoopMeter (default — no meter passed), operations must still complete.
+        $sink = new RecordingOutboundSink();
+        $ref = $this->remoteRef($this->node('node-a'), $this->node('node-b'), $sink);
 
         $ref->tell(new Ping('quiet'));
 
-        // No assertion needed beyond "did not throw".
-        self::assertTrue(true);
+        self::assertSame(1, $sink->count());
     }
 
     // -------------------------------------------------------------------------
