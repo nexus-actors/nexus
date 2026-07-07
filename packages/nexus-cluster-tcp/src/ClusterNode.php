@@ -508,6 +508,11 @@ final class ClusterNode
 
             if ($frame->type === FrameType::Gossip) {
                 $this->processGossipFrame($frame, $peerAddr);
+                // Gossip is the steady-state heartbeat: receiving it proves the peer
+                // is alive, so it MUST feed the failure detector. Without this the phi
+                // detector starves once traffic goes quiet and falsely suspects an
+                // idle-but-alive peer (there is no separate Ping/Pong heartbeat).
+                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
 
                 return;
             }
@@ -603,6 +608,11 @@ final class ClusterNode
 
             if ($frame->type === FrameType::Gossip) {
                 $this->processGossipFrame($frame, $peerAddr);
+                // Gossip is the steady-state heartbeat: receiving it proves the peer
+                // is alive, so it MUST feed the failure detector. Without this the phi
+                // detector starves once traffic goes quiet and falsely suspects an
+                // idle-but-alive peer (there is no separate Ping/Pong heartbeat).
+                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
 
                 return;
             }
