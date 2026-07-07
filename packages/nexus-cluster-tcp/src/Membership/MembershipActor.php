@@ -21,9 +21,13 @@ use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreRestart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
 use Psr\Clock\ClockInterface;
+use Throwable;
 
 /**
  * @psalm-api
@@ -55,6 +59,14 @@ final class MembershipActor implements StatefulActorHandler
 
     private readonly Duration $gossipInterval;
 
+    private ?Counter $nodesSuspected = null;
+
+    private ?Counter $nodesRecovered = null;
+
+    private ?Counter $nodesPruned = null;
+
+    private ?Counter $heartbeatsReceived = null;
+
     public function __construct(
         private readonly MembershipService $service,
         private readonly PhiAccrualDetector $detector,
@@ -64,6 +76,7 @@ final class MembershipActor implements StatefulActorHandler
         private readonly ClockInterface $clock,
         ?Duration $heartbeatInterval = null,
         ?Duration $gossipInterval = null,
+        private readonly Meter $meter = new NoopMeter(),
     ) {
         $this->heartbeatInterval = $heartbeatInterval ?? Duration::seconds(1);
         $this->gossipInterval = $gossipInterval ?? Duration::seconds(1);
@@ -127,6 +140,10 @@ final class MembershipActor implements StatefulActorHandler
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
         $now = $this->clock->now();
+
+        if ($message instanceof PeerLivenessObserved) {
+            $this->safely(fn(): mixed => $this->heartbeatsReceivedCounter()->add(1));
+        }
 
         return match (true) {
             $message instanceof HandshakeReceived => $this->apply($this->service->applyHandshake(
@@ -195,6 +212,7 @@ final class MembershipActor implements StatefulActorHandler
     {
         foreach ($transition->events as $event) {
             $this->eventPublisher->publish($event);
+            $this->recordMembershipEvent($event);
         }
 
         foreach ($transition->effects as $effect) {
@@ -213,5 +231,64 @@ final class MembershipActor implements StatefulActorHandler
         $message->replyTo->tell($state->view);
 
         return BehaviorWithState::same();
+    }
+
+    private function recordMembershipEvent(MembershipEvent $event): void
+    {
+        if ($event instanceof NodeSuspected) {
+            $this->safely(fn(): mixed => $this->nodesSuspectedCounter()->add(1));
+        } elseif ($event instanceof NodeUp) {
+            $this->safely(fn(): mixed => $this->nodesRecoveredCounter()->add(1));
+        } elseif ($event instanceof NodeDown) {
+            $this->safely(fn(): mixed => $this->nodesPrunedCounter()->add(1));
+        }
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break membership operations.
+        }
+    }
+
+    private function nodesSuspectedCounter(): Counter
+    {
+        return $this->nodesSuspected ??= $this->meter->counter(
+            'nexus.cluster.nodes.suspected',
+            '{node}',
+            'Cluster nodes that became suspected (unreachable)',
+        );
+    }
+
+    private function nodesRecoveredCounter(): Counter
+    {
+        return $this->nodesRecovered ??= $this->meter->counter(
+            'nexus.cluster.nodes.recovered',
+            '{node}',
+            'Cluster nodes that recovered from Suspect to Up',
+        );
+    }
+
+    private function nodesPrunedCounter(): Counter
+    {
+        return $this->nodesPruned ??= $this->meter->counter(
+            'nexus.cluster.nodes.pruned',
+            '{node}',
+            'Cluster nodes declared down and pruned from the view',
+        );
+    }
+
+    private function heartbeatsReceivedCounter(): Counter
+    {
+        return $this->heartbeatsReceived ??= $this->meter->counter(
+            'nexus.cluster.heartbeats.received',
+            '{heartbeat}',
+            'Heartbeat (liveness) signals received from peers',
+        );
     }
 }

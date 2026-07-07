@@ -6,10 +6,13 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\Exception\AskCapacityExceededException;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Observability\Trace\NoopSpan;
 use Monadial\Nexus\Observability\Trace\NoopTracer;
 use Monadial\Nexus\Observability\Trace\Span;
@@ -56,6 +59,7 @@ final readonly class ClusterRef implements ActorRef
         private TraceContextInjector $trace,
         private Closure $aliveChecker,
         private Tracer $tracer = new NoopTracer(),
+        private Meter $meter = new NoopMeter(),
     ) {}
 
     /**
@@ -64,13 +68,22 @@ final readonly class ClusterRef implements ActorRef
     #[Override]
     public function tell(object $message): void
     {
+        $encoded = $this->codec->encode($message);
+
         if ($this->targetsSelf()) {
             $_ = $this->localDelivery->deliver((string) $this->targetPath, $message, null);
+            $this->safely(fn(): mixed => $this->meter
+                ->counter(
+                    'nexus.cluster.messages.local_shortcircuit',
+                    '{message}',
+                    'Self-node tells short-circuited locally',
+                )
+                ->add(1, ['nexus.message.type' => $encoded->type]));
 
             return;
         }
 
-        $encoded = $this->codec->encode($message);
+        $trace = $this->safeInject();
 
         $span = $this->safeStartSpan('cluster.send', SpanKind::Producer, [
             'messaging.system' => 'nexus-tcp',
@@ -85,8 +98,11 @@ final readonly class ClusterRef implements ActorRef
                 body: $encoded->body,
                 correlationId: null,
                 replyPath: null,
-                trace: $this->trace->inject(),
+                trace: $trace,
             ));
+            $this->safely(fn(): mixed => $this->meter
+                ->counter('nexus.cluster.messages.sent', '{message}', 'Remote cluster tells sent')
+                ->add(1, ['nexus.message.type' => $encoded->type]));
         } catch (Throwable $e) {
             $this->safeRecordError($span, $e);
 
@@ -110,6 +126,7 @@ final readonly class ClusterRef implements ActorRef
         $replyPath = $this->self->temporaryAskReplyPath($correlationId);
 
         $encoded = $this->codec->encode($message);
+        $trace = $this->safeInject();
 
         $span = $this->safeStartSpan('cluster.ask', SpanKind::Producer, [
             'messaging.system' => 'nexus-tcp',
@@ -121,14 +138,29 @@ final readonly class ClusterRef implements ActorRef
             /** @var Future<R> $future */
             $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath);
 
+            $this->safely(fn(): mixed => $this->meter
+                ->counter('nexus.cluster.asks.sent', '{message}', 'Remote cluster asks sent')
+                ->add(1, ['nexus.message.type' => $encoded->type]));
+
             $this->sink->send($this->target, new MessagePayload(
                 targetPath: (string) $this->targetPath,
                 messageType: $encoded->type,
                 body: $encoded->body,
                 correlationId: $correlationId,
                 replyPath: (string) $replyPath,
-                trace: $this->trace->inject(),
+                trace: $trace,
             ));
+        } catch (AskCapacityExceededException $e) {
+            $this->safely(fn(): mixed => $this->meter
+                ->counter(
+                    'nexus.cluster.asks.capacity_rejected',
+                    '{message}',
+                    'Cluster asks rejected due to registry capacity',
+                )
+                ->add(1, ['nexus.message.type' => $encoded->type]));
+            $this->safeRecordError($span, $e);
+
+            throw $e;
         } catch (Throwable $e) {
             $this->safeRecordError($span, $e);
 
@@ -157,6 +189,16 @@ final readonly class ClusterRef implements ActorRef
         return $this->target->toPathPrefix() === $this->self->toPathPrefix();
     }
 
+    /** @return array<string, string> */
+    private function safeInject(): array
+    {
+        try {
+            return $this->trace->inject();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
     /**
      * @param array<string, scalar> $attributes
      */
@@ -183,6 +225,18 @@ final readonly class ClusterRef implements ActorRef
         try {
             $span->end();
         } catch (Throwable) {
+        }
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break cluster operations.
         }
     }
 }

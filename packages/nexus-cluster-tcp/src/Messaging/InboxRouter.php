@@ -7,6 +7,9 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Observability\Context\Context;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Observability\Trace\NoopSpan;
 use Monadial\Nexus\Observability\Trace\NoopTracer;
 use Monadial\Nexus\Observability\Trace\Span;
@@ -44,6 +47,10 @@ final class InboxRouter
 {
     private int $drops = 0;
 
+    private ?Counter $messagesReceived = null;
+
+    private ?Counter $messagesUnroutable = null;
+
     public function __construct(
         private readonly InboundDelivery $delivery,
         private readonly TcpAskRegistry $askRegistry,
@@ -53,6 +60,7 @@ final class InboxRouter
         private readonly TraceContextInjector $traceInjector = new NoopTraceContextInjector(),
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly Tracer $tracer = new NoopTracer(),
+        private readonly Meter $meter = new NoopMeter(),
     ) {}
 
     /**
@@ -60,6 +68,9 @@ final class InboxRouter
      */
     public function route(NodeAddress $origin, MessagePayload $payload): void
     {
+        $this->safely(fn(): mixed => $this->messagesReceivedCounter()
+            ->add(1, ['nexus.message.type' => $payload->messageType]));
+
         $parentContext = $this->traceExtractor->extract($payload->trace);
 
         $span = $this->safeStartSpan('cluster.receive', SpanKind::Consumer, [
@@ -123,6 +134,12 @@ final class InboxRouter
 
         if ($outcome === DeliveryOutcome::Unroutable) {
             ++$this->drops;
+            $this->safely(
+                fn(): mixed => $this->messagesUnroutableCounter()->add(
+                    1,
+                    ['nexus.message.type' => $payload->messageType],
+                ),
+            );
             $this->logger->debug('Dropping unroutable cluster message', [
                 'targetPath' => $payload->targetPath,
             ]);
@@ -166,5 +183,35 @@ final class InboxRouter
             $span->end();
         } catch (Throwable) {
         }
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break routing.
+        }
+    }
+
+    private function messagesReceivedCounter(): Counter
+    {
+        return $this->messagesReceived ??= $this->meter->counter(
+            'nexus.cluster.messages.received',
+            '{message}',
+            'Cluster messages received inbound',
+        );
+    }
+
+    private function messagesUnroutableCounter(): Counter
+    {
+        return $this->messagesUnroutable ??= $this->meter->counter(
+            'nexus.cluster.messages.unroutable',
+            '{message}',
+            'Cluster messages dropped as unroutable',
+        );
     }
 }

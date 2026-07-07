@@ -12,12 +12,19 @@ use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Cluster\Tcp\PeerConnection;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Histogram;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Throwable;
+
+use function strlen;
 
 /**
  * @psalm-api
@@ -41,6 +48,12 @@ final class MeshOutboundSink implements OutboundSink
 
     private int $drops = 0;
 
+    private ?Counter $sendBufferDropped = null;
+
+    private ?Counter $framesSent = null;
+
+    private ?Histogram $bytesSent = null;
+
     public function __construct(
         private readonly EndpointResolver $resolver,
         private readonly MeshTransport $transport,
@@ -49,6 +62,7 @@ final class MeshOutboundSink implements OutboundSink
         private readonly Duration $reconnectInitialBackoff,
         private readonly Duration $reconnectMaxBackoff,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly Meter $meter = new NoopMeter(),
     ) {}
 
     #[Override]
@@ -58,6 +72,7 @@ final class MeshOutboundSink implements OutboundSink
 
         if ($endpoint === null) {
             ++$this->drops;
+            $this->safely(fn(): mixed => $this->sendBufferDroppedCounter()->add(1));
             $this->logger->debug('MeshOutboundSink: dropping message — no endpoint registered for node', [
                 'target' => $target->toPathPrefix(),
             ]);
@@ -67,7 +82,9 @@ final class MeshOutboundSink implements OutboundSink
 
         $connection = $this->getOrCreate($endpoint);
         $bytes = $this->payloadSerializer->serialize($payload);
+        $this->safely(fn(): mixed => $this->bytesSentHistogram()->record(strlen($bytes)));
         $connection->sendFrame(new Frame(FrameType::Message, $bytes));
+        $this->safely(fn(): mixed => $this->framesSentCounter()->add(1, ['frame.type' => 'message']));
     }
 
     /**
@@ -105,5 +122,44 @@ final class MeshOutboundSink implements OutboundSink
         }
 
         return $this->connections[$key];
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break transport.
+        }
+    }
+
+    private function sendBufferDroppedCounter(): Counter
+    {
+        return $this->sendBufferDropped ??= $this->meter->counter(
+            'nexus.cluster.send_buffer.dropped',
+            '{message}',
+            'Messages dropped due to unresolvable peer endpoint',
+        );
+    }
+
+    private function framesSentCounter(): Counter
+    {
+        return $this->framesSent ??= $this->meter->counter(
+            'nexus.cluster.frames.sent',
+            '{frame}',
+            'Cluster frames sent to remote peers',
+        );
+    }
+
+    private function bytesSentHistogram(): Histogram
+    {
+        return $this->bytesSent ??= $this->meter->histogram(
+            'nexus.cluster.bytes.sent',
+            'By',
+            'Bytes sent in outbound cluster frames',
+        );
     }
 }

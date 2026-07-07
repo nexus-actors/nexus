@@ -10,8 +10,12 @@ use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
+use Throwable;
 
 /**
  * @psalm-api
@@ -37,6 +41,8 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
     /** @var array<string, true> path-prefixes to which we have already sent our Handshake */
     private array $handshakeSentTo = [];
 
+    private ?Counter $gossipRounds = null;
+
     /**
      * @param Closure(string $prefix, Frame $frame): void $sender
      *        Routes a frame to the peer identified by NodeAddress path-prefix.
@@ -46,6 +52,7 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
         private readonly ClusterTopology $topology,
         private readonly MessageSerializer $frameSerializer,
         private readonly Closure $sender,
+        private readonly Meter $meter = new NoopMeter(),
     ) {}
 
     #[Override]
@@ -81,6 +88,8 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
 
     private function sendGossip(SendGossip $effect): void
     {
+        $this->safely(fn(): mixed => $this->gossipRoundsCounter()->add(1));
+
         $gossipBytes = $this->frameSerializer->serialize($effect->payload);
         $gossipFrame = new Frame(FrameType::Gossip, $gossipBytes);
 
@@ -92,5 +101,26 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
     private function buildSelfHandshake(): Handshake
     {
         return Handshake::forSelf($this->topology);
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break membership effects.
+        }
+    }
+
+    private function gossipRoundsCounter(): Counter
+    {
+        return $this->gossipRounds ??= $this->meter->counter(
+            'nexus.cluster.gossip.rounds',
+            '{round}',
+            'Gossip rounds dispatched to peers',
+        );
     }
 }

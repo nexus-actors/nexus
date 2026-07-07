@@ -7,6 +7,8 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Observability\Trace\NoopTracer;
 use Monadial\Nexus\Observability\Trace\Tracer;
 
@@ -27,6 +29,7 @@ final readonly class ClusterRefFactory
         private ClusterMessageCodec $codec,
         private TraceContextInjector $trace = new NoopTraceContextInjector(),
         private Tracer $tracer = new NoopTracer(),
+        private Meter $meter = new NoopMeter(),
     ) {}
 
     /**
@@ -48,6 +51,7 @@ final readonly class ClusterRefFactory
             $this->trace,
             $aliveChecker ?? static fn(): bool => true,
             $this->tracer,
+            $this->meter,
         );
     }
 }

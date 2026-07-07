@@ -7,12 +7,19 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 use Monadial\Nexus\Cluster\Tcp\Exception\AskCapacityExceededException;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Histogram;
+use Monadial\Nexus\Observability\Metric\Meter;
+use Monadial\Nexus\Observability\Metric\NoopMeter;
+use Monadial\Nexus\Observability\Metric\ObservableGauge;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Throwable;
 
 use function count;
+use function hrtime;
 
 /**
  * @psalm-api
@@ -31,7 +38,22 @@ final class TcpAskRegistry
     /** @var array<string, FutureSlot<object>> */
     private array $pending = [];
 
-    public function __construct(private readonly Runtime $runtime, private readonly int $maxPending = 10_000) {}
+    /** @var array<string, int> hrtime(true) values keyed by correlationId */
+    private array $startTimes = [];
+
+    private ?Counter $asksResolved = null;
+
+    private ?Counter $asksTimedOut = null;
+
+    private ?Histogram $askDuration = null;
+
+    private ?ObservableGauge $pendingGauge = null;
+
+    public function __construct(
+        private readonly Runtime $runtime,
+        private readonly int $maxPending = 10_000,
+        private readonly Meter $meter = new NoopMeter(),
+    ) {}
 
     /**
      * Register a pending ask and schedule its timeout. The returned future resolves when a
@@ -49,9 +71,28 @@ final class TcpAskRegistry
 
         $slot = $this->runtime->createFutureSlot();
         $this->pending[$correlationId] = $slot;
+        $this->startTimes[$correlationId] = hrtime(true);
+
+        $this->safely(fn(): mixed => $this->pendingGauge ??= $this->meter->observableGauge(
+            'nexus.cluster.asks.pending',
+            fn(): int => $this->count(),
+            '{message}',
+            'Number of in-flight remote cluster asks',
+        ));
 
         $this->runtime->scheduleOnce($timeout, function () use ($correlationId, $target, $timeout): void {
-            $this->remove($correlationId)?->fail(new AskTimeoutException($target, $timeout));
+            $startTime = $this->startTimes[$correlationId] ?? null;
+            $slot = $this->remove($correlationId);
+
+            if ($slot !== null) {
+                $slot->fail(new AskTimeoutException($target, $timeout));
+                $this->safely(fn(): mixed => $this->asksTimedOutCounter()->add(1));
+
+                if ($startTime !== null) {
+                    $durationMs = (hrtime(true) - $startTime) / 1_000_000;
+                    $this->safely(fn(): mixed => $this->askDurationHistogram()->record($durationMs));
+                }
+            }
         });
 
         return new Future($slot);
@@ -67,9 +108,18 @@ final class TcpAskRegistry
             return false;
         }
 
+        $startTime = $this->startTimes[$correlationId] ?? null;
         $slot = $this->pending[$correlationId];
         unset($this->pending[$correlationId]);
+        unset($this->startTimes[$correlationId]);
         $slot->resolve($reply);
+
+        $this->safely(fn(): mixed => $this->asksResolvedCounter()->add(1));
+
+        if ($startTime !== null) {
+            $durationMs = (hrtime(true) - $startTime) / 1_000_000;
+            $this->safely(fn(): mixed => $this->askDurationHistogram()->record($durationMs));
+        }
 
         return true;
     }
@@ -91,7 +141,47 @@ final class TcpAskRegistry
     {
         $slot = $this->pending[$correlationId] ?? null;
         unset($this->pending[$correlationId]);
+        unset($this->startTimes[$correlationId]);
 
         return $slot;
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Telemetry must never break ask operations.
+        }
+    }
+
+    private function asksResolvedCounter(): Counter
+    {
+        return $this->asksResolved ??= $this->meter->counter(
+            'nexus.cluster.asks.resolved',
+            '{message}',
+            'Remote cluster asks resolved with a reply',
+        );
+    }
+
+    private function asksTimedOutCounter(): Counter
+    {
+        return $this->asksTimedOut ??= $this->meter->counter(
+            'nexus.cluster.asks.timed_out',
+            '{message}',
+            'Remote cluster asks that timed out without a reply',
+        );
+    }
+
+    private function askDurationHistogram(): Histogram
+    {
+        return $this->askDuration ??= $this->meter->histogram(
+            'nexus.cluster.ask.duration',
+            'ms',
+            'Round-trip duration of remote cluster asks',
+        );
     }
 }

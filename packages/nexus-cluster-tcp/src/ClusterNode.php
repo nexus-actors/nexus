@@ -46,6 +46,8 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Observability\Metric\Counter;
+use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\NoopSpan;
@@ -107,6 +109,8 @@ final class ClusterNode
     /** @var array<string, true> Path-prefixes for which a Leave has already been processed; prevents duplicate delivery on relay-back. */
     private array $processedLeaves = [];
 
+    private ?Counter $handshakeRejected = null;
+
     private function __construct(
         private readonly NodeAddress $selfAddress,
         private readonly ClusterTopology $topology,
@@ -119,6 +123,7 @@ final class ClusterNode
         private readonly Runtime $runtime,
         private readonly ActorSystem $system,
         private readonly Tracer $tracer,
+        private readonly Meter $meter,
     ) {}
 
     /**
@@ -156,7 +161,8 @@ final class ClusterNode
         // 3. Message delivery collaborators.
         $localRegistry = new LocalActorRegistry();
         $localDelivery = new LocalDelivery($localRegistry);
-        $askRegistry = new TcpAskRegistry($runtime);
+        $meter = $observability->meter();
+        $askRegistry = new TcpAskRegistry($runtime, meter: $meter);
 
         // 4. User-message codec. When $userTypes is non-null it shares the registry with the
         //    frame serializer so user types are reachable on both encode and decode paths.
@@ -204,6 +210,7 @@ final class ClusterNode
             $traceExtractor,
             $traceInjector,
             tracer: $tracer,
+            meter: $meter,
         );
 
         $refFactory = new ClusterRefFactory(
@@ -214,10 +221,11 @@ final class ClusterNode
             $codec,
             $traceInjector,
             $tracer,
+            $meter,
         );
 
         // 9. Membership collaborators.
-        $effectInterpreter = new TcpMembershipEffectInterpreter($topology, $frameSerializer, $sender);
+        $effectInterpreter = new TcpMembershipEffectInterpreter($topology, $frameSerializer, $sender, $meter);
         $eventPublisher = new EventDispatcherMembershipEventPublisher($system->eventDispatcher());
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
@@ -235,6 +243,7 @@ final class ClusterNode
             clock: $system->clock(),
             heartbeatInterval: $topology->heartbeatInterval,
             gossipInterval: $topology->gossipInterval,
+            meter: $meter,
         );
 
         $nodeSlug = (string) preg_replace('/[^a-zA-Z0-9_-]/', '-', $topology->self->node);
@@ -253,6 +262,7 @@ final class ClusterNode
             runtime: $runtime,
             system: $system,
             tracer: $tracer,
+            meter: $meter,
         );
 
         // 11. Start serving: wire the inbound accept pump.
@@ -454,9 +464,11 @@ final class ClusterNode
                     $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
                 } else {
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
+                    $this->safeRecordRejection();
                 }
 
                 $this->safeEndSpan($span);
@@ -540,9 +552,11 @@ final class ClusterNode
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
                 } else {
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
+                    $this->safeRecordRejection();
                 }
 
                 $this->safeEndSpan($span);
@@ -767,6 +781,20 @@ final class ClusterNode
         try {
             $span->end();
         } catch (Throwable) {
+        }
+    }
+
+    private function safeRecordRejection(): void
+    {
+        try {
+            $this->handshakeRejected ??= $this->meter->counter(
+                'nexus.cluster.handshake.rejected',
+                '{handshake}',
+                'Cluster handshakes rejected due to parse failure',
+            );
+            $this->handshakeRejected->add(1);
+        } catch (Throwable) {
+            // Telemetry must never break cluster operations.
         }
     }
 
