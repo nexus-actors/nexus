@@ -622,6 +622,89 @@ final class ClusterNodeTest extends TestCase
         self::assertNotEmpty($accepted, 'At least one handshake should have been accepted');
     }
 
+    /**
+     * Sustained-uptime smoke test: two joined nodes must remain Up over many gossip
+     * cycles with an aggressive failure-detection window — a gross false-Suspect /
+     * false-Down regression would fail this.
+     *
+     * Runs ~25 gossip cycles (100 ms) with a 500 ms give-up window and asserts BOTH
+     * nodes still see BOTH members Up. Note: this loopback scenario does NOT
+     * reproduce the specific gossip-starvation failure fixed in f0322d38 — that mode
+     * needs the real-socket boot-frame churn that seeds the phi window before it
+     * starves (a clean loopback boot leaves the detector with too few samples, so
+     * phi stays 0). f0322d38 is validated by the two-node Swoole example
+     * (examples/nexus-cluster-tcp) plus code analysis; this test guards the broader
+     * "nodes stay Up while gossiping" invariant.
+     */
+    #[Test]
+    public function joinedNodesStayUpThroughSustainedGossip(): void
+    {
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 60));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 60));
+
+        $topoA = $this->fastTopology('test-cluster', $addrA, $endpointA, [], singleNode: true)
+            ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(500));
+        $topoB = $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA])
+            ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(500));
+
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $topoA,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+        $nodeB = ClusterNode::boot(
+            $this->system,
+            $topoB,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        /** @var list<ClusterView> $capturedViews */
+        $capturedViews = [];
+
+        $collectorRef = $this->system->spawnAnonymous(
+            Props::fromBehavior(
+                Behavior::receive(
+                    static function ($ctx, object $msg) use (&$capturedViews): Behavior {
+                        if ($msg instanceof ClusterView) {
+                            $capturedViews[] = $msg;
+                        }
+
+                        return Behavior::same();
+                    },
+                ),
+            ),
+        );
+
+        // T=2500ms: 25 gossip cycles, five give-up windows past a starving detector.
+        $this->runtime->scheduleOnce(
+            Duration::millis(2500),
+            static function () use ($nodeA, $nodeB, $collectorRef): void {
+                $nodeA->queryViewAsync($collectorRef);
+                $nodeB->queryViewAsync($collectorRef);
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(3000), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertCount(2, $capturedViews, 'Both view queries should have been answered');
+        self::assertCount(
+            2,
+            $capturedViews[0]->upNodes(),
+            'Node A must still see both members Up (not starved into Suspect/Down)',
+        );
+        self::assertCount(
+            2,
+            $capturedViews[1]->upNodes(),
+            'Node B must still see both members Up (not starved into Suspect/Down)',
+        );
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new FiberRuntime();
