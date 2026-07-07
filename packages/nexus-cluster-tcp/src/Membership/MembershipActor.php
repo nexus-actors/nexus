@@ -27,6 +27,8 @@ use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
 use Psr\Clock\ClockInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Throwable;
 
 /**
@@ -77,6 +79,7 @@ final class MembershipActor implements StatefulActorHandler
         ?Duration $heartbeatInterval = null,
         ?Duration $gossipInterval = null,
         private readonly Meter $meter = new NoopMeter(),
+    private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->heartbeatInterval = $heartbeatInterval ?? Duration::seconds(1);
         $this->gossipInterval = $gossipInterval ?? Duration::seconds(1);
@@ -237,10 +240,20 @@ final class MembershipActor implements StatefulActorHandler
     {
         if ($event instanceof NodeSuspected) {
             $this->safely(fn(): mixed => $this->nodesSuspectedCounter()->add(1));
+            $this->safely(fn(): mixed => $this->logger->info('cluster.membership.node_suspected', [
+                'peer' => $event->node->toPathPrefix(),
+                'reason' => $event->reason->name,
+            ]));
         } elseif ($event instanceof NodeUp) {
             $this->safely(fn(): mixed => $this->nodesRecoveredCounter()->add(1));
+            $this->safely(fn(): mixed => $this->logger->info('cluster.membership.node_up', [
+                'peer' => $event->node->toPathPrefix(),
+            ]));
         } elseif ($event instanceof NodeDown) {
             $this->safely(fn(): mixed => $this->nodesPrunedCounter()->add(1));
+            $this->safely(fn(): mixed => $this->logger->info('cluster.membership.node_down', [
+                'peer' => $event->node->toPathPrefix(),
+            ]));
         }
     }
 

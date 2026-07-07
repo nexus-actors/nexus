@@ -7,7 +7,10 @@ namespace Monadial\Nexus\Cluster\Tcp;
 use Closure;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use RuntimeException;
+use Throwable;
 
 use function count;
 
@@ -39,6 +42,11 @@ final class PeerConnection
 
     private int $drops = 0;
 
+    /** Once-per-episode overflow warning: reset when a fresh connection is established. */
+    private bool $overflowWarned = false;
+
+    private int $reconnectAttempts = 0;
+
     /** @var list<Frame> */
     private array $queue = [];
 
@@ -52,6 +60,7 @@ final class PeerConnection
         private readonly Duration $initialBackoff,
         private readonly Duration $maxBackoff,
         private readonly int $queueCap = self::DEFAULT_QUEUE_CAP,
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
         $this->attemptConnect($this->initialBackoff);
     }
@@ -76,6 +85,14 @@ final class PeerConnection
 
         if (count($this->queue) >= $this->queueCap) {
             ++$this->drops;
+
+            if (!$this->overflowWarned) {
+                $this->overflowWarned = true;
+                $this->safely(fn(): mixed => $this->logger->warning('cluster.send_buffer.overflow', [
+                    'peer' => (string) $this->endpoint,
+                    'queue_cap' => $this->queueCap,
+                ]));
+            }
 
             return;
         }
@@ -123,6 +140,12 @@ final class PeerConnection
         try {
             $link = $this->transport->connect($this->endpoint);
         } catch (RuntimeException) {
+            $attempt = ++$this->reconnectAttempts;
+            $this->safely(fn(): mixed => $this->logger->debug('cluster.peer.reconnect_attempt', [
+                'attempt' => $attempt,
+                'backoff_ms' => $currentBackoff->toMillis(),
+                'peer' => (string) $this->endpoint,
+            ]));
             $this->runtime->scheduleOnce($currentBackoff, function () use ($currentBackoff): void {
                 $this->attemptConnect($this->growBackoff($currentBackoff));
             });
@@ -147,6 +170,9 @@ final class PeerConnection
 
     private function wireLink(PeerLink $link): void
     {
+        // Reset overflow episode flag — a fresh connection is established.
+        $this->overflowWarned = false;
+
         $link->onFrame(function (Frame $frame): void {
             foreach ($this->frameHandlers as $handler) {
                 $handler($frame);
@@ -172,6 +198,18 @@ final class PeerConnection
 
         foreach ($queued as $frame) {
             $link->sendFrame($frame);
+        }
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable) {
+            // Logging must never break peer connection operations.
         }
     }
 

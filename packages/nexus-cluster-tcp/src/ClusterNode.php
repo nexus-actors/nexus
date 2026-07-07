@@ -19,6 +19,8 @@ use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerDisconnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
 use Monadial\Nexus\Cluster\Tcp\Membership\RandomPeerSelector;
 use Monadial\Nexus\Cluster\Tcp\Membership\TcpMembershipEffectInterpreter;
@@ -61,6 +63,9 @@ use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Override;
+use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Throwable;
 
 use function array_keys;
@@ -126,6 +131,8 @@ final class ClusterNode
         private readonly ActorSystem $system,
         private readonly Tracer $tracer,
         private readonly Meter $meter,
+        private readonly EventDispatcherInterface $dispatcher,
+        private readonly LoggerInterface $logger,
     ) {}
 
     /**
@@ -150,8 +157,10 @@ final class ClusterNode
         ?TypeRegistry $userTypes = null,
         ?MeshTransport $transport = null,
         ?Observability $observability = null,
+        ?LoggerInterface $logger = null,
     ): self {
         $observability ??= new NoopObservability();
+        $logger ??= new NullLogger();
         $runtime = $system->runtime();
 
         // 1. Cluster frame serializer — shared registry for cluster wire types + user message types.
@@ -245,6 +254,7 @@ final class ClusterNode
             clock: $system->clock(),
             heartbeatInterval: $topology->heartbeatInterval,
             gossipInterval: $topology->gossipInterval,
+            logger: $logger,
             meter: $meter,
         );
 
@@ -265,6 +275,8 @@ final class ClusterNode
             system: $system,
             tracer: $tracer,
             meter: $meter,
+            dispatcher: $system->eventDispatcher(),
+            logger: $logger,
         );
 
         // 11. Start serving: wire the inbound accept pump.
@@ -415,6 +427,7 @@ final class ClusterNode
                     $this->runtime,
                     $this->topology->reconnectInitialBackoff,
                     $this->topology->reconnectMaxBackoff,
+                    logger: $this->logger,
                 );
             }
 
@@ -468,9 +481,14 @@ final class ClusterNode
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
+                    $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
                 } else {
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
                     $this->safeRecordRejection();
+                    $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.rejected', [
+                        'peer_endpoint' => $link->remote() !== null ? (string) $link->remote() : 'unknown',
+                        'reason' => 'parse_failure',
+                    ]));
                 }
 
                 $this->safeEndSpan($span);
@@ -513,6 +531,7 @@ final class ClusterNode
         $link->onClose(function () use (&$peerAddr): void {
             if ($peerAddr !== null) {
                 $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
+                $this->safeDispatch(new PeerDisconnected($peerAddr));
             }
         });
     }
@@ -535,6 +554,7 @@ final class ClusterNode
             $this->runtime,
             $this->topology->reconnectInitialBackoff,
             $this->topology->reconnectMaxBackoff,
+            logger: $this->logger,
         );
 
         $this->outboundConns[$key] = $conn;
@@ -545,7 +565,7 @@ final class ClusterNode
         /** @var FrameIngress|null $ingress Created once peerAddr is known. */
         $ingress = null;
 
-        $conn->onFrame(function (Frame $frame) use (&$peerAddr, &$ingress, $inboxRouter): void {
+        $conn->onFrame(function (Frame $frame) use (&$peerAddr, &$ingress, $inboxRouter, $seedEndpoint): void {
             if ($frame->type === FrameType::Handshake) {
                 $span = $this->safeStartHandshakeSpan();
                 $parsed = $this->parseHandshakeFrame($frame);
@@ -556,9 +576,14 @@ final class ClusterNode
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
+                    $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
                 } else {
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
                     $this->safeRecordRejection();
+                    $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.rejected', [
+                        'peer_endpoint' => (string) $seedEndpoint,
+                        'reason' => 'parse_failure',
+                    ]));
                 }
 
                 $this->safeEndSpan($span);
@@ -795,6 +820,27 @@ final class ClusterNode
                 'Cluster handshakes rejected due to parse failure',
             );
             $this->handshakeRejected->add(1);
+        } catch (Throwable) {
+            // Telemetry must never break cluster operations.
+        }
+    }
+
+    private function safeDispatch(object $event): void
+    {
+        try {
+            $this->dispatcher->dispatch($event);
+        } catch (Throwable) {
+            // Event dispatch must never break cluster operations.
+        }
+    }
+
+    /**
+     * @param callable(): mixed $fn
+     */
+    private function safely(callable $fn): void
+    {
+        try {
+            $fn();
         } catch (Throwable) {
             // Telemetry must never break cluster operations.
         }

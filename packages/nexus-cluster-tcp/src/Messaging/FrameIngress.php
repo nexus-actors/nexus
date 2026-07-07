@@ -94,15 +94,17 @@ final class FrameIngress
         try {
             $payload = $this->payloadSerializer->deserialize($frame->payload, self::MESSAGE_PAYLOAD_TYPE);
         } catch (MessageDeserializationException $e) {
-            $this->logger->debug('FrameIngress: dropping undecodable Message frame', [
+            $this->logger->warning('FrameIngress: dropping undecodable Message frame from peer', [
                 'error' => $e->getMessage(),
+                'peer' => $this->origin->toPathPrefix(),
             ]);
 
             return;
         }
 
         if (!$payload instanceof MessagePayload) {
-            $this->logger->debug('FrameIngress: deserializer returned unexpected type for cluster.message', [
+            $this->logger->warning('FrameIngress: deserializer returned unexpected type for cluster.message', [
+                'peer' => $this->origin->toPathPrefix(),
                 'type' => $payload::class,
             ]);
 
