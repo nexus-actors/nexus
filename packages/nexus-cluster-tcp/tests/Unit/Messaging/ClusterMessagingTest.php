@@ -31,6 +31,7 @@ use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -376,6 +377,20 @@ final class ClusterMessagingTest extends TestCase
         $router->route($this->node('node-b'), $payload);
 
         self::assertSame(1, $router->drops());
+    }
+
+    #[Test]
+    public function decodeRejectsLiteralClassNameFromTheWire(): void
+    {
+        // Security: the shared MessagePack serializer falls back to treating an unregistered
+        // type name as a literal class name. On the cluster network path that would let a remote
+        // peer drive instantiation of any autoloadable class by naming it on the wire. The cluster
+        // codec is registry-strict — an unregistered type (here, the raw FQCN instead of the
+        // registered 'test.ping') is rejected, not instantiated.
+        $body = $this->codec()->encode(new Ping('x'))->body;
+
+        $this->expectException(MessageDeserializationException::class);
+        $this->codec()->decode(Ping::class, $body);
     }
 
     #[Test]

@@ -48,7 +48,8 @@ use function min;
  */
 final class MembershipService
 {
-    private const int PROTOCOL_VERSION = 1;
+    /** Wire protocol version asserted in the handshake; the single source of truth for the mesh. */
+    public const int PROTOCOL_VERSION = 1;
 
     private readonly string $selfKey;
 

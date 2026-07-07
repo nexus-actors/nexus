@@ -100,7 +100,7 @@ All messages sent across the cluster must carry `#[MessageType]` and be register
 
 - **`tell(object $message): void`** — fire-and-forget. Short-circuits straight to local delivery when the target is the same node (no frame on the wire). Opens a `cluster.send` Producer span for remote sends.
 - **`ask(object $message, Duration $timeout): Future`** — registers a correlation slot in `TcpAskRegistry`, stamps a reply path derived from the sending node's address, sends the request frame, and returns a `Future` that resolves on reply or fails with `AskTimeoutException` after `$timeout`. Opens a `cluster.ask` Producer span. Throws `AskCapacityExceededException` when the registry is at capacity.
-- **`isAlive(): bool`** — reflects whether the target node is currently `Up` in the membership view.
+- **`isAlive(): bool`** — always returns `true` in C1. A `ClusterRef` cannot see the remote actor's lifecycle, and membership-view wiring for this probe is planned for a later milestone. Use `ClusterNode::view()` (or `queryViewAsync()`) to check whether a node is `Up`.
 
 ## Failure-detection configuration
 
@@ -162,7 +162,18 @@ $topology = ClusterTopology::create(
 )->withTls($tls);
 ```
 
-Plaintext cluster ports must not be exposed to untrusted networks. Use TLS with a private CA and `verifyPeer: true` for any deployment beyond an isolated LAN.
+Plaintext cluster ports must not be exposed to untrusted networks. Use TLS with a private CA and `verifyPeer: true` for any deployment beyond an isolated LAN. When `verifyPeer: true`, the client binds the TLS session to the dialled host (SNI + hostname verification) and rejects self-signed certificates; supply a `caFile`.
+
+## Security & trust model
+
+The C1 mesh assumes a **mutually trusted network**. Understand exactly what that means before deploying:
+
+- **`clusterName` is a label, not a secret.** It prevents *accidental* cross-cluster joins; it is not authentication. Any peer that can reach the bind port and speak the framing can complete a handshake. (A mismatched `clusterName` or protocol version is rejected before any message is routed, so a wrong-cluster peer cannot inject messages — but a peer that knows or guesses your `clusterName` is admitted.)
+- **A trusted peer is fully trusted.** Once admitted, a peer can send messages to any actor you `expose()` (addressed by path, including ask/reply), and its gossip can register member endpoints that this node will subsequently dial. A hostile-but-admitted peer can therefore both inject actor traffic and steer this node's outbound connections (SSRF). There is no per-message authorization and no endpoint allowlist in C1.
+- **Wire decode is registry-strict.** A frame body is only deserialized into a type registered via `#[MessageType]`; a peer cannot name an arbitrary class on the wire to force its instantiation.
+- **TLS authenticates the transport, not the identity.** With `verifyPeer: true` a peer must present a CA-chained certificate matching the dialled host, which stops network MITM — but the cluster does not yet bind the handshake node identity to the certificate (no mTLS identity check).
+
+**Deployment guidance:** run the mesh on an isolated network segment (or mTLS-fenced overlay) reachable only by nodes you control; do not expose cluster ports to any host that should not be a full cluster member. Peer authentication, endpoint allowlisting, and resource quotas (connection caps, registry eviction, idle timeouts) are planned hardening — see the package roadmap.
 
 ## Observability
 

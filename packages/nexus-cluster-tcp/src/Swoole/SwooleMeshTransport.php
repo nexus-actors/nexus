@@ -159,7 +159,7 @@ final class SwooleMeshTransport implements MeshTransport
         $client = new Client($sockType);
 
         if ($this->tls !== null) {
-            $client->set($this->buildTlsSettings($this->tls));
+            $client->set($this->buildTlsSettings($this->tls, $endpoint->host->value));
         }
 
         $connected = $client->connect($endpoint->host->value, $endpoint->port->value, 5.0);
@@ -221,17 +221,33 @@ final class SwooleMeshTransport implements MeshTransport
      * Build the Swoole SSL settings array from a TlsConfig.
      * Keys are sorted alphabetically per the project's coding standard.
      *
+     * @param string|null $peerHost The host being dialled (client side only). When set and
+     *                              verification is on, binds the session to that hostname so
+     *                              the presented certificate must match the host — not merely
+     *                              chain to the CA. Null on the server side, where it does not apply.
+     *
      * @return array<string, mixed>
      */
-    private function buildTlsSettings(TlsConfig $tls): array
+    private function buildTlsSettings(TlsConfig $tls, ?string $peerHost = null): array
     {
         $settings = [];
+
+        // With verification on, refuse self-signed certificates outright: a peer must present a
+        // CA-chained cert, not any self-signed one it minted. (Ignored when verifyPeer is false.)
+        if ($tls->verifyPeer) {
+            $settings['ssl_allow_self_signed'] = false;
+        }
 
         if ($tls->caFile !== null) {
             $settings['ssl_cafile'] = $tls->caFile;
         }
 
         $settings['ssl_cert_file'] = $tls->certFile;
+
+        if ($peerHost !== null && $tls->verifyPeer) {
+            $settings['ssl_host_name'] = $peerHost;
+        }
+
         $settings['ssl_key_file'] = $tls->keyFile;
         $settings['ssl_verify_peer'] = $tls->verifyPeer;
 

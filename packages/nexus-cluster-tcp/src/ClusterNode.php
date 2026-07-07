@@ -662,6 +662,22 @@ final class ClusterNode
             return null;
         }
 
+        // Gate the DATA path here, synchronously, before any ingress is wired: a peer whose
+        // cluster name or protocol version does not match ours must never have its Message
+        // frames routed to local actors. The membership actor performs the same check when it
+        // decides admission, but that runs asynchronously and only governs the membership view —
+        // it does not stop frame ingress. Rejecting at parse time closes that gap.
+        if ($obj->clusterName !== $this->topology->clusterName
+            || $obj->protocolVersion !== MembershipService::PROTOCOL_VERSION) {
+            $this->safely(fn(): mixed => $this->logger->debug('cluster.handshake.mismatch', [
+                'expected_cluster' => $this->topology->clusterName,
+                'peer_cluster' => $obj->clusterName,
+                'peer_protocol' => $obj->protocolVersion,
+            ]));
+
+            return null;
+        }
+
         $peerAddr = new NodeAddress(
             $obj->node['cluster'] ?? 'unknown',
             $obj->node['datacenter'] ?? 'unknown',

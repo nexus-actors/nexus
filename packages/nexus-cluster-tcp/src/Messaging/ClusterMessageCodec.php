@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
+use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -34,8 +35,23 @@ final readonly class ClusterMessageCodec
         return new EncodedMessage($type, $this->serializer->serialize($message));
     }
 
+    /**
+     * Decode a wire frame body to an object.
+     *
+     * The `$type` string arrives off the network and is therefore untrusted. It MUST resolve
+     * to a whitelisted {@see \Monadial\Nexus\Serialization\MessageType} in the registry: a peer
+     * must never be able to drive instantiation of an arbitrary class by naming it on the wire.
+     * Unregistered types are rejected here (the underlying serializer would otherwise fall back
+     * to treating `$type` as a literal class name).
+     *
+     * @throws MessageDeserializationException When `$type` is not a registered cluster type.
+     */
     public function decode(string $type, string $body): object
     {
+        if ($this->registry->classForName($type) === null) {
+            throw new MessageDeserializationException($type, "No cluster type name registered for type '{$type}'");
+        }
+
         return $this->serializer->deserialize($body, $type);
     }
 }
