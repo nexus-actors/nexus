@@ -13,6 +13,8 @@ use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Pong;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\FakeObservability;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\SpyTracer;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -20,6 +22,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Core\Net\Port;
+use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -559,6 +562,64 @@ final class ClusterNodeTest extends TestCase
         $this->system->run();
 
         self::assertTrue($timedOut, 'Ask to non-existent path should have timed out with AskTimeoutException');
+    }
+
+    // -------------------------------------------------------------------------
+    // Scenario: cluster.handshake span
+    // -------------------------------------------------------------------------
+
+    /**
+     * TDD SCENARIO: When two nodes connect, cluster.handshake spans are recorded
+     * with SpanKind::Internal and an `accepted` outcome attribute.
+     */
+    #[Test]
+    public function handshakeSpanIsRecordedWithInternalKindAndAcceptedOutcome(): void
+    {
+        $spy = new SpyTracer();
+        $obs = new FakeObservability($spy);
+
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 50));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 50));
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+
+        $topologyA = $this->fastTopology('test', $addrA, $endpointA, [$endpointB]);
+        $topologyB = $this->fastTopology('test', $addrB, $endpointB, [$endpointA]);
+
+        ClusterNode::boot(
+            $this->system,
+            $topologyA,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+            observability: $obs,
+        );
+
+        ClusterNode::boot(
+            $this->system,
+            $topologyB,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+            observability: $obs,
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(300), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        $handshakeSpans = $spy->spansNamed('cluster.handshake');
+        self::assertNotEmpty($handshakeSpans, 'At least one cluster.handshake span should have been recorded');
+
+        foreach ($handshakeSpans as $entry) {
+            self::assertSame(SpanKind::Internal, $entry['kind']);
+            self::assertArrayHasKey('nexus.cluster.handshake.outcome', $entry['span']->attributes);
+        }
+
+        // At least one span should have outcome=accepted (valid Handshake frames were exchanged)
+        $accepted = array_filter(
+            $handshakeSpans,
+            static fn(array $e): bool => $e['span']->attributes['nexus.cluster.handshake.outcome'] === 'accepted',
+        );
+        self::assertNotEmpty($accepted, 'At least one handshake should have been accepted');
     }
 
     protected function setUp(): void

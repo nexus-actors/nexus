@@ -10,9 +10,16 @@ use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Observability\Trace\NoopSpan;
+use Monadial\Nexus\Observability\Trace\NoopTracer;
+use Monadial\Nexus\Observability\Trace\Span;
+use Monadial\Nexus\Observability\Trace\SpanKind;
+use Monadial\Nexus\Observability\Trace\StatusCode;
+use Monadial\Nexus\Observability\Trace\Tracer;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
+use Throwable;
 
 /**
  * @psalm-api
@@ -25,6 +32,10 @@ use Override;
  * {@see ask()} registers a correlation slot in the {@see TcpAskRegistry}, stamps a
  * `replyPath` derived from the sending node's address, and returns a {@see Future} that
  * resolves on the reply frame or fails with {@see AskTimeoutException} after one RTT.
+ *
+ * `cluster.send` and `cluster.ask` spans are opened around each outbound publish; both are
+ * swallow-safe so a broken tracer never disrupts message delivery.
+ * Self-node short-circuits produce no span.
  *
  * @template T of object
  * @implements ActorRef<T>
@@ -44,6 +55,7 @@ final readonly class ClusterRef implements ActorRef
         private ClusterMessageCodec $codec,
         private TraceContextInjector $trace,
         private Closure $aliveChecker,
+        private Tracer $tracer = new NoopTracer(),
     ) {}
 
     /**
@@ -60,14 +72,28 @@ final readonly class ClusterRef implements ActorRef
 
         $encoded = $this->codec->encode($message);
 
-        $this->sink->send($this->target, new MessagePayload(
-            targetPath: (string) $this->targetPath,
-            messageType: $encoded->type,
-            body: $encoded->body,
-            correlationId: null,
-            replyPath: null,
-            trace: $this->trace->inject(),
-        ));
+        $span = $this->safeStartSpan('cluster.send', SpanKind::Producer, [
+            'messaging.system' => 'nexus-tcp',
+            'nexus.cluster.peer' => $this->target->toPathPrefix(),
+            'nexus.message.type' => $encoded->type,
+        ]);
+
+        try {
+            $this->sink->send($this->target, new MessagePayload(
+                targetPath: (string) $this->targetPath,
+                messageType: $encoded->type,
+                body: $encoded->body,
+                correlationId: null,
+                replyPath: null,
+                trace: $this->trace->inject(),
+            ));
+        } catch (Throwable $e) {
+            $this->safeRecordError($span, $e);
+
+            throw $e;
+        } finally {
+            $this->safeEnd($span);
+        }
     }
 
     /**
@@ -85,17 +111,31 @@ final readonly class ClusterRef implements ActorRef
 
         $encoded = $this->codec->encode($message);
 
-        /** @var Future<R> $future */
-        $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath);
+        $span = $this->safeStartSpan('cluster.ask', SpanKind::Producer, [
+            'messaging.system' => 'nexus-tcp',
+            'nexus.cluster.peer' => $this->target->toPathPrefix(),
+            'nexus.message.type' => $encoded->type,
+        ]);
 
-        $this->sink->send($this->target, new MessagePayload(
-            targetPath: (string) $this->targetPath,
-            messageType: $encoded->type,
-            body: $encoded->body,
-            correlationId: $correlationId,
-            replyPath: (string) $replyPath,
-            trace: $this->trace->inject(),
-        ));
+        try {
+            /** @var Future<R> $future */
+            $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath);
+
+            $this->sink->send($this->target, new MessagePayload(
+                targetPath: (string) $this->targetPath,
+                messageType: $encoded->type,
+                body: $encoded->body,
+                correlationId: $correlationId,
+                replyPath: (string) $replyPath,
+                trace: $this->trace->inject(),
+            ));
+        } catch (Throwable $e) {
+            $this->safeRecordError($span, $e);
+
+            throw $e;
+        } finally {
+            $this->safeEnd($span);
+        }
 
         return $future;
     }
@@ -115,5 +155,32 @@ final readonly class ClusterRef implements ActorRef
     private function targetsSelf(): bool
     {
         return $this->target->toPathPrefix() === $this->self->toPathPrefix();
+    }
+
+    /**
+     * @param array<string, scalar> $attributes
+     */
+    private function safeStartSpan(string $name, SpanKind $kind, array $attributes): Span
+    {
+        try {
+            return $this->tracer->startSpan($name, $kind, $attributes);
+        } catch (Throwable) {
+            return new NoopSpan();
+        }
+    }
+
+    private function safeRecordError(Span $span, Throwable $e): void
+    {
+        try {
+            $span->recordException($e);
+            $span->setStatus(StatusCode::Error, $e->getMessage());
+        } catch (Throwable) {}
+    }
+
+    private function safeEnd(Span $span): void
+    {
+        try {
+            $span->end();
+        } catch (Throwable) {}
     }
 }

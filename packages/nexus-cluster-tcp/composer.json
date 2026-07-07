@@ -7,8 +7,10 @@
         "php": ">=8.5.7",
         "nexus-actors/cluster": "dev-main",
         "nexus-actors/core": "dev-main",
+        "nexus-actors/observability": "dev-main",
         "nexus-actors/runtime": "dev-main",
         "nexus-actors/serialization": "dev-main",
+        "nexus-actors/serialization-msgpack": "dev-main",
         "psr/clock": "^1.0",
         "psr/log": "^3.0"
     },
@@ -17,9 +19,7 @@
     },
     "suggest": {
         "ext-swoole": "Required for real TCP transport; loopback and unit tests run without it",
-        "nexus-actors/observability": "Tracing and metrics for cluster transport",
-        "nexus-actors/runtime-swoole": "Required for production TCP cluster transport",
-        "nexus-actors/serialization-msgpack": "Recommended wire codec for cluster frames"
+        "nexus-actors/runtime-swoole": "Required for production TCP cluster transport"
     },
     "autoload": {
         "psr-4": {

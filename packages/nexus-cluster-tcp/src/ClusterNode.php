@@ -39,11 +39,19 @@ use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
 use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Cluster\Tcp\Swoole\SwooleMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextExtractor;
+use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextInjector;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Observability\NoopObservability;
+use Monadial\Nexus\Observability\Observability;
+use Monadial\Nexus\Observability\Trace\NoopSpan;
+use Monadial\Nexus\Observability\Trace\Span;
+use Monadial\Nexus\Observability\Trace\SpanKind;
+use Monadial\Nexus\Observability\Trace\Tracer;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\MessageSerializer;
@@ -110,6 +118,7 @@ final class ClusterNode
         private readonly MessageSerializer $frameSerializer,
         private readonly Runtime $runtime,
         private readonly ActorSystem $system,
+        private readonly Tracer $tracer,
     ) {}
 
     /**
@@ -123,13 +132,19 @@ final class ClusterNode
      * @param MeshTransport|null $transport Optional transport override (e.g. LoopbackMeshTransport
      *        with a shared hub for multi-node integration tests). Auto-selects SwooleMeshTransport
      *        when ext-swoole is loaded; falls back to a fresh LoopbackMeshTransport.
+     * @param Observability|null $observability Optional telemetry provider. When supplied, wires
+     *        real W3C trace-context inject/extract and opens `cluster.send`, `cluster.receive`,
+     *        `cluster.ask`, and `cluster.handshake` spans. Defaults to {@see NoopObservability}
+     *        (zero overhead when not provided).
      */
     public static function boot(
         ActorSystem $system,
         ClusterTopology $topology,
         ?TypeRegistry $userTypes = null,
         ?MeshTransport $transport = null,
+        ?Observability $observability = null,
     ): self {
+        $observability ??= new NoopObservability();
         $runtime = $system->runtime();
 
         // 1. Cluster frame serializer — shared registry for cluster wire types + user message types.
@@ -170,17 +185,36 @@ final class ClusterNode
         // 7. Outbound sink for user messages (ClusterRef::tell / ask).
         $outboundSink = self::buildOutboundSink($sender, $frameSerializer);
 
-        // 8. Inbox router + ref factory.
+        // 8. Inbox router + ref factory — wire real or noop trace seams from $observability.
+        $traceInjector = $observability->isEnabled()
+            ? new ObservabilityTraceContextInjector($observability)
+            : new NoopTraceContextInjector();
+
+        $traceExtractor = $observability->isEnabled()
+            ? new ObservabilityTraceContextExtractor($observability)
+            : new NoopTraceContextExtractor();
+
+        $tracer = $observability->tracer();
+
         $inboxRouter = new InboxRouter(
             $localDelivery,
             $askRegistry,
             $codec,
             $outboundSink,
-            new NoopTraceContextExtractor(),
-            new NoopTraceContextInjector(),
+            $traceExtractor,
+            $traceInjector,
+            tracer: $tracer,
         );
 
-        $refFactory = new ClusterRefFactory($topology->self, $outboundSink, $localDelivery, $askRegistry, $codec);
+        $refFactory = new ClusterRefFactory(
+            $topology->self,
+            $outboundSink,
+            $localDelivery,
+            $askRegistry,
+            $codec,
+            $traceInjector,
+            $tracer,
+        );
 
         // 9. Membership collaborators.
         $effectInterpreter = new TcpMembershipEffectInterpreter($topology, $frameSerializer, $sender);
@@ -218,6 +252,7 @@ final class ClusterNode
             frameSerializer: $frameSerializer,
             runtime: $runtime,
             system: $system,
+            tracer: $tracer,
         );
 
         // 11. Start serving: wire the inbound accept pump.
@@ -411,6 +446,7 @@ final class ClusterNode
 
         $link->onFrame(function (Frame $frame) use ($link, &$peerAddr, &$ingress, $inboxRouter): void {
             if ($frame->type === FrameType::Handshake) {
+                $span = $this->safeStartHandshakeSpan();
                 $parsed = $this->parseHandshakeFrame($frame);
 
                 if ($parsed !== null) {
@@ -418,7 +454,12 @@ final class ClusterNode
                     $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
+                } else {
+                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
                 }
+
+                $this->safeEndSpan($span);
 
                 return;
             }
@@ -492,13 +533,19 @@ final class ClusterNode
 
         $conn->onFrame(function (Frame $frame) use (&$peerAddr, &$ingress, $inboxRouter): void {
             if ($frame->type === FrameType::Handshake) {
+                $span = $this->safeStartHandshakeSpan();
                 $parsed = $this->parseHandshakeFrame($frame);
 
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
+                } else {
+                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
                 }
+
+                $this->safeEndSpan($span);
 
                 return;
             }
@@ -692,6 +739,33 @@ final class ClusterNode
                 $this->sendByPrefix($prefix, $frame);
             }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Span helpers (swallow-safe — a broken tracer must never disrupt cluster ops)
+    // -------------------------------------------------------------------------
+
+    private function safeStartHandshakeSpan(): Span
+    {
+        try {
+            return $this->tracer->startSpan('cluster.handshake', SpanKind::Internal);
+        } catch (Throwable) {
+            return new NoopSpan();
+        }
+    }
+
+    private function safeSpanAttribute(Span $span, string $key, string $value): void
+    {
+        try {
+            $span->setAttribute($key, $value);
+        } catch (Throwable) {}
+    }
+
+    private function safeEndSpan(Span $span): void
+    {
+        try {
+            $span->end();
+        } catch (Throwable) {}
     }
 
     // -------------------------------------------------------------------------

@@ -7,13 +7,15 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Observability\Trace\NoopTracer;
+use Monadial\Nexus\Observability\Trace\Tracer;
 
 /**
  * @psalm-api
  *
  * Builds {@see ClusterRef} instances for target actors, injecting the shared messaging
- * collaborators (outbound sink, local delivery, ask registry, codec, trace seam) and the
- * sending node's own address so refs can short-circuit self-node sends.
+ * collaborators (outbound sink, local delivery, ask registry, codec, trace seam, tracer) and
+ * the sending node's own address so refs can short-circuit self-node sends.
  */
 final readonly class ClusterRefFactory
 {
@@ -24,6 +26,7 @@ final readonly class ClusterRefFactory
         private TcpAskRegistry $askRegistry,
         private ClusterMessageCodec $codec,
         private TraceContextInjector $trace = new NoopTraceContextInjector(),
+        private Tracer $tracer = new NoopTracer(),
     ) {}
 
     /**
@@ -44,6 +47,7 @@ final readonly class ClusterRefFactory
             $this->codec,
             $this->trace,
             $aliveChecker ?? static fn(): bool => true,
+            $this->tracer,
         );
     }
 }

@@ -6,9 +6,17 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Observability\Context\Context;
+use Monadial\Nexus\Observability\Trace\NoopSpan;
+use Monadial\Nexus\Observability\Trace\NoopTracer;
+use Monadial\Nexus\Observability\Trace\Span;
+use Monadial\Nexus\Observability\Trace\SpanKind;
+use Monadial\Nexus\Observability\Trace\StatusCode;
+use Monadial\Nexus\Observability\Trace\Tracer;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use Throwable;
 
 /**
  * @psalm-api
@@ -27,6 +35,10 @@ use Psr\Log\NullLogger;
  *
  * Undeliverable payloads (unroutable target, unknown/late correlation, decode failure) are
  * counted and logged at debug — never nacked, per spec §7.
+ *
+ * A `cluster.receive` span (Consumer) is opened for every routed payload; its parent is the
+ * remote context extracted from `payload->trace` so the inbound work is linked to the
+ * sender's trace. The span is swallow-safe — a broken tracer never disrupts routing.
  */
 final class InboxRouter
 {
@@ -40,6 +52,7 @@ final class InboxRouter
         private readonly TraceContextExtractor $traceExtractor,
         private readonly TraceContextInjector $traceInjector = new NoopTraceContextInjector(),
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly Tracer $tracer = new NoopTracer(),
     ) {}
 
     /**
@@ -47,8 +60,32 @@ final class InboxRouter
      */
     public function route(NodeAddress $origin, MessagePayload $payload): void
     {
-        $this->traceExtractor->extract($payload->trace);
+        $parentContext = $this->traceExtractor->extract($payload->trace);
 
+        $span = $this->safeStartSpan('cluster.receive', SpanKind::Consumer, [
+            'messaging.system' => 'nexus-tcp',
+            'nexus.cluster.peer' => $origin->toPathPrefix(),
+            'nexus.message.type' => $payload->messageType,
+        ], $parentContext);
+
+        try {
+            $this->doRoute($origin, $payload);
+        } catch (Throwable $e) {
+            $this->safeRecordError($span, $e);
+
+            throw $e;
+        } finally {
+            $this->safeEnd($span);
+        }
+    }
+
+    public function drops(): int
+    {
+        return $this->drops;
+    }
+
+    private function doRoute(NodeAddress $origin, MessagePayload $payload): void
+    {
         try {
             $message = $this->codec->decode($payload->messageType, $payload->body);
         } catch (MessageDeserializationException $e) {
@@ -92,11 +129,6 @@ final class InboxRouter
         }
     }
 
-    public function drops(): int
-    {
-        return $this->drops;
-    }
-
     private function routeReply(string $correlationId, object $message): void
     {
         if (!$this->askRegistry->resolve($correlationId, $message)) {
@@ -105,5 +137,31 @@ final class InboxRouter
                 'correlationId' => $correlationId,
             ]);
         }
+    }
+
+    /**
+     * @param array<string, scalar> $attributes
+     */
+    private function safeStartSpan(string $name, SpanKind $kind, array $attributes, ?Context $parent = null,): Span {
+        try {
+            return $this->tracer->startSpan($name, $kind, $attributes, $parent);
+        } catch (Throwable) {
+            return new NoopSpan();
+        }
+    }
+
+    private function safeRecordError(Span $span, Throwable $e): void
+    {
+        try {
+            $span->recordException($e);
+            $span->setStatus(StatusCode::Error, $e->getMessage());
+        } catch (Throwable) {}
+    }
+
+    private function safeEnd(Span $span): void
+    {
+        try {
+            $span->end();
+        } catch (Throwable) {}
     }
 }
