@@ -83,13 +83,16 @@ final readonly class ClusterRef implements ActorRef
             return;
         }
 
-        $trace = $this->safeInject();
-
         $span = $this->safeStartSpan('cluster.send', SpanKind::Producer, [
             'messaging.system' => 'nexus-tcp',
             'nexus.cluster.peer' => $this->target->toPathPrefix(),
             'nexus.message.type' => $encoded->type,
         ]);
+
+        // Inject AFTER starting the span so the propagated trace-context references the
+        // cluster.send span itself (the tracer activates it) — otherwise the remote
+        // cluster.receive parents to the pre-span context and the trace is not chained.
+        $trace = $this->safeInject();
 
         try {
             $this->sink->send($this->target, new MessagePayload(
@@ -126,13 +129,16 @@ final readonly class ClusterRef implements ActorRef
         $replyPath = $this->self->temporaryAskReplyPath($correlationId);
 
         $encoded = $this->codec->encode($message);
-        $trace = $this->safeInject();
 
         $span = $this->safeStartSpan('cluster.ask', SpanKind::Producer, [
             'messaging.system' => 'nexus-tcp',
             'nexus.cluster.peer' => $this->target->toPathPrefix(),
             'nexus.message.type' => $encoded->type,
         ]);
+
+        // Inject AFTER starting the span so the reply/receive side chains to this cluster.ask
+        // span rather than to the pre-span context (see tell()).
+        $trace = $this->safeInject();
 
         try {
             /** @var Future<R> $future */
