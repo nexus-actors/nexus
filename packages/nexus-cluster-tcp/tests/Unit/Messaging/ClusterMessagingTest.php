@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Messaging;
 
 use InvalidArgumentException;
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\Exception\PeerUnreachableException;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterMessageCodec;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRefFactory;
@@ -245,6 +246,37 @@ final class ClusterMessagingTest extends TestCase
         }
 
         self::assertSame(0, $askRegistry->count());
+    }
+
+    #[Test]
+    public function failAllForNodeFailsInFlightAsksToThatNodeOnly(): void
+    {
+        $runtime = new TestRuntime();
+        $registry = new TcpAskRegistry($runtime);
+
+        $nodeA = $this->node('node-a');
+        $nodeB = $this->node('node-b');
+
+        $a1 = $registry->register('a1', Duration::seconds(30), ActorPath::fromString(self::PATH), $nodeA);
+        $a2 = $registry->register('a2', Duration::seconds(30), ActorPath::fromString(self::PATH), $nodeA);
+        $registry->register('b1', Duration::seconds(30), ActorPath::fromString(self::PATH), $nodeB);
+
+        self::assertSame(3, $registry->count());
+
+        $failed = $registry->failAllForNode($nodeA);
+
+        self::assertSame(2, $failed, 'both node-a asks failed');
+        self::assertSame(1, $registry->count(), 'the node-b ask is untouched');
+        self::assertTrue($registry->has('b1'));
+
+        foreach (['a1' => $a1, 'a2' => $a2] as $future) {
+            try {
+                $future->await();
+                self::fail('Expected PeerUnreachableException for a node-a ask');
+            } catch (PeerUnreachableException) {
+                // Expected: the reply can never arrive over the dead link.
+            }
+        }
     }
 
     #[Test]

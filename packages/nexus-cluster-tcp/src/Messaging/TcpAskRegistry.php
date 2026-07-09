@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
+use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Exception\AskCapacityExceededException;
+use Monadial\Nexus\Cluster\Tcp\Exception\PeerUnreachableException;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Observability\Metric\Counter;
@@ -41,6 +43,9 @@ final class TcpAskRegistry
     /** @var array<string, int> hrtime(true) values keyed by correlationId */
     private array $startTimes = [];
 
+    /** @var array<string, string> Target node path-prefix keyed by correlationId — lets a peer-down fail its in-flight asks. */
+    private array $targets = [];
+
     private ?Counter $asksResolved = null;
 
     private ?Counter $asksTimedOut = null;
@@ -63,8 +68,12 @@ final class TcpAskRegistry
      *
      * @throws AskCapacityExceededException When the registry is at capacity.
      */
-    public function register(string $correlationId, Duration $timeout, ActorPath $target): Future
-    {
+    public function register(
+        string $correlationId,
+        Duration $timeout,
+        ActorPath $target,
+        NodeAddress $targetNode,
+    ): Future {
         if (count($this->pending) >= $this->maxPending) {
             throw new AskCapacityExceededException($this->maxPending, count($this->pending));
         }
@@ -72,6 +81,7 @@ final class TcpAskRegistry
         $slot = $this->runtime->createFutureSlot();
         $this->pending[$correlationId] = $slot;
         $this->startTimes[$correlationId] = hrtime(true);
+        $this->targets[$correlationId] = $targetNode->toPathPrefix();
 
         $this->safely(fn(): mixed => $this->pendingGauge ??= $this->meter->observableGauge(
             'nexus.cluster.asks.pending',
@@ -112,6 +122,7 @@ final class TcpAskRegistry
         $slot = $this->pending[$correlationId];
         unset($this->pending[$correlationId]);
         unset($this->startTimes[$correlationId]);
+        unset($this->targets[$correlationId]);
         $slot->resolve($reply);
 
         $this->safely(fn(): mixed => $this->asksResolvedCounter()->add(1));
@@ -135,6 +146,35 @@ final class TcpAskRegistry
     }
 
     /**
+     * Fail every in-flight ask targeting `$node` with {@see PeerUnreachableException}. Called when a
+     * peer's link closes: the reply can never arrive over the dead connection, so awaiting callers
+     * fail fast instead of parking until their per-ask timeout, and a single dead peer can no longer
+     * hold the registry toward its capacity limit and starve asks to healthy peers.
+     *
+     * @return int the number of asks failed
+     */
+    public function failAllForNode(NodeAddress $node): int
+    {
+        $prefix = $node->toPathPrefix();
+        $failed = 0;
+
+        foreach ($this->targets as $correlationId => $targetPrefix) {
+            if ($targetPrefix !== $prefix) {
+                continue;
+            }
+
+            $slot = $this->remove($correlationId);
+
+            if ($slot !== null) {
+                $slot->fail(new PeerUnreachableException($prefix));
+                ++$failed;
+            }
+        }
+
+        return $failed;
+    }
+
+    /**
      * @return FutureSlot<object>|null
      */
     private function remove(string $correlationId): ?FutureSlot
@@ -142,6 +182,7 @@ final class TcpAskRegistry
         $slot = $this->pending[$correlationId] ?? null;
         unset($this->pending[$correlationId]);
         unset($this->startTimes[$correlationId]);
+        unset($this->targets[$correlationId]);
 
         return $slot;
     }

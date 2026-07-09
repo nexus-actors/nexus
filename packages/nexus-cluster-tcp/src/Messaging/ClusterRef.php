@@ -136,7 +136,7 @@ final readonly class ClusterRef implements ActorRef
 
         try {
             /** @var Future<R> $future */
-            $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath);
+            $future = $this->askRegistry->register($correlationId, $timeout, $this->targetPath, $this->target);
 
             $this->safely(fn(): mixed => $this->meter
                 ->counter('nexus.cluster.asks.sent', '{message}', 'Remote cluster asks sent')

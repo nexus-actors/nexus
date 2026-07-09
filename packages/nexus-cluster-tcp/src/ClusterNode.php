@@ -158,6 +158,7 @@ final class ClusterNode
         private readonly Tracer $tracer,
         private readonly Meter $meter,
         private readonly EventDispatcherInterface $dispatcher,
+        private readonly TcpAskRegistry $askRegistry,
         private readonly LoggerInterface $logger,
         private readonly ?HandshakeAuthenticator $authenticator = null,
     ) {
@@ -320,6 +321,7 @@ final class ClusterNode
             tracer: $tracer,
             meter: $meter,
             dispatcher: $system->eventDispatcher(),
+            askRegistry: $askRegistry,
             logger: $logger,
             authenticator: $authenticator,
         );
@@ -633,6 +635,8 @@ final class ClusterNode
                 $this->livenessThrottle->forget($peerAddr->toPathPrefix());
                 $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
                 $this->safeDispatch(new PeerDisconnected($peerAddr));
+                // Fail any in-flight asks to this node fast — the reply can't arrive over the dead link.
+                $this->askRegistry->failAllForNode($peerAddr);
             }
         });
     }

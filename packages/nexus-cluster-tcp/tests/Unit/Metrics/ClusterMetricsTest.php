@@ -188,7 +188,7 @@ final class ClusterMetricsTest extends TestCase
         $runtime = new TestRuntime();
         $registry = new TcpAskRegistry($runtime, meter: $meter);
 
-        $registry->register('corr-1', Duration::seconds(5), ActorPath::fromString(self::PATH));
+        $registry->register('corr-1', Duration::seconds(5), ActorPath::fromString(self::PATH), self::peer());
         $registry->resolve('corr-1', new Pong('reply'));
 
         self::assertSame(1, $meter->counterSum('nexus.cluster.asks.resolved'));
@@ -206,7 +206,7 @@ final class ClusterMetricsTest extends TestCase
         $runtime = new TestRuntime();
         $registry = new TcpAskRegistry($runtime, meter: $meter);
 
-        $registry->register('corr-timeout', Duration::millis(100), ActorPath::fromString(self::PATH));
+        $registry->register('corr-timeout', Duration::millis(100), ActorPath::fromString(self::PATH), self::peer());
         $runtime->advanceTime(Duration::millis(100));
 
         self::assertSame(1, $meter->counterSum('nexus.cluster.asks.timed_out'));
@@ -224,8 +224,8 @@ final class ClusterMetricsTest extends TestCase
         $registry = new TcpAskRegistry($runtime, meter: $meter);
 
         // Two registers trigger lazy gauge registration and populate the registry.
-        $registry->register('corr-g1', Duration::seconds(5), ActorPath::fromString(self::PATH));
-        $registry->register('corr-g2', Duration::seconds(5), ActorPath::fromString(self::PATH));
+        $registry->register('corr-g1', Duration::seconds(5), ActorPath::fromString(self::PATH), self::peer());
+        $registry->register('corr-g2', Duration::seconds(5), ActorPath::fromString(self::PATH), self::peer());
 
         self::assertSame(2, $meter->observableGaugeValue('nexus.cluster.asks.pending'));
     }
@@ -471,7 +471,8 @@ final class ClusterMetricsTest extends TestCase
         );
     }
 
-    private function selfRef(NodeAddress $self, RecordingOutboundSink $sink, ?Meter $meter = null,): ClusterRef {
+    private function selfRef(NodeAddress $self, RecordingOutboundSink $sink, ?Meter $meter = null): ClusterRef
+    {
         $registry = new LocalActorRegistry();
         [$ref] = $this->localRef(self::PATH);
         $registry->expose($ref);
@@ -584,5 +585,10 @@ final class ClusterMetricsTest extends TestCase
             ),
             $mailbox,
         ];
+    }
+
+    private static function peer(): NodeAddress
+    {
+        return new NodeAddress('production', 'eu', 'payments', 'node-2');
     }
 }
