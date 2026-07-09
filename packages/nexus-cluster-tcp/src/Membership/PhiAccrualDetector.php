@@ -47,7 +47,7 @@ final class PhiAccrualDetector
      * duplicate still refreshes liveness (`lastArrivalMs`) but does not record a
      * degenerate interval. Well below any realistic heartbeat interval.
      */
-    private const float MIN_SAMPLE_INTERVAL_MS = 50.0;
+    public const float MIN_SAMPLE_INTERVAL_MS = 50.0;
 
     /** @var array<string, list<float>> */
     private array $windows = [];

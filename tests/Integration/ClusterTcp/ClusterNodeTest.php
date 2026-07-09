@@ -14,6 +14,7 @@ use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Pong;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\FakeObservability;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\SpyTracer;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
@@ -796,6 +797,83 @@ final class ClusterNodeTest extends TestCase
 
         $closedCount = ($firstClosed ? 1 : 0) + ($secondClosed ? 1 : 0);
         self::assertSame(1, $closedCount, 'with a cap of 1, exactly one of the two inbound links must be rejected');
+    }
+
+    /**
+     * Liveness coalescing: a burst of inbound messages must NOT flood the membership
+     * actor with one PeerLivenessObserved per frame. Per-frame liveness costs a clock
+     * read, a phi update, and a ClusterView rebuild each, and under load it queues
+     * gossip/tick processing behind thousands of stale beats — the throttle caps it
+     * at one observation per peer per detector sample interval (50 ms).
+     */
+    #[Test]
+    public function messageBurstDoesNotFloodMembershipWithLiveness(): void
+    {
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 72));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 72));
+
+        $obsB = new RecordingObservability();
+
+        $nodeB = ClusterNode::boot(
+            $this->system,
+            $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA]),
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+            observability: $obsB,
+        );
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $this->fastTopology('test-cluster', $addrA, $endpointA, [$endpointB]),
+            $this->makeUserTypes(),
+            new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $delivered = 0;
+        $burst = 200;
+
+        $sink = $this->system->spawn(
+            Props::fromBehavior(Behavior::receive(
+                static function ($ctx, object $msg) use (&$delivered): Behavior {
+                    if ($msg instanceof Ping) {
+                        ++$delivered;
+                    }
+
+                    return Behavior::same();
+                },
+            )),
+            'liveness-burst-sink',
+        );
+        $nodeB->expose($sink);
+
+        // T=600ms: converged — blast the burst in one tight loop (well inside one 50 ms window).
+        $this->runtime->scheduleOnce(
+            Duration::millis(600),
+            static function () use ($nodeA, $addrB, $sink, $burst): void {
+                $ref = $nodeA->refFor($addrB, $sink->path());
+
+                for ($i = 0; $i < $burst; ++$i) {
+                    $ref->tell(new Ping('burst'));
+                }
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(1400), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertSame($burst, $delivered, 'every burst message must still be delivered');
+
+        $beats = $obsB->meter->counters['nexus.cluster.heartbeats.received']->total ?? 0;
+        self::assertGreaterThan(0, $beats, 'liveness must still reach the membership actor');
+        self::assertLessThanOrEqual(
+            20,
+            $beats,
+            "a {$burst}-message burst must coalesce to a handful of liveness observations, not one per frame",
+        );
     }
 
     protected function setUp(): void

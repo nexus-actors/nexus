@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\EventDispatcherMembershipEventPublisher;
+use Monadial\Nexus\Cluster\Tcp\Membership\LivenessThrottle;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
@@ -75,6 +76,7 @@ use function array_values;
 use function count;
 use function explode;
 use function extension_loaded;
+use function hrtime;
 use function ltrim;
 use function preg_replace;
 use function spl_object_id;
@@ -132,6 +134,13 @@ final class ClusterNode
 
     private ?Counter $handshakeRejected = null;
 
+    /**
+     * Coalesces per-frame liveness signals to at most one PeerLivenessObserved per peer
+     * per detector sample interval — see {@see LivenessThrottle} for why unthrottled
+     * per-frame liveness is a reliability hazard under load.
+     */
+    private readonly LivenessThrottle $livenessThrottle;
+
     private function __construct(
         private readonly NodeAddress $selfAddress,
         private readonly ClusterTopology $topology,
@@ -148,7 +157,9 @@ final class ClusterNode
         private readonly Meter $meter,
         private readonly EventDispatcherInterface $dispatcher,
         private readonly LoggerInterface $logger,
-    ) {}
+    ) {
+        $this->livenessThrottle = new LivenessThrottle();
+    }
 
     /**
      * Boot a cluster node from the given topology, wiring all collaborators.
@@ -478,6 +489,20 @@ final class ClusterNode
     }
 
     /**
+     * Forward a liveness observation for `$peerAddr` to the membership actor, coalesced
+     * to at most one per peer per detector sample interval. Every inbound frame proves
+     * the peer alive, but per-frame observations flood the membership mailbox under
+     * load and carry no extra detection value (the phi detector discards sub-interval
+     * samples) — see {@see LivenessThrottle}.
+     */
+    private function observeLiveness(NodeAddress $peerAddr): void
+    {
+        if ($this->livenessThrottle->shouldObserve($peerAddr->toPathPrefix(), hrtime(true))) {
+            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+        }
+    }
+
+    /**
      * Wire the frame pump for an accepted inbound PeerLink.
      */
     private function wireInboundLink(PeerLink $link, InboxRouter $inboxRouter): void
@@ -564,7 +589,7 @@ final class ClusterNode
                 // is alive, so it MUST feed the failure detector. Without this the phi
                 // detector starves once traffic goes quiet and falsely suspects an
                 // idle-but-alive peer (there is no separate Ping/Pong heartbeat).
-                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+                $this->observeLiveness($peerAddr);
 
                 return;
             }
@@ -577,12 +602,12 @@ final class ClusterNode
 
             if ($frame->type === FrameType::Message && $ingress !== null) {
                 $ingress->ingest($frame);
-                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+                $this->observeLiveness($peerAddr);
 
                 return;
             }
 
-            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+            $this->observeLiveness($peerAddr);
         });
 
         $link->onClose(function () use (&$peerAddr, $linkId, $deadline): void {
@@ -590,6 +615,7 @@ final class ClusterNode
             unset($this->inboundLinks[$linkId]);
 
             if ($peerAddr !== null) {
+                $this->livenessThrottle->forget($peerAddr->toPathPrefix());
                 $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
                 $this->safeDispatch(new PeerDisconnected($peerAddr));
             }
@@ -667,7 +693,7 @@ final class ClusterNode
                 // is alive, so it MUST feed the failure detector. Without this the phi
                 // detector starves once traffic goes quiet and falsely suspects an
                 // idle-but-alive peer (there is no separate Ping/Pong heartbeat).
-                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+                $this->observeLiveness($peerAddr);
 
                 return;
             }
@@ -680,12 +706,12 @@ final class ClusterNode
 
             if ($frame->type === FrameType::Message && $ingress !== null) {
                 $ingress->ingest($frame);
-                $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+                $this->observeLiveness($peerAddr);
 
                 return;
             }
 
-            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+            $this->observeLiveness($peerAddr);
         });
 
         // Send our Handshake as the first frame so the seed can identify us.
