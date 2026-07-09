@@ -57,57 +57,107 @@ docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filt
 
 # Whole-machine saturation sweep (msgs/worker, payload bytes)
 ./tests/Performance/cluster_tcp_saturation.sh 100000 1024
+
+# Hot-path component breakdown (per-stage µs attribution)
+docker compose exec php-swoole php tests/Performance/cluster_tcp_hotpath.php
 ```
 
 ## Per-core results
 
 **Cross-node tell throughput** (one-way, fire-and-forget), payload sweep:
 
-| Payload | Throughput | Bandwidth |
-|---|---|---|
-| 64 B | ~33,500 msg/s | 2.0 MB/s |
-| 1 KB | ~31,600 msg/s | 30.8 MB/s |
-| 16 KB | ~27,100 msg/s | 424 MB/s |
+| Payload | Throughput | Bandwidth | (before tuning) |
+|---|---|---|---|
+| 64 B | **~78,400 msg/s** | 4.8 MB/s | 33,500 msg/s |
+| 1 KB | **~73,900 msg/s** | 72.2 MB/s | 31,600 msg/s |
+| 16 KB | **~52,400 msg/s** | 818 MB/s | 424 MB/s |
 
 Throughput is roughly flat in message *count* until payloads get large — the per-message cost
 (serialize + frame + syscall + deserialize) dominates over the bytes until ~16 KB, where bandwidth
-climbs to ~424 MB/s and the copy cost starts to matter.
+climbs to ~818 MB/s and the copy cost starts to matter. The "before tuning" column is the first
+benchmark run of the same stack; the [profiling section below](#finding-the-bottlenecks) explains
+where the 2.3× came from.
 
 **Cross-node ask round-trip latency** (request → reply, one in flight):
 
-| mean | p50 | p90 | p99 | p99.9 | max |
-|---|---|---|---|---|---|
-| 71 µs | 69 µs | 78 µs | 89 µs | 351 µs | 4.5 ms |
+| mean | p50 | p90 | p99 | p99.9 | max | (before: p50 / p99) |
+|---|---|---|---|---|---|---|
+| 35.9 µs | **34.9 µs** | 40.5 µs | **48.0 µs** | 100 µs | 1.6 ms | 69.3 / 89.4 µs |
 
 That is a full round trip — serialize, frame, loopback TCP, deserialize, actor hop, reply, and back —
-at **sub-100 µs through p99**. Sequential ask/reply (one outstanding) yields ~14,000 asks/s; real
+at **sub-50 µs through p99**. Sequential ask/reply (one outstanding) yields ~27,900 asks/s; real
 throughput is far higher with requests in flight concurrently.
 
 **Local short-circuit baseline** — a `ClusterRef` addressed to an actor on the *same* node skips the
-wire entirely: **~304,000 msg/s**. The ~10× gap between this and the ~31,600 msg/s cross-node figure is
-the cost of the transport plus the shared-reactor contention — the actor delivery itself is cheap; the
-wire is where the time goes.
+wire entirely: **~304,000 msg/s**. The remaining gap between this and the cross-node figure is the
+transport (msgpack + framing + loopback TCP) plus the shared-reactor contention of the single-process
+harness — the actor delivery itself is cheap.
+
+## Finding the bottlenecks
+
+The tuned numbers above did not come from guessing. A component profiler
+(`tests/Performance/cluster_tcp_hotpath.php`) prices every userland stage of the remote path in
+isolation, so each microsecond of the measured per-message budget is *attributed*, not assumed:
+
+| Stage (per 1 KB message) | µs/op | % of the 31.6 µs budget |
+|---|---|---|
+| envelope deserialize (Valinor TreeMapper) | **11.94** | **37.8%** |
+| body decode (user message, Valinor) | 3.41 | 10.8% |
+| envelope serialize (Valinor normalizer) | 2.94 | 9.3% |
+| user message encode | 1.19 | 3.8% |
+| per-message liveness pipeline | 1.34 | 4.2% |
+| telemetry no-op paths | ~0.06 | ~0.2% |
+| *unaccounted (sockets, scheduler, mailbox hop)* | 10.64 | 33.7% |
+
+Two findings drove the two fixes:
+
+1. **Serialization was 62% of the entire budget**, and the single worst stage was hydrating the
+   fixed six-field `MessagePayload` envelope through Valinor's reflection-driven TreeMapper.
+   The fix — a hand-rolled `MessagePayloadCodec` that packs/unpacks the same msgpack map directly —
+   cut the envelope cost from 14.9 µs to 1.3 µs per message (unpack alone: 15.6× faster), while
+   keeping wire compatibility (both codecs emit the same map; readers resolve by key) and strict
+   per-field validation at the trust boundary. User message bodies deliberately stay on the generic
+   Valinor path: arbitrary types justify a mapper; a fixed internal envelope does not.
+2. **Every inbound frame fired a liveness message at the membership actor** — one allocation,
+   one mailbox hop, one clock read, one phi update, and one `ClusterView` rebuild *per frame* —
+   even though the phi detector discards inter-arrival samples closer than its 50 ms floor, so
+   per-frame beats carried no detection value. Worse than the CPU cost, this was a **reliability
+   hazard**: under sustained traffic the membership mailbox floods and gossip/failure-detection
+   processing queues behind thousands of stale beats — the detector reads stale arrival times
+   exactly when the cluster is busiest. `LivenessThrottle` coalesces to at most one observation
+   per peer per 50 ms; a 200-message burst now produces a handful of observations instead of 200+
+   (guarded by a regression test validated to fail with the throttle disabled).
+
+Equally important is what the profiler said **not** to fix: the no-op telemetry path costs ~0.06 µs
+per message — the "cache the counters" optimization that looked plausible on paper would have been
+noise. Measure first.
+
+Two known costs remain on the table for future work: the pure-PHP msgpack backend (`ext-msgpack`
+is auto-detected by `MsgpackCodec` when present but is not in the shipped image), and the
+~10 µs unaccounted remainder (socket syscalls, coroutine scheduling, and the mailbox hop —
+per-frame write batching would attack the syscall share).
 
 ## Whole-machine scaling
 
 Aggregate 1 KB throughput as *K* parallel two-node clusters run at once (so `2K` nodes total):
 
-| K workers | Nodes | Aggregate msg/s | Bandwidth | Container CPU |
+| K workers | Nodes | Aggregate msg/s | Bandwidth | Peak CPU |
 |---|---|---|---|---|
-| 1 | 2 | 31,173 | 30.4 MB/s | 100% |
-| 2 | 4 | 61,177 | 59.7 MB/s | 201% |
-| 4 | 8 | 119,096 | 116.4 MB/s | 403% |
-| 8 | 16 | 234,473 | 228.8 MB/s | 806% |
-| 12 | 24 | **315,747** | **308.3 MB/s** | 1214% |
-| 16 | 32 | 314,697 | 307.2 MB/s | 1547% |
+| 1 | 2 | 72,195 | 70.5 MB/s | 97% |
+| 2 | 4 | 141,108 | 137.8 MB/s | 130% |
+| 4 | 8 | 276,627 | 270.1 MB/s | 268% |
+| 8 | 16 | 553,403 | 540.6 MB/s | 541% |
+| 12 | 24 | **814,607** | **795.5 MB/s** | 899% |
+| 16 | 32 | 823,859 | 804.6 MB/s | 1587% |
 
-Throughput scales **near-linearly** — ~1.96× at K=2, ~3.8× at K=4, ~7.5× at K=8 — and then plateaus at
-**~315,000 msg/s around K=12**. That is not a coincidence: the M4 Max has **12 performance cores**. Beyond
-K=12 the only cores left are the 4 efficiency cores, which raise CPU% (to ~1547%) without adding
+Throughput scales **near-linearly** — ~1.95× at K=2, ~3.8× at K=4, ~7.7× at K=8 — and then plateaus at
+**~820,000 msg/s around K=12**. That is not a coincidence: the M4 Max has **12 performance cores**. Beyond
+K=12 the only cores left are the 4 efficiency cores, which raise CPU% without adding meaningful
 throughput. The clean plateau at the P-core count is the important result: **the transport has no global
-lock or shared bottleneck — it scales with cores.**
+lock or shared bottleneck — it scales with cores.** (The pre-tuning run showed the same shape at a
+~315K msg/s plateau; the 2.6× lift is the per-core tuning multiplied across every core.)
 
-So on this laptop the mesh sustains roughly **300K small messages/second (~300 MB/s)** across the machine,
+So on this laptop the mesh sustains roughly **820K small messages/second (~800 MB/s)** across the machine,
 and would go higher on bare-metal Linux or with the two sides of each pair on separate hosts.
 
 ## Is this usable? An honest comparison
@@ -120,7 +170,7 @@ with tuning and hardware, so treat these as ballpark):
 
 | System | Remote small-msg throughput | Round-trip latency | Notes |
 |---|---|---|---|
-| **Nexus cluster-tcp** (this) | ~31K/core, ~315K/machine | ~70 µs p50 (loopback) | PHP 8.5 + Swoole, userland MessagePack |
+| **Nexus cluster-tcp** (this) | ~74K/core, ~820K/machine | ~35 µs p50 (loopback) | PHP 8.5 + Swoole, userland MessagePack |
 | Akka / Pekko (JVM, Artery) | ~hundreds of K – ~1M+ /node | tens–hundreds of µs | JIT, off-heap, battle-tested at scale |
 | Erlang/OTP (BEAM dist) | ~hundreds of K /node | low µs–ms | purpose-built for distribution |
 | Proto.Actor (Go) | ~hundreds of K remote | tens–hundreds of µs | native, gRPC transport |
@@ -130,7 +180,7 @@ with tuning and hardware, so treat these as ballpark):
 
 What this means in practice:
 
-- **Against other actor runtimes**, Nexus is roughly **10–50× slower per node** for raw remote throughput.
+- **Against other actor runtimes**, Nexus is roughly **5–20× slower per node** for raw remote throughput.
   That is exactly what you would expect: PHP with userland serialization and coroutine scheduling versus
   JIT-compiled JVM/Go or the natively-distributed BEAM. If you need a multi-million-message-per-second
   firehose or microsecond-tail trading latency, use the right tool — this is not it.
@@ -142,7 +192,7 @@ What this means in practice:
 **Where it is genuinely usable today:** sharded stateful entities (one writer per aggregate, addressed by
 identity across the mesh), coordinating workers across machines, real-time features (presence, live
 counters, fan-out), and turning a broker-and-HTTP service graph into direct sub-millisecond actor calls —
-at a scale of **hundreds of thousands of messages per second per machine**, which covers the overwhelming
+at a scale of **~800K messages per second per machine**, which covers the overwhelming
 majority of PHP workloads.
 
 **Where it is not the answer (yet):** ultra-high-throughput streaming, microsecond-latency-critical paths,
