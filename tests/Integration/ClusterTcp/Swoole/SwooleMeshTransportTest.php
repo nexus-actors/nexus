@@ -19,7 +19,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
 
+use function str_repeat;
 use function Swoole\Coroutine\run;
 
 /**
@@ -84,6 +86,72 @@ final class SwooleMeshTransportTest extends TestCase
         self::assertCount(1, $serverReceived);
         self::assertSame(FrameType::Ping, $serverReceived[0]->type);
         self::assertSame('hello-server', $serverReceived[0]->payload);
+    }
+
+    /**
+     * Regression: two coroutines writing the SAME link concurrently must not collide.
+     * Swoole forbids two coroutines writing one socket at the same time, and sendAll()
+     * suspends mid-write once the send buffer fills — so without SwoolePeerLink's write
+     * mutex, large frames sent from parallel coroutines (e.g. an app tell racing a gossip
+     * frame) crash the process with "writing of the same socket ... is not allowed". This
+     * drives that exact race with big frames and asserts every frame still arrives.
+     */
+    #[Test]
+    public function concurrentWritesOnOneLinkAreSerialised(): void
+    {
+        $received = 0;
+        $sendersCount = 2;
+        $framesPerSender = 40;
+        $payload = str_repeat('x', 512 * 1024);
+
+        run(static function () use (&$received, $sendersCount, $framesPerSender, $payload): void {
+            $runtime = new SwooleRuntime();
+            $transport = new SwooleMeshTransport($runtime);
+
+            $port = $transport->bindEphemeral(Host::of('127.0.0.1'));
+            $bind = new NodeEndpoint(Host::of('127.0.0.1'), Port::of($port));
+
+            $transport->serve(
+                $bind,
+                static function (PeerLink $serverLink) use (&$received): void {
+                    $serverLink->onFrame(static function (Frame $frame) use (&$received): void {
+                        ++$received;
+                    });
+                },
+            );
+
+            Coroutine::sleep(0.05);
+
+            $clientLink = $transport->connect($bind);
+            $done = new Channel($sendersCount);
+
+            for ($s = 0; $s < $sendersCount; ++$s) {
+                Coroutine::create(static function () use ($clientLink, $framesPerSender, $payload, $done): void {
+                    for ($i = 0; $i < $framesPerSender; ++$i) {
+                        $clientLink->sendFrame(new Frame(FrameType::Message, $payload));
+                    }
+
+                    $done->push(true);
+                });
+            }
+
+            for ($s = 0; $s < $sendersCount; ++$s) {
+                $done->pop();
+            }
+
+            for ($waited = 0.0; $received < $sendersCount * $framesPerSender && $waited < 5.0; $waited += 0.02) {
+                Coroutine::sleep(0.02);
+            }
+
+            $clientLink->close();
+            $transport->close();
+        });
+
+        self::assertSame(
+            $sendersCount * $framesPerSender,
+            $received,
+            'all concurrently-sent frames must arrive with no socket-write collision',
+        );
     }
 
     /**

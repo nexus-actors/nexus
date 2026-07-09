@@ -12,6 +12,7 @@ use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
+use Swoole\Coroutine\Channel;
 use Swoole\Coroutine\Client;
 use Swoole\Coroutine\Socket;
 
@@ -65,6 +66,16 @@ final class SwoolePeerLink implements PeerLink
 
     private readonly FrameCodec $codec;
 
+    /**
+     * Capacity-1 channel used as a coroutine mutex to serialise socket writes.
+     * Swoole forbids two coroutines writing the same socket concurrently, and
+     * {@see Socket::sendAll()} suspends the caller when the send buffer fills — so
+     * under load a stalled app-send and a gossip/heartbeat send from another
+     * coroutine would otherwise collide and crash. Holding the single token across
+     * the write makes every send to this link mutually exclusive.
+     */
+    private readonly Channel $writeLock;
+
     public function __construct(
         private readonly Socket $socket,
         private readonly Runtime $runtime,
@@ -78,6 +89,8 @@ final class SwoolePeerLink implements PeerLink
         private readonly ?Client $clientOwner = null,
     ) {
         $this->codec = new FrameCodec();
+        $this->writeLock = new Channel(1);
+        $this->writeLock->push(true);
         $this->startReceiveLoop();
     }
 
@@ -91,7 +104,7 @@ final class SwoolePeerLink implements PeerLink
             return;
         }
 
-        $this->socket->sendAll($bytes);
+        $this->write($bytes);
     }
 
     #[Override]
@@ -101,7 +114,7 @@ final class SwoolePeerLink implements PeerLink
             return;
         }
 
-        $this->socket->sendAll($this->codec->encode($frame));
+        $this->write($this->codec->encode($frame));
     }
 
     #[Override]
@@ -223,6 +236,22 @@ final class SwoolePeerLink implements PeerLink
 
         foreach ($this->closeHandlers as $handler) {
             $handler();
+        }
+    }
+
+    /**
+     * Write bytes to the socket under the per-link write mutex so concurrent
+     * senders (e.g. an app tell and a gossip frame) never write it at the same
+     * time. The token is always returned, even if the write throws.
+     */
+    private function write(string $bytes): void
+    {
+        $this->writeLock->pop();
+
+        try {
+            $this->socket->sendAll($bytes);
+        } finally {
+            $this->writeLock->push(true);
         }
     }
 
