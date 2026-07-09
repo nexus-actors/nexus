@@ -53,6 +53,7 @@ final readonly class ClusterTopology
         public int $maxInboundLinks,
         public bool $singleNode,
         public ?TlsConfig $tls,
+        public ?string $authSecret,
     ) {}
 
     /**
@@ -117,7 +118,27 @@ final readonly class ClusterTopology
             maxInboundLinks: $maxInboundLinks,
             singleNode: $singleNode,
             tls: $tls,
+            authSecret: null,
         );
+    }
+
+    /**
+     * Require every joining node to prove it holds the shared cluster secret (HMAC-signed
+     * handshake). Without this, `clusterName` is only a label and any reachable peer joins.
+     * Combine with TLS for transport-level per-node identity. Pass `null` to disable
+     * (the default) — insecure outside a fully trusted, network-fenced segment.
+     *
+     * @throws InvalidArgumentException when the secret is an empty string.
+     */
+    public function withAuthSecret(?string $secret): self
+    {
+        if ($secret === '') {
+            throw new InvalidArgumentException(
+                'ClusterTopology authSecret must not be an empty string; pass null to disable.',
+            );
+        }
+
+        return clone($this, ['authSecret' => $secret]);
     }
 
     public function withHeartbeatInterval(Duration $heartbeatInterval): self

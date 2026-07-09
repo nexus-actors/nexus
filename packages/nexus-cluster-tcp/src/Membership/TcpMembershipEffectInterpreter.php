@@ -53,6 +53,7 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
         private readonly MessageSerializer $frameSerializer,
         private readonly Closure $sender,
         private readonly Meter $meter = new NoopMeter(),
+        private readonly ?HandshakeAuthenticator $authenticator = null,
     ) {}
 
     #[Override]
@@ -100,7 +101,9 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
 
     private function buildSelfHandshake(): Handshake
     {
-        return Handshake::forSelf($this->topology);
+        $handshake = Handshake::forSelf($this->topology);
+
+        return $this->authenticator?->sign($handshake) ?? $handshake;
     }
 
     /**

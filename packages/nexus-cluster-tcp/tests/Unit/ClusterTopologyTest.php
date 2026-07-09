@@ -54,6 +54,41 @@ final class ClusterTopologyTest extends TestCase
         self::assertSame(1_024, $topology->maxInboundLinks);
         self::assertFalse($topology->singleNode);
         self::assertNull($topology->tls);
+        self::assertNull($topology->authSecret);
+    }
+
+    #[Test]
+    public function withAuthSecretReturnsNewInstance(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $modified = $topology->withAuthSecret('cluster-secret');
+
+        self::assertNotSame($topology, $modified);
+        self::assertSame('cluster-secret', $modified->authSecret);
+        self::assertNull($topology->authSecret);
+        self::assertNull($modified->withAuthSecret(null)->authSecret, 'passing null disables auth');
+    }
+
+    #[Test]
+    public function emptyAuthSecretThrows(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('authSecret');
+
+        ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        )->withAuthSecret('');
     }
 
     #[Test]

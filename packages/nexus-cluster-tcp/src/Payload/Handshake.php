@@ -15,6 +15,11 @@ use Monadial\Nexus\Serialization\MessageType;
  * NodeAddress fields (cluster/datacenter/application/node) as plain strings.
  * `advertise` is the host:port peers should use to connect back.
  *
+ * When a cluster secret is configured, `nonce`/`issuedAt`/`mac` carry the
+ * {@see \Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator} signature
+ * proving the sender holds the secret; they are null on an unauthenticated cluster
+ * (and remain wire-compatible with peers that never send them).
+ *
  * @psalm-type NodeMap = array<string, string>
  */
 #[MessageType('cluster.handshake')]
@@ -28,6 +33,9 @@ final readonly class Handshake
         public array $node,
         public string $advertise,
         public int $protocolVersion = 1,
+        public ?string $nonce = null,
+        public ?int $issuedAt = null,
+        public ?string $mac = null,
     ) {}
 
     /**

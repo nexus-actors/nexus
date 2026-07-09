@@ -518,6 +518,126 @@ final class ClusterNodeSwooleTest extends TestCase
     }
 
     /**
+     * SCENARIO 7 (auth, positive): two nodes sharing the cluster secret authenticate each
+     * other's HMAC-signed handshakes over real TCP and converge to a two-member view.
+     */
+    #[Test]
+    public function nodesSharingTheAuthSecretConvergeOverRealTcp(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('cluster-swoole-auth-ok', $runtime);
+
+        $upA = 0;
+        $upB = 0;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, &$upA, &$upB): void {
+                $transportA = null;
+                $transportB = null;
+                $nodeA = null;
+                $nodeB = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+
+                    $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+                    $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+
+                    $nodeB = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrB, $endpointB, [$endpointA])
+                            ->withAuthSecret('shared-cluster-secret'),
+                        $this->makeUserTypes(),
+                        $transportB,
+                    );
+                    $nodeA = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrA, $endpointA, [$endpointB])
+                            ->withAuthSecret('shared-cluster-secret'),
+                        $this->makeUserTypes(),
+                        $transportA,
+                    );
+
+                    $this->pollUntil(60, static function () use ($nodeA, $nodeB): bool {
+                        return count($nodeA->view()->upNodes()) === 2
+                            && count($nodeB->view()->upNodes()) === 2;
+                    });
+
+                    $upA = count($nodeA->view()->upNodes());
+                    $upB = count($nodeB->view()->upNodes());
+                } finally {
+                    $this->cleanupCluster($system, $nodeA, $nodeB, $transportA, $transportB);
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertSame(2, $upA, 'A must admit a peer that proves the shared secret');
+        self::assertSame(2, $upB, 'B must admit a peer that proves the shared secret');
+    }
+
+    /**
+     * SCENARIO 8 (auth, negative): a node presenting the WRONG secret is rejected at
+     * handshake parse time — it never joins the authenticated node's view, over real TCP.
+     */
+    #[Test]
+    public function nodeWithWrongAuthSecretIsRejected(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('cluster-swoole-auth-bad', $runtime);
+
+        $membersA = 0;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, &$membersA): void {
+                $transportA = null;
+                $transportB = null;
+                $nodeA = null;
+                $nodeB = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+
+                    $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+                    $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+
+                    // A requires the real secret and serves. B dials A signing with a
+                    // different secret — every handshake B sends must be rejected.
+                    $nodeA = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrA, $endpointA, [], singleNode: true)
+                            ->withAuthSecret('correct-secret'),
+                        $this->makeUserTypes(),
+                        $transportA,
+                    );
+                    $nodeB = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrB, $endpointB, [$endpointA])
+                            ->withAuthSecret('attacker-secret'),
+                        $this->makeUserTypes(),
+                        $transportB,
+                    );
+
+                    Coroutine::sleep(1.5);
+
+                    $membersA = count($nodeA->view()->members);
+                } finally {
+                    $this->cleanupCluster($system, $nodeA, $nodeB, $transportA, $transportB);
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertSame(1, $membersA, 'A must reject a peer that cannot prove the shared secret');
+    }
+
+    /**
      * Create a SwooleMeshTransport bound to an OS-assigned ephemeral port on
      * 127.0.0.1 and return it together with the resolved advertise endpoint.
      *

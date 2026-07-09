@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\EventDispatcherMembershipEventPublisher;
+use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Membership\LivenessThrottle;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
@@ -81,6 +82,7 @@ use function ltrim;
 use function preg_replace;
 use function spl_object_id;
 use function strlen;
+use function time;
 
 /**
  * @psalm-api
@@ -157,6 +159,7 @@ final class ClusterNode
         private readonly Meter $meter,
         private readonly EventDispatcherInterface $dispatcher,
         private readonly LoggerInterface $logger,
+        private readonly ?HandshakeAuthenticator $authenticator = null,
     ) {
         $this->livenessThrottle = new LivenessThrottle();
     }
@@ -265,7 +268,18 @@ final class ClusterNode
         );
 
         // 9. Membership collaborators.
-        $effectInterpreter = new TcpMembershipEffectInterpreter($topology, $frameSerializer, $sender, $meter);
+        // Handshake authentication: enforced only when the topology carries a shared secret.
+        $authenticator = $topology->authSecret !== null
+            ? new HandshakeAuthenticator($topology->authSecret)
+            : null;
+
+        $effectInterpreter = new TcpMembershipEffectInterpreter(
+            $topology,
+            $frameSerializer,
+            $sender,
+            $meter,
+            $authenticator,
+        );
         $eventPublisher = new EventDispatcherMembershipEventPublisher($system->eventDispatcher());
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
@@ -307,6 +321,7 @@ final class ClusterNode
             meter: $meter,
             dispatcher: $system->eventDispatcher(),
             logger: $logger,
+            authenticator: $authenticator,
         );
 
         // 11. Start serving: wire the inbound accept pump.
@@ -759,6 +774,18 @@ final class ClusterNode
             return null;
         }
 
+        // Authenticate BEFORE any ingress is wired: a peer that cannot prove it holds the
+        // shared cluster secret is rejected here, so it never joins the view or delivers a
+        // frame. No-op when the cluster runs without a secret.
+        if ($this->authenticator !== null && !$this->authenticator->verify($obj, time())) {
+            $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.unauthenticated', [
+                'peer_advertise' => $obj->advertise,
+                'peer_cluster' => $obj->clusterName,
+            ]));
+
+            return null;
+        }
+
         $peerAddr = new NodeAddress(
             $obj->node['cluster'] ?? 'unknown',
             $obj->node['datacenter'] ?? 'unknown',
@@ -966,7 +993,9 @@ final class ClusterNode
      */
     private function buildSelfHandshake(): Handshake
     {
-        return Handshake::forSelf($this->topology);
+        $handshake = Handshake::forSelf($this->topology);
+
+        return $this->authenticator?->sign($handshake) ?? $handshake;
     }
 
     /**
