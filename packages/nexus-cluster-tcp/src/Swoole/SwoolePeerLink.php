@@ -159,7 +159,25 @@ final class SwoolePeerLink implements PeerLink
             while (true) {
                 $data = $this->socket->recv(65536);
 
-                if ($data === false || $data === '') {
+                if ($data === false) {
+                    // A recv timeout is NOT a disconnect. Swoole coroutine sockets carry a finite
+                    // default recv timeout, and in a mutual-seed mesh each TCP connection is used
+                    // unidirectionally (a node sends to a peer over its own outbound link and
+                    // receives over the peer's) — so a link legitimately receives nothing for long
+                    // stretches. Treating that timeout as EOF tore the link down every few seconds,
+                    // driving perpetual reconnect churn that starved the phi detector into false
+                    // Suspect/Down. Keep waiting on a timeout; only a genuine peer close (empty read)
+                    // or a hard socket error ends the loop.
+                    if (self::isRecvTimeout($this->socket->errCode)) {
+                        continue;
+                    }
+
+                    $this->notifyClose();
+
+                    return;
+                }
+
+                if ($data === '') {
                     $this->notifyClose();
 
                     return;
@@ -206,5 +224,16 @@ final class SwoolePeerLink implements PeerLink
         foreach ($this->closeHandlers as $handler) {
             $handler();
         }
+    }
+
+    /**
+     * Whether a failed recv is a benign timeout (deadline elapsed / would block)
+     * rather than a real disconnect. Swoole sets the socket errCode to the POSIX
+     * errno; ETIMEDOUT (110) and EAGAIN/EWOULDBLOCK (11) both mean "no data yet,
+     * the connection is still open".
+     */
+    private static function isRecvTimeout(int $errCode): bool
+    {
+        return $errCode === SOCKET_ETIMEDOUT || $errCode === SOCKET_EAGAIN;
     }
 }
