@@ -16,9 +16,13 @@ metric land in Grafana, with a pre-provisioned dashboard.
 The script builds the image, starts Grafana LGTM, runs the mesh pointed at it, and then
 **leaves Grafana running** so you can explore. Open:
 
-- **http://localhost:3000** → *Dashboards* → **“Nexus Cluster TCP — Traces & Metrics”**
+- **http://localhost:3000** → *Dashboards*:
+  - **“Nexus — Cluster Overview (all subsystems)”** — the full picture: actor system,
+    cluster TCP messaging, ask & membership, serialization, runtime/Swoole, persistence,
+    worker pool, and distributed tracing in one board.
+  - **“Nexus Cluster TCP — Traces & Metrics”** — the trace-focused cluster board.
 - *Explore → Tempo* → TraceQL: `{ resource.service.name = "nexus-cluster-mesh" }`
-- *Explore → Prometheus* → any metric starting `nexus_cluster_` or `traces_spanmetrics_`
+- *Explore → Prometheus* → any metric starting `nexus_cluster_`, `nexus_actor_system_`, or `traces_spanmetrics_`
 
 Tear the stack down when finished:
 
@@ -52,12 +56,25 @@ Tear the stack down when finished:
 
 ## What you'll see
 
-- **Cluster tracing** — a live Tempo trace list, plus span throughput and p95 latency
-  per operation (`cluster.send`, `cluster.ask`, `cluster.handshake`) from Tempo's
-  span-metrics.
-- **Message throughput** — aggregate tells/s and bytes/s, local short-circuit rate.
-- **Ask & health** — ask round-trip p50/p95/p99, asks pending/resolved/timed-out/rejected,
-  handshake rejections, frames sent.
+The **overview** dashboard has a row per Nexus subsystem:
+
+| Row | Source | Live in this demo? |
+|-----|--------|--------------------|
+| Actor system | `nexus.actor_system.*` (wired via `ActorSystemMetrics`) | ✅ |
+| Cluster TCP — messaging / ask / membership | `nexus.cluster.*` | ✅ |
+| Distributed tracing | Tempo span-metrics + trace list | ✅ |
+| Serialization | `nexus.serialization.*` | only when a `TracingMessageSerializer` is wired |
+| Runtime / Swoole | `swoole.*` | only when `SwooleAdminMetrics` is wired (needs a `Swoole\Server`) |
+| Persistence | `nexus.persistence.*` | only in apps using persistence |
+| Worker pool | `nexus.worker_pool.*` | only in apps using the worker pool |
+
+The cluster mesh emits the Actor + Cluster + Tracing rows; the remaining rows are part of
+the same board so it doubles as a **reusable full-stack Nexus overview** — they light up
+automatically in a deployment that runs those subsystems with observability enabled.
+
+The **cluster-tcp** dashboard is the trace-focused view: a live Tempo trace list plus span
+throughput and p95 latency per operation (`cluster.send`, `cluster.ask`,
+`cluster.handshake`), and the cluster message/ask/handshake metrics.
 
 **Per-node breakdown caveat:** the “by node” panels rely on the collector promoting the
 `node.id` resource attribute to a metric label. Not every LGTM build does this by

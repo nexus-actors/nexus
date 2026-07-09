@@ -41,6 +41,7 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Core\Net\Port;
+use Monadial\Nexus\Observability\Actor\ActorSystemMetrics;
 use Monadial\Nexus\Observability\Config\ObservabilityConfig;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
@@ -241,6 +242,13 @@ function runMeshNode(
 
     $runtime = new SwooleRuntime();
     $system = ActorSystem::create("mesh-{$tag}", $runtime, eventDispatcher: $dispatcher);
+
+    // Emit ActorSystem gauges (live actors, dead letters, running) alongside the cluster
+    // metrics, so the Grafana overview dashboard's "Actor system" row is live for this node.
+    if ($observability instanceof OtelObservability) {
+        $actorMetrics = new ActorSystemMetrics($observability, $system);
+        $actorMetrics->register();
+    }
 
     $selfPort = $basePort + $threadId - 1;
     $selfAddr = new NodeAddress('mesh', 'dc1', 'soak', $tag);

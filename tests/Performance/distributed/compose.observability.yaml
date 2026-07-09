@@ -38,6 +38,7 @@ services:
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     volumes:
       - ./grafana/dashboards/nexus-cluster-tcp.json:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-cluster-tcp.json:ro
+      - ./grafana/dashboards/nexus-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-overview.json:ro
     networks:
       - mesh-net
     healthcheck:
