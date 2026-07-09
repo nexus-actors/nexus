@@ -227,11 +227,15 @@ function runMeshNode(
         // up, so first dials fail. With the default 30 s max backoff those retries
         // trickle in for minutes; capping at 2 s converges the 16-node mesh promptly.
         ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2))
-        // Saturated-links tuning, per the benchmarks guide: at ~100% per-core duty
-        // cycle, multi-second reactor stalls are normal and the default 500 ms
-        // std-dev floor lets phi fire on them (~15 transients/node/min — all refuted
-        // and healed, but noisy). Widening the floor keeps detection meaningful for
-        // real failures (Suspect->Down still 10 s) while tolerating load jitter.
+        // Saturated-links tuning. MEASURED (full send rate, 16 nodes, 60 s): at pure
+        // default phi the detector legitimately fires ~8-18 times/node on multi-second
+        // reactor stalls caused by data-plane saturation, and each transient still spreads
+        // through gossip — views ALWAYS heal (0 unhealed, 0 Downs, 39M msgs delivered), but
+        // the event stream is noisy. Widening the std-dev floor to 3 s keeps detection
+        // meaningful for real failures (Suspect->Down still 10 s) while tolerating that load
+        // jitter, and the mesh passes at full send rate. The real fix is control/data-plane
+        // connection separation (plan Phase 1.A), whose acceptance bar is passing here at
+        // DEFAULT phi with this line removed.
         ->withFailureDetection(minStdDev: Duration::seconds(3));
 
     $registry = new TypeRegistry();
@@ -383,13 +387,10 @@ function runMeshNode(
                     ++$sent;
                 }
 
-                // Pace to ~75% of link capacity. At 100% duty cycle the per-peer TCP buffers
-                // run permanently full and gossip/heartbeat frames — which share the data
-                // connection — queue behind megabytes of flood (head-of-line blocking), so
-                // the failure detector fires on healthy peers. Real systems keep headroom;
-                // the saturation regime is covered by the same-host fleet soak, and the
-                // control-plane/data-plane separation is tracked as C2 hardening.
-                Coroutine::sleep(0.008);
+                // Yield once per batch so the reactor services reads/gossip; the mesh runs
+                // at full send rate (headroom is not required for stability now that stale
+                // suspicion is deduped and refutation is reachable).
+                Coroutine::sleep(0.001);
 
                 $nowNs = hrtime(true);
 
