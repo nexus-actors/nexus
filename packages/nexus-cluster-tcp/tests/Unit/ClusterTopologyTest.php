@@ -50,6 +50,8 @@ final class ClusterTopologyTest extends TestCase
         self::assertEquals(Duration::millis(500), $topology->phiMinStdDev);
         self::assertSame(200, $topology->phiSampleSize);
         self::assertEquals(Duration::seconds(1), $topology->gossipInterval);
+        self::assertEquals(Duration::seconds(10), $topology->handshakeTimeout);
+        self::assertSame(1_024, $topology->maxInboundLinks);
         self::assertFalse($topology->singleNode);
         self::assertNull($topology->tls);
     }
@@ -256,6 +258,75 @@ final class ClusterTopologyTest extends TestCase
         self::assertEquals(Duration::millis(500), $modified->phiMinStdDev);
         self::assertEquals(Duration::seconds(10), $modified->maxNoHeartbeat);
         self::assertSame(8.0, $modified->phiThreshold);
+    }
+
+    #[Test]
+    public function withInboundLimitsReturnsNewInstance(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $modified = $topology->withInboundLimits(handshakeTimeout: Duration::seconds(3), maxInboundLinks: 16);
+
+        self::assertNotSame($topology, $modified);
+        self::assertEquals(Duration::seconds(3), $modified->handshakeTimeout);
+        self::assertSame(16, $modified->maxInboundLinks);
+        self::assertEquals(Duration::seconds(10), $topology->handshakeTimeout);
+        self::assertSame(1_024, $topology->maxInboundLinks);
+    }
+
+    #[Test]
+    public function withInboundLimitsWithNullsPreservesValues(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $modified = $topology->withInboundLimits();
+
+        self::assertEquals(Duration::seconds(10), $modified->handshakeTimeout);
+        self::assertSame(1_024, $modified->maxInboundLinks);
+    }
+
+    #[Test]
+    public function nonPositiveMaxInboundLinksThrows(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('maxInboundLinks');
+
+        ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            maxInboundLinks: 0,
+        );
+    }
+
+    #[Test]
+    public function nonPositiveHandshakeTimeoutThrows(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('handshakeTimeout');
+
+        ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            handshakeTimeout: Duration::zero(),
+        );
     }
 
     protected function setUp(): void

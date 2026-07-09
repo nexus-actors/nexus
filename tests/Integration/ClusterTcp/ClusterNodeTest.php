@@ -705,6 +705,99 @@ final class ClusterNodeTest extends TestCase
         );
     }
 
+    /**
+     * DoS hardening: an accepted link that never completes a handshake is closed once the
+     * handshake deadline elapses, so a peer cannot hold a connection (and its receive loop)
+     * open indefinitely without identifying itself.
+     */
+    #[Test]
+    public function unidentifiedInboundLinkIsClosedAfterHandshakeTimeout(): void
+    {
+        $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 70));
+
+        $topology = ClusterTopology::create(
+            clusterName: 'test-cluster',
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: [],
+            singleNode: true,
+        )->withInboundLimits(handshakeTimeout: Duration::millis(100));
+
+        ClusterNode::boot(
+            $this->system,
+            $topology,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        // A raw peer that connects but never sends a Handshake frame.
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $link = $client->connect($endpoint);
+
+        $closed = false;
+        $link->onClose(static function () use (&$closed): void {
+            $closed = true;
+        });
+
+        $this->runtime->scheduleOnce(Duration::millis(400), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertTrue($closed, 'an inbound link that never handshakes must be closed after the deadline');
+    }
+
+    /**
+     * DoS hardening: concurrent accepted inbound links are capped; a link beyond the ceiling is
+     * refused immediately so a peer cannot exhaust memory by opening endless sockets.
+     */
+    #[Test]
+    public function inboundLinkBeyondTheCapIsRejected(): void
+    {
+        $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 71));
+
+        $topology = ClusterTopology::create(
+            clusterName: 'test-cluster',
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: [],
+            singleNode: true,
+        )->withInboundLimits(maxInboundLinks: 1);
+
+        ClusterNode::boot(
+            $this->system,
+            $topology,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+
+        $firstClosed = false;
+        $secondClosed = false;
+
+        $first = $client->connect($endpoint);
+        $first->onClose(static function () use (&$firstClosed): void {
+            $firstClosed = true;
+        });
+        $second = $client->connect($endpoint);
+        $second->onClose(static function () use (&$secondClosed): void {
+            $secondClosed = true;
+        });
+
+        $this->runtime->scheduleOnce(Duration::millis(150), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        $closedCount = ($firstClosed ? 1 : 0) + ($secondClosed ? 1 : 0);
+        self::assertSame(1, $closedCount, 'with a cap of 1, exactly one of the two inbound links must be rejected');
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new FiberRuntime();

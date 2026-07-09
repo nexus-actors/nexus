@@ -49,6 +49,8 @@ final readonly class ClusterTopology
         public Duration $gossipInterval,
         public Duration $reconnectInitialBackoff,
         public Duration $reconnectMaxBackoff,
+        public Duration $handshakeTimeout,
+        public int $maxInboundLinks,
         public bool $singleNode,
         public ?TlsConfig $tls,
     ) {}
@@ -71,6 +73,8 @@ final readonly class ClusterTopology
         ?Duration $gossipInterval = null,
         ?Duration $reconnectInitialBackoff = null,
         ?Duration $reconnectMaxBackoff = null,
+        ?Duration $handshakeTimeout = null,
+        int $maxInboundLinks = 1_024,
         bool $singleNode = false,
         ?TlsConfig $tls = null,
     ): self {
@@ -83,6 +87,16 @@ final readonly class ClusterTopology
                 'ClusterTopology seeds must not be empty unless singleNode is true. '
                 . 'Pass singleNode: true to start as a standalone node.',
             );
+        }
+
+        if ($maxInboundLinks < 1) {
+            throw new InvalidArgumentException('ClusterTopology maxInboundLinks must be at least 1.');
+        }
+
+        $resolvedHandshakeTimeout = $handshakeTimeout ?? Duration::seconds(10);
+
+        if (!$resolvedHandshakeTimeout->isGreaterThan(Duration::zero())) {
+            throw new InvalidArgumentException('ClusterTopology handshakeTimeout must be positive.');
         }
 
         return new self(
@@ -99,6 +113,8 @@ final readonly class ClusterTopology
             gossipInterval: $gossipInterval ?? Duration::seconds(1),
             reconnectInitialBackoff: $reconnectInitialBackoff ?? Duration::millis(100),
             reconnectMaxBackoff: $reconnectMaxBackoff ?? Duration::seconds(30),
+            handshakeTimeout: $resolvedHandshakeTimeout,
+            maxInboundLinks: $maxInboundLinks,
             singleNode: $singleNode,
             tls: $tls,
         );
@@ -143,6 +159,32 @@ final readonly class ClusterTopology
             'phiMinStdDev' => $minStdDev ?? $this->phiMinStdDev,
             'phiSampleSize' => $sampleSize ?? $this->phiSampleSize,
             'phiThreshold' => $phiThreshold ?? $this->phiThreshold,
+        ]);
+    }
+
+    /**
+     * Tune the inbound-connection DoS guards: `$handshakeTimeout` is how long an accepted link
+     * has to complete a valid handshake before it is closed; `$maxInboundLinks` caps concurrent
+     * accepted links.
+     *
+     * @throws InvalidArgumentException when handshakeTimeout is not positive or maxInboundLinks < 1.
+     */
+    public function withInboundLimits(?Duration $handshakeTimeout = null, ?int $maxInboundLinks = null): self
+    {
+        $resolvedHandshakeTimeout = $handshakeTimeout ?? $this->handshakeTimeout;
+        $resolvedMaxInboundLinks = $maxInboundLinks ?? $this->maxInboundLinks;
+
+        if (!$resolvedHandshakeTimeout->isGreaterThan(Duration::zero())) {
+            throw new InvalidArgumentException('ClusterTopology handshakeTimeout must be positive.');
+        }
+
+        if ($resolvedMaxInboundLinks < 1) {
+            throw new InvalidArgumentException('ClusterTopology maxInboundLinks must be at least 1.');
+        }
+
+        return clone($this, [
+            'handshakeTimeout' => $resolvedHandshakeTimeout,
+            'maxInboundLinks' => $resolvedMaxInboundLinks,
         ]);
     }
 }

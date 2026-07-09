@@ -76,6 +76,7 @@ use function explode;
 use function extension_loaded;
 use function ltrim;
 use function preg_replace;
+use function spl_object_id;
 use function strlen;
 
 /**
@@ -118,6 +119,9 @@ final class ClusterNode
 
     /** @var array<string, PeerLink> Accepted inbound links keyed by NodeAddress::toPathPrefix() */
     private array $acceptedLinks = [];
+
+    /** @var array<int, true> Live accepted inbound links by object id — bounds concurrency (see ClusterTopology::$maxInboundLinks). */
+    private array $inboundLinks = [];
 
     /** @var array<string, PeerConnection> Outbound connections keyed by (string) NodeEndpoint */
     private array $outboundConns = [];
@@ -472,19 +476,52 @@ final class ClusterNode
      */
     private function wireInboundLink(PeerLink $link, InboxRouter $inboxRouter): void
     {
+        // Concurrency cap: inbound links are unauthenticated, so refuse new ones once the live
+        // ceiling is reached rather than let a peer exhaust memory with endless open sockets.
+        if (count($this->inboundLinks) >= $this->topology->maxInboundLinks) {
+            $this->safely(fn(): mixed => $this->logger->warning('cluster.inbound.capacity_exceeded', [
+                'limit' => $this->topology->maxInboundLinks,
+                'peer_endpoint' => $link->remote() !== null ? (string) $link->remote() : 'unknown',
+            ]));
+            $link->close();
+
+            return;
+        }
+
+        $linkId = spl_object_id($link);
+        $this->inboundLinks[$linkId] = true;
+
         /** @var NodeAddress|null $peerAddr Learned from the first Handshake frame. */
         $peerAddr = null;
 
         /** @var FrameIngress|null $ingress Created once peerAddr is known. */
         $ingress = null;
 
-        $link->onFrame(function (Frame $frame) use ($link, &$peerAddr, &$ingress, $inboxRouter): void {
+        // Slowloris guard: close the link if it never completes a valid handshake in time. The
+        // receive loop tolerates recv timeouts, so an unidentified link would otherwise idle forever.
+        $deadline = $this->runtime->scheduleOnce(
+            $this->topology->handshakeTimeout,
+            function () use (&$peerAddr, $link, $linkId): void {
+                if ($peerAddr !== null) {
+                    return;
+                }
+
+                unset($this->inboundLinks[$linkId]);
+                $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.timeout', [
+                    'peer_endpoint' => $link->remote() !== null ? (string) $link->remote() : 'unknown',
+                ]));
+                $link->close();
+            },
+        );
+
+        $link->onFrame(function (Frame $frame) use ($link, &$peerAddr, &$ingress, $inboxRouter, $deadline): void {
             if ($frame->type === FrameType::Handshake) {
                 $span = $this->safeStartHandshakeSpan();
                 $parsed = $this->parseHandshakeFrame($frame);
 
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
+                    $deadline->cancel();
                     $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
@@ -542,7 +579,10 @@ final class ClusterNode
             $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
         });
 
-        $link->onClose(function () use (&$peerAddr): void {
+        $link->onClose(function () use (&$peerAddr, $linkId, $deadline): void {
+            $deadline->cancel();
+            unset($this->inboundLinks[$linkId]);
+
             if ($peerAddr !== null) {
                 $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
                 $this->safeDispatch(new PeerDisconnected($peerAddr));
