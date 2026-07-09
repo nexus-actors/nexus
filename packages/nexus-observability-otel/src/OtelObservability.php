@@ -13,9 +13,12 @@ use Monadial\Nexus\Observability\Otel\Trace\OtelTracer;
 use Monadial\Nexus\Observability\Trace\SpanContext;
 use Monadial\Nexus\Observability\Trace\Tracer;
 use OpenTelemetry\API\Trace\Span as OtelApiSpan;
+use OpenTelemetry\SDK\Logs\LoggerProviderInterface;
 use OpenTelemetry\SDK\Metrics\MeterProviderInterface;
 use OpenTelemetry\SDK\Trace\TracerProviderInterface;
 use Override;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @psalm-api
@@ -30,14 +33,32 @@ final readonly class OtelObservability implements Observability
 
     private Meter $meter;
 
+    private string $scope;
+
     public function __construct(
         private TracerProviderInterface $tracerProvider,
         private MeterProviderInterface $meterProvider,
         private ContextPropagator $propagator,
         string $instrumentationScope = 'nexus',
+        private ?LoggerProviderInterface $loggerProvider = null,
     ) {
         $this->tracer = new OtelTracer($tracerProvider->getTracer($instrumentationScope));
         $this->meter = new OtelMeter($meterProvider->getMeter($instrumentationScope));
+        $this->scope = $instrumentationScope;
+    }
+
+    /**
+     * A PSR-3 logger that exports records over OTLP (correlated with the active trace).
+     * Returns a no-op logger when logs are not configured. Not part of the {@see Observability}
+     * contract — callers opt in by depending on the concrete OTel provider.
+     */
+    public function psrLogger(?string $name = null): LoggerInterface
+    {
+        if ($this->loggerProvider === null) {
+            return new NullLogger();
+        }
+
+        return new OtelPsrLogger($this->loggerProvider->getLogger($name ?? $this->scope));
     }
 
     #[Override]
@@ -90,6 +111,7 @@ final readonly class OtelObservability implements Observability
     {
         $this->tracerProvider->forceFlush();
         $this->meterProvider->forceFlush();
+        $this->loggerProvider?->forceFlush();
     }
 
     #[Override]
@@ -97,5 +119,6 @@ final readonly class OtelObservability implements Observability
     {
         $this->tracerProvider->shutdown();
         $this->meterProvider->shutdown();
+        $this->loggerProvider?->shutdown();
     }
 }
