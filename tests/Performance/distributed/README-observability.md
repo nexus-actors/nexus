@@ -21,8 +21,10 @@ The script builds the image, starts Grafana LGTM, runs the mesh pointed at it, a
     cluster TCP messaging, ask & membership, serialization, runtime/Swoole, persistence,
     worker pool, and distributed tracing in one board.
   - **“Nexus Cluster TCP — Traces & Metrics”** — the trace-focused cluster board.
-- *Explore → Tempo* → TraceQL: `{ resource.service.name = "nexus-cluster-mesh" }`
+- *Explore → Tempo* → TraceQL: `{ resource.service.name = "nexus-cluster-mesh" }` — traces
+  are chained (`cluster.send` → remote `cluster.receive`).
 - *Explore → Prometheus* → any metric starting `nexus_cluster_`, `nexus_actor_system_`, or `traces_spanmetrics_`
+- *Explore → Loki* → `{service_name="nexus-cluster-mesh"}` — app/actor logs, correlated with traces.
 
 Tear the stack down when finished:
 

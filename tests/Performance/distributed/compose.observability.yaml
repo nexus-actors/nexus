@@ -37,12 +37,14 @@ services:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
     volumes:
-      - ./grafana/dashboards/nexus-cluster-tcp.json:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-cluster-tcp.json:ro
-      - ./grafana/dashboards/nexus-overview.json:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-overview.json:ro
+      # A directory provider (otel-lgtm's own providers point at single files, so a JSON
+      # dropped in the provisioning dir is not scanned) + the dashboards it loads.
+      - ./grafana/provisioning/nexus-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-dashboards.yaml:ro
+      - ./grafana/dashboards:/otel-lgtm/nexus-dashboards:ro
     networks:
       - mesh-net
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
       interval: 5s
       timeout: 3s
       retries: 40

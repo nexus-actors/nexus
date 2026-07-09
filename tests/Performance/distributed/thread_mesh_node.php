@@ -211,6 +211,11 @@ function runMeshNode(
     $expectedNodes = $workers * $threads;
 
     $observability = buildObservability($tag, $workerId, $threadId);
+    // PSR-3 logger that exports over OTLP (to Loki) when observability is on, correlated with
+    // the active trace. Null when disabled → the system/cluster use their own defaults.
+    $meshLogger = $observability instanceof OtelObservability
+        ? $observability->psrLogger("mesh-{$tag}")
+        : null;
     // Tells per batch before yielding — lower it (SEND_BATCH) for a readable observability
     // demo so metrics/traces reflect a gentle rate rather than link saturation.
     $sendBatch = envInt('SEND_BATCH', 500);
@@ -241,7 +246,7 @@ function runMeshNode(
     };
 
     $runtime = new SwooleRuntime();
-    $system = ActorSystem::create("mesh-{$tag}", $runtime, eventDispatcher: $dispatcher);
+    $system = ActorSystem::create("mesh-{$tag}", $runtime, logger: $meshLogger, eventDispatcher: $dispatcher);
 
     // Emit ActorSystem gauges (live actors, dead letters, running) alongside the cluster
     // metrics, so the Grafana overview dashboard's "Actor system" row is live for this node.
@@ -313,6 +318,7 @@ function runMeshNode(
         $topology,
         $registry,
         $observability,
+        $meshLogger,
         $sendBatch,
         $peerAddrs,
         $expectedNodes,
@@ -339,15 +345,16 @@ function runMeshNode(
             // Cluster debug logging is OPT-IN (MESH_DEBUG=1): a blocking stderr logger on
             // the frame path stalls the whole thread when the container log pipe backs
             // up, starving gossip timers and causing the very suspicion it then logs.
+            $bootLogger = $meshLogger ?? (getenv('MESH_DEBUG') === '1'
+                ? new MeshStderrLogger($tag)
+                : null);
             $node = ClusterNode::boot(
                 $system,
                 $topology,
                 $registry,
                 $transport,
                 $observability,
-                getenv('MESH_DEBUG') === '1'
-                    ? new MeshStderrLogger($tag)
-                    : null,
+                $bootLogger,
             );
 
             // Periodically push batched spans + the current metric snapshot to the collector so
@@ -422,6 +429,7 @@ function runMeshNode(
 
             $converged = true;
             printf("[%s] converged: %d/%d nodes Up\n", $tag, $upCount, $expectedNodes);
+            $meshLogger?->info('cluster converged', ['expected' => $expectedNodes, 'node' => $tag, 'up' => $upCount]);
 
             // Synchronized load window: every node starts at the shared START_AT epoch and
             // stops DURATION later (containers share the host clock). Without this, nodes
@@ -518,6 +526,14 @@ function runMeshNode(
                         $suspected,
                         $down,
                     );
+                    $meshLogger?->info('mesh health', [
+                        'down' => $down,
+                        'elapsed_s' => $elapsed,
+                        'mem_mb' => round($memMb, 1),
+                        'node' => $tag,
+                        'rate_msg_s' => (int) $rate,
+                        'suspected' => $suspected,
+                    ]);
 
                     $intervalStartNs = $nowNs;
                     $intervalStartReceived = $received;
