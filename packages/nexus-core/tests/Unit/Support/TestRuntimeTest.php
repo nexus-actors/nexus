@@ -48,6 +48,16 @@ final class TestRuntimeTest extends TestCase
     }
 
     #[Test]
+    public function deferTracksTheTaskAsSpawnedWork(): void
+    {
+        $runtime = new TestRuntime();
+
+        $runtime->defer(static function (): void {});
+
+        self::assertCount(1, $runtime->spawnedActors());
+    }
+
+    #[Test]
     public function runAndShutdownToggleIsRunning(): void
     {
         $runtime = new TestRuntime();

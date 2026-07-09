@@ -48,6 +48,11 @@ final class TestRuntime implements Runtime
         return $id;
     }
 
+    public function defer(callable $task): void
+    {
+        $this->spawn($task);
+    }
+
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable
     {
         $microseconds = (int) ($delay->toNanos() / 1000);

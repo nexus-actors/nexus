@@ -55,6 +55,7 @@ $system  = ActorSystem::create('my-app', $runtime);
 - `name(): string` — human-readable runtime identifier used in log output and diagnostics.
 - `createMailbox(MailboxConfig $config): Mailbox` — allocate a new mailbox backed by the runtime's native queue (SplQueue for Fiber, Swoole channel for Swoole).
 - `spawn(callable $actorLoop): string` — launch a Fiber or coroutine to run the actor's message-processing loop; returns an opaque spawn ID.
+- `defer(callable $task): void` — hand a one-shot task to the runtime to run asynchronously as soon as possible; fire-and-forget (no ID, no delay). Use it instead of `spawn()` when you don't need to track the work, or instead of `scheduleOnce()` with a zero delay.
 - `scheduleOnce(Duration $delay, callable $callback): Cancellable` — fire a callback once after `$delay`; returns a handle to cancel it.
 - `scheduleRepeatedly(Duration $initialDelay, Duration $interval, callable $callback): Cancellable` — fire a callback on a fixed interval until cancelled.
 - `yield(): void` — voluntarily yield control to the scheduler (important in tight processing loops).

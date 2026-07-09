@@ -89,6 +89,12 @@ final class StepRuntime implements Runtime
     }
 
     #[Override]
+    public function defer(callable $task): void
+    {
+        $this->spawn($task);
+    }
+
+    #[Override]
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable
     {
         $fireAt = $this->addDuration($this->clock->now(), $delay);

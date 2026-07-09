@@ -27,6 +27,7 @@ final class MyRuntime implements Runtime
 {
     public function createMailbox(MailboxConfig $config): Mailbox { /* ... */ }
     public function spawn(callable $actorLoop): string { /* ... */ }
+    public function defer(callable $task): void { /* ... */ }
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable { /* ... */ }
     public function scheduleRepeatedly(Duration $initial, Duration $interval, callable $callback): Cancellable { /* ... */ }
     public function yield(): void { /* ... */ }
