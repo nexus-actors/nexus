@@ -66,6 +66,14 @@
         </testsuite>
         <testsuite name="integration-cluster-loopback">
             <directory>tests/Integration/ClusterTcp</directory>
+            <!--
+                The Swoole/ subdir holds the real-socket ext-swoole tests; they are covered by the
+                integration-cluster suite in the Xdebug-free php-swoole container (make test-cluster).
+                This loopback suite runs in the php-full container (Swoole + Xdebug), where Xdebug's
+                zend_execute_ex hook + Swoole coroutines segfault at process teardown (exit 139 after a
+                clean OK). Excluding them keeps this suite true to its "no ext-swoole required" purpose.
+            -->
+            <exclude>tests/Integration/ClusterTcp/Swoole</exclude>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
