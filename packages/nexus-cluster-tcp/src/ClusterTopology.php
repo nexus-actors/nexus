@@ -51,6 +51,7 @@ final readonly class ClusterTopology
         public Duration $reconnectMaxBackoff,
         public Duration $handshakeTimeout,
         public int $maxInboundLinks,
+        public int $maxFrameSize,
         public bool $singleNode,
         public ?TlsConfig $tls,
         public ?string $authSecret,
@@ -116,6 +117,7 @@ final readonly class ClusterTopology
             reconnectMaxBackoff: $reconnectMaxBackoff ?? Duration::seconds(30),
             handshakeTimeout: $resolvedHandshakeTimeout,
             maxInboundLinks: $maxInboundLinks,
+            maxFrameSize: 8 * 1024 * 1024,
             singleNode: $singleNode,
             tls: $tls,
             authSecret: null,
@@ -167,6 +169,24 @@ final readonly class ClusterTopology
     public function withTls(?TlsConfig $tls): self
     {
         return clone($this, ['tls' => $tls]);
+    }
+
+    /**
+     * Cap the maximum decoded frame body size (bytes). A peer that declares a larger
+     * frame is rejected before its body is buffered, bounding per-link reassembly
+     * memory to roughly this value. The default (8 MiB) is generous for large actor
+     * messages; lower it on control-heavy meshes to tighten the memory-DoS surface,
+     * but keep it above your largest legitimate message.
+     *
+     * @throws InvalidArgumentException when the size is not positive.
+     */
+    public function withMaxFrameSize(int $maxFrameSize): self
+    {
+        if ($maxFrameSize < 1) {
+            throw new InvalidArgumentException('ClusterTopology maxFrameSize must be at least 1 byte.');
+        }
+
+        return clone($this, ['maxFrameSize' => $maxFrameSize]);
     }
 
     public function withFailureDetection(

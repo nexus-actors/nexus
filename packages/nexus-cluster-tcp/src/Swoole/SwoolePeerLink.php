@@ -87,8 +87,9 @@ final class SwoolePeerLink implements PeerLink
          * returns and the $client local variable goes out of scope.
          */
         private readonly ?Client $clientOwner = null,
+        int $maxFrameSize = 8 * 1024 * 1024,
     ) {
-        $this->codec = new FrameCodec();
+        $this->codec = new FrameCodec($maxFrameSize);
         $this->writeLock = new Channel(1);
         $this->writeLock->push(true);
         $this->startReceiveLoop();

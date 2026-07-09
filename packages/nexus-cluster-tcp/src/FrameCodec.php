@@ -30,8 +30,10 @@ use function unpack;
  * feed `rest` back on the next read, enabling byte-by-byte reassembly without
  * copies beyond the buffer.
  *
- * Max-frame-size wiring to ClusterTopology is deferred to C1.6 (ClusterNode);
- * the constructor parameter is the hook for that wiring.
+ * `maxFrameSize` bounds the declared body length: a peer that declares a larger
+ * frame is rejected at the 4-byte prefix, before its body is buffered, so per-link
+ * reassembly memory stays bounded by this value. It is wired from
+ * `ClusterTopology::withMaxFrameSize()` through `SwooleMeshTransport`/`SwoolePeerLink`.
  */
 final class FrameCodec
 {

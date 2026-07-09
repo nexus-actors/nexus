@@ -52,9 +52,42 @@ final class ClusterTopologyTest extends TestCase
         self::assertEquals(Duration::seconds(1), $topology->gossipInterval);
         self::assertEquals(Duration::seconds(10), $topology->handshakeTimeout);
         self::assertSame(1_024, $topology->maxInboundLinks);
+        self::assertSame(8 * 1024 * 1024, $topology->maxFrameSize);
         self::assertFalse($topology->singleNode);
         self::assertNull($topology->tls);
         self::assertNull($topology->authSecret);
+    }
+
+    #[Test]
+    public function withMaxFrameSizeReturnsNewInstanceWithTheCap(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $tightened = $topology->withMaxFrameSize(1024 * 1024);
+
+        self::assertSame(8 * 1024 * 1024, $topology->maxFrameSize, 'original is unchanged');
+        self::assertSame(1024 * 1024, $tightened->maxFrameSize);
+    }
+
+    #[Test]
+    public function withMaxFrameSizeRejectsANonPositiveCap(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        $this->expectException(InvalidArgumentException::class);
+        $topology->withMaxFrameSize(0);
     }
 
     #[Test]

@@ -64,8 +64,11 @@ final class SwooleMeshTransport implements MeshTransport
      */
     private ?Server $prebound = null;
 
-    public function __construct(private readonly Runtime $runtime, private readonly ?TlsConfig $tls = null)
-    {
+    public function __construct(
+        private readonly Runtime $runtime,
+        private readonly ?TlsConfig $tls = null,
+        private readonly int $maxFrameSize = 8 * 1024 * 1024,
+    ) {
         if (!extension_loaded('swoole')) {
             throw new RuntimeException(
                 'SwooleMeshTransport requires ext-swoole. '
@@ -131,7 +134,7 @@ final class SwooleMeshTransport implements MeshTransport
 
         $server->handle(function (Connection $conn) use ($onAccept): void {
             $socket = $conn->exportSocket();
-            $link = new SwoolePeerLink($socket, $this->runtime, null);
+            $link = new SwoolePeerLink($socket, $this->runtime, null, null, $this->maxFrameSize);
             $this->links[] = $link;
             $onAccept($link);
         });
@@ -188,7 +191,7 @@ final class SwooleMeshTransport implements MeshTransport
         // Pass $client to SwoolePeerLink to keep it alive.
         // Swoole\Coroutine\Client::__destruct() closes the underlying socket;
         // without this reference the socket closes as soon as connect() returns.
-        $link = new SwoolePeerLink($socket, $this->runtime, $endpoint, $client);
+        $link = new SwoolePeerLink($socket, $this->runtime, $endpoint, $client, $this->maxFrameSize);
         $this->links[] = $link;
 
         return $link;

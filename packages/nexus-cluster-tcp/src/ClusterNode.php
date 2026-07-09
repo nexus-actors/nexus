@@ -1027,7 +1027,7 @@ final class ClusterNode
     private static function selectTransport(Runtime $runtime, ClusterTopology $topology): MeshTransport
     {
         if (extension_loaded('swoole') && $runtime instanceof SwooleRuntime) {
-            return new SwooleMeshTransport($runtime, $topology->tls);
+            return new SwooleMeshTransport($runtime, $topology->tls, $topology->maxFrameSize);
         }
 
         return new LoopbackMeshTransport(new LoopbackHub(), $runtime);
@@ -1048,8 +1048,7 @@ final class ClusterNode
         Closure $sender,
         MessagePayloadCodec $payloadCodec,
         Meter $meter,
-    ): OutboundSink
-    {
+    ): OutboundSink {
         return new class ($sender, $payloadCodec, $meter) implements OutboundSink {
             private ?Counter $framesSent = null;
 
