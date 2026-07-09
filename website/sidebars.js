@@ -58,6 +58,7 @@ const sidebars = {
         'guides/standalone-integration',
         'guides/messenger-bridge',
         'guides/clustering-over-tcp',
+        'guides/cluster-tcp-benchmarks',
       ],
     },
     {
