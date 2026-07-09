@@ -8,13 +8,12 @@ use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
-use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Serialization\Exception\MessageDeserializationException;
-use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
@@ -28,24 +27,20 @@ use function strlen;
  * {@see InboxRouter}. Each instance is associated with one peer (the `$origin` address
  * is fixed at construction).
  *
- * {@see FrameType::Message} frames are deserialized to a {@see MessagePayload} VO via the
- * injected serializer and handed to {@see InboxRouter::route()} with the peer's node address
- * as the origin. All other frame types are forwarded to the optional `$fallback` handler or
- * silently ignored — they are the responsibility of the membership/handshake layer.
+ * {@see FrameType::Message} frames are decoded to a
+ * {@see \Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload} VO via the hand-rolled
+ * {@see MessagePayloadCodec} (the envelope is the per-message hot path; the generic
+ * Valinor-backed serializer stays on the low-frequency handshake/gossip frames) and handed
+ * to {@see InboxRouter::route()} with the peer's node address as the origin. All other
+ * frame types are forwarded to the optional `$fallback` handler or silently ignored — they
+ * are the responsibility of the membership/handshake layer.
  *
  * Usage:
- *   $ingress = new FrameIngress($router, $peerAddress, $serializer);
+ *   $ingress = new FrameIngress($router, $peerAddress, $payloadCodec);
  *   $peerLink->onFrame(fn(Frame $frame) => $ingress->ingest($frame));
  */
 final class FrameIngress
 {
-    /**
-     * The well-known cluster type name for MessagePayload, set via its #[MessageType] attribute.
-     *
-     * @see \Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload
-     */
-    private const string MESSAGE_PAYLOAD_TYPE = 'cluster.message';
-
     /** @var Closure(Frame): void|null */
     private readonly ?Closure $fallback;
 
@@ -59,7 +54,7 @@ final class FrameIngress
     public function __construct(
         private readonly InboxRouter $router,
         private readonly NodeAddress $origin,
-        private readonly MessageSerializer $payloadSerializer,
+        private readonly MessagePayloadCodec $payloadCodec,
         ?callable $fallback = null,
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly Meter $meter = new NoopMeter(),
@@ -92,20 +87,11 @@ final class FrameIngress
         }
 
         try {
-            $payload = $this->payloadSerializer->deserialize($frame->payload, self::MESSAGE_PAYLOAD_TYPE);
+            $payload = $this->payloadCodec->unpack($frame->payload);
         } catch (MessageDeserializationException $e) {
             $this->logger->warning('FrameIngress: dropping undecodable Message frame from peer', [
                 'error' => $e->getMessage(),
                 'peer' => $this->origin->toPathPrefix(),
-            ]);
-
-            return;
-        }
-
-        if (!$payload instanceof MessagePayload) {
-            $this->logger->warning('FrameIngress: deserializer returned unexpected type for cluster.message', [
-                'peer' => $this->origin->toPathPrefix(),
-                'type' => $payload::class,
             ]);
 
             return;

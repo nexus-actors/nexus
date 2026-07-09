@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\PeerConnection;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Histogram;
@@ -18,7 +19,6 @@ use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
-use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -35,7 +35,7 @@ use function strlen;
  * For each send:
  *   1. Resolve the target {@see NodeAddress} to a {@see NodeEndpoint} via the injected
  *      {@see EndpointResolver}.
- *   2. Serialize the {@see MessagePayload} to bytes using the injected payload serializer.
+ *   2. Pack the {@see MessagePayload} to bytes via the hand-rolled {@see MessagePayloadCodec}.
  *   3. Wrap the bytes in a {@see FrameType::Message} frame and enqueue it on the peer's
  *      {@see PeerConnection} (which handles buffering and reconnect automatically).
  *
@@ -58,7 +58,7 @@ final class MeshOutboundSink implements OutboundSink
         private readonly EndpointResolver $resolver,
         private readonly MeshTransport $transport,
         private readonly Runtime $runtime,
-        private readonly MessageSerializer $payloadSerializer,
+        private readonly MessagePayloadCodec $payloadCodec,
         private readonly Duration $reconnectInitialBackoff,
         private readonly Duration $reconnectMaxBackoff,
         private readonly LoggerInterface $logger = new NullLogger(),
@@ -81,7 +81,7 @@ final class MeshOutboundSink implements OutboundSink
         }
 
         $connection = $this->getOrCreate($endpoint);
-        $bytes = $this->payloadSerializer->serialize($payload);
+        $bytes = $this->payloadCodec->pack($payload);
         $this->safely(fn(): mixed => $this->bytesSentHistogram()->record(strlen($bytes)));
         $connection->sendFrame(new Frame(FrameType::Message, $bytes));
         $this->safely(fn(): mixed => $this->framesSentCounter()->add(1, ['frame.type' => 'message']));

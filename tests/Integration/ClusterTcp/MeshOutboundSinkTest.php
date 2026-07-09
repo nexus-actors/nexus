@@ -19,6 +19,7 @@ use Monadial\Nexus\Cluster\Tcp\Messaging\NoopTraceContextExtractor;
 use Monadial\Nexus\Cluster\Tcp\Messaging\TcpAskRegistry;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
 use Monadial\Nexus\Core\Actor\ActorPath;
@@ -30,7 +31,6 @@ use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
-use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -72,7 +72,7 @@ final class MeshOutboundSinkTest extends TestCase
         $registry->expose($actorRef);
 
         $codec = $this->codec();
-        $payloadSerializer = $this->payloadSerializer();
+        $payloadCodec = new MessagePayloadCodec();
 
         $router = new InboxRouter(
             new LocalDelivery($registry),
@@ -82,14 +82,14 @@ final class MeshOutboundSinkTest extends TestCase
                 new MapEndpointResolver([]),
                 $nodeBTransport,
                 $runtime,
-                $payloadSerializer,
+                $payloadCodec,
                 Duration::millis(10),
                 Duration::millis(100),
             ),
             new NoopTraceContextExtractor(),
         );
 
-        $ingress = new FrameIngress($router, $nodeA, $payloadSerializer);
+        $ingress = new FrameIngress($router, $nodeA, $payloadCodec);
 
         // Node B serves: wire FrameIngress to every inbound link.
         $nodeBTransport->serve(
@@ -107,7 +107,7 @@ final class MeshOutboundSinkTest extends TestCase
             $resolver,
             $nodeATransport,
             $runtime,
-            $payloadSerializer,
+            $payloadCodec,
             Duration::millis(10),
             Duration::millis(100),
         );
@@ -153,7 +153,7 @@ final class MeshOutboundSinkTest extends TestCase
             new MapEndpointResolver([]),  // empty — no endpoint for unknownNode
             $transport,
             new FiberRuntime(),
-            $this->payloadSerializer(),
+            new MessagePayloadCodec(),
             Duration::millis(10),
             Duration::millis(100),
         );
@@ -185,13 +185,5 @@ final class MeshOutboundSinkTest extends TestCase
             new MessagePackMessageSerializer($registry),
             $registry,
         );
-    }
-
-    private function payloadSerializer(): MessageSerializer
-    {
-        $registry = new TypeRegistry();
-        $registry->registerFromAttribute(MessagePayload::class);
-
-        return new MessagePackMessageSerializer($registry);
     }
 }

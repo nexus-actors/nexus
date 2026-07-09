@@ -40,6 +40,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
 use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\Swoole\SwooleMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextExtractor;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextInjector;
@@ -140,6 +141,7 @@ final class ClusterNode
         private readonly MeshTransport $transport,
         private readonly MutableEndpointRegistry $endpointRegistry,
         private readonly MessageSerializer $frameSerializer,
+        private readonly MessagePayloadCodec $payloadCodec,
         private readonly Runtime $runtime,
         private readonly ActorSystem $system,
         private readonly Tracer $tracer,
@@ -212,8 +214,11 @@ final class ClusterNode
             }
         };
 
-        // 7. Outbound sink for user messages (ClusterRef::tell / ask).
-        $outboundSink = self::buildOutboundSink($sender, $frameSerializer, $meter);
+        // 7. Outbound sink for user messages (ClusterRef::tell / ask). The MessagePayload
+        //    envelope is the per-message hot path, so it uses the hand-rolled codec rather
+        //    than the generic Valinor-backed serializer (which stays on handshake/gossip).
+        $payloadCodec = new MessagePayloadCodec();
+        $outboundSink = self::buildOutboundSink($sender, $payloadCodec, $meter);
 
         // 8. Inbox router + ref factory — wire real or noop trace seams from $observability.
         $traceInjector = $observability->isEnabled()
@@ -284,6 +289,7 @@ final class ClusterNode
             transport: $meshTransport,
             endpointRegistry: $endpointRegistry,
             frameSerializer: $frameSerializer,
+            payloadCodec: $payloadCodec,
             runtime: $runtime,
             system: $system,
             tracer: $tracer,
@@ -523,7 +529,7 @@ final class ClusterNode
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $deadline->cancel();
                     $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
-                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer, meter: $this->meter);
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
@@ -626,7 +632,7 @@ final class ClusterNode
 
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
-                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->frameSerializer, meter: $this->meter);
+                    $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
@@ -985,25 +991,25 @@ final class ClusterNode
      */
     private static function buildOutboundSink(
         Closure $sender,
-        MessageSerializer $frameSerializer,
+        MessagePayloadCodec $payloadCodec,
         Meter $meter,
     ): OutboundSink
     {
-        return new class ($sender, $frameSerializer, $meter) implements OutboundSink {
+        return new class ($sender, $payloadCodec, $meter) implements OutboundSink {
             private ?Counter $framesSent = null;
 
             private ?Histogram $bytesSent = null;
 
             public function __construct(
                 private readonly Closure $sender,
-                private readonly MessageSerializer $frameSerializer,
+                private readonly MessagePayloadCodec $payloadCodec,
                 private readonly Meter $meter,
             ) {}
 
             #[Override]
             public function send(NodeAddress $target, MessagePayload $payload): void
             {
-                $bytes = $this->frameSerializer->serialize($payload);
+                $bytes = $this->payloadCodec->pack($payload);
                 $this->safely(fn(): mixed => $this->bytesSentHistogram()->record(strlen($bytes)));
                 ($this->sender)($target->toPathPrefix(), new Frame(FrameType::Message, $bytes));
                 $this->safely(fn(): mixed => $this->framesSentCounter()->add(1, ['frame.type' => 'message']));
