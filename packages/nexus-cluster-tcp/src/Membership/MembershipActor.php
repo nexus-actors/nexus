@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipTick;
@@ -79,7 +80,8 @@ final class MembershipActor implements StatefulActorHandler
         ?Duration $heartbeatInterval = null,
         ?Duration $gossipInterval = null,
         private readonly Meter $meter = new NoopMeter(),
-    private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly MembershipEventDeduplicator $deduplicator = new MembershipEventDeduplicator(),
     ) {
         $this->heartbeatInterval = $heartbeatInterval ?? Duration::seconds(1);
         $this->gossipInterval = $gossipInterval ?? Duration::seconds(1);
@@ -213,7 +215,13 @@ final class MembershipActor implements StatefulActorHandler
      */
     private function apply(MembershipTransition $transition): BehaviorWithState
     {
+        $now = $this->clock->now();
+
         foreach ($transition->events as $event) {
+            if (!$this->shouldPublishEvent($event, $transition->newView, $now)) {
+                continue;
+            }
+
             $this->eventPublisher->publish($event);
             $this->recordMembershipEvent($event);
         }
@@ -223,6 +231,36 @@ final class MembershipActor implements StatefulActorHandler
         }
 
         return BehaviorWithState::next(MembershipState::fromTransition($transition));
+    }
+
+    /**
+     * Gate an announcement through the {@see MembershipEventDeduplicator}: gossip view
+     * merges re-emit the SAME (peer, incarnation, status) news on every merge until the
+     * suspected node's incarnation refutation propagates, amplifying one transient into
+     * dozens of events across a mesh. The view transition itself is never filtered —
+     * only what is published and counted.
+     */
+    private function shouldPublishEvent(MembershipEvent $event, ClusterView $view, DateTimeImmutable $now): bool
+    {
+        [$node, $status] = match (true) {
+            $event instanceof NodeUp => [$event->node, 'up'],
+            $event instanceof NodeSuspected => [$event->node, 'suspected'],
+            $event instanceof NodeDown => [$event->node, 'down'],
+            default => [null, ''],
+        };
+
+        if ($node === null) {
+            return true;
+        }
+
+        $key = $node->toPathPrefix();
+        // A Down member has already been removed from the view — fall back to the last
+        // incarnation this deduplicator announced for the peer.
+        $incarnation = isset($view->members[$key])
+            ? $view->members[$key]->incarnation
+            : $this->deduplicator->lastKnownIncarnation($key);
+
+        return $this->deduplicator->shouldPublish($key, $incarnation, $status, $now);
     }
 
     /**

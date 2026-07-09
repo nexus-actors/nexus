@@ -270,6 +270,62 @@ final class MembershipActorTest extends TestCase
         self::assertSame($thirdPeer->toPathPrefix(), $upEvents[0]->node->toPathPrefix());
     }
 
+    /**
+     * Gossip echo dedup: after a member goes Down, stale gossip re-teaching the same
+     * incarnation re-adds it to the VIEW (correct — the merge is a join-semilattice)
+     * but must NOT re-announce it — in a 16-node mesh this readmission churn amplified
+     * one real departure into dozens of NodeSuspected/NodeDown events per observer.
+     */
+    #[Test]
+    public function staleGossipReaddingADownedMemberDoesNotReannounce(): void
+    {
+        $ref = $this->spawnActor();
+        $this->events->clear();
+
+        $thirdPeer = new NodeAddress('production', 'eu', 'payments', 'node-3');
+        $upGossip = new GossipPayload(
+            [
+                [
+                    'address' => $thirdPeer->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => 1,
+                ],
+            ],
+            [],
+        );
+
+        // Learn the member, then it leaves: NodeUp + NodeDown announced.
+        $ref->tell(new GossipReceived($this->peer, $upGossip));
+        $ref->tell(new LeaveReceived($thirdPeer));
+        $this->runtime->drain();
+
+        self::assertCount(1, $this->events->ofType(NodeUp::class));
+        self::assertCount(1, $this->events->ofType(NodeDown::class));
+
+        // Stale gossip still circulating the pre-departure suspicion re-adds the member.
+        $staleGossip = new GossipPayload(
+            [
+                [
+                    'address' => $thirdPeer->toPathPrefix(),
+                    'endpoint' => '10.0.0.3:7355',
+                    'incarnation' => 1,
+                    'status' => 2,
+                ],
+            ],
+            [],
+        );
+        $ref->tell(new GossipReceived($this->peer, $staleGossip));
+        $this->runtime->drain();
+
+        // The view may readmit it (merge semantics), but subscribers hear nothing new.
+        self::assertCount(
+            0,
+            $this->events->ofType(NodeSuspected::class),
+            'post-Down readmission churn must be suppressed, not re-announced',
+        );
+    }
+
     #[Test]
     public function stateEvolvesAcrossMessages(): void
     {

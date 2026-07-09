@@ -588,7 +588,14 @@ final class MembershipService
     {
         $candidates = [];
 
-        foreach ($view->upNodes() as $record) {
+        // Gossip targets include SUSPECT members, not just Up ones. A node that every
+        // peer has marked Suspect would otherwise receive no gossip at all — it could
+        // never see itself asserted Suspect, never bump its incarnation, and the
+        // refutation that ends a stale-suspicion epidemic would be unreachable
+        // (observed as persistent Suspect/Up flapping in a 16-node mesh). Its TCP
+        // links are still alive; gossiping to it costs one frame and delivers the
+        // refutation trigger. Down members are already out of the view entirely.
+        foreach ($view->nodes() as $record) {
             $key = $record->address->toPathPrefix();
 
             if ($key !== $this->selfKey) {

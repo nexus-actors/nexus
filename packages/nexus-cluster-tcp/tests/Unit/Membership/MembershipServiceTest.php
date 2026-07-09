@@ -662,6 +662,57 @@ final class MembershipServiceTest extends TestCase
         self::assertContains($this->peer->toPathPrefix(), $effect->targets);
     }
 
+    /**
+     * A SUSPECT member must remain a gossip target: if every peer that suspects a node
+     * stops gossiping to it, the node can never see itself asserted Suspect, never bumps
+     * its incarnation, and the refutation that ends a stale-suspicion epidemic becomes
+     * unreachable (observed as persistent Suspect/Up flapping in a 16-node mesh).
+     */
+    #[Test]
+    public function tickStillGossipsToSuspectMembers(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+
+        // Unexpected link close marks the peer Suspect (reason: Connection).
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
+
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertCount(1, $t3->effects);
+        $effect = $t3->effects[0];
+        self::assertInstanceOf(SendGossip::class, $effect);
+        self::assertContains(
+            $this->peer->toPathPrefix(),
+            $effect->targets,
+            'the suspected peer must still receive gossip so it can refute',
+        );
+    }
+
     #[Test]
     public function tickGossipPayloadContainsMemberAddresses(): void
     {

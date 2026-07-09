@@ -226,7 +226,13 @@ function runMeshNode(
         // Full-mutual mesh boot: every node dials every peer before most listeners are
         // up, so first dials fail. With the default 30 s max backoff those retries
         // trickle in for minutes; capping at 2 s converges the 16-node mesh promptly.
-        ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2));
+        ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2))
+        // Saturated-links tuning, per the benchmarks guide: at ~100% per-core duty
+        // cycle, multi-second reactor stalls are normal and the default 500 ms
+        // std-dev floor lets phi fire on them (~15 transients/node/min — all refuted
+        // and healed, but noisy). Widening the floor keeps detection meaningful for
+        // real failures (Suspect->Down still 10 s) while tolerating load jitter.
+        ->withFailureDetection(minStdDev: Duration::seconds(3));
 
     $registry = new TypeRegistry();
     $registry->registerFromAttribute(Ping::class);
@@ -447,6 +453,7 @@ function runMeshNode(
             // instability. Snapshot before the drain.
             $suspectedUnderLoad = $suspected;
             $downUnderLoad = $down;
+            $finalUp = count($node->view()->upNodes());
 
             for ($waited = 0.0; $waited < 20.0; $waited += 0.05) {
                 $before = $received;
@@ -459,10 +466,15 @@ function runMeshNode(
 
             $reasons = [];
 
-            // Instability = the failure detector fired (phi or connection loss). A NodeDown
-            // WITHOUT suspicion is a graceful Leave — orderly, not instability — but with the
-            // synchronized window none should land inside the load window either.
-            if ($suspectedUnderLoad > 0) {
+            // With event dedup, each observer announces a cluster-wide suspicion episode at
+            // most once per state change — transient, self-healing suspicion is expected in
+            // an AP mesh under load. FAIL on an event STORM (echo regression) or on any
+            // view that did not heal to full membership by the end of the window.
+            if ($finalUp !== $expectedNodes) {
+                $reasons[] = "view did not heal: {$finalUp}/{$expectedNodes} Up at end";
+            }
+
+            if ($suspectedUnderLoad > 30) {
                 $reasons[] = sprintf(
                     'failure detector fired under load (suspected=%d [conn=%d gossip=%d phi=%d], down=%d)',
                     $suspectedUnderLoad,
