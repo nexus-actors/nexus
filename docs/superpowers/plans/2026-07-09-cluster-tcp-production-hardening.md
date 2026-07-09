@@ -100,3 +100,55 @@ Merging after Phase 0 + 1.A alone drops most of the review's qualifiers. Everyth
 ## Acceptance for "production-ready clustering" (the phrase that matters)
 
 The distributed 16- and 32-node mesh soaks pass at **default** failure-detection settings (no hand tuning), with authentication on, through a hard-kill of one node mid-load, with flat gossip bytes/node as N grows — and an operator can follow the runbook to diagnose a NodeSuspected without reading the source.
+
+---
+
+## REVIEW ADDENDUM (2026-07-09) — 5-reviewer adversarial audit
+
+Five parallel adversarial reviewers (protocol, code-quality, concurrency, docs, security+perf) audited the package. Headline findings source-verified by the lead. Verdict: **merge-ready as an honestly-scoped v1 for trusted/authenticated/≤16-node/low-churn meshes AFTER the P0 blockers; NOT yet production-ready** for untrusted/large/high-churn. No finding is an architectural dead-end. The pure `MembershipService`/`ClusterView` core, the write-mutex, recv-timeout fix, auth-gate ordering, and DoS-map bounds all verified SOLID.
+
+### P0 — PRE-MERGE BLOCKERS (small, do before opening PR)
+- **[S1 HIGH ✓verified] maxFrameSize DoS.** `FrameCodec` defaults 8 MB (FrameCodec.php:38), NOT wired from `ClusterTopology` (no field), no per-link reassembly-buffer cap. 1024 inbound links × 8 MB ≈ 8 GB pin via slow partial frames (handshake timeout disarms after ID). Add `maxFrameSize` to topology (default ~1 MB), thread into SwoolePeerLink's FrameCodec, cap the reassembly buffer + `pendingFrames`.
+- **[C#1 HIGH ✓verified] Asks never fail on peer death.** `TcpAskRegistry` cleared only by reply or per-ask timeout; nothing in PeerDisconnected/NodeDown touches it. One dead peer parks coroutines + can exhaust the 10k cap → `AskCapacityExceededException` to HEALTHY peers. Track target NodeAddress per correlation id; add `failAllForNode()` on disconnect.
+- **[M1 MED] Silent decode failures.** 29 `catch(Throwable)`; handshake/gossip/leave/ack decode paths return null with no log/metric. Add `nexus.cluster.frames.malformed` counter + debug log per path.
+- **[Docs H2 HIGH] Example vs benchmark contradiction.** example README warns of false `Suspect→Down` flapping; benchmarks.md claims "zero suspicion PASS 16/16". This IS a symptom of P1#1 below. Re-verify on current HEAD; reconcile wording (honesty blocker an adopter meets day one).
+
+### P1 — PROTOCOL CORRECTNESS (the priority)
+- **[#1 HIGH ✓verified] Non-monotonic recovery clobber.** `recordLiveness:394` recovers a peer to Up keeping incarnation N; `pickWinner:126` lets incoming `Suspect@N` beat local `Up@N`. A locally-recovered peer flaps every gossip round until the OWNER refutes (higher incarnation). Root of the "noisy under load / needs minStdDev(3s)" symptom AND the example's false-Suspect. FIX: local liveness must not be demotable by equal-incarnation gossip (treat local Up as tie-winner, or only owner asserts own Up).
+- **[#4 HIGH] Incarnation-1 re-add regression.** `recordLiveness:410` re-adds a removed peer at hard-coded incarnation 1 → loses to lingering higher-incarnation Suspect/Down; feeds #1. Preserve last-known incarnation (dedup already tracks it) and re-add at `max(1, lastKnown)`.
+- **[#6 MED] Silent peer never suspected.** phi returns 0.0 on empty window (PhiAccrualDetector:103); a peer that handshakes once then goes silent is never suspected (no absolute no-heartbeat fallback). Add `now-lastArrival > maxNoHeartbeat → Suspect` independent of phi.
+- **[#7 MED] Wall-clock phi.** Detector fed `DateTimeImmutable` (wall clock); NTP/leap jumps poison the window (forward jump → spurious mass-Suspect). Use `hrtime(true)` monotonic (as LivenessThrottle already does).
+- **[#2 HIGH] Handshake seeds empty view.** `MembershipActor` passes `ClusterView::empty()` as theirView → transitive membership seeding is dead code; join relies purely on gossip. Fold HandshakeAck view members into the membership view.
+- **[#3 HIGH] No quorum/partition guard.** Symmetric partition → both halves Down each other → NodeDown storm on heal; a minority of 1 declares the rest Down and runs as singleton (single-writer guarantees are cluster-blind). Add `withMinimumMembers()` + degraded mode (no new Downs below floor).
+- **[1.A ⭐ / P3 MED] Control/data-plane separation.** Gossip/heartbeat share the peer socket + write-mutex with bulk Message frames → send-side HOL starves liveness under load = the phi TRIGGER. Dedicated control connection. (Reduces the trigger; #1 is why a triggered suspicion then flaps.)
+- Rejoin without process restart (applyRejoin wired; bypass dedup quiet-period on higher incarnation).
+
+### P2 — SECURITY
+- **[S2 MED ✓verified] Nonce never checked** → free replay within the 60 s window (HandshakeAuthenticator:74 validates MAC+freshness, never records nonce). Bounded seen-nonce set (TTL=window), or bind to TLS channel. At minimum document the 60 s replay window.
+- **[S3 MED] Endpoint-registry poisoning.** advertise endpoint never validated vs observed TCP peer; gossiped `addr→endpoint` mappings trusted → traffic-redirection primitive. Prefer observed peer addr; require auth to modify entries; rate-limit new endpoints/peer.
+- **[S5 LOW] Unauthenticated Leave for a THIRD node** → forced immediate Down + mesh relay. Require Leave.node == authenticated sender (self-departure only).
+- **[S4 MED] Insecure default.** No TLS + no auth = any reachable process joins. Boot-time warning when neither set on a non-singleNode topology.
+
+### P3 — CODE QUALITY
+- **[H4 HIGH] Triple-duplicated connection management.** `MeshOutboundSink` (tested) is bypassed by `buildOutboundSink` anon class + `sendByPrefix`, creating TWO independent socket pools to the same peer. Route everything through one `MeshOutboundSink`; delete the anon sink.
+- **[H1/H3 HIGH] ClusterNode god-class (1,119 LOC, ~5 responsibilities); near-duplicate onFrame handlers (already drifted → the acceptedLinks asymmetry).** Extract ConnectionRegistry / FramePump / Bootstrap; unify onFrame behind a PeerContext. Target <300 LOC.
+- **[H2 HIGH] Frame pump has zero direct tests** (falls out of H1/H3 extraction).
+- **[C#2 MED] Link-map leaks:** inbound onClose never unsets `acceptedLinks`; `outboundConns` + perpetual reconnect loops never cleaned on NodeDown.
+- **[C#3 MED ✓verified] SwooleRuntime.timerIds** added but never pruned (only cleared at shutdown) → unbounded RSS growth on a long-running node. (runtime-swoole pkg; cluster is heaviest user.) Prune in the one-shot callback + on cancel.
+
+### P4 — PERFORMANCE
+- **[P1 HIGH] Ask cost, not pipelining.** ~28K/s ask vs 100s-of-K tell is per-ask `random_bytes(16)` CSPRNG + per-ask `scheduleOnce` timer + span, not protocol serialization. Monotonic per-connection counter IDs + a single timing-wheel for timeouts closes most of the gap.
+- **[P2 HIGH] O(N²) gossip.** Full view every round; ~1.8 MB/s cluster-wide at N=100, ~180 MB/s at N=1000. Delta/digest (scuttlebutt) gossip.
+- **[P4 MED] No write-batching** — one `sendAll()` syscall per frame; coalesce per-peer per event-loop tick (highest tell-throughput win).
+- **[P5 MED] Document the per-node one-core ceiling + scale-out story** (multiple nodes/host or reactor sharding).
+
+### P5 — DOCS & HOMEPAGE
+- **[Docs H1 HIGH] No operations runbook.** operations/runbook.md + metrics.md have ZERO cluster content. Add: 7 `nexus.cluster.*` metric meanings + alert thresholds; NodeSuspected→Down lifecycle (reason Connection/Phi/Gossip playbook); auth-secret rotation across a live mesh; phi-tuning decision table by symptom; capacity vs N.
+- **[Docs M1/M2] API-table inaccuracies:** `withFailureDetection` 4th param `phiThreshold` undocumented; `create()` signature misrepresented (maxNoHeartbeat/phiSampleSize/phiMinStdDev are wither-only).
+- **[Docs M3] isAlive() doc stale** (aliveChecker seam now exists).
+- **[Docs M4/L1] Auth invisible on the guide + landing** (only in package trust-model). Add a "Membership authentication" subsection + one honest homepage line (open by default; set a secret).
+- **[Docs M5] Link the benchmarks page** from ref/guide/landing.
+- 32-node validation + K8s StatefulSet example (still owed).
+
+### Sequencing
+P0 (pre-merge) → P1#1+#4+1.A (the correctness/noise root) → P0-adjacent security S2/S3 → P3 H4/H1 (before more sprawl) → remainder. #1 and #4 share one root: **incarnation monotonicity across recovery/re-add** — the load-bearing invariant the whole LWW merge depends on. Fixing it (plus 1.A reducing the trigger) is what lets the soak pass at DEFAULT phi.
