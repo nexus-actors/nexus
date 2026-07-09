@@ -24,7 +24,9 @@ The script builds the image, starts Grafana LGTM, runs the mesh pointed at it, a
 - *Explore → Tempo* → TraceQL: `{ resource.service.name = "nexus-cluster-mesh" }` — traces
   are chained (`cluster.send` → remote `cluster.receive`).
 - *Explore → Prometheus* → any metric starting `nexus_cluster_`, `nexus_actor_system_`, or `traces_spanmetrics_`
-- *Explore → Loki* → `{service_name="nexus-cluster-mesh"}` — app/actor logs, correlated with traces.
+- *Explore → Loki* → `{service_name="nexus-cluster-mesh"}` — cluster + **internal actor**
+  logs (`actor spawned`, `actor state transition`, `actor signal`, supervision directives),
+  correlated with traces.
 
 Tear the stack down when finished:
 
