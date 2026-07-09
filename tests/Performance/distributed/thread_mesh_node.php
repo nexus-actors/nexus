@@ -41,6 +41,11 @@ use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Core\Net\Port;
+use Monadial\Nexus\Observability\Config\ObservabilityConfig;
+use Monadial\Nexus\Observability\NoopObservability;
+use Monadial\Nexus\Observability\Observability;
+use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
+use Monadial\Nexus\Observability\Otel\OtelObservability;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -98,6 +103,43 @@ function envInt(string $name, int $default): int
     return $value > 0
         ? $value
         : $default;
+}
+
+/** Read a string from the environment, falling back when unset or empty. */
+function envStr(string $name, string $default): string
+{
+    $value = getenv($name);
+
+    return $value === false || $value === ''
+        ? $default
+        : $value;
+}
+
+/**
+ * Build a per-node OpenTelemetry provider when OTEL_EXPORTER_OTLP_ENDPOINT is set
+ * (see run-observability.sh + compose.observability.yaml), otherwise a no-op. Each node
+ * exports under one service (`nexus-cluster-mesh`) tagged with its own node/worker/thread
+ * resource attributes, so Grafana can slice cluster.* metrics and traces per node.
+ */
+function buildObservability(string $tag, int $workerId, int $threadId): Observability
+{
+    $endpoint = getenv('OTEL_EXPORTER_OTLP_ENDPOINT');
+
+    if ($endpoint === false || $endpoint === '') {
+        return new NoopObservability();
+    }
+
+    $config = ObservabilityConfig::fromEnv([
+        'OTEL_EXPORTER_OTLP_ENDPOINT' => $endpoint,
+        'OTEL_RESOURCE_ATTRIBUTES' => sprintf('node.id=%s,worker.id=%d,thread.id=%d', $tag, $workerId, $threadId),
+        // Sample traces (the soak emits a cluster.send span per message); metrics are always
+        // fully aggregated. Override via OTEL_TRACES_SAMPLER_ARG.
+        'OTEL_SERVICE_NAME' => envStr('OTEL_SERVICE_NAME', 'nexus-cluster-mesh'),
+        'OTEL_TRACES_SAMPLER' => envStr('OTEL_TRACES_SAMPLER', 'traceidratio'),
+        'OTEL_TRACES_SAMPLER_ARG' => envStr('OTEL_TRACES_SAMPLER_ARG', '0.01'),
+    ]);
+
+    return ObservabilityFactory::fromConfig($config);
 }
 
 $workerId = envInt('WORKER_ID', 0);
@@ -166,6 +208,11 @@ function runMeshNode(
 ): void {
     $tag = "w{$workerId}t{$threadId}";
     $expectedNodes = $workers * $threads;
+
+    $observability = buildObservability($tag, $workerId, $threadId);
+    // Tells per batch before yielding — lower it (SEND_BATCH) for a readable observability
+    // demo so metrics/traces reflect a gentle rate rather than link saturation.
+    $sendBatch = envInt('SEND_BATCH', 500);
 
     $suspected = 0;
     $down = 0;
@@ -257,6 +304,8 @@ function runMeshNode(
         $system,
         $topology,
         $registry,
+        $observability,
+        $sendBatch,
         $peerAddrs,
         $expectedNodes,
         $duration,
@@ -282,9 +331,29 @@ function runMeshNode(
             // Cluster debug logging is OPT-IN (MESH_DEBUG=1): a blocking stderr logger on
             // the frame path stalls the whole thread when the container log pipe backs
             // up, starving gossip timers and causing the very suspicion it then logs.
-            $node = ClusterNode::boot($system, $topology, $registry, $transport, logger: getenv('MESH_DEBUG') === '1'
-                ? new MeshStderrLogger($tag)
-                : null);
+            $node = ClusterNode::boot(
+                $system,
+                $topology,
+                $registry,
+                $transport,
+                $observability,
+                getenv('MESH_DEBUG') === '1'
+                    ? new MeshStderrLogger($tag)
+                    : null,
+            );
+
+            // Periodically push batched spans + the current metric snapshot to the collector so
+            // Grafana shows a live time-series during the run (the manual reader only exports on
+            // flush). Swoole's coroutine hooks keep the OTLP HTTP export non-blocking.
+            if ($observability instanceof OtelObservability) {
+                $runtime->scheduleRepeatedly(
+                    Duration::seconds(10),
+                    Duration::seconds(10),
+                    static function () use ($observability): void {
+                        $observability->forceFlush();
+                    },
+                );
+            }
 
             $sink = $system->spawn(
                 Props::fromBehavior(Behavior::receive(
@@ -382,7 +451,7 @@ function runMeshNode(
                 $ref = $node->refFor($peerAddrs[$target % $peerCount], $sinkPath);
                 ++$target;
 
-                for ($i = 0; $i < 500; ++$i) {
+                for ($i = 0; $i < $sendBatch; ++$i) {
                     $ref->tell(new Ping($payload));
                     ++$sent;
                 }
@@ -515,6 +584,10 @@ function runMeshNode(
     });
 
     $system->run();
+
+    // Flush and stop the exporters before the thread exits, or the final spans/metrics are lost.
+    // Runs after the reactor has stopped, so the OTLP export is a plain synchronous HTTP call.
+    $observability->shutdown();
 
     printf(
         "[%s] %s | sent=%s received=%s askFailures=%d converged=%s\n",
