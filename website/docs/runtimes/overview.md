@@ -52,7 +52,7 @@ The `Runtime` interface exposes eleven methods organized into three groups:
 
 **Lifecycle** — `run()` starts the event loop (blocking until shutdown), `shutdown(Duration $timeout)` signals a graceful stop, `isRunning()` reports current state.
 
-**Concurrency** — `spawn(callable $actorLoop)` registers a new concurrent task (fiber or coroutine) and returns an ID string, `yield()` cooperatively yields, `sleep(Duration)` suspends the current task.
+**Concurrency** — `spawn(callable $actorLoop)` registers a new concurrent task (fiber or coroutine) and returns an ID string, `defer(callable)` runs a one-shot task asynchronously without returning an ID (fire-and-forget), `yield()` cooperatively yields, `sleep(Duration)` suspends the current task.
 
 **Scheduling** — `createMailbox(MailboxConfig)` creates a runtime-specific mailbox, `createFutureSlot()` creates a slot for `Future` resolution, `scheduleOnce(Duration, callable)` fires a callback once after a delay, `scheduleRepeatedly(Duration, Duration, callable)` fires on a fixed interval. Both scheduling methods return a `Cancellable`.
 

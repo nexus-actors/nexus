@@ -277,6 +277,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Applied uniformly: <code class="font-mono">SwooleMeshTransport</code> reads <code class="font-mono">TlsConfig</code> for both server and outbound client sockets</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> No code changes beyond topology config; transport selection remains automatic</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Inbound links are capped and unfinished handshakes time out — bounded against trivial resource exhaustion (<code class="font-mono">withInboundLimits()</code>)</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Never expose plaintext cluster ports (default 7355) to untrusted networks</li>
       </ul>
     </div>

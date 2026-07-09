@@ -275,6 +275,33 @@ $topology = ClusterTopology::create(
 );
 ```
 
+## Inbound connection limits
+
+Inbound connections are unauthenticated (see the trust model in the [package reference](../packages/cluster-tcp.md#security--trust-model)), so `ClusterNode` bounds two things by default to blunt trivial resource-exhaustion:
+
+- **Concurrent accepted links** are capped at `maxInboundLinks` (default 1024). A connection beyond the ceiling is closed immediately.
+- **Unfinished handshakes** are timed out: an accepted link that has not sent a valid handshake within `handshakeTimeout` (default 10 s) is closed, so a peer cannot hold a socket open without identifying itself.
+
+Both are tunable together via `withInboundLimits()`. Raise the cap for very large meshes; shorten the timeout on hostile-adjacent networks. These are resource guards, not authentication — keep the mesh on a trusted segment.
+
+```php title="Tuning inbound limits" verify:lint-only
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Runtime\Duration;
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu-west-1', 'payments', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7355')],
+)->withInboundLimits(
+    handshakeTimeout: Duration::seconds(5),  // default: 10 s
+    maxInboundLinks:  4096,                   // default: 1024
+);
+```
+
 ## Observing the cluster
 
 Subscribe to PSR-14 events dispatched by `ActorSystem` for operational visibility:
