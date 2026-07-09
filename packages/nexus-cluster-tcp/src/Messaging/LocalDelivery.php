@@ -7,6 +7,8 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Observability\NoopObservability;
+use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Override;
 
@@ -25,7 +27,10 @@ final class LocalDelivery implements InboundDelivery
 {
     private int $drops = 0;
 
-    public function __construct(private readonly LocalActorRegistry $registry) {}
+    public function __construct(
+        private readonly LocalActorRegistry $registry,
+        private readonly Observability $observability = new NoopObservability(),
+    ) {}
 
     /**
      * @param ActorRef<object>|null $replySender
@@ -46,6 +51,18 @@ final class LocalDelivery implements InboundDelivery
 
         if ($replySender !== null) {
             $envelope = $envelope->withSenderRef($replySender);
+        }
+
+        // Carry the active trace context (the cluster.receive span) onto the envelope so the
+        // receiving actor's `process` span parents to it — this is what chains the distributed
+        // trace across the network boundary into local actor processing.
+        if ($this->observability->isEnabled()) {
+            $carrier = [];
+            $this->observability->propagator()->inject($this->observability->currentContext(), $carrier);
+
+            if ($carrier !== []) {
+                $envelope = $envelope->withMetadata($carrier);
+            }
         }
 
         $result = $ref->offerEnvelope($envelope) === EnqueueResult::Accepted

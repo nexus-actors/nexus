@@ -78,6 +78,25 @@ The **cluster-tcp** dashboard is the trace-focused view: a live Tempo trace list
 throughput and p95 latency per operation (`cluster.send`, `cluster.ask`,
 `cluster.handshake`), and the cluster message/ask/handshake metrics.
 
+### Full span chains + internal actors
+
+Observability is wired into the `ActorSystem`, so every actor message becomes a
+`process {Type}` span and feeds `nexus.actor.messages.processed` /
+`nexus.actor.message.processing.duration`. That means:
+
+- **Distributed traces chain end to end:** `cluster.send` (sender) → `cluster.receive`
+  (receiver) → `process Ping` (the receiving actor) — one connected trace across the
+  network boundary.
+- **The whole system is traced**, not just app messages — you'll see `process GossipReceived`,
+  `process HeartbeatTick`, `process PeerLivenessObserved`, `process HandshakeReceived`, etc.,
+  from the internal membership actors.
+
+> **Observer-effect note.** Tracing *every* message (including the membership hot-path)
+> costs real CPU, and a mesh node is single-core. Under a heavy flood this can slow the
+> failure detector enough that a node reports a transient un-healed view — the telemetry
+> still flows; it's the cost of full instrumentation. Keep `SEND_BATCH` modest for a
+> stable demo, and use `run.sh` (no observability) for the clean pass/fail soak.
+
 **Per-node breakdown caveat:** the “by node” panels rely on the collector promoting the
 `node.id` resource attribute to a metric label. Not every LGTM build does this by
 default — if those panels look empty, the aggregate panels and the per-`nexus.message.type`

@@ -246,7 +246,16 @@ function runMeshNode(
     };
 
     $runtime = new SwooleRuntime();
-    $system = ActorSystem::create("mesh-{$tag}", $runtime, logger: $meshLogger, eventDispatcher: $dispatcher);
+    // Wire observability into the ActorSystem so ActorCell emits a `process {type}` span and
+    // nexus.actor.* metrics per message — this is what extends the trace chain past the cluster
+    // boundary into the receiving actor, and lights up the actor rows of the dashboards.
+    $system = ActorSystem::create(
+        "mesh-{$tag}",
+        $runtime,
+        logger: $meshLogger,
+        eventDispatcher: $dispatcher,
+        observability: $observability,
+    );
 
     // Emit ActorSystem gauges (live actors, dead letters, running) alongside the cluster
     // metrics, so the Grafana overview dashboard's "Actor system" row is live for this node.

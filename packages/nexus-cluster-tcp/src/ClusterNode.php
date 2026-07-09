@@ -201,7 +201,7 @@ final class ClusterNode
 
         // 3. Message delivery collaborators.
         $localRegistry = new LocalActorRegistry();
-        $localDelivery = new LocalDelivery($localRegistry);
+        $localDelivery = new LocalDelivery($localRegistry, $observability);
         $meter = $observability->meter();
         $askRegistry = new TcpAskRegistry($runtime, meter: $meter);
 
