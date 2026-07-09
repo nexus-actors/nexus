@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
@@ -122,6 +123,85 @@ final class PhiAccrualDetectorTest extends TestCase
             $large->phi('peer', $this->at(7400)),
             $small->phi('peer', $this->at(7400)),
         );
+    }
+
+    #[Test]
+    public function rejectsANonPositiveWindowSize(): void
+    {
+        // Boundary: a window of exactly 1 is valid; 0 is not.
+        new PhiAccrualDetector(maxWindowSize: 1);
+
+        $this->expectException(InvalidArgumentException::class);
+        new PhiAccrualDetector(maxWindowSize: 0);
+    }
+
+    #[Test]
+    public function rejectsANonPositiveStdDevFloor(): void
+    {
+        new PhiAccrualDetector(minStdDev: 0.01);
+
+        $this->expectException(InvalidArgumentException::class);
+        new PhiAccrualDetector(minStdDev: 0.0);
+    }
+
+    #[Test]
+    public function recordsAnIntervalExactlyAtTheSampleFloor(): void
+    {
+        $detector = new PhiAccrualDetector();
+        $detector->heartbeat('peer', $this->at(0));
+        // Exactly MIN_SAMPLE_INTERVAL_MS (50) apart — inclusive, so it IS recorded.
+        $detector->heartbeat('peer', $this->at(50));
+
+        // With that single interval on record, a long silence yields high suspicion;
+        // if the boundary were exclusive the window would be empty and phi would be 0.
+        self::assertGreaterThan(1.0, $detector->phi('peer', $this->at(5050)));
+    }
+
+    /**
+     * Golden vector for the Hayashibara math. Window of intervals
+     * [400, 1600, 400, 1600] ms → mean 1000, stddev 600 (above the 500 floor, so the
+     * computed deviation is what drives phi). Sampled 2200 ms after the last beat puts
+     * the elapsed time exactly z = (2200 − 1000) / 600 = 2 standard deviations out, where
+     * the standard-normal tail P(Z > 2) ≈ 0.02275 gives phi = −log10(0.02275) ≈ 1.643.
+     */
+    #[Test]
+    public function phiMatchesTheNormalTailForAKnownWindow(): void
+    {
+        $detector = new PhiAccrualDetector();
+
+        foreach ([0, 400, 2000, 2400, 4000] as $ms) {
+            $detector->heartbeat('peer', $this->at($ms));
+        }
+
+        self::assertEqualsWithDelta(1.643, $detector->phi('peer', $this->at(6200)), 0.03);
+    }
+
+    /**
+     * The floor keeps phi finite when arrivals are perfectly periodic (computed stddev
+     * would be 0). Steady 1000 ms intervals → floor 500 is used; 2000 ms after the last
+     * beat is z = 2, so phi ≈ 1.643 again rather than exploding.
+     */
+    #[Test]
+    public function phiUsesTheStdDevFloorForPeriodicArrivals(): void
+    {
+        self::assertEqualsWithDelta(1.643, $this->steadyDetector()->phi('peer', $this->at(7000)), 0.03);
+    }
+
+    /**
+     * An early arrival (elapsed below the mean) is z < 0; the tail is computed by
+     * reflection (1 − P(Z > |z|)). For the [400,1600,…] window (mean 1000, stddev 600),
+     * sampling 400 ms after the last beat is z = −1, tail ≈ 0.841, phi ≈ 0.075.
+     */
+    #[Test]
+    public function phiReflectsTheNegativeTailForEarlyArrivals(): void
+    {
+        $detector = new PhiAccrualDetector();
+
+        foreach ([0, 400, 2000, 2400, 4000] as $ms) {
+            $detector->heartbeat('peer', $this->at($ms));
+        }
+
+        self::assertEqualsWithDelta(0.075, $detector->phi('peer', $this->at(4400)), 0.02);
     }
 
     protected function setUp(): void

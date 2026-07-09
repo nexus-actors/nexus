@@ -124,6 +124,36 @@ final class MembershipEventDeduplicatorTest extends TestCase
         self::assertTrue($dedup->shouldPublish(self::PEER, 1, 'up', $this->t0->modify('+6 seconds')));
     }
 
+    #[Test]
+    public function defaultQuietPeriodEdgeIsExclusiveAtThirtySeconds(): void
+    {
+        // Default period is 30 s. Readmission strictly inside the window is suppressed;
+        // exactly at the 30 s edge it publishes again (the boundary is exclusive).
+        self::assertTrue($this->dedup->shouldPublish(self::PEER, 1, 'down', $this->t0));
+        self::assertFalse($this->dedup->shouldPublish(self::PEER, 1, 'up', $this->t0->modify('+29 seconds')));
+        self::assertTrue($this->dedup->shouldPublish(self::PEER, 1, 'up', $this->t0->modify('+30 seconds')));
+    }
+
+    #[Test]
+    public function slateMapEvictsTheOldestPeerBeyondTheCap(): void
+    {
+        $evictee = '/cluster/prod/eu/app/evictee';
+        $this->dedup->shouldPublish($evictee, 5, 'up', $this->t0);
+
+        // Fill the map to its 10 000-peer cap with fresh peers; the oldest (the evictee)
+        // is dropped, but peers still within the window survive.
+        for ($i = 1; $i <= 10_000; $i++) {
+            $this->dedup->shouldPublish("/cluster/prod/eu/app/bulk-{$i}", 7, 'up', $this->t0);
+        }
+
+        self::assertSame(1, $this->dedup->lastKnownIncarnation($evictee), 'the oldest peer is evicted (defaults to 1)');
+        self::assertSame(
+            7,
+            $this->dedup->lastKnownIncarnation('/cluster/prod/eu/app/bulk-5000'),
+            'a peer still within the cap is retained',
+        );
+    }
+
     protected function setUp(): void
     {
         $this->dedup = new MembershipEventDeduplicator();
