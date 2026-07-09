@@ -377,6 +377,87 @@ final class ClusterNodeSwooleTest extends TestCase
     }
 
     /**
+     * SCENARIO 6 (regression): joined nodes must survive the Swoole socket recv-timeout
+     * window. In a mutual-seed mesh each node's outbound link is send-only and receives
+     * nothing, so it trips the coroutine socket's finite recv timeout after a few seconds.
+     * A prior bug treated that timeout (errCode ETIMEDOUT) as EOF and tore the link down;
+     * the resulting reconnect churn starved the failure detector into false Suspect → Down
+     * within ~8 s of a clean join. This holds both nodes joined well past that window and
+     * asserts neither was ever suspected and both still see two Up members.
+     */
+    #[Test]
+    public function joinedNodesSurviveTheRecvTimeoutWindow(): void
+    {
+        $runtime = new SwooleRuntime();
+        $events = new RecordingMembershipDispatcher();
+        $system = ActorSystem::create('cluster-swoole-uptime', $runtime, eventDispatcher: $events);
+
+        $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+
+        $upA = 0;
+        $upB = 0;
+        $suspected = true;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, $events, $addrA, $addrB, &$upA, &$upB, &$suspected): void {
+                $transportA = null;
+                $transportB = null;
+                $nodeA = null;
+                $nodeB = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+
+                    // Default cadence (1 s gossip/heartbeat, default reconnect backoff) — the
+                    // conditions under which the recv-timeout bug actually cascaded to a false
+                    // Suspect. Fast test overrides (100 ms gossip / 50 ms reconnect) pin phi near
+                    // zero and mask the regression, so this scenario deliberately uses defaults.
+                    $nodeB = ClusterNode::boot(
+                        $system,
+                        $this->defaultTopology('swoole-cluster', $addrB, $endpointB, [$endpointA]),
+                        $this->makeUserTypes(),
+                        $transportB,
+                    );
+                    $nodeA = ClusterNode::boot(
+                        $system,
+                        $this->defaultTopology('swoole-cluster', $addrA, $endpointA, [$endpointB]),
+                        $this->makeUserTypes(),
+                        $transportA,
+                    );
+
+                    $this->pollUntil(80, static function () use ($nodeA, $nodeB): bool {
+                        return count($nodeA->view()->members) === 2
+                            && count($nodeB->view()->members) === 2;
+                    });
+
+                    // Hold joined well past the ~5 s coroutine recv-timeout window and the phi
+                    // give-up window that followed it. Bounded sleep (never while(true)).
+                    Coroutine::sleep(9.0);
+
+                    $upA = count($nodeA->view()->upNodes());
+                    $upB = count($nodeB->view()->upNodes());
+                    $suspected = $events->hasSuspected($addrA->toPathPrefix())
+                        || $events->hasSuspected($addrB->toPathPrefix());
+                } finally {
+                    $this->cleanupCluster($system, $nodeA, $nodeB, $transportA, $transportB);
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertFalse(
+            $suspected,
+            'Neither node may be suspected during steady uptime past the recv-timeout window',
+        );
+        self::assertSame(2, $upA, 'Node A must still see both members Up after the recv-timeout window');
+        self::assertSame(2, $upB, 'Node B must still see both members Up after the recv-timeout window');
+    }
+
+    /**
      * SCENARIO 5: handshake rejection. Two nodes configured with DIFFERENT cluster
      * names never admit each other — the peer is rejected and never added to a view.
      */
@@ -497,6 +578,28 @@ final class ClusterNodeSwooleTest extends TestCase
         $registry->registerFromAttribute(Pong::class);
 
         return $registry;
+    }
+
+    /**
+     * Build a ClusterTopology with production default cadence (1 s gossip/heartbeat,
+     * default reconnect backoff). Used by the recv-timeout regression scenario, which
+     * needs the real steady-state timing to surface the bug.
+     *
+     * @param list<NodeEndpoint> $seeds
+     */
+    private function defaultTopology(
+        string $clusterName,
+        NodeAddress $self,
+        NodeEndpoint $endpoint,
+        array $seeds,
+    ): ClusterTopology {
+        return ClusterTopology::create(
+            clusterName: $clusterName,
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: $seeds,
+        );
     }
 
     /**
