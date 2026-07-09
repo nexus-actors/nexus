@@ -161,6 +161,33 @@ lock or shared bottleneck — it scales with cores.** (The pre-tuning run showed
 So on this laptop the mesh sustains roughly **945K small messages/second (~925 MB/s)** across the machine,
 and would go higher on bare-metal Linux or with the two sides of each pair on separate hosts.
 
+## Endurance (5-minute soak)
+
+Throughput numbers mean little if they decay, leak, or destabilise membership over time, so a soak
+harness (`tests/Performance/bin/cluster_tcp_soak.php`) drives a continuous tell flood for N seconds
+with an every-10-s health series — interval throughput, an ask-latency probe *through the loaded
+pipeline*, PHP memory, and membership events — and hard pass/fail criteria (no suspicion, no
+throughput decay, flat memory, stable ask latency). Production-default failure-detection settings,
+deliberately: the soak must prove the detector stays quiet under load at the real cadence.
+
+**Single pipeline, 5 minutes:** 23.6M messages at a dead-flat ~78.7K msg/s (every one of 29 intervals
+within ±2%), memory pinned at exactly 10.0 MB throughout, ask p50 stable at ~32 µs while the flood ran,
+zero suspicion. **PASS.**
+
+**Whole machine, 5 minutes** (16 soak processes in parallel): **253.4M messages** — ~845K msg/s
+sustained aggregate — at a mean **1435% / peak 1733% container CPU** (all 16 cores saturated).
+Every worker passed independently: flat memory, no decay, no false suspicion anywhere. **PASS 16/16.**
+
+A note on CPU utilisation, because it surprises people: one PHP process is one Swoole reactor is one
+OS thread — a single soak (or any single node) can never use more than one core, *by design of the
+runtime model*. Whole-machine utilisation comes from running many share-nothing processes, which is
+exactly how Swoole is deployed in production (and what the fleet soak and saturation sweep do).
+
+```bash
+# Single-pipeline soak (seconds, payload bytes)
+docker compose exec php-swoole php tests/Performance/bin/cluster_tcp_soak.php 300 1024
+```
+
 ## Is this usable? An honest comparison
 
 Short answer: **yes, for its niche — and comfortably better than the usual PHP alternatives — but it is
