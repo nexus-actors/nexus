@@ -123,6 +123,130 @@ final class HandshakeAuthenticatorTest extends TestCase
     }
 
     #[Test]
+    public function acceptsExactlyAtTheFreshnessWindowEdge(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        self::assertNotNull($signed->issuedAt);
+        // Exactly `window` seconds away is still fresh (boundary is inclusive); one past is stale.
+        self::assertTrue($this->auth->verify($signed, $signed->issuedAt + 60), 'window edge is inclusive');
+        self::assertTrue($this->auth->verify($signed, $signed->issuedAt - 60), 'window edge is symmetric');
+        self::assertFalse($this->auth->verify($signed, $signed->issuedAt + 61));
+    }
+
+    #[Test]
+    public function rejectsAHandshakeMissingOnlyTheNonce(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        // A partial signature — every field present except the nonce — must not authenticate,
+        // even with a fresh timestamp and a real MAC.
+        $partial = new Handshake(
+            clusterName: $signed->clusterName,
+            node: $signed->node,
+            advertise: $signed->advertise,
+            protocolVersion: $signed->protocolVersion,
+            nonce: null,
+            issuedAt: time(),
+            mac: $signed->mac,
+        );
+
+        self::assertFalse($this->auth->verify($partial, time()));
+    }
+
+    #[Test]
+    public function rejectsAHandshakeMissingOnlyTheIssuedAt(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        $partial = new Handshake(
+            clusterName: $signed->clusterName,
+            node: $signed->node,
+            advertise: $signed->advertise,
+            protocolVersion: $signed->protocolVersion,
+            nonce: $signed->nonce,
+            issuedAt: null,
+            mac: $signed->mac,
+        );
+
+        self::assertFalse($this->auth->verify($partial, time()));
+    }
+
+    #[Test]
+    public function rejectsAHandshakeMissingOnlyTheMac(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        $partial = new Handshake(
+            clusterName: $signed->clusterName,
+            node: $signed->node,
+            advertise: $signed->advertise,
+            protocolVersion: $signed->protocolVersion,
+            nonce: $signed->nonce,
+            issuedAt: time(),
+            mac: null,
+        );
+
+        self::assertFalse($this->auth->verify($partial, time()));
+    }
+
+    #[Test]
+    public function macBindsEveryNodeIdentitySubfield(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        foreach (['application', 'cluster', 'datacenter', 'node'] as $field) {
+            $tamperedNode = $signed->node;
+            $tamperedNode[$field] = 'tampered-' . $field;
+
+            $tampered = new Handshake(
+                clusterName: $signed->clusterName,
+                node: $tamperedNode,
+                advertise: $signed->advertise,
+                protocolVersion: $signed->protocolVersion,
+                nonce: $signed->nonce,
+                issuedAt: $signed->issuedAt,
+                mac: $signed->mac,
+            );
+
+            self::assertFalse(
+                $this->auth->verify($tampered, time()),
+                "node.{$field} must be bound by the MAC",
+            );
+        }
+    }
+
+    #[Test]
+    public function macBindsClusterNameAndProtocolVersion(): void
+    {
+        $signed = $this->auth->sign($this->handshake());
+
+        $tamperedCluster = new Handshake(
+            clusterName: 'a-different-cluster',
+            node: $signed->node,
+            advertise: $signed->advertise,
+            protocolVersion: $signed->protocolVersion,
+            nonce: $signed->nonce,
+            issuedAt: $signed->issuedAt,
+            mac: $signed->mac,
+        );
+
+        self::assertFalse($this->auth->verify($tamperedCluster, time()), 'clusterName must be MAC-bound');
+
+        $tamperedProtocol = new Handshake(
+            clusterName: $signed->clusterName,
+            node: $signed->node,
+            advertise: $signed->advertise,
+            protocolVersion: $signed->protocolVersion + 1,
+            nonce: $signed->nonce,
+            issuedAt: $signed->issuedAt,
+            mac: $signed->mac,
+        );
+
+        self::assertFalse($this->auth->verify($tamperedProtocol, time()), 'protocolVersion must be MAC-bound');
+    }
+
+    #[Test]
     public function honoursACustomFreshnessWindow(): void
     {
         $auth = new HandshakeAuthenticator('cluster-secret', Duration::seconds(5));
