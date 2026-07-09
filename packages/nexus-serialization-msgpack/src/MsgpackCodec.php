@@ -72,8 +72,13 @@ final readonly class MsgpackCodec
     public function unpack(string $bytes): array
     {
         if ($this->useExtension) {
+            // The @ matters: ext-msgpack emits a PHP warning (php_msgpack_unserialize)
+            // on malformed or trailing bytes instead of failing cleanly. This method
+            // decodes untrusted network input, so garbage must surface only through the
+            // is_array() check below — never as log noise, and never as a Throwable
+            // under a warning-to-exception error handler.
             /** @psalm-suppress UndefinedFunction */
-            $result = msgpack_unpack($bytes);
+            $result = @msgpack_unpack($bytes);
         } else {
             $unpacker = new BufferUnpacker($bytes);
             /** @psalm-suppress MixedAssignment */

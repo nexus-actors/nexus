@@ -12,6 +12,11 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install bcmath intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# ext-msgpack: native MessagePack codec. MsgpackCodec auto-detects it and prefers
+# it over the pure-PHP rybakit backend — this is the cluster wire hot path.
+RUN pecl install msgpack \
+    && docker-php-ext-enable msgpack
+
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
 # ── Base ZTS stage (thread-safe, for Swoole Thread) ──
@@ -28,6 +33,11 @@ RUN apt-get update && apt-get install -y \
     zlib1g-dev \
     && docker-php-ext-install bcmath intl \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# ext-msgpack: native MessagePack codec. MsgpackCodec auto-detects it and prefers
+# it over the pure-PHP rybakit backend — this is the cluster wire hot path.
+RUN pecl install msgpack \
+    && docker-php-ext-enable msgpack
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 

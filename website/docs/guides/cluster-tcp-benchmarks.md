@@ -22,7 +22,7 @@ real network latency on top. Numbers are order-of-magnitude guidance, not a data
 |---|---|
 | Machine | Apple MacBook Pro 16", **M4 Max** (12 performance + 4 efficiency cores), 128 GB RAM |
 | Host OS | macOS; benchmarks run inside the `php-swoole` container under **Docker Desktop** (Linux VM) |
-| Runtime | PHP 8.5.7 (ZTS) · Swoole 6.2.1 · JIT disabled (Xdebug-free image) |
+| Runtime | PHP 8.5.7 (ZTS) · Swoole 6.2.1 · ext-msgpack 3.x · JIT disabled (Xdebug-free image) |
 | Transport | `SwooleMeshTransport` over TCP on `127.0.0.1`, MessagePack payloads, length-prefixed frames |
 
 Two things to keep in mind throughout:
@@ -68,28 +68,28 @@ docker compose exec php-swoole php tests/Performance/cluster_tcp_hotpath.php
 
 | Payload | Throughput | Bandwidth | (before tuning) |
 |---|---|---|---|
-| 64 B | **~78,400 msg/s** | 4.8 MB/s | 33,500 msg/s |
-| 1 KB | **~73,900 msg/s** | 72.2 MB/s | 31,600 msg/s |
-| 16 KB | **~52,400 msg/s** | 818 MB/s | 424 MB/s |
+| 64 B | **~84,800 msg/s** | 5.2 MB/s | 33,500 msg/s |
+| 1 KB | **~84,100 msg/s** | 82.2 MB/s | 31,600 msg/s |
+| 16 KB | **~57,400 msg/s** | 896 MB/s | 424 MB/s |
 
 Throughput is roughly flat in message *count* until payloads get large — the per-message cost
 (serialize + frame + syscall + deserialize) dominates over the bytes until ~16 KB, where bandwidth
-climbs to ~818 MB/s and the copy cost starts to matter. The "before tuning" column is the first
+climbs to ~896 MB/s and the copy cost starts to matter. The "before tuning" column is the first
 benchmark run of the same stack; the [profiling section below](#finding-the-bottlenecks) explains
-where the 2.3× came from.
+where the 2.7× came from.
 
 **Cross-node ask round-trip latency** (request → reply, one in flight):
 
 | mean | p50 | p90 | p99 | p99.9 | max | (before: p50 / p99) |
 |---|---|---|---|---|---|---|
-| 35.9 µs | **34.9 µs** | 40.5 µs | **48.0 µs** | 100 µs | 1.6 ms | 69.3 / 89.4 µs |
+| 33.1 µs | **32.0 µs** | 37.5 µs | **45.9 µs** | 114 µs | 1.8 ms | 69.3 / 89.4 µs |
 
 That is a full round trip — serialize, frame, loopback TCP, deserialize, actor hop, reply, and back —
-at **sub-50 µs through p99**. Sequential ask/reply (one outstanding) yields ~27,900 asks/s; real
+at **sub-50 µs through p99**. Sequential ask/reply (one outstanding) yields ~30,200 asks/s; real
 throughput is far higher with requests in flight concurrently.
 
 **Local short-circuit baseline** — a `ClusterRef` addressed to an actor on the *same* node skips the
-wire entirely: **~304,000 msg/s**. The remaining gap between this and the cross-node figure is the
+wire entirely: **~340,000 msg/s**. The remaining gap between this and the cross-node figure is the
 transport (msgpack + framing + loopback TCP) plus the shared-reactor contention of the single-process
 harness — the actor delivery itself is cheap.
 
@@ -132,10 +132,11 @@ Equally important is what the profiler said **not** to fix: the no-op telemetry 
 per message — the "cache the counters" optimization that looked plausible on paper would have been
 noise. Measure first.
 
-Two known costs remain on the table for future work: the pure-PHP msgpack backend (`ext-msgpack`
-is auto-detected by `MsgpackCodec` when present but is not in the shipped image), and the
-~10 µs unaccounted remainder (socket syscalls, coroutine scheduling, and the mailbox hop —
-per-frame write batching would attack the syscall share).
+A third, smaller win followed: adding `ext-msgpack` to the Docker image (auto-detected by
+`MsgpackCodec`) roughly halved the raw pack/unpack cost again — worth a further ~14% end-to-end.
+Still on the table for future work: the ~10 µs unaccounted remainder (socket syscalls, coroutine
+scheduling, and the mailbox hop — per-frame write batching would attack the syscall share) and the
+Valinor share of user-body decode.
 
 ## Whole-machine scaling
 
@@ -143,21 +144,21 @@ Aggregate 1 KB throughput as *K* parallel two-node clusters run at once (so `2K`
 
 | K workers | Nodes | Aggregate msg/s | Bandwidth | Peak CPU |
 |---|---|---|---|---|
-| 1 | 2 | 72,195 | 70.5 MB/s | 97% |
-| 2 | 4 | 141,108 | 137.8 MB/s | 130% |
-| 4 | 8 | 276,627 | 270.1 MB/s | 268% |
-| 8 | 16 | 553,403 | 540.6 MB/s | 541% |
-| 12 | 24 | **814,607** | **795.5 MB/s** | 899% |
-| 16 | 32 | 823,859 | 804.6 MB/s | 1587% |
+| 1 | 2 | 78,314 | 76.5 MB/s | 122% |
+| 2 | 4 | 157,090 | 153.4 MB/s | 99% |
+| 4 | 8 | 306,072 | 298.9 MB/s | 219% |
+| 8 | 16 | 582,574 | 568.8 MB/s | 496% |
+| 12 | 24 | **877,859** | **857.4 MB/s** | 799% |
+| 16 | 32 | **946,426** | **924.2 MB/s** | 1639% |
 
-Throughput scales **near-linearly** — ~1.95× at K=2, ~3.8× at K=4, ~7.7× at K=8 — and then plateaus at
-**~820,000 msg/s around K=12**. That is not a coincidence: the M4 Max has **12 performance cores**. Beyond
-K=12 the only cores left are the 4 efficiency cores, which raise CPU% without adding meaningful
-throughput. The clean plateau at the P-core count is the important result: **the transport has no global
+Throughput scales **near-linearly** — ~1.95× at K=2, ~3.8× at K=4, ~7.7× at K=8 — and reaches
+**~878,000 msg/s at K=12** (the M4 Max has **12 performance cores**). With ext-msgpack lightening the
+per-message CPU, the 4 efficiency cores now add real headroom beyond that — K=16 tops out at
+**~946,000 msg/s**. The clean plateau at the P-core count is the important result: **the transport has no global
 lock or shared bottleneck — it scales with cores.** (The pre-tuning run showed the same shape at a
-~315K msg/s plateau; the 2.6× lift is the per-core tuning multiplied across every core.)
+~315K msg/s plateau; the 3× lift is the per-core tuning multiplied across every core.)
 
-So on this laptop the mesh sustains roughly **820K small messages/second (~800 MB/s)** across the machine,
+So on this laptop the mesh sustains roughly **945K small messages/second (~925 MB/s)** across the machine,
 and would go higher on bare-metal Linux or with the two sides of each pair on separate hosts.
 
 ## Is this usable? An honest comparison
@@ -170,7 +171,7 @@ with tuning and hardware, so treat these as ballpark):
 
 | System | Remote small-msg throughput | Round-trip latency | Notes |
 |---|---|---|---|
-| **Nexus cluster-tcp** (this) | ~74K/core, ~820K/machine | ~35 µs p50 (loopback) | PHP 8.5 + Swoole, userland MessagePack |
+| **Nexus cluster-tcp** (this) | ~84K/core, ~945K/machine | ~32 µs p50 (loopback) | PHP 8.5 + Swoole + ext-msgpack |
 | Akka / Pekko (JVM, Artery) | ~hundreds of K – ~1M+ /node | tens–hundreds of µs | JIT, off-heap, battle-tested at scale |
 | Erlang/OTP (BEAM dist) | ~hundreds of K /node | low µs–ms | purpose-built for distribution |
 | Proto.Actor (Go) | ~hundreds of K remote | tens–hundreds of µs | native, gRPC transport |
@@ -180,7 +181,7 @@ with tuning and hardware, so treat these as ballpark):
 
 What this means in practice:
 
-- **Against other actor runtimes**, Nexus is roughly **5–20× slower per node** for raw remote throughput.
+- **Against other actor runtimes**, Nexus is roughly **3–12× slower per node** for raw remote throughput.
   That is exactly what you would expect: PHP with userland serialization and coroutine scheduling versus
   JIT-compiled JVM/Go or the natively-distributed BEAM. If you need a multi-million-message-per-second
   firehose or microsecond-tail trading latency, use the right tool — this is not it.
@@ -192,7 +193,7 @@ What this means in practice:
 **Where it is genuinely usable today:** sharded stateful entities (one writer per aggregate, addressed by
 identity across the mesh), coordinating workers across machines, real-time features (presence, live
 counters, fan-out), and turning a broker-and-HTTP service graph into direct sub-millisecond actor calls —
-at a scale of **~800K messages per second per machine**, which covers the overwhelming
+at a scale of **~950K messages per second per machine**, which covers the overwhelming
 majority of PHP workloads.
 
 **Where it is not the answer (yet):** ultra-high-throughput streaming, microsecond-latency-critical paths,
