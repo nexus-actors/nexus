@@ -14,6 +14,7 @@ use Monadial\Nexus\Runtime\Duration;
 
 use function count;
 use function explode;
+use function max;
 use function min;
 
 /**
@@ -142,6 +143,13 @@ final class MembershipService
      * list (including incarnation and status) and merges it into the current view.
      * Unlike applyLiveness, gossip does not feed the phi detector.
      *
+     * Incarnation refutation (SWIM/Akka-style): if the gossip asserts THIS node as Suspect or
+     * Down, we bump our incarnation above the value the peer holds and re-assert ourselves as Up.
+     * Because {@see ClusterView::merge()} lets a higher incarnation win deterministically, our next
+     * gossip overrides the stale suspicion on every peer — including peers with no direct link to
+     * us, which could otherwise never recover us via liveness. Self is excluded from mergeView, so
+     * our own record is only ever changed here (or at startup).
+     *
      * @param array<string, DateTimeImmutable> $suspectSince
      * @psalm-suppress UnusedParam $peer retained for API symmetry; gossip-source validation is a future extension.
      */
@@ -155,6 +163,27 @@ final class MembershipService
     ): MembershipTransition {
         $incoming = $this->gossipToView($payload, $now);
         [$newView, $newSuspectSince, $events] = $this->mergeView($view, $suspectSince, $incoming);
+
+        $suspectedAt = $this->peerAssertedSelfSuspicion($payload);
+
+        if ($suspectedAt !== null) {
+            // Reuse applyRejoin's "insert self Up at a higher incarnation" primitive, flooring the
+            // bump above the incarnation the peer holds so the refutation always wins the merge.
+            $rejoin = $this->applyRejoin(
+                $newView,
+                $newSuspectSince,
+                max($selfIncarnation, $suspectedAt),
+                $now,
+            );
+
+            return new MembershipTransition(
+                $rejoin->newView,
+                $events,
+                [],
+                $newSuspectSince,
+                $rejoin->newSelfIncarnation,
+            );
+        }
 
         return new MembershipTransition($newView, $events, [], $newSuspectSince, $selfIncarnation);
     }
@@ -495,6 +524,28 @@ final class MembershipService
         }
 
         return $view;
+    }
+
+    /**
+     * Scan the raw gossip members for an assertion that THIS node is non-Up (Suspect or Down),
+     * returning the incarnation at which the peer holds us, or null if there is no such assertion.
+     * Operates on the raw payload because {@see gossipToView()} deliberately excludes self.
+     */
+    private function peerAssertedSelfSuspicion(GossipPayload $payload): ?int
+    {
+        foreach ($payload->members as $member) {
+            if ($member['address'] !== $this->selfKey) {
+                continue;
+            }
+
+            $status = self::statusFromInt($member['status']);
+
+            if ($status !== null && $status !== MemberStatus::Up) {
+                return $member['incarnation'];
+            }
+        }
+
+        return null;
     }
 
     /**

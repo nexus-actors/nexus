@@ -730,6 +730,109 @@ final class MembershipServiceTest extends TestCase
         self::assertSame($before + 1, $t1->newSelfIncarnation);
     }
 
+    #[Test]
+    public function gossipAssertingSelfSuspectTriggersIncarnationRefutation(): void
+    {
+        $service = $this->service();
+        $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
+        $t0 = $service->initialState($this->clock->now());
+
+        // A peer gossips that WE are Suspect at our current incarnation.
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $self->toPathPrefix(),
+                    'endpoint' => '10.0.0.1:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Suspect->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        // We refute: bump our incarnation and re-assert Up, so our next gossip wins the merge.
+        self::assertSame(2, $t1->newSelfIncarnation);
+        self::assertSame(2, $t1->newView->members[$self->toPathPrefix()]->incarnation);
+        self::assertSame(MemberStatus::Up, $t1->newView->members[$self->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function refutationFloorsBumpAbovePeerAssertedIncarnation(): void
+    {
+        $service = $this->service();
+        $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
+        $t0 = $service->initialState($this->clock->now());
+
+        // A peer holds us at a HIGHER incarnation than we currently know (e.g. after a restart
+        // reset our counter to 1). The refutation must clear their value, not just add one to ours.
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $self->toPathPrefix(),
+                    'endpoint' => '10.0.0.1:7355',
+                    'incarnation' => 5,
+                    'status' => MemberStatus::Down->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation, // 1
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        self::assertSame(6, $t1->newSelfIncarnation, 'bump must floor above the peer-asserted incarnation');
+        self::assertSame(6, $t1->newView->members[$self->toPathPrefix()]->incarnation);
+        self::assertSame(MemberStatus::Up, $t1->newView->members[$self->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function gossipAssertingSelfUpDoesNotBumpIncarnation(): void
+    {
+        $service = $this->service();
+        $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
+        $t0 = $service->initialState($this->clock->now());
+
+        // Gossip that echoes us as Up (the normal case) must NOT trigger a refutation.
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $self->toPathPrefix(),
+                    'endpoint' => '10.0.0.1:7355',
+                    'incarnation' => 1,
+                    'status' => MemberStatus::Up->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        self::assertSame(1, $t1->newSelfIncarnation, 'a self-Up echo must not bump the incarnation');
+        self::assertSame(1, $t1->newView->members[$self->toPathPrefix()]->incarnation);
+    }
+
     protected function setUp(): void
     {
         $this->clock = new TestClock();
