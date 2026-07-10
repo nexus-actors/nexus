@@ -339,12 +339,26 @@ final class MembershipService
                 continue;
             }
 
-            if ($record->status === MemberStatus::Up && $detector->phi($key, $now) > $this->topology->phiThreshold) {
-                $newView = $newView->withStatus($record->address, MemberStatus::Suspect, $now);
-                $newSuspectSince[$key] = $now;
-                $events[] = new NodeSuspected($record->address, SuspicionReason::Phi);
+            if ($record->status === MemberStatus::Up) {
+                $phiExceeded = $detector->phi($key, $now) > $this->topology->phiThreshold;
+                // Absolute-silence fallback: a peer with an empty phi window (handshaked once, then
+                // silent) never crosses the phi threshold, so phi alone would never suspect it.
+                // Suspect it once we have heard nothing for the no-heartbeat window regardless of phi.
+                $silentMs = $detector->millisSinceLastHeartbeat($key, $now);
+                $silentTooLong = $silentMs !== null && $silentMs > (float) $this->downAfter->toMillis();
 
-                continue;
+                if ($phiExceeded || $silentTooLong) {
+                    $newView = $newView->withStatus($record->address, MemberStatus::Suspect, $now);
+                    $newSuspectSince[$key] = $now;
+                    $events[] = new NodeSuspected(
+                        $record->address,
+                        $phiExceeded
+                            ? SuspicionReason::Phi
+                            : SuspicionReason::Gossip,
+                    );
+
+                    continue;
+                }
             }
 
             if ($record->status === MemberStatus::Suspect) {

@@ -121,6 +121,21 @@ final class PhiAccrualDetector
         return -log10(max(self::tailProbability($z), 1e-300));
     }
 
+    /**
+     * Milliseconds since the last heartbeat from `$peer`, or null if none has ever been recorded.
+     * Unlike {@see self::phi()} this is defined even before any inter-arrival interval exists — so a
+     * peer that handshakes once and then goes permanently silent (empty phi window ⇒ phi stays 0.0)
+     * is still detectable via an absolute-silence threshold.
+     */
+    public function millisSinceLastHeartbeat(string $peer, DateTimeImmutable $now): ?float
+    {
+        if (!isset($this->lastArrivalMs[$peer])) {
+            return null;
+        }
+
+        return self::toMillis($now) - $this->lastArrivalMs[$peer];
+    }
+
     private static function toMillis(DateTimeImmutable $time): float
     {
         return (float) $time->format('U.u') * 1000.0;

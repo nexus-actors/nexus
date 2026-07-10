@@ -204,6 +204,24 @@ final class PhiAccrualDetectorTest extends TestCase
         self::assertEqualsWithDelta(0.075, $detector->phi('peer', $this->at(4400)), 0.02);
     }
 
+    #[Test]
+    public function millisSinceLastHeartbeatIsNullBeforeAnyHeartbeat(): void
+    {
+        self::assertNull(new PhiAccrualDetector()->millisSinceLastHeartbeat('peer', $this->t0));
+    }
+
+    #[Test]
+    public function millisSinceLastHeartbeatTracksElapsedForASilentPeer(): void
+    {
+        // The #6 gap: a peer that handshakes once then goes silent has an empty phi window, so
+        // phi stays 0 forever — but the absolute silence is measurable and grows.
+        $detector = new PhiAccrualDetector();
+        $detector->heartbeat('peer', $this->at(0));
+
+        self::assertSame(0.0, $detector->phi('peer', $this->at(30_000)), 'phi cannot see the silence');
+        self::assertEqualsWithDelta(30_000.0, $detector->millisSinceLastHeartbeat('peer', $this->at(30_000)), 1.0);
+    }
+
     protected function setUp(): void
     {
         $this->t0 = new DateTimeImmutable('2026-01-01T00:00:00+00:00');
