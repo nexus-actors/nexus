@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Messaging;
 
 use InvalidArgumentException;
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\Exception\AskCapacityExceededException;
 use Monadial\Nexus\Cluster\Tcp\Exception\PeerUnreachableException;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterMessageCodec;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
@@ -359,6 +360,98 @@ final class ClusterMessagingTest extends TestCase
         $decoded = $this->codec()->decode($sent['payload']->messageType, $sent['payload']->body);
         self::assertInstanceOf(Pong::class, $decoded);
         self::assertSame('answer', $decoded->text);
+    }
+
+    #[Test]
+    public function inboundAskWithMalformedReplyPathIsDroppedNotDelivered(): void
+    {
+        // I5: replyPath is supplied verbatim by a remote peer. A path that is not the origin node's
+        // own temporary ask-reply path is not a legitimate reply target — it must be dropped (never
+        // delivered, never nacked), not echoed into a ClusterReplyRef that would later throw when its
+        // path() calls ActorPath::fromString() on garbage.
+        $registry = new LocalActorRegistry();
+        [$ref, $mailbox] = $this->localRef(self::PATH);
+        $registry->expose($ref);
+
+        $router = new InboxRouter(
+            new LocalDelivery($registry),
+            new TcpAskRegistry(new TestRuntime()),
+            $this->codec(),
+            new RecordingOutboundSink(),
+            new NoopTraceContextExtractor(),
+        );
+
+        $payload = new MessagePayload(
+            targetPath: self::PATH,
+            messageType: 'test.ping',
+            body: $this->codec()->encode(new Ping('ask'))->body,
+            correlationId: 'corr-evil',
+            replyPath: 'not-even-a-path::../../etc/passwd',
+            trace: [],
+        );
+
+        $router->route($this->node('node-a'), $payload);
+
+        self::assertNull($mailbox->dequeue(), 'a malformed reply path must not be delivered');
+        self::assertSame(1, $router->drops());
+    }
+
+    #[Test]
+    public function inboundAskWithReplyPathForADifferentNodeIsDropped(): void
+    {
+        // I5: even a well-FORMED actor path that is not under the ORIGIN node's own prefix is rejected —
+        // we only ever reply back to the origin, so a reply target belonging to another node is bogus.
+        $registry = new LocalActorRegistry();
+        [$ref, $mailbox] = $this->localRef(self::PATH);
+        $registry->expose($ref);
+
+        $router = new InboxRouter(
+            new LocalDelivery($registry),
+            new TcpAskRegistry(new TestRuntime()),
+            $this->codec(),
+            new RecordingOutboundSink(),
+            new NoopTraceContextExtractor(),
+        );
+
+        // A syntactically valid ask-reply path, but minted for node-b while the frame arrives from node-a.
+        $foreignReplyPath = (string) $this->node('node-b')->temporaryAskReplyPath('corr-123');
+        $payload = new MessagePayload(
+            targetPath: self::PATH,
+            messageType: 'test.ping',
+            body: $this->codec()->encode(new Ping('ask'))->body,
+            correlationId: 'corr-123',
+            replyPath: $foreignReplyPath,
+            trace: [],
+        );
+
+        $router->route($this->node('node-a'), $payload);
+
+        self::assertNull($mailbox->dequeue(), 'a reply path for a different node must not be delivered');
+        self::assertSame(1, $router->drops());
+    }
+
+    #[Test]
+    public function askSurfacesAskCapacityExceededExceptionWhenRegistryIsFull(): void
+    {
+        // B4: the documented capacity-rejection contract is the SPECIFIC exception type. A registry at
+        // capacity must surface AskCapacityExceededException to the caller — not swallow it, not wrap it.
+        $askRegistry = new TcpAskRegistry(new TestRuntime(), maxPending: 0);
+
+        $clusterRef = new ClusterRef(
+            $this->node('node-a'),
+            $this->node('node-b'),
+            ActorPath::fromString(self::PATH),
+            new RecordingOutboundSink(),
+            new LocalDelivery(new LocalActorRegistry()),
+            $askRegistry,
+            $this->codec(),
+            new SpyTraceContextInjector(),
+            static fn(): bool => true,
+        );
+
+        $this->expectException(AskCapacityExceededException::class);
+
+        $clusterRef->ask(new Ping('over-capacity'), Duration::seconds(5));
     }
 
     #[Test]

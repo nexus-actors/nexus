@@ -21,6 +21,8 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
 
+use function str_starts_with;
+
 /**
  * @psalm-api
  *
@@ -119,6 +121,19 @@ final class InboxRouter
         // A tell has correlationId === null; a reply (correlationId set, replyPath null) was
         // handled above. So reaching here with correlationId set means an inbound ask, whose
         // replyPath is therefore guaranteed non-null.
+        if ($payload->correlationId !== null && !$this->isValidAskReplyPath($origin, $payload->replyPath)) {
+            // A remote peer supplies replyPath verbatim; a malformed one would throw inside the
+            // delivery seam when ClusterReplyRef::path() calls ActorPath::fromString(). Reject the
+            // ask here (drop, never nack) rather than let a hostile/buggy path crash routing.
+            ++$this->drops;
+            $this->logger->debug('Dropping cluster ask with malformed replyPath', [
+                'origin' => $origin->toPathPrefix(),
+                'replyPath' => $payload->replyPath,
+            ]);
+
+            return;
+        }
+
         $replySender = $payload->correlationId !== null
             ? new ClusterReplyRef(
                 $origin,
@@ -144,6 +159,23 @@ final class InboxRouter
                 'targetPath' => $payload->targetPath,
             ]);
         }
+    }
+
+    /**
+     * Shape-guard an inbound ask reply path. A well-formed reply target is the temporary
+     * ask-reply path the origin node minted for this ask — its own path prefix followed by
+     * the `/temp/remote-ask-` marker (see {@see NodeAddress::temporaryAskReplyPath()}). We only
+     * ever reply back to `$origin`, so anything not addressed under that node's own prefix, or
+     * not carrying the remote-ask marker, is not a legitimate reply target and is rejected.
+     * This is a shape/prefix guard, not a full ACL.
+     */
+    private function isValidAskReplyPath(NodeAddress $origin, ?string $replyPath): bool
+    {
+        if ($replyPath === null || $replyPath === '') {
+            return false;
+        }
+
+        return str_starts_with($replyPath, $origin->toPathPrefix() . '/temp/remote-ask-');
     }
 
     private function routeReply(string $correlationId, object $message): void
