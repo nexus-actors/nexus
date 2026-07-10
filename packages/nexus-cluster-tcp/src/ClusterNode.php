@@ -521,7 +521,7 @@ final class ClusterNode
     private function observeLiveness(NodeAddress $peerAddr): void
     {
         if ($this->livenessThrottle->shouldObserve($peerAddr->toPathPrefix(), hrtime(true))) {
-            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null));
+            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null, $this->system->clock()->now()));
         }
     }
 
