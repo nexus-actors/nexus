@@ -56,16 +56,18 @@ docker compose logs -f node-b &
 
 ## What to observe
 
-> **Known limitation in this environment (verified 2026-07).** The initial join,
-> membership convergence (both nodes `UP`), the location-transparent `tell`, and the
-> `ask` round-trip all reproduce reliably. However, after the first exchange the
-> phi-accrual detector currently emits false `Suspect → Down` transitions
-> (`reason=Phi`) in the two-container Swoole setup — heartbeat liveness between
-> long-lived peer connections is still being hardened in `nexus-cluster-tcp`. As a
-> result the **sustained** 3-second greeting loop and the **kill/recover** failure
-> demo below may not reproduce cleanly yet. The steady-state and failure sections
-> describe the intended behaviour; treat them as the target once heartbeat liveness
-> lands. The join + `tell` + `ask` path is fully functional today.
+> **Failure detection under load — read this.** Join, convergence (both nodes `UP`), the
+> location-transparent `tell`, the `ask` round-trip, the **sustained** greeting loop, and the
+> **kill/recover** demo all reproduce in this two-container setup: the earlier false
+> `Suspect → Down` on idle long-lived links (a Swoole recv-timeout misread as a peer close)
+> is fixed. What remains is a load characteristic, not visible in this gentle demo: under
+> heavy message **saturation** on a single-core node the phi-accrual detector can still emit
+> transient `Suspect` events that self-heal (views always reconverge, no false `Down`). The
+> benchmark soak passes with the documented failure-detection tuning
+> (`withFailureDetection(minStdDev: …)`), and the remaining root cause — incarnation
+> monotonicity on recovery — is tracked in
+> `docs/superpowers/plans/2026-07-09-cluster-tcp-production-hardening.md`. This demo runs well
+> below that regime.
 
 ### Startup and join (first 3 seconds)
 

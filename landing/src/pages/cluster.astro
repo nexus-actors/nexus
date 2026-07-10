@@ -274,6 +274,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         <code class="font-mono">verifyPeer: true</code> (the default).
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <strong>The mesh is open by default</strong> — TLS encrypts the wire, but admission control needs a shared secret: <code class="font-mono">withAuthSecret()</code> enables HMAC handshake authentication so only nodes holding the secret can join. Set one in production</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Applied uniformly: <code class="font-mono">SwooleMeshTransport</code> reads <code class="font-mono">TlsConfig</code> for both server and outbound client sockets</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> No code changes beyond topology config; transport selection remains automatic</li>
