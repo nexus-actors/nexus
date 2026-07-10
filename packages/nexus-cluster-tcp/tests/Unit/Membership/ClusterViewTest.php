@@ -146,6 +146,32 @@ final class ClusterViewTest extends TestCase
         self::assertEquals($later, $local->merge($other)->members[$address->toPathPrefix()]->lastSeen);
     }
 
+    #[Test]
+    public function mergeExactTieKeepsLocalRecord(): void
+    {
+        // Equal incarnation, equal status rank, equal lastSeen — but differing endpoints. The local
+        // record must win so a value-identical merge is a no-op (no needless record churn).
+        $address = $this->address('node-2');
+        $local = ClusterView::empty()->withMember(new MemberRecord(
+            $address,
+            NodeEndpoint::fromString('10.0.0.2:7355'),
+            1,
+            MemberStatus::Up,
+            $this->t0,
+        ));
+        $incoming = ClusterView::empty()->withMember(new MemberRecord(
+            $address,
+            NodeEndpoint::fromString('10.9.9.9:7355'),
+            1,
+            MemberStatus::Up,
+            $this->t0,
+        ));
+
+        $merged = $local->merge($incoming);
+
+        self::assertSame('10.0.0.2:7355', (string) $merged->members[$address->toPathPrefix()]->endpoint);
+    }
+
     protected function setUp(): void
     {
         $this->t0 = new DateTimeImmutable('2026-01-01T00:00:00+00:00');

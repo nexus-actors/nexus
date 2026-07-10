@@ -19,8 +19,9 @@ use function ksort;
  *
  * `merge()` implements last-writer-wins by incarnation: the record with the
  * higher incarnation supersedes; on equal incarnation the worse status wins
- * (Down > Suspect > Up); on a further tie the later `lastSeen` wins. This lets
- * gossiped views converge deterministically regardless of arrival order.
+ * (Down > Suspect > Up); on a further tie a strictly-later `lastSeen` wins (an
+ * exact tie keeps the local record). This lets gossiped views converge
+ * deterministically regardless of arrival order.
  */
 final readonly class ClusterView
 {
@@ -129,7 +130,10 @@ final readonly class ClusterView
                 : $current;
         }
 
-        return $incoming->lastSeen >= $current->lastSeen
+        // Strictly-greater: on an exact tie (equal incarnation, status rank, and lastSeen) the LOCAL
+        // record wins. Value-equal merges are then a no-op, avoiding needless record churn; the join
+        // remains commutative up to lastSeen, which is the tiebreak.
+        return $incoming->lastSeen > $current->lastSeen
             ? $incoming
             : $current;
     }
