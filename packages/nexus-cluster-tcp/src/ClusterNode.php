@@ -22,6 +22,7 @@ use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
+use Monadial\Nexus\Cluster\Tcp\Membership\OutboundEvictingMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerDisconnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
@@ -274,7 +275,7 @@ final class ClusterNode
         // 9. Membership collaborators.
         // Handshake authentication: enforced only when the topology carries a shared secret.
         $authenticator = $topology->authSecret !== null
-            ? new HandshakeAuthenticator($topology->authSecret)
+            ? new HandshakeAuthenticator($topology->authSecret, clock: $system->clock())
             : null;
 
         $effectInterpreter = new TcpMembershipEffectInterpreter(
@@ -284,9 +285,14 @@ final class ClusterNode
             $meter,
             $authenticator,
         );
-        $eventPublisher = new AskFailingMembershipEventPublisher(
-            new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
-            $askRegistry,
+        $eventPublisher = new OutboundEvictingMembershipEventPublisher(
+            new AskFailingMembershipEventPublisher(
+                new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
+                $askRegistry,
+            ),
+            static function (NodeAddress $node) use (&$selfNode): void {
+                $selfNode?->evictOutbound($node);
+            },
         );
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
@@ -457,6 +463,38 @@ final class ClusterNode
     // -------------------------------------------------------------------------
 
     /**
+     * Evict and close the lazily-created outbound {@see PeerConnection} for a peer that has been
+     * declared {@see NodeDown}. Without this the connection's exponential-backoff reconnect loop
+     * keeps firing (and hammering the dead endpoint with SYNs) up to `reconnectMaxBackoff` forever
+     * — a timer + socket-attempt leak proportional to the lifetime count of departed peers.
+     *
+     * Only outbound connections are evicted; a live peer that merely flapped is re-dialed lazily
+     * by {@see sendByPrefix()} the next time a frame is routed to it, so legitimate reconnection
+     * is preserved. Accepted inbound links are handled separately by their own onClose.
+     *
+     * @internal Invoked by {@see OutboundEvictingMembershipEventPublisher} on the authoritative
+     *           NodeDown decision.
+     */
+    public function evictOutbound(NodeAddress $node): void
+    {
+        $endpoint = $this->endpointRegistry->resolveByPrefix($node->toPathPrefix());
+
+        if ($endpoint === null) {
+            return;
+        }
+
+        $key = (string) $endpoint;
+        $conn = $this->outboundConns[$key] ?? null;
+
+        if ($conn === null) {
+            return;
+        }
+
+        unset($this->outboundConns[$key]);
+        $conn->close();
+    }
+
+    /**
      * Route a frame to the peer identified by NodeAddress path-prefix. Prefers an
      * outbound PeerConnection (lazily created from the endpoint registry) so that
      * frames arrive at the peer's wireInboundLink handler, which has ingress set up
@@ -576,10 +614,21 @@ final class ClusterNode
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $deadline->cancel();
-                    $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
+                    $prefix = $peerAddr->toPathPrefix();
+                    // Re-handshake: if a different link is already accepted for this peer (mutual-seed
+                    // race, or a reconnect whose old link's onClose hasn't fired yet), close the prior
+                    // link first so its recv coroutine + socket are released instead of leaking. Its
+                    // onClose will no-op the acceptedLinks removal below because the slot now holds $link.
+                    $existing = $this->acceptedLinks[$prefix] ?? null;
+
+                    if ($existing !== null && $existing !== $link) {
+                        $existing->close();
+                    }
+
+                    $this->acceptedLinks[$prefix] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
-                    $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
+                    $this->safeSpanAttribute($span, 'nexus.cluster.peer', $prefix);
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
                     $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
                 } else {
@@ -633,12 +682,22 @@ final class ClusterNode
             $this->observeLiveness($peerAddr);
         });
 
-        $link->onClose(function () use (&$peerAddr, $linkId, $deadline): void {
+        $link->onClose(function () use ($link, &$peerAddr, $linkId, $deadline): void {
             $deadline->cancel();
             unset($this->inboundLinks[$linkId]);
 
             if ($peerAddr !== null) {
-                $this->livenessThrottle->forget($peerAddr->toPathPrefix());
+                $prefix = $peerAddr->toPathPrefix();
+
+                // Remove the accepted-link entry so the map does not leak a dead link (and so
+                // processLeaveFrame no longer fans out to a stale prefix). Guard against clobbering
+                // a NEWER link: a re-handshake (C2) may have already replaced this slot, in which
+                // case the entry must be left intact.
+                if (($this->acceptedLinks[$prefix] ?? null) === $link) {
+                    unset($this->acceptedLinks[$prefix]);
+                }
+
+                $this->livenessThrottle->forget($prefix);
                 $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
                 $this->safeDispatch(new PeerDisconnected($peerAddr));
                 // Fail any in-flight asks to this node fast — the reply can't arrive over the dead link.

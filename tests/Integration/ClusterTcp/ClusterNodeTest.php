@@ -7,10 +7,13 @@ namespace Monadial\Nexus\Tests\Integration\ClusterTcp;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterNode;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\Frame;
+use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Pong;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\FakeObservability;
@@ -26,10 +29,12 @@ use Monadial\Nexus\Core\Net\Port;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Serialization\Msgpack\MessagePackMessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 /**
  * Loopback integration tests for ClusterNode::boot.
@@ -876,11 +881,268 @@ final class ClusterNodeTest extends TestCase
         );
     }
 
+    /**
+     * C1: when an accepted inbound link closes, its entry must be removed from the node's
+     * acceptedLinks map — otherwise the map leaks a dead link per reconnect episode and
+     * processLeaveFrame fans out to stale prefixes forever.
+     */
+    #[Test]
+    public function acceptedLinkEntryIsRemovedWhenTheInboundLinkCloses(): void
+    {
+        $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 80));
+
+        $topology = ClusterTopology::create(
+            clusterName: 'test-cluster',
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: [],
+            singleNode: true,
+        );
+
+        $node = ClusterNode::boot(
+            $this->system,
+            $topology,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        // A raw peer that connects, sends a valid handshake (so it becomes an accepted link), then closes.
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $link = $client->connect($endpoint);
+
+        $peerAddr = new NodeAddress('test', 'local', 'nexus', 'node-peer');
+        $peerEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 80));
+
+        // T=50ms: send handshake so the link is accepted.
+        $this->runtime->scheduleOnce(
+            Duration::millis(50),
+            function () use ($link, $peerAddr, $peerEndpoint): void {
+                $link->sendFrame($this->handshakeFrame('test-cluster', $peerAddr, $peerEndpoint));
+            },
+        );
+
+        $acceptedAfterHandshake = null;
+        $acceptedAfterClose = null;
+
+        // T=150ms: capture accepted-link count while the link is up.
+        $this->runtime->scheduleOnce(
+            Duration::millis(150),
+            function () use ($node, $peerAddr, &$acceptedAfterHandshake): void {
+                $acceptedAfterHandshake = $this->hasAcceptedLink($node, $peerAddr);
+            },
+        );
+
+        // T=200ms: close the link.
+        $this->runtime->scheduleOnce(Duration::millis(200), static function () use ($link): void {
+            $link->close();
+        });
+
+        // T=350ms: capture accepted-link count after the close was processed.
+        $this->runtime->scheduleOnce(
+            Duration::millis(350),
+            function () use ($node, $peerAddr, &$acceptedAfterClose): void {
+                $acceptedAfterClose = $this->hasAcceptedLink($node, $peerAddr);
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(450), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertTrue($acceptedAfterHandshake, 'the link must be accepted after a valid handshake');
+        self::assertFalse($acceptedAfterClose, 'the accepted-link entry must be gone once the link closes (C1)');
+    }
+
+    /**
+     * C2: when the same peer opens a second inbound link (mutual-seed race / reconnect before the
+     * old link's EOF is seen), the prior accepted link for that prefix must be closed — otherwise
+     * its recv coroutine + socket leak.
+     */
+    #[Test]
+    public function reHandshakeClosesThePriorAcceptedLinkForTheSamePeer(): void
+    {
+        $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 81));
+
+        $topology = ClusterTopology::create(
+            clusterName: 'test-cluster',
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: [],
+            singleNode: true,
+        );
+
+        $node = ClusterNode::boot(
+            $this->system,
+            $topology,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $peerAddr = new NodeAddress('test', 'local', 'nexus', 'node-peer');
+        $peerEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 81));
+
+        $firstLink = $client->connect($endpoint);
+        $firstClosed = false;
+        $firstLink->onClose(static function () use (&$firstClosed): void {
+            $firstClosed = true;
+        });
+
+        // T=50ms: first handshake — first link accepted.
+        $this->runtime->scheduleOnce(
+            Duration::millis(50),
+            function () use ($firstLink, $peerAddr, $peerEndpoint): void {
+                $firstLink->sendFrame($this->handshakeFrame('test-cluster', $peerAddr, $peerEndpoint));
+            },
+        );
+
+        // T=150ms: SAME peer opens a second link and handshakes again (old link's EOF not yet seen).
+        $secondLink = $client->connect($endpoint);
+
+        $this->runtime->scheduleOnce(
+            Duration::millis(150),
+            function () use ($secondLink, $peerAddr, $peerEndpoint): void {
+                $secondLink->sendFrame($this->handshakeFrame('test-cluster', $peerAddr, $peerEndpoint));
+            },
+        );
+
+        $stillAccepted = null;
+
+        // T=300ms: the prior link must have been closed, and the peer must still be accepted (via link 2).
+        $this->runtime->scheduleOnce(
+            Duration::millis(300),
+            function () use ($node, $peerAddr, &$stillAccepted): void {
+                $stillAccepted = $this->hasAcceptedLink($node, $peerAddr);
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(400), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertTrue($firstClosed, 'the prior accepted link must be closed on re-handshake (C2)');
+        self::assertTrue($stillAccepted, 'the peer must still be accepted via the newer link');
+    }
+
+    /**
+     * I6: when a peer is declared Down, its lazily-created outbound PeerConnection must be evicted
+     * and closed so its reconnect loop/timer stops hammering the dead endpoint.
+     */
+    #[Test]
+    public function outboundConnectionIsEvictedWhenPeerGoesDown(): void
+    {
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 82));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 82));
+
+        // Aggressive give-up so B is downed quickly once it stops beating. A dials B (outbound conn to B).
+        $topoA = $this->fastTopology('test-cluster', $addrA, $endpointA, [$endpointB])
+            ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(400));
+        $topoB = $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA]);
+
+        $nodeB = ClusterNode::boot(
+            $this->system,
+            $topoB,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $topoA,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $outboundWhileUp = null;
+        $outboundAfterDown = null;
+
+        // T=600ms: converged — A holds an outbound connection to B.
+        $this->runtime->scheduleOnce(
+            Duration::millis(600),
+            function () use ($nodeA, $endpointB, &$outboundWhileUp): void {
+                $outboundWhileUp = $this->hasOutboundConn($nodeA, $endpointB);
+            },
+        );
+
+        // T=700ms: B leaves the mesh (its links close + Leave broadcast → A marks B Down).
+        $this->runtime->scheduleOnce(Duration::millis(700), static function () use ($nodeB): void {
+            $nodeB->shutdown();
+        });
+
+        // T=2000ms: after the give-up window, A must have evicted B's outbound connection.
+        $this->runtime->scheduleOnce(
+            Duration::millis(2000),
+            function () use ($nodeA, $endpointB, &$outboundAfterDown): void {
+                $outboundAfterDown = $this->hasOutboundConn($nodeA, $endpointB);
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(2200), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertTrue($outboundWhileUp, 'A must hold an outbound connection to B while B is up');
+        self::assertFalse($outboundAfterDown, 'A must evict the outbound connection once B is Down (I6)');
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new FiberRuntime();
         $this->system = ActorSystem::create('cluster-test', $this->runtime);
         $this->hub = new LoopbackHub();
+    }
+
+    /**
+     * Build a valid Handshake frame for a raw loopback client, serialized exactly as ClusterNode
+     * expects (MessagePack, cluster.handshake type).
+     */
+    private function handshakeFrame(string $clusterName, NodeAddress $peer, NodeEndpoint $advertise): Frame
+    {
+        $registry = new TypeRegistry();
+        $registry->registerFromAttribute(Handshake::class);
+        $serializer = new MessagePackMessageSerializer($registry);
+
+        $handshake = new Handshake(
+            clusterName: $clusterName,
+            node: [
+                'application' => $peer->application,
+                'cluster' => $peer->cluster,
+                'datacenter' => $peer->datacenter,
+                'node' => $peer->node,
+            ],
+            advertise: (string) $advertise,
+        );
+
+        return new Frame(FrameType::Handshake, $serializer->serialize($handshake));
+    }
+
+    /**
+     * Reflect the private acceptedLinks map to check whether the given peer has a live accepted link.
+     */
+    private function hasAcceptedLink(ClusterNode $node, NodeAddress $peer): bool
+    {
+        /** @var array<string, mixed> $accepted */
+        $accepted = (new ReflectionProperty(ClusterNode::class, 'acceptedLinks'))->getValue($node);
+
+        return isset($accepted[$peer->toPathPrefix()]);
+    }
+
+    /**
+     * Reflect the private outboundConns map to check whether an outbound connection exists for the endpoint.
+     */
+    private function hasOutboundConn(ClusterNode $node, NodeEndpoint $endpoint): bool
+    {
+        /** @var array<string, mixed> $conns */
+        $conns = (new ReflectionProperty(ClusterNode::class, 'outboundConns'))->getValue($node);
+
+        return isset($conns[(string) $endpoint]);
     }
 
     // -------------------------------------------------------------------------
