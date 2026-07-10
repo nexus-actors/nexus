@@ -164,6 +164,8 @@ $system = ActorSystem::create(
 //    SwooleRuntime enters Co\run() via $system->run().
 // ---------------------------------------------------------------------------
 
+$exitCode = 0;
+
 $runtime->scheduleOnce(
     Duration::millis(10),
     static function () use (
@@ -175,6 +177,7 @@ $runtime->scheduleOnce(
         $clusterName,
         $greeterNodeEnv,
         $logger,
+        &$exitCode,
     ): void {
         // Boot the cluster node: wires transport, membership actor, gossip/heartbeat.
         $node = ClusterNode::boot($system, $topology, $typeRegistry, logger: $logger);
@@ -227,7 +230,10 @@ $runtime->scheduleOnce(
 
             if (count($greeterNodeParts) !== 3) {
                 $logger->error('GREETER_NODE must be "dc/app/node"', ['value' => $greeterNodeEnv]);
-                exit(1);
+                $exitCode = 1;
+                $system->shutdown(Duration::seconds(5));
+
+                return;
             }
 
             [$greeterDc, $greeterApp, $greeterNodeId] = $greeterNodeParts;
@@ -307,7 +313,8 @@ $runtime->scheduleOnce(
             $logger->info('Client actor spawned — will greet node-a every 3 seconds');
         } else {
             $logger->error('Unknown NODE_ROLE — expected "greeter" or "client"', ['role' => $nodeRole]);
-            exit(1);
+            $exitCode = 1;
+            $system->shutdown(Duration::seconds(5));
         }
     },
 );
@@ -326,3 +333,5 @@ $logger->info('Starting actor system', [
 $system->run();
 
 $logger->info('Actor system stopped.');
+
+exit($exitCode);
