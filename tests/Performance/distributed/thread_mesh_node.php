@@ -295,17 +295,17 @@ function runMeshNode(
         // Full-mutual mesh boot: every node dials every peer before most listeners are
         // up, so first dials fail. With the default 30 s max backoff those retries
         // trickle in for minutes; capping at 2 s converges the 16-node mesh promptly.
-        ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2))
-        // Saturated-links tuning. MEASURED (full send rate, 16 nodes, 60 s): at pure
-        // default phi the detector legitimately fires ~8-18 times/node on multi-second
-        // reactor stalls caused by data-plane saturation, and each transient still spreads
-        // through gossip — views ALWAYS heal (0 unhealed, 0 Downs, 39M msgs delivered), but
-        // the event stream is noisy. Widening the std-dev floor to 3 s keeps detection
-        // meaningful for real failures (Suspect->Down still 10 s) while tolerating that load
-        // jitter, and the mesh passes at full send rate. The real fix is control/data-plane
-        // connection separation (plan Phase 1.A), whose acceptance bar is passing here at
-        // DEFAULT phi with this line removed.
-        ->withFailureDetection(minStdDev: Duration::seconds(3));
+        ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2));
+        // No failure-detector tuning here: the previous `minStdDev: seconds(3)` widening
+        // was a workaround for data-plane-saturation phi noise, and it is now OBSOLETE.
+        // Receive-time heartbeat timestamping (the phi detector is fed the socket-ingress
+        // timestamp, not actor-processing time — see
+        // docs/superpowers/plans/2026-07-10-cluster-phi-ingress-timestamp.md) eliminated
+        // that false suspicion under load: steady-state phi drops from ~15 to 0 at DEFAULT
+        // phi in the 16-node soak. The soak below therefore validates the shipping default.
+        // The residual suspicion this soak still observes is a one-time CONVERGENCE-window
+        // gossip-echo (tracked as finding #1 / incarnation-monotonicity), not data-plane
+        // saturation — see the `suspectedUnderLoad` threshold comment below.
 
     $registry = new TypeRegistry();
     $registry->registerFromAttribute(Ping::class);
@@ -493,6 +493,9 @@ function runMeshNode(
                     // tell loop for sequential asks would silence this node for seconds and
                     // train-then-trip the peers' phi detectors — a real app keeps talking
                     // while it asks. p50 reported from the last COMPLETED probe.
+                    // This bursty 30s-interval cadence (20 asks back-to-back) was historically
+                    // a second, undisclosed phi-noise contributor alongside data-plane
+                    // saturation; it is now moot with the phi-ingress-timestamp fix.
                     $askRef = $node->refFor($peerAddrs[$target % $peerCount], $echoPath);
                     $runtime->defer(static function () use ($askRef, &$lastAskP50Us, &$askFailures): void {
                         $samples = [];
@@ -577,6 +580,11 @@ function runMeshNode(
                 $reasons[] = "view did not heal: {$finalUp}/{$expectedNodes} Up at end";
             }
 
+            // Threshold provenance: 30 is the observed CONVERGENCE-window gossip-echo
+            // baseline (~26-34/node at default phi in the 16-node soak — see finding #1 /
+            // incarnation-monotonicity) plus margin. It is NOT a steady-state figure —
+            // steady-state (post-convergence, under load) is 0 new suspicions since the
+            // phi-ingress-timestamp fix.
             if ($suspectedUnderLoad > 30) {
                 $reasons[] = sprintf(
                     'failure detector fired under load (suspected=%d [conn=%d gossip=%d phi=%d], down=%d)',

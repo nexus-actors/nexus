@@ -7,6 +7,12 @@
 #
 # Usage: ./tests/Performance/distributed/run.sh [durationSeconds] [payloadBytes]
 # Exit:  0 = every node PASSed, 1 otherwise.
+#
+# This is the authoritative verdict and runs WITHOUT the observability overlay
+# (compose.observability.yaml) — full tracing/metrics instrumentation can induce
+# observer-effect instability on this harness's single-core-per-node reactor. The
+# Grafana overlay (run-observability.sh) is inspection-only; never read its dashboards
+# as a health signal for this soak.
 set -euo pipefail
 
 cd "$(dirname "$0")"
