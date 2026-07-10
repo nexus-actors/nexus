@@ -470,6 +470,7 @@ function runMeshNode(
             $nextReportNs = $intervalStartNs + 30 * 1_000_000_000;
             $elapsed = 0;
             $target = 0;
+            $suspectedAtConvergence = null;
 
             while (hrtime(true) < $deadlineNs) {
                 // Batch of tells to the next peer (rotates through the whole mesh).
@@ -520,6 +521,10 @@ function runMeshNode(
                     $askP50Us = $lastAskP50Us;
 
                     $elapsed += 30;
+                    // Snapshot suspicion at the first post-convergence interval. Steady-state health
+                    // is judged by GROWTH from this baseline, not the absolute count — the absolute
+                    // count is dominated by the one-time convergence-window gossip-echo.
+                    $suspectedAtConvergence ??= $suspected;
                     $intervalReceived = $received - $intervalStartReceived;
                     $rate = $intervalReceived / (($nowNs - $intervalStartNs) / 1_000_000_000);
                     $memMb = memory_get_usage(true) / 1_048_576;
@@ -580,14 +585,22 @@ function runMeshNode(
                 $reasons[] = "view did not heal: {$finalUp}/{$expectedNodes} Up at end";
             }
 
-            // Threshold provenance: 30 is the observed CONVERGENCE-window gossip-echo
-            // baseline (~26-34/node at default phi in the 16-node soak — see finding #1 /
-            // incarnation-monotonicity) plus margin. It is NOT a steady-state figure —
-            // steady-state (post-convergence, under load) is 0 new suspicions since the
-            // phi-ingress-timestamp fix.
-            if ($suspectedUnderLoad > 30) {
+            // Judge STEADY-STATE stability by suspicion GROWTH after convergence, not by the
+            // absolute count. At true default phi the one-time convergence-window gossip-echo is
+            // ~110-150/node (finding #1 / incarnation-monotonicity) — benign and FLAT once the mesh
+            // is up. A healthy mesh adds ~0 new suspicions after convergence; a real regression
+            // (link churn, phi starvation under load) makes suspicion climb through the window — that
+            // is what we fail on. Baseline = the first post-convergence 30s snapshot; 20 is jitter
+            // margin. (The prior absolute `> 30` gate conflated benign convergence noise with churn
+            // and was calibrated against a since-removed detuned phi config.)
+            $steadyBaseline = $suspectedAtConvergence ?? $suspectedUnderLoad;
+            $steadyGrowth = $suspectedUnderLoad - $steadyBaseline;
+
+            if ($steadyGrowth > 20) {
                 $reasons[] = sprintf(
-                    'failure detector fired under load (suspected=%d [conn=%d gossip=%d phi=%d], down=%d)',
+                    'failure detector kept firing under load: steady-state suspicion grew +%d (%d->%d) [conn=%d gossip=%d phi=%d], down=%d',
+                    $steadyGrowth,
+                    $steadyBaseline,
                     $suspectedUnderLoad,
                     $byReason['Connection'],
                     $byReason['Gossip'],
