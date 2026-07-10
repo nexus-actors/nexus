@@ -95,6 +95,37 @@ final class ClusterTopologyTest extends TestCase
     }
 
     #[Test]
+    public function factoryAcceptsMinimumMembersParam(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            minimumMembers: 3,
+        );
+
+        self::assertSame(3, $topology->minimumMembers);
+    }
+
+    #[Test]
+    public function factoryRejectsNegativeMinimumMembers(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('minimumMembers');
+
+        ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            minimumMembers: -1,
+        );
+    }
+
+    #[Test]
     public function withMaxFrameSizeRejectsANonPositiveCap(): void
     {
         $topology = ClusterTopology::create(

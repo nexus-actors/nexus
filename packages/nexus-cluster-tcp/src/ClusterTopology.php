@@ -61,9 +61,17 @@ final readonly class ClusterTopology
     /**
      * Create a ClusterTopology with sensible defaults.
      *
-     * @param list<NodeEndpoint> $seeds Seed node endpoints. Must be non-empty unless `$singleNode` is true.
+     * Parameters group as: identity (`clusterName`, `self`) → network (`bindEndpoint`,
+     * `advertiseEndpoint`) → seeds → timing (`heartbeatInterval`, `phiThreshold`,
+     * `gossipInterval`, reconnect backoffs, `handshakeTimeout`) → limits (`maxInboundLinks`,
+     * `minimumMembers`, `singleNode`) → security (`tls`; enable auth via `withAuthSecret()`).
      *
-     * @throws InvalidArgumentException when clusterName is empty or seeds is empty and singleNode is false.
+     * @param list<NodeEndpoint> $seeds Seed node endpoints. Must be non-empty unless `$singleNode` is true.
+     * @param int $minimumMembers Split-brain floor: minimum reachable (Up) members before this node
+     *        will declare any peer Down. 0 (default) disables it. See {@see withMinimumMembers()}.
+     *
+     * @throws InvalidArgumentException when clusterName is empty, seeds is empty and singleNode is
+     *         false, or minimumMembers is negative.
      */
     public static function create(
         string $clusterName,
@@ -78,6 +86,7 @@ final readonly class ClusterTopology
         ?Duration $reconnectMaxBackoff = null,
         ?Duration $handshakeTimeout = null,
         int $maxInboundLinks = 1_024,
+        int $minimumMembers = 0,
         bool $singleNode = false,
         ?TlsConfig $tls = null,
     ): self {
@@ -94,6 +103,10 @@ final readonly class ClusterTopology
 
         if ($maxInboundLinks < 1) {
             throw new InvalidArgumentException('ClusterTopology maxInboundLinks must be at least 1.');
+        }
+
+        if ($minimumMembers < 0) {
+            throw new InvalidArgumentException('ClusterTopology minimumMembers must not be negative.');
         }
 
         $resolvedHandshakeTimeout = $handshakeTimeout ?? Duration::seconds(10);
@@ -119,7 +132,7 @@ final readonly class ClusterTopology
             handshakeTimeout: $resolvedHandshakeTimeout,
             maxInboundLinks: $maxInboundLinks,
             maxFrameSize: 8 * 1024 * 1024,
-            minimumMembers: 0,
+            minimumMembers: $minimumMembers,
             singleNode: $singleNode,
             tls: $tls,
             authSecret: null,
