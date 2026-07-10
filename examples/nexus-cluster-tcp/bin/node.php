@@ -180,11 +180,11 @@ $runtime->scheduleOnce(
         $node = ClusterNode::boot($system, $topology, $typeRegistry, logger: $logger);
 
         $logger->info('Cluster node booted', [
-            'role' => $nodeRole,
-            'self' => $topology->self->toPathPrefix(),
-            'bind' => (string) $topology->bindEndpoint,
             'advertise' => (string) $topology->advertiseEndpoint,
+            'bind' => (string) $topology->bindEndpoint,
+            'role' => $nodeRole,
             'seeds' => array_map(static fn($e): string => (string) $e, $topology->seeds),
+            'self' => $topology->self->toPathPrefix(),
         ]);
 
         if ($nodeRole === 'greeter') {
@@ -227,8 +227,7 @@ $runtime->scheduleOnce(
 
             if (count($greeterNodeParts) !== 3) {
                 $logger->error('GREETER_NODE must be "dc/app/node"', ['value' => $greeterNodeEnv]);
-
-                return;
+                exit(1);
             }
 
             [$greeterDc, $greeterApp, $greeterNodeId] = $greeterNodeParts;
@@ -308,6 +307,7 @@ $runtime->scheduleOnce(
             $logger->info('Client actor spawned — will greet node-a every 3 seconds');
         } else {
             $logger->error('Unknown NODE_ROLE — expected "greeter" or "client"', ['role' => $nodeRole]);
+            exit(1);
         }
     },
 );
