@@ -53,6 +53,7 @@ final class ClusterTopologyTest extends TestCase
         self::assertEquals(Duration::seconds(10), $topology->handshakeTimeout);
         self::assertSame(1_024, $topology->maxInboundLinks);
         self::assertSame(8 * 1024 * 1024, $topology->maxFrameSize);
+        self::assertSame(0, $topology->minimumMembers);
         self::assertFalse($topology->singleNode);
         self::assertNull($topology->tls);
         self::assertNull($topology->authSecret);
@@ -73,6 +74,24 @@ final class ClusterTopologyTest extends TestCase
 
         self::assertSame(8 * 1024 * 1024, $topology->maxFrameSize, 'original is unchanged');
         self::assertSame(1024 * 1024, $tightened->maxFrameSize);
+    }
+
+    #[Test]
+    public function withMinimumMembersSetsTheQuorumFloorAndRejectsNegative(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: $this->bindEndpoint,
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        self::assertSame(3, $topology->withMinimumMembers(3)->minimumMembers);
+        self::assertSame(0, $topology->minimumMembers, 'original is unchanged');
+
+        $this->expectException(InvalidArgumentException::class);
+        $topology->withMinimumMembers(-1);
     }
 
     #[Test]
