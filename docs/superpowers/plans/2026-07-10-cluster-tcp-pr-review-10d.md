@@ -76,3 +76,23 @@ No correctness, security, or architecture blocker anywhere in the 10 dimensions.
 Fix items 1–5 (all small: one example wiring bug, one example exit path, three doc edits),
 re-run the example + affected suites, then merge. No re-soak needed — none of the five
 touch cluster-tcp runtime code.
+
+---
+
+## ZERO-NIT RESOLUTION (2026-07-10)
+
+All findings from all ten dimensions addressed in 4 fixer waves, 12 commits (ce5f3da9..d35bcb54):
+example TypeError + ExitException path; stale phi docs; README Security+Scaling; benchmark
+multipliers + REPLY_STREAM; rolling-restart + worker-pool-composition sections; and the src wave —
+handshake ingress observedAt, isAlive() wired via DepartedPeerTracker, create(minimumMembers),
+incarnation overflow clamp, incomplete-handshake-identity rejection, RandomPeerSelector copy,
+pickWinner tie→local, docblock items. By-design tradeoffs documented rather than churned
+(Leave-relay M2, incarnation trust M3, re-handshake bound L2, processedLeaves FIFO). Roadmap items
+tracked: delta-gossip, control lane, god-class split, I3.
+
+Final gates (HEAD d35bcb54): cluster 259 + loopback 16 + full unit 1525 + Swoole 50 green; Psalm
+clean; Deptrac 0. Final 16-node soak at true default phi: all 16 nodes healthy (flat suspicion,
+down=0, ~695k msg/s); 15/16 verdict lines reported — w3t2's PASS line was lost to the known
+pre-existing Swoole thread-pool teardown race (aio pipe bad fd) AFTER a fully healthy run
+(its health lines: suspected=139 flat t=030s..t=210s, down=0). Harness artifact, not a cluster
+defect; tracked with the sendAll() teardown-flakiness family.
