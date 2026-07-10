@@ -178,6 +178,7 @@ final class MembershipActor implements StatefulActorHandler
                 $this->detector,
                 $message->peer,
                 $message->endpoint,
+                $message->observedAt,
                 $now,
             )),
             $message instanceof PeerLinkClosed => $this->apply($this->service->applyLinkClosed(

@@ -126,6 +126,7 @@ final class MembershipService
             $peer,
             $endpoint,
             $now,
+            $now,
         );
         [$view2, $suspectSince2, $events2] = $this->mergeView($view1, $suspectSince1, $theirView);
 
@@ -202,6 +203,7 @@ final class MembershipService
         PhiAccrualDetector $detector,
         NodeAddress $peer,
         ?NodeEndpoint $endpoint,
+        DateTimeImmutable $observedAt,
         DateTimeImmutable $now,
     ): MembershipTransition {
         [$newView, $newSuspectSince, $events] = $this->recordLiveness(
@@ -210,6 +212,7 @@ final class MembershipService
             $detector,
             $peer,
             $endpoint,
+            $observedAt,
             $now,
         );
 
@@ -410,10 +413,11 @@ final class MembershipService
         PhiAccrualDetector $detector,
         NodeAddress $peer,
         ?NodeEndpoint $endpoint,
+        DateTimeImmutable $observedAt,
         DateTimeImmutable $now,
     ): array {
         $key = $peer->toPathPrefix();
-        $detector->heartbeat($key, $now);
+        $detector->heartbeat($key, $observedAt);
 
         if ($key === $this->selfKey) {
             return [$view, $suspectSince, []];

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterDegraded;
@@ -180,6 +181,38 @@ final class MembershipServiceTest extends TestCase
     }
 
     #[Test]
+    public function livenessFeedsTheDetectorAtObservedTimeNotProcessingTime(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $peer = new NodeAddress('production', 'eu', 'payments', 'node-9');
+        $endpoint = NodeEndpoint::fromString('10.0.0.9:7355');
+
+        // Bytes arrived at observedAt; the membership actor only processed the
+        // message 8s later (simulating data-plane scheduler contention).
+        $observedAt = new DateTimeImmutable('2026-07-10 00:00:02.000000');
+        $processingNow = new DateTimeImmutable('2026-07-10 00:00:10.000000');
+
+        $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $peer,
+            $endpoint,
+            $observedAt,
+            $processingNow,
+        );
+
+        // The detector recorded the arrival at observedAt: elapsed-since is 0 AT observedAt.
+        self::assertSame(
+            0.0,
+            $this->detector->millisSinceLastHeartbeat($peer->toPathPrefix(), $observedAt),
+        );
+    }
+
+    #[Test]
     public function mergeViewEmitsNodeUpWhenSuspectPeerRecovers(): void
     {
         $service = $this->service();
@@ -196,6 +229,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $third,
             $thirdEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
@@ -281,6 +315,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $third,
             $thirdEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -397,6 +432,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
             $t1->newView,
@@ -427,6 +463,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
             $t1->newView,
@@ -455,6 +492,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
 
         for ($i = 0; $i < 5; $i++) {
@@ -466,6 +504,7 @@ final class MembershipServiceTest extends TestCase
                 $this->detector,
                 $this->peer,
                 null,
+                $this->clock->now(),
                 $this->clock->now(),
             );
         }
@@ -500,6 +539,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
             $t1->newView,
@@ -516,6 +556,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $this->peer,
             $this->peerEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -537,6 +578,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $this->peer,
             $this->peerEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
@@ -579,6 +621,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
             $t1->newView,
@@ -618,6 +661,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLinkClosed(
             $t1->newView,
@@ -655,6 +699,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLeave($t1->newView, $t1->newSuspectSince, $t1->newSelfIncarnation, $this->peer);
 
@@ -678,6 +723,7 @@ final class MembershipServiceTest extends TestCase
             $this->peer,
             $this->peerEndpoint,
             $this->clock->now(),
+            $this->clock->now(),
         );
         $t2 = $service->applyLiveness(
             $t1->newView,
@@ -686,6 +732,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $other,
             NodeEndpoint::fromString('10.0.0.3:7355'),
+            $this->clock->now(),
             $this->clock->now(),
         );
         $t3 = $service->applyTick(
@@ -723,6 +770,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $this->peer,
             $this->peerEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -768,6 +816,7 @@ final class MembershipServiceTest extends TestCase
             $this->detector,
             $this->peer,
             $this->peerEndpoint,
+            $this->clock->now(),
             $this->clock->now(),
         );
         $t2 = $service->applyTick(
