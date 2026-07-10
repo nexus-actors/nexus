@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Membership\Message;
 
+use Monadial\Nexus\Core\Actor\UntracedMessage;
+
 /**
  * @psalm-api
  *
@@ -12,4 +14,4 @@ namespace Monadial\Nexus\Cluster\Tcp\Membership\Message;
  * C1.6c tick couples failure detection and gossip fan-out; the actor interprets
  * whichever effects the transition returns.
  */
-final readonly class HeartbeatTick {}
+final readonly class HeartbeatTick implements UntracedMessage {}

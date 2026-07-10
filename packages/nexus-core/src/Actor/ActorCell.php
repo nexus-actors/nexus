@@ -898,7 +898,9 @@ final class ActorCell implements ActorContext
 
     private function traceUserMessage(Envelope $envelope, object $message): void
     {
-        if (!$this->observability->isEnabled()) {
+        // Skip per-message span + metrics when observability is off, or for infrastructure
+        // messages that opt out (high-frequency ticks/liveness signals) — see UntracedMessage.
+        if (!$this->observability->isEnabled() || $message instanceof UntracedMessage) {
             $this->handleUserMessage($message);
 
             return;
