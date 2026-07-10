@@ -74,3 +74,22 @@ Four parallel reviewers over the branch (merge-base `da8ec590`): A = cluster-tcp
 Transport-lifecycle changes (C1/C2/I6) MUST be re-validated by the 16-node mesh soak (default
 phi, ingress fix in place) — convergence + steady-state must remain clean and no new downs — per
 the session lesson that unit-green is necessary but not sufficient for the mesh.
+
+---
+
+## RESOLUTION (2026-07-10)
+
+All FIX-NOW items landed and validated:
+- Code defects C1/C2/I6/I5/I2 fixed; C2/I6 initially regressed the mesh (batched, unit-green but
+  soak-red) and were re-worked mesh-safe (commit cdc170f8): C2 no eager close, I6 evict only on
+  graceful Leave. C1/I5/I2 unchanged.
+- D1 (UntracedMessage), docs (C1d/C2d/C3d/C4d/C5d, M5), harness honesty (B1/B2/B6b/B6c), examples
+  (D2/B7/B8), tests (B3/B4/B5) all committed.
+- Soak gate corrected (commit 1ffd2757) to measure steady-state suspicion GROWTH, not absolute
+  count (the old gate was calibrated on a detuned config).
+- FINAL VALIDATION: 16-node mesh soak at TRUE default phi = RESULT PASS (16/16), ~738k msg/s, all
+  converged, down=0, suspicion flat. Cluster unit 249 + integration 15 green; psalm clean.
+
+DEFERRED (tracked, non-merge-blocking): I1 Approach-B control lane; I3 latent suspectSince trap;
+M1 ClusterNode god-class + wireInboundLink/dialSeed dedup; M2/M3/M4 perf/error-swallowing; the
+one-time convergence-window gossip-echo (#1 / incarnation-monotonicity); assorted minor test-tax.
