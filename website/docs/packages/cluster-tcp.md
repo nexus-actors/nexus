@@ -136,6 +136,8 @@ $topology = ClusterTopology::create(
 
 **Detection timeline for a hard-killed node (defaults):** TCP EOF triggers an immediate `NodeSuspected(reason=Connection)`. After `maxNoHeartbeat` (10 s) without a heartbeat arriving, the node transitions to `Down`. A graceful `ClusterNode::shutdown()` broadcasts a `Leave` frame first; the peer marks the node `Down` immediately on receipt, without waiting for the phi timeout.
 
+The phi detector is fed heartbeat-arrival timestamps captured at TCP-frame ingress, so local scheduler/GC jitter on a busy reactor does not poison the inter-arrival window. The defaults are correct out of the box on a LAN; only raise `phiMinStdDev`/`phiThreshold` to absorb genuine network-level jitter (WAN links, lossy routing) — not local pauses.
+
 See [Clustering over TCP — failure-detection tuning](../guides/clustering-over-tcp.md#failure-detection-tuning) for production guidance and the trade-offs between threshold sensitivity and false-positive risk.
 
 ## TLS

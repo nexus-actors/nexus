@@ -200,8 +200,10 @@ The defaults are conservative and safe for LAN deployments:
 **Adjustment guidance:**
 
 - **LAN, low jitter** — defaults work well. Lower `phiThreshold` to 6.0 only if you need faster detection and your network is very stable.
-- **WAN or cross-datacenter** — raise `maxNoHeartbeat` to 30–60 s, increase `phiMinStdDev` to 1–2 s, and raise `phiThreshold` to 10–12 to tolerate routing variance.
-- **Fast demo / testing** — lower `maxNoHeartbeat` to 4 s to see failure detection in under 5 seconds. Do not lower `phiThreshold` below 8.0 at a 1 s heartbeat interval — ordinary coroutine or GC pauses cross the threshold and produce false `Suspect → Down` flapping.
+- **WAN or cross-datacenter** — raise `maxNoHeartbeat` to 30–60 s, increase `phiMinStdDev` to 1–2 s, and raise `phiThreshold` to 10–12 to tolerate genuine network jitter (WAN links, lossy routing).
+- **Fast demo / testing** — lower `maxNoHeartbeat` to 4 s to see failure detection in under 5 seconds. Do not lower `phiThreshold` below 8.0 at a 1 s heartbeat interval.
+
+The phi detector feeds on the timestamp a heartbeat is observed at TCP-frame ingress, not when the `MembershipActor` gets around to processing it — so local scheduler contention or GC pauses on a busy reactor no longer poison the inter-arrival window. The defaults above are correct out of the box on a LAN; only widen `phiMinStdDev`/`phiThreshold` to absorb real network-level variance (WAN, lossy links), not local pauses. Validated by a 16-node soak test at default phi with zero false `Down` transitions.
 
 ```php title="Production tuning example" verify:lint-only
 use Monadial\Nexus\Cluster\NodeAddress;
