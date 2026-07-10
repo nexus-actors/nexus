@@ -22,7 +22,6 @@ use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
-use Monadial\Nexus\Cluster\Tcp\Membership\OutboundEvictingMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerDisconnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
@@ -285,14 +284,9 @@ final class ClusterNode
             $meter,
             $authenticator,
         );
-        $eventPublisher = new OutboundEvictingMembershipEventPublisher(
-            new AskFailingMembershipEventPublisher(
-                new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
-                $askRegistry,
-            ),
-            static function (NodeAddress $node) use (&$selfNode): void {
-                $selfNode?->evictOutbound($node);
-            },
+        $eventPublisher = new AskFailingMembershipEventPublisher(
+            new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
+            $askRegistry,
         );
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
@@ -463,17 +457,17 @@ final class ClusterNode
     // -------------------------------------------------------------------------
 
     /**
-     * Evict and close the lazily-created outbound {@see PeerConnection} for a peer that has been
-     * declared {@see NodeDown}. Without this the connection's exponential-backoff reconnect loop
-     * keeps firing (and hammering the dead endpoint with SYNs) up to `reconnectMaxBackoff` forever
-     * — a timer + socket-attempt leak proportional to the lifetime count of departed peers.
+     * Evict and close the lazily-created outbound {@see PeerConnection} for a peer that has
+     * gracefully LEFT the cluster (a Leave frame), so its exponential-backoff reconnect loop
+     * stops hammering an endpoint that is definitively gone.
      *
-     * Only outbound connections are evicted; a live peer that merely flapped is re-dialed lazily
-     * by {@see sendByPrefix()} the next time a frame is routed to it, so legitimate reconnection
-     * is preserved. Accepted inbound links are handled separately by their own onClose.
+     * Deliberately NOT wired to a phi/timeout {@see NodeDown}: such a Down may be a false positive
+     * (load jitter, a transient reactor stall), and closing the outbound connection there would
+     * stop us gossiping to a still-live peer and prevent it from ever healing back to Up. A peer
+     * Downed by suspicion keeps its outbound connection (bounded reconnect) so it can recover.
+     * Accepted inbound links are handled separately by their own onClose.
      *
-     * @internal Invoked by {@see OutboundEvictingMembershipEventPublisher} on the authoritative
-     *           NodeDown decision.
+     * @internal Invoked from {@see processLeaveFrame()} on a graceful Leave.
      */
     public function evictOutbound(NodeAddress $node): void
     {
@@ -615,16 +609,12 @@ final class ClusterNode
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $deadline->cancel();
                     $prefix = $peerAddr->toPathPrefix();
-                    // Re-handshake: if a different link is already accepted for this peer (mutual-seed
-                    // race, or a reconnect whose old link's onClose hasn't fired yet), close the prior
-                    // link first so its recv coroutine + socket are released instead of leaking. Its
-                    // onClose will no-op the acceptedLinks removal below because the slot now holds $link.
-                    $existing = $this->acceptedLinks[$prefix] ?? null;
-
-                    if ($existing !== null && $existing !== $link) {
-                        $existing->close();
-                    }
-
+                    // Re-handshake: a new inbound link supersedes any prior one for this peer. We do
+                    // NOT eagerly close the prior link — in the mutual-seed mesh close() EOFs the remote
+                    // peer and triggers a reconnect/re-handshake storm that starves gossip and spuriously
+                    // suspects healthy peers. Just replace the map slot; the prior link is cleaned up by
+                    // its own onClose (guarded so it cannot remove this newer slot), and a genuinely
+                    // orphaned link EOFs on its own when the peer drops that connection.
                     $this->acceptedLinks[$prefix] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
                     $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
@@ -984,6 +974,11 @@ final class ClusterNode
         $this->processedLeaves[$leavingPrefix] = true;
 
         $this->membershipRef->tell(new LeaveReceived($leavingAddr));
+
+        // A graceful Leave means the peer is definitively gone: evict and close our outbound
+        // connection to it so its reconnect loop stops. We deliberately do NOT evict on a
+        // phi/timeout NodeDown, which may be a false positive that must be allowed to heal.
+        $this->evictOutbound($leavingAddr);
 
         // Forward to all accepted peers except the leaving node and the frame sender.
         $senderPrefix = $senderAddr?->toPathPrefix();

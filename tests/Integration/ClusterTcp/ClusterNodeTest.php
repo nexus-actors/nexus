@@ -957,12 +957,14 @@ final class ClusterNodeTest extends TestCase
     }
 
     /**
-     * C2: when the same peer opens a second inbound link (mutual-seed race / reconnect before the
-     * old link's EOF is seen), the prior accepted link for that prefix must be closed — otherwise
-     * its recv coroutine + socket leak.
+     * C2 (mesh-safe): when the same peer opens a second inbound link (mutual-seed race / reconnect
+     * before the old link's EOF is seen), the newer link becomes the accepted one for that prefix
+     * WITHOUT force-closing the prior link. Eagerly closing it would EOF the remote peer and trigger
+     * a reconnect/re-handshake storm that starves gossip and spuriously suspects healthy peers; the
+     * prior link is instead cleaned up by its own onClose when the peer drops that connection.
      */
     #[Test]
-    public function reHandshakeClosesThePriorAcceptedLinkForTheSamePeer(): void
+    public function reHandshakeReplacesTheAcceptedLinkWithoutClosingThePrior(): void
     {
         $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
         $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 81));
@@ -1026,16 +1028,22 @@ final class ClusterNodeTest extends TestCase
 
         $this->system->run();
 
-        self::assertTrue($firstClosed, 'the prior accepted link must be closed on re-handshake (C2)');
+        self::assertFalse(
+            $firstClosed,
+            'the prior link must NOT be force-closed on re-handshake — that EOF causes mesh churn (C2 mesh-safe)',
+        );
         self::assertTrue($stillAccepted, 'the peer must still be accepted via the newer link');
     }
 
     /**
-     * I6: when a peer is declared Down, its lazily-created outbound PeerConnection must be evicted
-     * and closed so its reconnect loop/timer stops hammering the dead endpoint.
+     * I6 (mesh-safe): when a peer gracefully LEAVES (Leave frame), its lazily-created outbound
+     * PeerConnection must be evicted and closed so its reconnect loop/timer stops hammering an
+     * endpoint that is definitively gone. Eviction is triggered by the Leave, NOT by a phi/timeout
+     * NodeDown — a suspicion-driven Down may be a false positive that must keep its outbound
+     * connection so the peer can heal back to Up.
      */
     #[Test]
-    public function outboundConnectionIsEvictedWhenPeerGoesDown(): void
+    public function outboundConnectionIsEvictedWhenPeerGracefullyLeaves(): void
     {
         $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
         $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
