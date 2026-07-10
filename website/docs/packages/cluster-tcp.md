@@ -23,7 +23,7 @@ Swoole TCP mesh clustering for Nexus — a full `nexus-cluster` implementation t
 | `MembershipActor` + phi-accrual detector | Internal gossip loop and Hayashibara phi-accrual failure detector; marks peers `Up`, `Suspect`, `Down` |
 | `TlsConfig` | Optional Swoole SSL configuration for encrypted peer connections |
 | `ClusterView` | Immutable membership snapshot returned by `ClusterNode::view()` |
-| PSR-14 events | `NodeUp`, `NodeDown`, `NodeSuspected`, `PeerConnected`, `PeerDisconnected` — dispatched via `ActorSystem`'s event dispatcher |
+| PSR-14 events | `NodeUp`, `NodeDown`, `NodeSuspected`, `PeerConnected`, `PeerDisconnected`, `ClusterDegraded` — dispatched via `ActorSystem`'s event dispatcher |
 
 ## Install
 
@@ -187,6 +187,7 @@ Pass an `Observability` instance to `ClusterNode::boot()` to enable full instrum
 | `cluster.handshake` | Internal | `nexus.cluster.peer`, `nexus.cluster.handshake.outcome` (accepted / rejected) |
 | `cluster.send` | Producer | `messaging.system=nexus-tcp`, `nexus.cluster.peer`, `nexus.message.type` |
 | `cluster.ask` | Producer | `messaging.system=nexus-tcp`, `nexus.cluster.peer`, `nexus.message.type` |
+| `cluster.receive` | Consumer | `messaging.system=nexus-tcp`, `nexus.cluster.peer`, `nexus.message.type` — opened on the receiving node for every routed inbound payload, parented to the sender's propagated trace context |
 
 **Metrics** (OTLP):
 
@@ -209,6 +210,7 @@ Pass an `Observability` instance to `ClusterNode::boot()` to enable full instrum
 | `NodeSuspected` | `$node: NodeAddress`, `$reason: SuspicionReason` (Connection / Gossip / Phi) |
 | `PeerConnected` | `$peer: NodeAddress`, `$endpoint: NodeEndpoint` |
 | `PeerDisconnected` | `$peer: NodeAddress` |
+| `ClusterDegraded` | `$reachableMembers: int`, `$requiredMembers: int` — dispatched while the node is below the `ClusterTopology::withMinimumMembers()` floor; the node suppresses new `Down` decisions until quorum is restored |
 
 **Leveled logging** — pass a PSR-3 `LoggerInterface` to `ClusterNode::boot()` to receive structured log entries for handshake events, peer connections, reconnect attempts, and membership transitions.
 

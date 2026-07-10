@@ -234,7 +234,7 @@ $topology = ClusterTopology::create(
 :::warning This cluster model is AP, not CP
 `nexus-cluster-tcp` is an **AP system** (available under partition). Understand the implications before using it for coordinated state:
 
-- **No quorum, no split-brain protection.** Both sides of a network partition continue accepting messages independently. Any actor that holds mutable state (counters, locks, ledger balances) may diverge across partitions and have no automatic reconciliation path.
+- **No quorum by default; split-brain protection is opt-in.** Out of the box, both sides of a network partition continue accepting messages independently. Any actor that holds mutable state (counters, locks, ledger balances) may diverge across partitions and have no automatic reconciliation path. Set `ClusterTopology::withMinimumMembers()` to a quorum (e.g. N/2 + 1) to bound this: a side that falls below the floor stops declaring peers `Down` and enters a degraded mode (emitting `ClusterDegraded`) instead of evicting the majority as a split-brain minority.
 - **No leader election.** There is no concept of a cluster leader or primary node. All nodes are peers.
 - **Gossip convergence is eventual.** Membership views converge within ~1 gossip interval (1 s by default) under normal conditions. A freshly `Up` node may not be visible to all peers immediately; a freshly `Down` node may still appear in some views for one interval.
 - **No rejoin after `Down`.** A node declared `Down` must restart its process to re-join the cluster. There is no automatic re-admission path in C1.
@@ -313,7 +313,7 @@ use Monadial\Nexus\Cluster\Tcp\Membership\NodeUp;
 use Psr\EventDispatcher\ListenerProviderInterface;
 
 // Wire into your PSR-14 event dispatcher (Symfony EventDispatcher, etc.)
-// Events: NodeUp, NodeDown, NodeSuspected, PeerConnected, PeerDisconnected
+// Events: NodeUp, NodeDown, NodeSuspected, PeerConnected, PeerDisconnected, ClusterDegraded
 $dispatcher->addListener(NodeSuspected::class, function (NodeSuspected $event): void {
     // $event->node: NodeAddress, $event->reason: SuspicionReason (Connection/Gossip/Phi)
 });
@@ -322,6 +322,8 @@ $dispatcher->addListener(NodeDown::class, function (NodeDown $event): void {
     // trigger alert, update load balancer weights, etc.
 });
 ```
+
+`ClusterDegraded` (`$reachableMembers: int`, `$requiredMembers: int`) fires while the node is below the `withMinimumMembers()` floor — alert on it to catch lost quorum.
 
 Pass the PSR-14 dispatcher to `ActorSystem::create()` and it is automatically threaded to `ClusterNode::boot()` through the system.
 
