@@ -198,11 +198,11 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         gossip propagates the rest within one interval.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">bindEndpoint</code> — the address the TCP server listens on (e.g. <code class="font-mono">0.0.0.0:7355</code>)</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">advertiseEndpoint</code> — what peers connect to (pod IP in Kubernetes, public IP on bare-metal)</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Gossip and heartbeat default to 1 s; the full view propagates within one round</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Auto-reconnect with exponential back-off (100 ms → 30 s) on TCP disconnection</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">singleNode: true</code> starts without seeds — useful for single-node dev and integration tests</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">bindEndpoint</code> — the address the TCP server listens on (e.g. <code class="font-mono">0.0.0.0:7355</code>)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">advertiseEndpoint</code> — what peers connect to (pod IP in Kubernetes, public IP on bare-metal)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Gossip and heartbeat default to 1 s; the full view propagates within one round</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Auto-reconnect with exponential back-off (100 ms → 30 s) on TCP disconnection</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">singleNode: true</code> starts without seeds — useful for single-node dev and integration tests</span></li>
       </ul>
     </div>
     <CodeBlock code={meshCode} lang="php" title="bootstrap.php — topology" />
@@ -222,10 +222,10 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         without touching a single handler.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">tell()</code> is fire-and-forget; self-node calls bypass TCP entirely — direct mailbox delivery</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">ask()</code> stamps a correlation ID and reply path, returns <code class="font-mono">Future&lt;R&gt;</code></li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Messages serialised with MessagePack via <code class="font-mono">nexus-serialization-msgpack</code>; types require <code class="font-mono">#[MessageType]</code></li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">AskTimeoutException</code> on timeout; <code class="font-mono">AskCapacityExceededException</code> when the registry is full (fail-fast)</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">tell()</code> is fire-and-forget; self-node calls bypass TCP entirely — direct mailbox delivery</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">ask()</code> stamps a correlation ID and reply path, returns <code class="font-mono">Future&lt;R&gt;</code></span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Messages serialised with MessagePack via <code class="font-mono">nexus-serialization-msgpack</code>; types require <code class="font-mono">#[MessageType]</code></span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">AskTimeoutException</code> on timeout; <code class="font-mono">AskCapacityExceededException</code> when the registry is full (fail-fast)</span></li>
       </ul>
       <a
         href={docsUrl('/packages/cluster-tcp')}
@@ -250,12 +250,12 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         <code class="font-mono">Down</code>.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">phiThreshold: 8.0</code> default — conservative, Hazelcast-parity; lower = more sensitive</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">sampleSize: 200</code> — statistical history window of inter-arrival samples</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">minStdDev: 500 ms</code> — noise floor preventing phi spikes on idle connections</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> TCP EOF → immediate <code class="font-mono">Suspect(Connection)</code> before phi fires</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Graceful <code class="font-mono">shutdown()</code> → immediate <code class="font-mono">Down</code> via Leave frame; no phi wait</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> All four knobs tunable via <code class="font-mono">withFailureDetection()</code></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">phiThreshold: 8.0</code> default — conservative, Hazelcast-parity; lower = more sensitive</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">sampleSize: 200</code> — statistical history window of inter-arrival samples</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">minStdDev: 500 ms</code> — noise floor preventing phi spikes on idle connections</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>TCP EOF → immediate <code class="font-mono">Suspect(Connection)</code> before phi fires</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Graceful <code class="font-mono">shutdown()</code> → immediate <code class="font-mono">Down</code> via Leave frame; no phi wait</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>All four knobs tunable via <code class="font-mono">withFailureDetection()</code></span></li>
       </ul>
     </div>
     <CodeBlock code={failureCode} lang="php" title="bootstrap.php — failure detection" />
@@ -274,12 +274,12 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         <code class="font-mono">verifyPeer: true</code> (the default).
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <strong>The mesh is open by default</strong> — TLS encrypts the wire, but admission control needs a shared secret: <code class="font-mono">withAuthSecret()</code> enables HMAC handshake authentication so only nodes holding the secret can join. Set one in production</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Applied uniformly: <code class="font-mono">SwooleMeshTransport</code> reads <code class="font-mono">TlsConfig</code> for both server and outbound client sockets</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> No code changes beyond topology config; transport selection remains automatic</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Inbound links are capped and unfinished handshakes time out — bounded against trivial resource exhaustion (<code class="font-mono">withInboundLimits()</code>)</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Never expose plaintext cluster ports (default 7355) to untrusted networks</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><strong>The mesh is open by default</strong> — TLS encrypts the wire, but admission control needs a shared secret: <code class="font-mono">withAuthSecret()</code> enables HMAC handshake authentication so only nodes holding the secret can join. Set one in production</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Applied uniformly: <code class="font-mono">SwooleMeshTransport</code> reads <code class="font-mono">TlsConfig</code> for both server and outbound client sockets</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>No code changes beyond topology config; transport selection remains automatic</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Inbound links are capped and unfinished handshakes time out — bounded against trivial resource exhaustion (<code class="font-mono">withInboundLimits()</code>)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Never expose plaintext cluster ports (default 7355) to untrusted networks</span></li>
       </ul>
     </div>
   </section>
@@ -298,10 +298,10 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         in your collector, with no manual wiring.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">cluster.send</code> and <code class="font-mono">cluster.ask</code> Producer spans around every outbound frame</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">cluster.handshake</code> Internal span per peer connection</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Seven counters + one bytes-sent histogram — automatically instrumented</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Disabled by default: omit <code class="font-mono">$obs</code> and telemetry costs nothing at runtime</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.send</code> and <code class="font-mono">cluster.ask</code> Producer spans around every outbound frame</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.handshake</code> Internal span per peer connection</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Seven counters + one bytes-sent histogram — automatically instrumented</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Disabled by default: omit <code class="font-mono">$obs</code> and telemetry costs nothing at runtime</span></li>
       </ul>
       <a
         href={docsUrl('/packages/observability')}
@@ -366,11 +366,11 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         and phi-accrual failure detection, not a consensus layer.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span> <strong>No quorum or split-brain protection.</strong> If the network partitions, both halves continue operating independently.</li>
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span> <strong>No leader election.</strong> There is no designated coordinator node.</li>
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span> <strong>No service registry.</strong> <code class="font-mono">refFor()</code> requires a pre-agreed <code class="font-mono">NodeAddress</code> and <code class="font-mono">ActorPath</code>. A receptionist service-registry is planned for C2.</li>
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span> <strong>No automatic rejoin after Down.</strong> A node marked <code class="font-mono">Down</code> must restart the process to re-join the cluster.</li>
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span> <strong>Gossip convergence latency.</strong> State changes propagate within ~1 gossip interval (default 1 s); rapid membership churn may produce briefly stale views on individual nodes.</li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election; split-brain protection is opt-in.</strong> By default both halves of a partition keep operating; set <code class="font-mono">withMinimumMembers()</code> for a quorum floor that drops a below-quorum minority into a degraded, Down-suppressing mode instead of letting it evict the majority.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election.</strong> There is no designated coordinator node.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No service registry.</strong> <code class="font-mono">refFor()</code> requires a pre-agreed <code class="font-mono">NodeAddress</code> and <code class="font-mono">ActorPath</code>. A receptionist service-registry is planned for C2.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No automatic rejoin after Down.</strong> A node marked <code class="font-mono">Down</code> must restart the process to re-join the cluster.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>Gossip convergence latency.</strong> State changes propagate within ~1 gossip interval (default 1 s); rapid membership churn may produce briefly stale views on individual nodes.</span></li>
       </ul>
       <p class="text-slate-600 dark:text-slate-300 mt-4">
         For workloads that need consensus — distributed locks, exactly-once semantics,

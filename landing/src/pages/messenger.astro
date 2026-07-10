@@ -180,11 +180,11 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         exchange. Swap a local ref for a broker-backed one without touching a single handler.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Same <code class="font-mono">tell()</code> call whether local or remote</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any Messenger <code class="font-mono">SenderInterface</code> — AMQP, Redis, SQS, Doctrine, in-memory</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Optional <code class="font-mono">sourcePath</code> stamps the sender's actor path on every envelope</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">MessengerBridge::producer()</code> — no container, plain factory</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">NexusMessengerSerializer</code> — Nexus-backed wire format with an explicit <code class="font-mono">allowedClasses</code> allow-list, or binary MessagePack bodies via <code class="font-mono">nexus-serialization-msgpack</code>; swappable for any Symfony <code class="font-mono">SerializerInterface</code></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Same <code class="font-mono">tell()</code> call whether local or remote</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Any Messenger <code class="font-mono">SenderInterface</code> — AMQP, Redis, SQS, Doctrine, in-memory</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Optional <code class="font-mono">sourcePath</code> stamps the sender's actor path on every envelope</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">MessengerBridge::producer()</code> — no container, plain factory</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">NexusMessengerSerializer</code> — Nexus-backed wire format with an explicit <code class="font-mono">allowedClasses</code> allow-list, or binary MessagePack bodies via <code class="font-mono">nexus-serialization-msgpack</code>; swappable for any Symfony <code class="font-mono">SerializerInterface</code></span></li>
       </ul>
     </div>
     <CodeBlock code={producerCode} lang="php" title="src/Actor/OrderActor.php" />
@@ -254,10 +254,10 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         restarts the worker — the broker holds unacked messages during the restart window.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Message count, memory bytes, or elapsed time — combine any subset</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">WorkerRecyclingTriggered</code> PSR-14 event dispatched before shutdown</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Graceful drain: in-flight messages ack before the process exits</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with any process supervisor — systemd, Supervisor, Docker</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Message count, memory bytes, or elapsed time — combine any subset</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">WorkerRecyclingTriggered</code> PSR-14 event dispatched before shutdown</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Graceful drain: in-flight messages ack before the process exits</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Works with any process supervisor — systemd, Supervisor, Docker</span></li>
       </ul>
     </div>
   </section>
@@ -280,10 +280,10 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         silent gaps.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.sent</code> counter per message type</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">nexus.messenger.messages.consumed</code> counter — processing time observable as <code class="font-mono">messenger.receive</code> span duration</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Producer and consumer spans linked — one trace ID end-to-end</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Disabled by default: zero overhead when no observability is wired</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">nexus.messenger.messages.sent</code> counter per message type</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">nexus.messenger.messages.consumed</code> counter — processing time observable as <code class="font-mono">messenger.receive</code> span duration</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Producer and consumer spans linked — one trace ID end-to-end</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Disabled by default: zero overhead when no observability is wired</span></li>
       </ul>
       <a
         href={docsUrl('/guides/messenger-bridge')}
@@ -310,11 +310,11 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         crash-safe, at-least-once delivery end-to-end.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Timeout and return-type parity with local <code class="font-mono">ask()</code></li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Ephemeral TTL-backed reply queues — no queue leak on restart</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> First-reply-wins dedup; bounded pending registry (default 10 000, fail-fast at capacity)</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Full <code class="font-mono">messenger.ask</code> OTel span + PSR-14 events</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Plain Symfony responders need only the two headers — no Nexus dependency on the responder side</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Timeout and return-type parity with local <code class="font-mono">ask()</code></span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Ephemeral TTL-backed reply queues — no queue leak on restart</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>First-reply-wins dedup; bounded pending registry (default 10 000, fail-fast at capacity)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Full <code class="font-mono">messenger.ask</code> OTel span + PSR-14 events</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Plain Symfony responders need only the two headers — no Nexus dependency on the responder side</span></li>
       </ul>
       <a
         href={docsUrl('/guides/messenger-bridge#requestreply-over-the-broker')}
