@@ -199,3 +199,59 @@ CONCLUSION: #1 is coupled to 1.A and regresses standalone. CORRECT SEQUENCING: l
 phi stops firing under load), THEN layer the incarnation-monotonicity fix on top (with the
 hold-off now safe because control frames don't stall). The soak-first discipline caught this
 before any commit — the fix was reverted, HEAD stays at the landing-fix commit.
+
+---
+
+## 1.A FIX RESULT (2026-07-10) — receive-time heartbeat timestamping SHIPPED
+
+Implemented per spec `docs/superpowers/specs/2026-07-10-cluster-phi-ingress-timestamp-design.md`
+and plan `docs/superpowers/plans/2026-07-10-cluster-phi-ingress-timestamp.md`
+(commits e7ea7e61 → 1c6d63bf). The phi detector is now fed the socket-receive
+timestamp (`PeerLivenessObserved::observedAt`, stamped at frame ingress in the
+recv coroutine) instead of the MembershipActor's processing-time clock.
+
+Acceptance soak (16 nodes, DEFAULT phi, 180s, 1KB payload):
+
+| metric            | baseline (before) | after fix   |
+|-------------------|-------------------|-------------|
+| suspected / node  | ~210              | ~50         |
+| — phi reason      | ~15               | **0**       |
+| — gossip reason   | ~190              | ~50         |
+| — conn reason     | 0                 | 0           |
+| down / node       | 0                 | 0           |
+| throughput        | ~686k msg/s       | ~709k msg/s |
+
+Interpretation: the fix ELIMINATED phi-driven false suspicion under load (15→0),
+confirming the processing-time-jitter mechanism diagnosis. Because gossip
+suspicion was largely the view-merge ECHO of phi originations, killing phi at the
+source also dropped gossip ~190→~50 (total ~76% reduction), with zero false downs
+and a slight throughput GAIN. No regression — unlike the reverted #1 attempt which
+added downs.
+
+The soak's binary bar (suspected must be 0) still reports FAIL, but now ONLY on the
+residual ~50 gossip-reason events. With phi=0 and conn=0 on every node, those have
+no steady-state origin — they are the convergence-window suspicion echo amplified
+~15x across the mesh: finding #1 (incarnation monotonicity) / gossip-echo, a
+SEPARATE root cause. Plan Task 4's escalation branch (phi high → Approach B control
+lane) is NOT triggered: phi is 0, the data-plane/phi problem is solved. The
+remaining tail belongs to the #1 track, which earlier regressed and needs its own
+careful work. KEEP this fix; treat the gossip-echo tail as separate follow-up.
+
+### Convergence-only confirmation (240s soak, per-node 30s health lines)
+
+Re-ran at default phi for 240s capturing the per-node health lines the runner
+normally discards. The `suspected=` counter is FLAT for the entire steady-state
+window on every node: w1t1 = 27 at t=030s and still 27 at t=210s; w2t3 = 26
+throughout. It never climbs. => steady-state under sustained load produces ZERO
+new suspicions (phi=0, conn=0, down=0, ~712k msg/s, 11/16 nodes pass).
+
+The entire residual (~26–34/node) is accrued during the convergence window as the
+16-node mutual-seed mesh forms (handshake races → brief Suspect → echoed ~15x via
+view-merge) and then never grows. It is a ONE-TIME startup cost sitting near the
+harness's fixed cumulative pass threshold (~30), so ~11/16 nodes pass and a few tip
+just over. It is NOT a steady-state failure-detection defect.
+
+CONCLUSION: the phi-ingress fix achieves its goal — the failure detector no longer
+false-fires under load. The remaining convergence-time gossip-echo belongs to the
+#1 / gossip-echo track (lower severity: one-time, no liveness impact) and is
+separate follow-up. Do NOT game the harness threshold to force a green.
