@@ -4,19 +4,24 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
+use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-use function time;
-
 #[CoversClass(HandshakeAuthenticator::class)]
 final class HandshakeAuthenticatorTest extends TestCase
 {
     private HandshakeAuthenticator $auth;
+
+    private TestClock $clock;
+
+    /** The fixed Unix second the injected clock reports; sign() stamps issuedAt from it. */
+    private int $now;
 
     #[Test]
     public function signsThenVerifiesItsOwnHandshake(): void
@@ -26,7 +31,7 @@ final class HandshakeAuthenticatorTest extends TestCase
         self::assertNotNull($signed->nonce);
         self::assertNotNull($signed->issuedAt);
         self::assertNotNull($signed->mac);
-        self::assertTrue($this->auth->verify($signed, time()));
+        self::assertTrue($this->auth->verify($signed, $this->now));
     }
 
     #[Test]
@@ -43,7 +48,7 @@ final class HandshakeAuthenticatorTest extends TestCase
     #[Test]
     public function rejectsAnUnsignedHandshake(): void
     {
-        self::assertFalse($this->auth->verify($this->handshake(), time()));
+        self::assertFalse($this->auth->verify($this->handshake(), $this->now));
     }
 
     #[Test]
@@ -51,7 +56,7 @@ final class HandshakeAuthenticatorTest extends TestCase
     {
         $signed = new HandshakeAuthenticator('the-wrong-secret')->sign($this->handshake());
 
-        self::assertFalse($this->auth->verify($signed, time()));
+        self::assertFalse($this->auth->verify($signed, $this->now));
     }
 
     #[Test]
@@ -69,7 +74,10 @@ final class HandshakeAuthenticatorTest extends TestCase
             mac: $signed->mac,
         );
 
-        self::assertFalse($this->auth->verify($tampered, time()), 'a swapped node identity must invalidate the MAC');
+        self::assertFalse(
+            $this->auth->verify($tampered, $this->now),
+            'a swapped node identity must invalidate the MAC',
+        );
     }
 
     #[Test]
@@ -88,7 +96,7 @@ final class HandshakeAuthenticatorTest extends TestCase
         );
 
         self::assertFalse(
-            $this->auth->verify($tampered, time()),
+            $this->auth->verify($tampered, $this->now),
             'a redirected advertise endpoint must invalidate the MAC',
         );
     }
@@ -115,23 +123,33 @@ final class HandshakeAuthenticatorTest extends TestCase
     #[Test]
     public function acceptsWithinTheFreshnessWindow(): void
     {
-        $signed = $this->auth->sign($this->handshake());
+        // Each verify uses a freshly-signed handshake (fresh nonce) so the freshness window — not
+        // the replay guard — is what is under test.
+        $late = $this->auth->sign($this->handshake());
+        self::assertNotNull($late->issuedAt);
+        self::assertTrue($this->auth->verify($late, $late->issuedAt + 59));
 
-        self::assertNotNull($signed->issuedAt);
-        self::assertTrue($this->auth->verify($signed, $signed->issuedAt + 59));
-        self::assertTrue($this->auth->verify($signed, $signed->issuedAt - 59));
+        $early = $this->auth->sign($this->handshake());
+        self::assertNotNull($early->issuedAt);
+        self::assertTrue($this->auth->verify($early, $early->issuedAt - 59));
     }
 
     #[Test]
     public function acceptsExactlyAtTheFreshnessWindowEdge(): void
     {
-        $signed = $this->auth->sign($this->handshake());
-
-        self::assertNotNull($signed->issuedAt);
         // Exactly `window` seconds away is still fresh (boundary is inclusive); one past is stale.
-        self::assertTrue($this->auth->verify($signed, $signed->issuedAt + 60), 'window edge is inclusive');
-        self::assertTrue($this->auth->verify($signed, $signed->issuedAt - 60), 'window edge is symmetric');
-        self::assertFalse($this->auth->verify($signed, $signed->issuedAt + 61));
+        // A fresh signature per assertion isolates the boundary from the replay guard.
+        $edgeLate = $this->auth->sign($this->handshake());
+        self::assertNotNull($edgeLate->issuedAt);
+        self::assertTrue($this->auth->verify($edgeLate, $edgeLate->issuedAt + 60), 'window edge is inclusive');
+
+        $edgeEarly = $this->auth->sign($this->handshake());
+        self::assertNotNull($edgeEarly->issuedAt);
+        self::assertTrue($this->auth->verify($edgeEarly, $edgeEarly->issuedAt - 60), 'window edge is symmetric');
+
+        $stale = $this->auth->sign($this->handshake());
+        self::assertNotNull($stale->issuedAt);
+        self::assertFalse($this->auth->verify($stale, $stale->issuedAt + 61));
     }
 
     #[Test]
@@ -147,11 +165,11 @@ final class HandshakeAuthenticatorTest extends TestCase
             advertise: $signed->advertise,
             protocolVersion: $signed->protocolVersion,
             nonce: null,
-            issuedAt: time(),
+            issuedAt: $this->now,
             mac: $signed->mac,
         );
 
-        self::assertFalse($this->auth->verify($partial, time()));
+        self::assertFalse($this->auth->verify($partial, $this->now));
     }
 
     #[Test]
@@ -169,7 +187,7 @@ final class HandshakeAuthenticatorTest extends TestCase
             mac: $signed->mac,
         );
 
-        self::assertFalse($this->auth->verify($partial, time()));
+        self::assertFalse($this->auth->verify($partial, $this->now));
     }
 
     #[Test]
@@ -183,11 +201,11 @@ final class HandshakeAuthenticatorTest extends TestCase
             advertise: $signed->advertise,
             protocolVersion: $signed->protocolVersion,
             nonce: $signed->nonce,
-            issuedAt: time(),
+            issuedAt: $this->now,
             mac: null,
         );
 
-        self::assertFalse($this->auth->verify($partial, time()));
+        self::assertFalse($this->auth->verify($partial, $this->now));
     }
 
     #[Test]
@@ -210,7 +228,7 @@ final class HandshakeAuthenticatorTest extends TestCase
             );
 
             self::assertFalse(
-                $this->auth->verify($tampered, time()),
+                $this->auth->verify($tampered, $this->now),
                 "node.{$field} must be bound by the MAC",
             );
         }
@@ -231,7 +249,7 @@ final class HandshakeAuthenticatorTest extends TestCase
             mac: $signed->mac,
         );
 
-        self::assertFalse($this->auth->verify($tamperedCluster, time()), 'clusterName must be MAC-bound');
+        self::assertFalse($this->auth->verify($tamperedCluster, $this->now), 'clusterName must be MAC-bound');
 
         $tamperedProtocol = new Handshake(
             clusterName: $signed->clusterName,
@@ -243,7 +261,7 @@ final class HandshakeAuthenticatorTest extends TestCase
             mac: $signed->mac,
         );
 
-        self::assertFalse($this->auth->verify($tamperedProtocol, time()), 'protocolVersion must be MAC-bound');
+        self::assertFalse($this->auth->verify($tamperedProtocol, $this->now), 'protocolVersion must be MAC-bound');
     }
 
     #[Test]
@@ -257,9 +275,80 @@ final class HandshakeAuthenticatorTest extends TestCase
         self::assertFalse($auth->verify($signed, $signed->issuedAt + 6));
     }
 
+    #[Test]
+    public function signStampsIssuedAtFromTheInjectedClockNotWallClock(): void
+    {
+        // B3: sign() must read the injected clock, never time(); a fixed clock yields a fixed issuedAt.
+        $signed = $this->auth->sign($this->handshake());
+
+        self::assertSame($this->now, $signed->issuedAt);
+
+        // Advancing the clock moves the next signature's issuedAt deterministically.
+        $this->clock->advance(Duration::seconds(30));
+        $later = $this->auth->sign($this->handshake());
+
+        self::assertSame($this->now + 30, $later->issuedAt);
+    }
+
+    #[Test]
+    public function rejectsAReplayOfAnAlreadyAcceptedHandshakeWithinTheWindow(): void
+    {
+        // I2: a captured handshake, re-presented verbatim while still fresh, must be rejected the
+        // second time — the nonce is remembered on first acceptance.
+        $signed = $this->auth->sign($this->handshake());
+
+        self::assertTrue($this->auth->verify($signed, $this->now), 'first presentation is accepted');
+        self::assertFalse(
+            $this->auth->verify($signed, $this->now),
+            'an identical replay within the freshness window must be rejected',
+        );
+        self::assertFalse(
+            $this->auth->verify($signed, $this->now + 30),
+            'the nonce stays remembered for the whole freshness window',
+        );
+    }
+
+    #[Test]
+    public function acceptsAgainOnceTheRememberedNonceHasAgedOutOfTheWindow(): void
+    {
+        // I2 eviction: once the original handshake is too stale to pass the freshness check its nonce
+        // is evicted, so memory is bounded. (It can never be accepted again anyway — it's stale.)
+        $signed = $this->auth->sign($this->handshake());
+        self::assertNotNull($signed->nonce);
+
+        self::assertTrue($this->auth->verify($signed, $this->now));
+
+        // Verify a DIFFERENT, fresh handshake far in the future; this drives eviction of the stale nonce.
+        $this->clock->advance(Duration::seconds(200));
+        $fresh = $this->auth->sign($this->handshake());
+        self::assertNotSame($signed->nonce, $fresh->nonce);
+        self::assertTrue(
+            $this->auth->verify($fresh, $this->now + 200),
+            'a distinct fresh handshake is accepted, and evicts the aged-out nonce',
+        );
+    }
+
+    #[Test]
+    public function rememberedNoncesAreScopedToTheVerifierInstance(): void
+    {
+        // Two independent verifiers (same secret) each keep their own seen-nonce set — the replay guard
+        // is a per-node defense, matching the thread-confinement ownership model.
+        $signed = $this->auth->sign($this->handshake());
+        $other = new HandshakeAuthenticator('cluster-secret', clock: $this->clock);
+
+        self::assertTrue($this->auth->verify($signed, $this->now));
+        self::assertTrue(
+            $other->verify($signed, $this->now),
+            'a second verifier that never saw the nonce still accepts it',
+        );
+    }
+
     protected function setUp(): void
     {
-        $this->auth = new HandshakeAuthenticator('cluster-secret');
+        // Deterministic clock: sign() stamps issuedAt from it, so tests never touch wall-clock time.
+        $this->clock = new TestClock(new DateTimeImmutable('@1700000000'));
+        $this->now = 1700000000;
+        $this->auth = new HandshakeAuthenticator('cluster-secret', clock: $this->clock);
     }
 
     private function handshake(): Handshake
