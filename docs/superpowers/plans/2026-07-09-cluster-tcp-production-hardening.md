@@ -173,3 +173,29 @@ REMAINING (deferred — large/risky, need focused sessions, NOT rushed in a mara
 - **C1 ClusterNode god-class** extraction (ConnectionRegistry/FramePump/Bootstrap) + **C2** delete the buildOutboundSink duplicate (route through MeshOutboundSink).
 - **Perf finding-1** debugEnabled guard (marginal); **CSPRNG-per-ask**, **O(N^2) delta gossip**, **write-batching** (optimizations).
 - **Docs D1** operations runbook + fix metrics.md ("no registry" is now wrong); **D2** promote the observability story into website/docs.
+
+---
+
+## #1 SOAK-FIRST RESULT (2026-07-10) — hypothesis DISPROVEN, NOT committed
+
+Attempted the incarnation-monotonicity fix (recordLiveness stops locally recovering a Suspect
+peer; applyTick holds off Down while directly hearing from it; recovery only via higher-
+incarnation refutation). Unit-validated (240 unit + 46 Swoole green). Then validated against
+the 16-node distributed soak at DEFAULT phi (MESH_PHI_TUNING toggle), which DISPROVED it:
+
+- BASELINE (default phi, no fix): suspected ~210/node [gossip ~190, phi ~15], down=0. Noisy, self-heals.
+- POST-#1 (default phi): suspected ~195/node (barely moved) AND down=8-22 — a REGRESSION.
+
+Root cause revealed: the soak's suspicion storm is NOT the recordLiveness flap (the
+MembershipEventDeduplicator already absorbs that). It is data-plane SATURATION stalling the
+single-core reactor for multiple seconds → gossip/heartbeat processing is delayed → phi
+legitimately fires (~15x/node) and each firing spreads a Suspect through the mesh (~190 gossip
+events). That is **1.A (control/data-plane separation)**, not #1. Worse, removing the
+liveness-recovery made the applyTick hold-off unreliable: during a multi-second stall
+millisSinceLastHeartbeat exceeds the give-up window, so peers were falsely Downed.
+
+CONCLUSION: #1 is coupled to 1.A and regresses standalone. CORRECT SEQUENCING: land **1.A first**
+(dedicated control connection so heartbeat/gossip never queue behind bulk Message frames →
+phi stops firing under load), THEN layer the incarnation-monotonicity fix on top (with the
+hold-off now safe because control frames don't stall). The soak-first discipline caught this
+before any commit — the fix was reverted, HEAD stays at the landing-fix commit.
