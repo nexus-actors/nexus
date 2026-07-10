@@ -118,8 +118,8 @@ final class ClusterNode
     /**
      * Hard cap on remembered Leave path-prefixes. Leave frames are unauthenticated, so an
      * unbounded dedup set is a memory-exhaustion vector (a peer can relay Leaves for endless
-     * fabricated identities). At capacity the oldest remembered prefix is evicted; the worst
-     * case of re-evicting a still-relevant entry is a single redundant LeaveReceived, not a fault.
+     * fabricated identities). At capacity the earliest-inserted prefix is evicted (FIFO); the
+     * worst case of evicting a still-relevant entry is a single redundant LeaveReceived, not a fault.
      */
     private const int MAX_PROCESSED_LEAVES = 10_000;
 
