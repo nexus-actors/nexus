@@ -957,6 +957,68 @@ final class ClusterNodeTest extends TestCase
     }
 
     /**
+     * Security L3: a handshake with an incomplete node identity (a missing/blank NodeAddress field)
+     * must be rejected as malformed — the peer must never be admitted under a fabricated `unknown`
+     * identity, so it never becomes an accepted link.
+     */
+    #[Test]
+    public function handshakeWithIncompleteNodeIdentityIsRejected(): void
+    {
+        $self = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 82));
+
+        $topology = ClusterTopology::create(
+            clusterName: 'test-cluster',
+            self: $self,
+            bindEndpoint: $endpoint,
+            advertiseEndpoint: $endpoint,
+            seeds: [],
+            singleNode: true,
+        );
+
+        $node = ClusterNode::boot(
+            $this->system,
+            $topology,
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $link = $client->connect($endpoint);
+
+        // The peer whose full identity would be node-peer, but its handshake omits `datacenter`.
+        $peerAddr = new NodeAddress('test', 'local', 'nexus', 'node-peer');
+        $peerEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 82));
+        $fabricated = new NodeAddress('test', 'unknown', 'nexus', 'node-peer');
+
+        $this->runtime->scheduleOnce(
+            Duration::millis(50),
+            function () use ($link, $peerAddr, $peerEndpoint): void {
+                $link->sendFrame($this->incompleteNodeHandshakeFrame('test-cluster', $peerAddr, $peerEndpoint));
+            },
+        );
+
+        $acceptedFull = null;
+        $acceptedFabricated = null;
+
+        $this->runtime->scheduleOnce(
+            Duration::millis(200),
+            function () use ($node, $peerAddr, $fabricated, &$acceptedFull, &$acceptedFabricated): void {
+                $acceptedFull = $this->hasAcceptedLink($node, $peerAddr);
+                $acceptedFabricated = $this->hasAcceptedLink($node, $fabricated);
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(350), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertFalse($acceptedFull, 'an incomplete-identity handshake must not be accepted');
+        self::assertFalse($acceptedFabricated, 'the peer must not be admitted under a fabricated unknown identity');
+    }
+
+    /**
      * C2 (mesh-safe): when the same peer opens a second inbound link (mutual-seed race / reconnect
      * before the old link's EOF is seen), the newer link becomes the accepted one for that prefix
      * WITHOUT force-closing the prior link. Eagerly closing it would EOF the remote peer and trigger
@@ -1123,6 +1185,34 @@ final class ClusterNodeTest extends TestCase
                 'application' => $peer->application,
                 'cluster' => $peer->cluster,
                 'datacenter' => $peer->datacenter,
+                'node' => $peer->node,
+            ],
+            advertise: (string) $advertise,
+        );
+
+        return new Frame(FrameType::Handshake, $serializer->serialize($handshake));
+    }
+
+    /**
+     * Build a Handshake frame whose node map is missing the `datacenter` field, simulating a peer
+     * that omits part of its NodeAddress identity. ClusterNode must reject it as malformed rather
+     * than admit it under a fabricated `/cluster/.../unknown/...` identity.
+     */
+    private function incompleteNodeHandshakeFrame(
+        string $clusterName,
+        NodeAddress $peer,
+        NodeEndpoint $advertise,
+    ): Frame {
+        $registry = new TypeRegistry();
+        $registry->registerFromAttribute(Handshake::class);
+        $serializer = new MessagePackMessageSerializer($registry);
+
+        $handshake = new Handshake(
+            clusterName: $clusterName,
+            node: [
+                'application' => $peer->application,
+                'cluster' => $peer->cluster,
+                // 'datacenter' deliberately omitted.
                 'node' => $peer->node,
             ],
             advertise: (string) $advertise,
