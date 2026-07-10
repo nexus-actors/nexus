@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\Membership\ClusterDegraded;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeResponse;
 use Monadial\Nexus\Cluster\Tcp\Membership\MemberRecord;
@@ -563,6 +564,47 @@ final class MembershipServiceTest extends TestCase
     }
 
     #[Test]
+    public function belowQuorumHoldsTheSuspectInsteadOfDowningItAndEmitsClusterDegraded(): void
+    {
+        // Floor of 2: with only self reachable (peer is Suspect), the node is below quorum and must
+        // NOT evict the peer — otherwise a minority partition would declare the majority Down.
+        $service = $this->service(downAfter: Duration::seconds(10), minimumMembers: 2);
+        $t0 = $service->initialState($this->clock->now());
+
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+        );
+        $t2 = $service->applyLinkClosed(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->peer,
+            false,
+            $this->clock->now(),
+        );
+
+        $this->clock->set($this->clock->now()->modify('+11 seconds'));
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertTrue($t3->newView->has($this->peer), 'the peer is held, not evicted, below quorum');
+        self::assertNotEmpty(array_filter($t3->events, static fn($e): bool => $e instanceof ClusterDegraded));
+        self::assertEmpty(array_filter($t3->events, static fn($e): bool => $e instanceof NodeDown));
+    }
+
+    #[Test]
     public function suspectPeerStaysWithinGiveUpWindow(): void
     {
         $service = $this->service(downAfter: Duration::seconds(10));
@@ -899,7 +941,7 @@ final class MembershipServiceTest extends TestCase
         };
     }
 
-    private function service(?Duration $downAfter = null): MembershipService
+    private function service(?Duration $downAfter = null, int $minimumMembers = 0): MembershipService
     {
         $topology = ClusterTopology::create(
             clusterName: 'production',
@@ -908,6 +950,10 @@ final class MembershipServiceTest extends TestCase
             advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
             seeds: [NodeEndpoint::fromString('10.0.0.9:7355')],
         );
+
+        if ($minimumMembers > 0) {
+            $topology = $topology->withMinimumMembers($minimumMembers);
+        }
 
         return new MembershipService($topology, $downAfter);
     }

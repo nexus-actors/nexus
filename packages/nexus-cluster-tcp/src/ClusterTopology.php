@@ -52,6 +52,7 @@ final readonly class ClusterTopology
         public Duration $handshakeTimeout,
         public int $maxInboundLinks,
         public int $maxFrameSize,
+        public int $minimumMembers,
         public bool $singleNode,
         public ?TlsConfig $tls,
         public ?string $authSecret,
@@ -118,6 +119,7 @@ final readonly class ClusterTopology
             handshakeTimeout: $resolvedHandshakeTimeout,
             maxInboundLinks: $maxInboundLinks,
             maxFrameSize: 8 * 1024 * 1024,
+            minimumMembers: 0,
             singleNode: $singleNode,
             tls: $tls,
             authSecret: null,
@@ -169,6 +171,25 @@ final readonly class ClusterTopology
     public function withTls(?TlsConfig $tls): self
     {
         return clone($this, ['tls' => $tls]);
+    }
+
+    /**
+     * Require at least `$minimumMembers` reachable (Up) members before this node will declare any
+     * peer Down. Below the floor the node enters a degraded mode: it stops making new Down
+     * decisions (leaving suspected peers Suspect) and emits {@see \Monadial\Nexus\Cluster\Tcp\Membership\ClusterDegraded},
+     * so a minority side of a partition cannot independently evict the majority and run as a
+     * split-brain singleton. 0 (the default) disables the floor — current behaviour. Set it to a
+     * quorum (e.g. N/2 + 1) in production to bound split-brain.
+     *
+     * @throws InvalidArgumentException when the floor is negative.
+     */
+    public function withMinimumMembers(int $minimumMembers): self
+    {
+        if ($minimumMembers < 0) {
+            throw new InvalidArgumentException('ClusterTopology minimumMembers must not be negative.');
+        }
+
+        return clone($this, ['minimumMembers' => $minimumMembers]);
     }
 
     /**

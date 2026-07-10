@@ -332,6 +332,14 @@ final class MembershipService
         $newView = $view;
         $newSuspectSince = $suspectSince;
 
+        // Minimum-members floor: below it, do NOT declare peers Down. This stops a minority side of
+        // a partition from independently evicting the majority and running as a split-brain
+        // singleton. Suspicion still happens (local observation); only the destructive removal is
+        // gated. 0 disables the floor (default). See ClusterTopology::withMinimumMembers().
+        $reachable = count($view->upNodes());
+        $belowQuorum = $this->topology->minimumMembers > 0 && $reachable < $this->topology->minimumMembers;
+        $suppressedDown = false;
+
         foreach ($view->nodes() as $record) {
             $key = $record->address->toPathPrefix();
 
@@ -366,11 +374,20 @@ final class MembershipService
                 $newSuspectSince[$key] = $since;
 
                 if (self::elapsedMillis($now, $since) >= (float) $this->downAfter->toMillis()) {
-                    $newView = $newView->withoutNode($record->address);
-                    unset($newSuspectSince[$key]);
-                    $events[] = new NodeDown($record->address);
+                    if ($belowQuorum) {
+                        // Hold the Suspect; the floor forbids evicting it while we lack quorum.
+                        $suppressedDown = true;
+                    } else {
+                        $newView = $newView->withoutNode($record->address);
+                        unset($newSuspectSince[$key]);
+                        $events[] = new NodeDown($record->address);
+                    }
                 }
             }
+        }
+
+        if ($suppressedDown) {
+            $events[] = new ClusterDegraded($reachable, $this->topology->minimumMembers);
         }
 
         $effects = $this->buildGossipEffects($newView, $peerSelector);
