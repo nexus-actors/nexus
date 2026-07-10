@@ -9,6 +9,7 @@ use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Membership\AskFailingMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\EventDispatcherMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
@@ -281,7 +282,10 @@ final class ClusterNode
             $meter,
             $authenticator,
         );
-        $eventPublisher = new EventDispatcherMembershipEventPublisher($system->eventDispatcher());
+        $eventPublisher = new AskFailingMembershipEventPublisher(
+            new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
+            $askRegistry,
+        );
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
         $detector = new PhiAccrualDetector(

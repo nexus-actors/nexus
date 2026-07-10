@@ -40,6 +40,12 @@ use Swoole\Coroutine\Socket;
  */
 final class SwoolePeerLink implements PeerLink
 {
+    /** Bytes read per recv() call; also the reassembly-buffer slack over one max frame. */
+    private const int RECV_CHUNK = 65536;
+
+    /** Max frames buffered before onFrame() registration — bounds a pre-handshake frame flood. */
+    private const int PENDING_FRAME_LIMIT = 1024;
+
     private bool $closed = false;
 
     /** @var list<Closure(Frame): void> */
@@ -87,9 +93,9 @@ final class SwoolePeerLink implements PeerLink
          * returns and the $client local variable goes out of scope.
          */
         private readonly ?Client $clientOwner = null,
-        int $maxFrameSize = 8 * 1024 * 1024,
+        private readonly int $maxFrameSize = 8 * 1024 * 1024,
     ) {
-        $this->codec = new FrameCodec($maxFrameSize);
+        $this->codec = new FrameCodec($this->maxFrameSize);
         $this->writeLock = new Channel(1);
         $this->writeLock->push(true);
         $this->startReceiveLoop();
@@ -171,7 +177,7 @@ final class SwoolePeerLink implements PeerLink
             $buffer = '';
 
             while (true) {
-                $data = $this->socket->recv(65536);
+                $data = $this->socket->recv(self::RECV_CHUNK);
 
                 if ($data === false) {
                     // A recv timeout is NOT a disconnect. Swoole coroutine sockets carry a finite
@@ -199,6 +205,18 @@ final class SwoolePeerLink implements PeerLink
 
                 $buffer .= $data;
 
+                // Bound the reassembly buffer. A well-formed peer never buffers more than one
+                // in-flight frame (decodeStream trims completed frames and rejects any declared
+                // length over maxFrameSize at the 4-byte prefix), so anything beyond one max frame
+                // plus a recv chunk is a misbehaving peer pinning memory with a partial frame —
+                // close the link rather than let it grow. Operators cap the per-link bound itself
+                // via ClusterTopology::withMaxFrameSize().
+                if (strlen($buffer) > $this->maxFrameSize + self::RECV_CHUNK) {
+                    $this->notifyClose();
+
+                    return;
+                }
+
                 try {
                     $result = $this->codec->decodeStream($buffer);
                 } catch (ProtocolException) {
@@ -212,6 +230,14 @@ final class SwoolePeerLink implements PeerLink
                 foreach ($result['frames'] as $frame) {
                     if ($this->frameHandlers === []) {
                         // No handler registered yet — buffer the frame until onFrame() is called.
+                        // Cap the backlog so a peer that floods frames before a handler is wired
+                        // cannot pin unbounded memory.
+                        if (count($this->pendingFrames) >= self::PENDING_FRAME_LIMIT) {
+                            $this->notifyClose();
+
+                            return;
+                        }
+
                         $this->pendingFrames[] = $frame;
                     } else {
                         foreach ($this->frameHandlers as $handler) {
