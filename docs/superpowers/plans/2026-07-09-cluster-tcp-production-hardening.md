@@ -152,3 +152,24 @@ Five parallel adversarial reviewers (protocol, code-quality, concurrency, docs, 
 
 ### Sequencing
 P0 (pre-merge) → P1#1+#4+1.A (the correctness/noise root) → P0-adjacent security S2/S3 → P3 H4/H1 (before more sprawl) → remainder. #1 and #4 share one root: **incarnation monotonicity across recovery/re-add** — the load-bearing invariant the whole LWW merge depends on. Fixing it (plus 1.A reducing the trigger) is what lets the soak pass at DEFAULT phi.
+
+---
+
+## AUDIT FIXES APPLIED (2026-07-10) — status after the whole-PR audit
+
+FIXED & committed (all gates green; 237 cluster-tcp unit + 46 Swoole + 32 loopback pass):
+- **S1 (complete)** f4b984a8 — SwoolePeerLink reassembly buffer now explicitly bounded + pendingFrames capped.
+- **C#1 (complete)** f4b984a8 — AskFailingMembershipEventPublisher fails in-flight asks on the authoritative NodeDown (phi-driven, no socket close), not just inbound onClose.
+- **Observer effect** 3ce9f8ce — core UntracedMessage marker; ActorCell skips per-message span+metrics for membership ticks (GossipTick/HeartbeatTick/PeerLivenessObserved), so tracing no longer perturbs the phi detector.
+- **#6** 1ea9c89f — PhiAccrualDetector::millisSinceLastHeartbeat + applyTick absolute-silence fallback: a handshake-once-then-silent peer (empty phi window) is now suspected.
+- **C3** 269ac257 — nexus.cluster.frames.decode_failed counter + debug log on the handshake/gossip/leave decode catches.
+- **D3/D5** 8b93ff61 — example README reconciled with the benchmark (honest, no false "fixed"); landing surfaces withAuthSecret/open-by-default.
+
+REMAINING (deferred — large/risky, need focused sessions, NOT rushed in a marathon):
+- **#1 + #4 incarnation monotonicity** — THE flapping root. Changing recovery/re-add so a locally-recovered/re-added peer is not demotable by equal-or-stale gossip touches the join-semilattice convergence core; must be validated against the distributed mesh soak (getting it wrong diverges the mesh). Highest value, highest risk — dedicated session.
+- **#2 handshake view seeding** — wire-format change (HandshakeReceived must carry the member list) + merge wiring.
+- **#3 quorum / degraded mode** — new ClusterTopology::withMinimumMembers() + degraded state + ClusterDegraded/Recovered events + applyTick gating.
+- **#7 monotonic phi clock** — mechanical but broad API churn (detector + service + actor + phi tests all pass DateTimeImmutable); feed hrtime.
+- **C1 ClusterNode god-class** extraction (ConnectionRegistry/FramePump/Bootstrap) + **C2** delete the buildOutboundSink duplicate (route through MeshOutboundSink).
+- **Perf finding-1** debugEnabled guard (marginal); **CSPRNG-per-ask**, **O(N^2) delta gossip**, **write-batching** (optimizations).
+- **Docs D1** operations runbook + fix metrics.md ("no registry" is now wrong); **D2** promote the observability story into website/docs.
