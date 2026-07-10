@@ -35,6 +35,19 @@ final class RandomPeerSelectorTest extends TestCase
     }
 
     #[Test]
+    public function returnsACopyNotTheInputArrayWhenCountExceedsPool(): void
+    {
+        $pool = ['a', 'b'];
+
+        $selected = new RandomPeerSelector()->select($pool, 5);
+
+        self::assertSame($pool, $selected);
+        // Mutating the result must not touch the caller's array.
+        $selected[] = 'c';
+        self::assertSame(['a', 'b'], $pool);
+    }
+
+    #[Test]
     public function returnsRequestedCountOfDistinctPeersFromPool(): void
     {
         $pool = ['a', 'b', 'c', 'd', 'e'];
