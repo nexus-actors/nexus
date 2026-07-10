@@ -31,7 +31,9 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 use function array_column;
+use function array_filter;
 use function array_slice;
+use function array_values;
 
 #[CoversClass(MembershipService::class)]
 #[CoversClass(MembershipTransition::class)]
@@ -603,6 +605,63 @@ final class MembershipServiceTest extends TestCase
         self::assertFalse($t3->newView->has($this->peer));
         self::assertCount(1, $t3->events);
         self::assertInstanceOf(NodeDown::class, $t3->events[0]);
+    }
+
+    #[Test]
+    public function silentPeerGoesSuspectThenDownWithoutAnyLinkClose(): void
+    {
+        // B5: the pure non-EOF heartbeat-timeout path. A peer handshakes (one liveness beat), then
+        // stops heart-beating while its socket stays open — no applyLinkClosed is ever called. The
+        // give-up window must still drive it Up → Suspect → Down purely from the absence of beats.
+        // This is the class of bug already fixed once (recv-timeout misread as EOF / phi starvation):
+        // the surviving path that relies on NO socket signal at all.
+        $service = $this->service(downAfter: Duration::seconds(10));
+        $t0 = $service->initialState($this->clock->now());
+
+        // Single liveness beat at T0 — the handshake. After this the peer is silent forever.
+        $t1 = $service->applyLiveness(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $this->peer,
+            $this->peerEndpoint,
+            $this->clock->now(),
+            $this->clock->now(),
+        );
+        self::assertSame(MemberStatus::Up, $t1->newView->members[$this->peer->toPathPrefix()]->status);
+
+        // T0+11s: silent longer than downAfter — tick must suspect it (absolute-silence fallback,
+        // reason Gossip, NOT Connection since there was no link close).
+        $this->clock->set($this->clock->now()->modify('+11 seconds'));
+        $t2 = $service->applyTick(
+            $t1->newView,
+            $t1->newSuspectSince,
+            $t1->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertSame(MemberStatus::Suspect, $t2->newView->members[$this->peer->toPathPrefix()]->status);
+        $suspected = array_filter($t2->events, static fn($e): bool => $e instanceof NodeSuspected);
+        self::assertCount(1, $suspected);
+        self::assertSame(SuspicionReason::Gossip, array_values($suspected)[0]->reason);
+
+        // T0+22s: Suspect held longer than downAfter — tick must down and evict it.
+        $this->clock->set($this->clock->now()->modify('+11 seconds'));
+        $t3 = $service->applyTick(
+            $t2->newView,
+            $t2->newSuspectSince,
+            $t2->newSelfIncarnation,
+            $this->detector,
+            $this->peerSelector,
+            $this->clock->now(),
+        );
+
+        self::assertFalse($t3->newView->has($this->peer), 'the silent peer must be evicted after the give-up window');
+        $downs = array_filter($t3->events, static fn($e): bool => $e instanceof NodeDown);
+        self::assertCount(1, $downs);
     }
 
     #[Test]
