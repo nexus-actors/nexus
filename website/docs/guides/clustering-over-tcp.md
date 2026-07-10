@@ -245,6 +245,18 @@ $topology = ClusterTopology::create(
 For use cases that require coordination — distributed counters, single-writer aggregates, distributed locks — combine TCP mesh with the [single-writer aggregate pattern](../core-concepts/passivation.md) (one actor per entity, routed by consistent hash) or delegate coordination to an external store.
 :::
 
+## Rolling restarts and upgrades
+
+Because there is no rejoin after `Down` (the process must restart to re-join), a rolling upgrade needs explicit sequencing rather than a blind rolling-deploy:
+
+1. **Restart nodes one at a time.** Never stop more than one node concurrently.
+2. **Stop the node gracefully** — call `ClusterNode::shutdown()` before `ActorSystem::shutdown()`. This broadcasts a `Leave` frame, and peers remove the node and mark it `Down` immediately on receipt, with no phi-accrual wait. This is faster and cleaner than letting peers detect the process disappearing via TCP EOF and `maxNoHeartbeat`.
+3. **Restart the process.** It reconnects to its configured seeds and performs a fresh handshake, rejoining as a new incarnation — there is no state carried over from its previous membership.
+4. **Wait for the restarted node to show `Up`** in peer views before moving on: subscribe to the PSR-14 `NodeUp` event, or poll with `ClusterNode::queryViewAsync()` (safe to call from a timer callback; `view()` requires the runtime event loop).
+5. **Only then restart the next node.** Repeat until all nodes are upgraded.
+
+Keep `ClusterTopology::withMinimumMembers()` satisfied throughout the rollout — never take enough nodes down at once that reachable membership drops below the configured quorum floor. Below the floor the cluster enters degraded mode (`ClusterDegraded`) and stops making new `Down` decisions, which is a safety net against split-brain, not a substitute for sequencing restarts one node at a time.
+
 ## Wire format and serialisation
 
 All cluster frames use MessagePack encoding (via `nexus-serialization-msgpack`). The wire format is:

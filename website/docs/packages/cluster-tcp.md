@@ -25,6 +25,15 @@ Swoole TCP mesh clustering for Nexus — a full `nexus-cluster` implementation t
 | `ClusterView` | Immutable membership snapshot returned by `ClusterNode::view()` |
 | PSR-14 events | `NodeUp`, `NodeDown`, `NodeSuspected`, `PeerConnected`, `PeerDisconnected`, `ClusterDegraded` — dispatched via `ActorSystem`'s event dispatcher |
 
+## Cluster vs worker pool
+
+`nexus-cluster-tcp` and `nexus-worker-pool` solve different scaling problems and compose rather than compete:
+
+- **`nexus-worker-pool`** scales across CPU cores **within one machine**. Actors are distributed across Swoole threads via a consistent hash ring; `WorkerTransport` (`ThreadQueueTransport` in production) sends `Envelope` objects directly through shared memory (`Thread\Queue`/`Thread\Map`) — no serializer involved.
+- **`nexus-cluster-tcp`** scales **across machines** over a TCP mesh. `ClusterRef` serialises messages to MessagePack frames for any peer that isn't the local node.
+
+A deployment can run one cluster node per machine, with each node internally hosting a worker pool that spreads its local actors across threads. The two layers are orthogonal: worker-pool refs never touch the network, and cluster refs never bypass serialization for a remote peer — `tell()`/`ask()` look identical to calling code either way, but only the cluster layer pays the encode/decode cost.
+
 ## Install
 
 ```bash title="terminal"
