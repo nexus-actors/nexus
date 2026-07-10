@@ -82,6 +82,7 @@ final class MembershipServiceTest extends TestCase
             1,
             ClusterView::empty(),
             $this->clock->now(),
+            $this->clock->now(),
         );
 
         self::assertCount(1, $t1->effects);
@@ -112,6 +113,7 @@ final class MembershipServiceTest extends TestCase
             1,
             ClusterView::empty(),
             $this->clock->now(),
+            $this->clock->now(),
         );
 
         self::assertCount(1, $t1->effects);
@@ -139,6 +141,7 @@ final class MembershipServiceTest extends TestCase
             'production',
             2,
             ClusterView::empty(),
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -171,6 +174,7 @@ final class MembershipServiceTest extends TestCase
             'production',
             1,
             $theirView,
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -208,6 +212,40 @@ final class MembershipServiceTest extends TestCase
         );
 
         // The detector recorded the arrival at observedAt: elapsed-since is 0 AT observedAt.
+        self::assertSame(
+            0.0,
+            $this->detector->millisSinceLastHeartbeat($peer->toPathPrefix(), $observedAt),
+        );
+    }
+
+    #[Test]
+    public function handshakeFeedsTheDetectorAtObservedTimeNotProcessingTime(): void
+    {
+        $service = $this->service();
+        $t0 = $service->initialState($this->clock->now());
+
+        $peer = new NodeAddress('production', 'eu', 'payments', 'node-9');
+        $endpoint = NodeEndpoint::fromString('10.0.0.9:7355');
+
+        // The handshake bytes arrived at observedAt; the membership actor only processed the message
+        // 8s later (simulating membership-mailbox contention). The detector must record observedAt.
+        $observedAt = new DateTimeImmutable('2026-07-10 00:00:02.000000');
+        $processingNow = new DateTimeImmutable('2026-07-10 00:00:10.000000');
+
+        $service->applyHandshake(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->detector,
+            $peer,
+            $endpoint,
+            'production',
+            1,
+            ClusterView::empty(),
+            $observedAt,
+            $processingNow,
+        );
+
         self::assertSame(
             0.0,
             $this->detector->millisSinceLastHeartbeat($peer->toPathPrefix(), $observedAt),
@@ -257,6 +295,7 @@ final class MembershipServiceTest extends TestCase
             'production',
             1,
             $theirView,
+            $this->clock->now(),
             $this->clock->now(),
         );
 
@@ -998,6 +1037,42 @@ final class MembershipServiceTest extends TestCase
 
         self::assertSame(6, $t1->newSelfIncarnation, 'bump must floor above the peer-asserted incarnation');
         self::assertSame(6, $t1->newView->members[$self->toPathPrefix()]->incarnation);
+        self::assertSame(MemberStatus::Up, $t1->newView->members[$self->toPathPrefix()]->status);
+    }
+
+    #[Test]
+    public function refutationClampsAtPhpIntMaxInsteadOfOverflowingToFloat(): void
+    {
+        $service = $this->service();
+        $self = new NodeAddress('production', 'eu', 'payments', 'node-1');
+        $t0 = $service->initialState($this->clock->now());
+
+        // A peer asserts us Down at PHP_INT_MAX (forged/maxed). The refutation floor + applyRejoin's
+        // +1 would overflow to float; instead we must pin at PHP_INT_MAX and stay an int.
+        $payload = new GossipPayload(
+            members: [
+                [
+                    'address' => $self->toPathPrefix(),
+                    'endpoint' => '10.0.0.1:7355',
+                    'incarnation' => PHP_INT_MAX,
+                    'status' => MemberStatus::Down->rank(),
+                ],
+            ],
+            registrations: [],
+        );
+
+        $t1 = $service->applyGossip(
+            $t0->newView,
+            $t0->newSuspectSince,
+            $t0->newSelfIncarnation,
+            $this->peer,
+            $payload,
+            $this->clock->now(),
+        );
+
+        self::assertIsInt($t1->newSelfIncarnation);
+        self::assertSame(PHP_INT_MAX, $t1->newSelfIncarnation);
+        self::assertSame(PHP_INT_MAX, $t1->newView->members[$self->toPathPrefix()]->incarnation);
         self::assertSame(MemberStatus::Up, $t1->newView->members[$self->toPathPrefix()]->status);
     }
 

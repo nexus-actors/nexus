@@ -375,6 +375,7 @@ final class MembershipActorTest extends TestCase
                 ],
                 (string) $this->peerEndpoint,
             ),
+            $this->runtime->clock()->now(),
         );
     }
 

@@ -161,6 +161,7 @@ final class MembershipActor implements StatefulActorHandler
                 $message->handshake->clusterName,
                 $message->handshake->protocolVersion,
                 ClusterView::empty(),
+                $message->observedAt,
                 $now,
             )),
             $message instanceof GossipReceived => $this->apply($this->service->applyGossip(

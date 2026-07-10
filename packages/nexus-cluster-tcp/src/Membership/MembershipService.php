@@ -86,6 +86,8 @@ final class MembershipService
      * returns an accepted HandshakeResponse containing the local post-merge view.
      *
      * @param array<string, DateTimeImmutable> $suspectSince
+     * @param DateTimeImmutable $observedAt Socket-ingress timestamp fed to the phi detector; keeps
+     *        processing-queue latency out of the failure-detector window. Everything else uses $now.
      */
     public function applyHandshake(
         ClusterView $view,
@@ -97,6 +99,7 @@ final class MembershipService
         string $clusterName,
         int $protocolVersion,
         ClusterView $theirView,
+        DateTimeImmutable $observedAt,
         DateTimeImmutable $now,
     ): MembershipTransition {
         if ($clusterName !== $this->topology->clusterName) {
@@ -125,7 +128,7 @@ final class MembershipService
             $detector,
             $peer,
             $endpoint,
-            $now,
+            $observedAt,
             $now,
         );
         [$view2, $suspectSince2, $events2] = $this->mergeView($view1, $suspectSince1, $theirView);
@@ -170,12 +173,14 @@ final class MembershipService
         if ($suspectedAt !== null) {
             // Reuse applyRejoin's "insert self Up at a higher incarnation" primitive, flooring the
             // bump above the incarnation the peer holds so the refutation always wins the merge.
-            $rejoin = $this->applyRejoin(
-                $newView,
-                $newSuspectSince,
-                max($selfIncarnation, $suspectedAt),
-                $now,
-            );
+            // Clamp at PHP_INT_MAX: a peer asserting PHP_INT_MAX (forged/maxed) would otherwise make
+            // applyRejoin's +1 overflow to float, corrupting the int-typed incarnation contract. We
+            // stay pinned at PHP_INT_MAX instead — still the maximal, merge-winning value.
+            $floor = max($selfIncarnation, $suspectedAt);
+            $baseForRejoin = $floor >= PHP_INT_MAX
+                ? PHP_INT_MAX - 1
+                : $floor;
+            $rejoin = $this->applyRejoin($newView, $newSuspectSince, $baseForRejoin, $now);
 
             return new MembershipTransition(
                 $rejoin->newView,

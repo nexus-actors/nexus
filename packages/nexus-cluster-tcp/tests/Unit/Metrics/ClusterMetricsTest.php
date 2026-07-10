@@ -289,6 +289,7 @@ final class ClusterMetricsTest extends TestCase
                 ],
                 (string) $peerEndpoint,
             ),
+            $stepRuntime->clock()->now(),
         ));
         $stepRuntime->drain();
 

@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Membership\AskFailingMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
+use Monadial\Nexus\Cluster\Tcp\Membership\DepartedPeerTracker;
 use Monadial\Nexus\Cluster\Tcp\Membership\EventDispatcherMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Membership\LivenessThrottle;
@@ -171,6 +172,11 @@ final class ClusterNode
     /**
      * Boot a cluster node from the given topology, wiring all collaborators.
      *
+     * Transport auto-selection lives here (not on {@see ClusterTopology}) because it requires
+     * runtime/extension introspection — inspecting the live {@see Runtime} and whether ext-swoole is
+     * loaded — which is a boot-time concern, not plain configuration. Topology's `tls`/`authSecret`
+     * are static value knobs, so they stay declarative withers on the immutable config object.
+     *
      * @param TypeRegistry|null $userTypes Optional registry pre-populated with the caller's
      *        user-defined message types (e.g. for cross-node tell/ask). Boot adds the cluster
      *        wire protocol types (Handshake, HandshakeAck, GossipPayload, etc.) into this
@@ -260,6 +266,13 @@ final class ClusterNode
             meter: $meter,
         );
 
+        // Departed-peer tracker: an actor-confined set of Down peers that backs ClusterRef::isAlive()
+        // without any blocking probe. It decorates the event publisher (added on NodeDown, removed on
+        // NodeUp) and exposes an isAlive(NodeAddress) closure the ref factory binds per target.
+        $departedTracker = new DepartedPeerTracker(
+            new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
+        );
+
         $refFactory = new ClusterRefFactory(
             $topology->self,
             $outboundSink,
@@ -269,6 +282,7 @@ final class ClusterNode
             $traceInjector,
             $tracer,
             $meter,
+            $departedTracker->isAlive(...),
         );
 
         // 9. Membership collaborators.
@@ -284,10 +298,7 @@ final class ClusterNode
             $meter,
             $authenticator,
         );
-        $eventPublisher = new AskFailingMembershipEventPublisher(
-            new EventDispatcherMembershipEventPublisher($system->eventDispatcher()),
-            $askRegistry,
-        );
+        $eventPublisher = new AskFailingMembershipEventPublisher($departedTracker, $askRegistry);
 
         $service = new MembershipService($topology, $topology->maxNoHeartbeat);
         $detector = new PhiAccrualDetector(
@@ -532,7 +543,8 @@ final class ClusterNode
     // -------------------------------------------------------------------------
 
     /**
-     * @psalm-api
+     * @internal Forward-declared seam for the C2 (service-discovery) track; not yet callable. It
+     *           exists only to reserve the method shape and always throws — do not depend on it.
      *
      * Receptionist pattern for service discovery. Arrives in the C2 track.
      *
@@ -617,7 +629,12 @@ final class ClusterNode
                     // orphaned link EOFs on its own when the peer drops that connection.
                     $this->acceptedLinks[$prefix] = $link;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
-                    $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    // Stamp ingress time here (frame-parse), not at actor-processing time, so the phi
+                    // detector is fed the arrival instant regardless of membership-mailbox latency.
+                    $observedAt = $this->system->clock()->now();
+                    $this->membershipRef->tell(
+                        new HandshakeReceived($peerAddr, $peerEndpoint, $handshake, $observedAt),
+                    );
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $prefix);
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
                     $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
@@ -733,7 +750,12 @@ final class ClusterNode
                 if ($parsed !== null) {
                     [$peerAddr, $peerEndpoint, $handshake] = $parsed;
                     $ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
-                    $this->membershipRef->tell(new HandshakeReceived($peerAddr, $peerEndpoint, $handshake));
+                    // Stamp ingress time here (frame-parse), not at actor-processing time, so the phi
+                    // detector is fed the arrival instant regardless of membership-mailbox latency.
+                    $observedAt = $this->system->clock()->now();
+                    $this->membershipRef->tell(
+                        new HandshakeReceived($peerAddr, $peerEndpoint, $handshake, $observedAt),
+                    );
                     $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
                     $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
                     $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
@@ -847,12 +869,21 @@ final class ClusterNode
             return null;
         }
 
-        $peerAddr = new NodeAddress(
-            $obj->node['cluster'] ?? 'unknown',
-            $obj->node['datacenter'] ?? 'unknown',
-            $obj->node['application'] ?? 'unknown',
-            $obj->node['node'] ?? 'unknown',
-        );
+        // Reject a handshake with an incomplete node identity: a peer omitting (or blanking) any of
+        // the four NodeAddress fields must not be admitted under a fabricated `/cluster/unknown/...`
+        // identity. Treat it as a malformed handshake, counted via the decode-failure counter.
+        $cluster = $obj->node['cluster'] ?? '';
+        $datacenter = $obj->node['datacenter'] ?? '';
+        $application = $obj->node['application'] ?? '';
+        $node = $obj->node['node'] ?? '';
+
+        if ($cluster === '' || $datacenter === '' || $application === '' || $node === '') {
+            $this->recordDecodeFailure('handshake');
+
+            return null;
+        }
+
+        $peerAddr = new NodeAddress($cluster, $datacenter, $application, $node);
 
         try {
             $peerEndpoint = NodeEndpoint::fromString($obj->advertise);
