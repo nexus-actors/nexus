@@ -52,10 +52,8 @@ require __DIR__ . '/../vendor/autoload.php';
 $typeRegistry = new TypeRegistry();
 $typeRegistry->registerFromAttribute(OrderPlaced::class);
 
-$serializer = new NexusMessengerSerializer(
-    SerializerFactory::fromEnvironment($typeRegistry, [OrderPlaced::class]),
-    $typeRegistry,
-);
+$nexusSerializer = SerializerFactory::fromEnvironment($typeRegistry, [OrderPlaced::class]);
+$serializer = new NexusMessengerSerializer($nexusSerializer, $typeRegistry);
 
 // ---------------------------------------------------------------------------
 // 2. Redis transport
@@ -94,7 +92,7 @@ $app->addCommand(new ConsumeCommand(
     $transport,
     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
         $processorRef = $system->spawn(
-            Props::fromFactory(fn () => new OrderProcessor()),
+            Props::fromFactory(fn() => new OrderProcessor()),
             'order-processor',
         );
 
@@ -105,6 +103,6 @@ $app->addCommand(new ConsumeCommand(
     replySenders: new MapReplySenderLocator(['replies' => $repliesTransport]),
 ));
 
-$app->addCommand(new ProduceCommand($transport, $serializer, $typeRegistry));
+$app->addCommand(new ProduceCommand($transport, $nexusSerializer, $typeRegistry));
 
 $app->run();
