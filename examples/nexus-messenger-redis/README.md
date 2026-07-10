@@ -181,6 +181,7 @@ SERIALIZER=msgpack docker compose run --rm app php bin/worker.php
 |-------------------|----------------------|-------------|
 | `REDIS_DSN`       | `redis://redis:6379` | Redis connection string |
 | `REDIS_STREAM`    | `orders`             | Redis Stream / queue name |
+| `REPLY_STREAM`    | `replies`            | Reply stream for ask/reply (console worker only) |
 | `CONSUMER_GROUP`  | `nexus-workers`      | Redis consumer group name |
 | `RECEIVER_COUNT`  | `3`                  | Number of competing ReceiverActors |
 | `MESSAGE_LIMIT`   | `50`                 | Watchdog recycles after this many messages |

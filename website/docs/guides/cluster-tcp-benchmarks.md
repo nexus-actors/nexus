@@ -151,9 +151,9 @@ Aggregate 1 KB throughput as *K* parallel two-node clusters run at once (so `2K`
 | 12 | 24 | **877,859** | **857.4 MB/s** | 799% |
 | 16 | 32 | **946,426** | **924.2 MB/s** | 1639% |
 
-Throughput scales **near-linearly** — ~1.95× at K=2, ~3.8× at K=4, ~7.7× at K=8 — and reaches
-**~878,000 msg/s at K=12** (the M4 Max has **12 performance cores**). With ext-msgpack lightening the
-per-message CPU, the 4 efficiency cores now add real headroom beyond that — K=16 tops out at
+Throughput scales **near-linearly** — ~2.0× at K=2, ~3.9× at K=4, ~7.4× at K=8 — and reaches
+**~878,000 msg/s at K=12** (the M4 Max has **12 performance cores**), achieving ~93% scaling efficiency.
+With ext-msgpack lightening the per-message CPU, the 4 efficiency cores now add real headroom beyond that — K=16 tops out at
 **~946,000 msg/s**. The clean plateau at the P-core count is the important result: **the transport has no global
 lock or shared bottleneck — it scales with cores.** (The pre-tuning run showed the same shape at a
 ~315K msg/s plateau; the 3× lift is the per-core tuning multiplied across every core.)
