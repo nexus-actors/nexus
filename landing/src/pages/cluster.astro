@@ -299,8 +299,9 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.send</code> and <code class="font-mono">cluster.ask</code> Producer spans around every outbound frame</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.receive</code> Consumer span on the receiving node, parented to the sender's trace context</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.handshake</code> Internal span per peer connection</span></li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Seven counters + one bytes-sent histogram — automatically instrumented</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Six counters + one bytes-sent histogram — automatically instrumented</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Disabled by default: omit <code class="font-mono">$obs</code> and telemetry costs nothing at runtime</span></li>
       </ul>
       <a
@@ -324,7 +325,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         metrics pipeline, alerting rules, or audit log.
       </p>
     </div>
-    <div class="grid md:grid-cols-3 gap-6">
+    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
       <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
         <h3 class="font-bold text-lg mb-2">Node lifecycle</h3>
         <p class="text-slate-500 dark:text-slate-400 text-sm">
@@ -353,6 +354,14 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
           fires on TCP close — before phi, for fast failure propagation.
         </p>
       </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Quorum</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">ClusterDegraded(reachableMembers, requiredMembers)</code>
+          fires while the node is below the <code class="font-mono">withMinimumMembers()</code>
+          floor — the quorum-loss signal to alert on.
+        </p>
+      </div>
     </div>
   </section>
 
@@ -366,8 +375,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         and phi-accrual failure detection, not a consensus layer.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election; split-brain protection is opt-in.</strong> By default both halves of a partition keep operating; set <code class="font-mono">withMinimumMembers()</code> for a quorum floor that drops a below-quorum minority into a degraded, Down-suppressing mode instead of letting it evict the majority.</span></li>
-        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election.</strong> There is no designated coordinator node.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election; split-brain protection is opt-in.</strong> There is no designated coordinator node. By default both halves of a partition keep operating; set <code class="font-mono">withMinimumMembers()</code> for a quorum floor that drops a below-quorum minority into a degraded, Down-suppressing mode instead of letting it evict the majority.</span></li>
         <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No service registry.</strong> <code class="font-mono">refFor()</code> requires a pre-agreed <code class="font-mono">NodeAddress</code> and <code class="font-mono">ActorPath</code>. A receptionist service-registry is planned for C2.</span></li>
         <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No automatic rejoin after Down.</strong> A node marked <code class="font-mono">Down</code> must restart the process to re-join the cluster.</span></li>
         <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>Gossip convergence latency.</strong> State changes propagate within ~1 gossip interval (default 1 s); rapid membership churn may produce briefly stale views on individual nodes.</span></li>
