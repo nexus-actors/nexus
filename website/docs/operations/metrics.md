@@ -8,7 +8,11 @@ related:
 
 # Metrics
 
-Nexus does not ship a Prometheus endpoint or a metrics registry. It accepts a PSR-14 `EventDispatcherInterface` at boot and fires events as actors start, stop, fail, and process messages — your application code subscribes to those events and publishes counters however it likes.
+Nexus **core** does not ship a Prometheus endpoint or a metrics registry — it stays dependency-light and metrics-agnostic. It accepts a PSR-14 `EventDispatcherInterface` at boot and fires events as actors start, stop, fail, and process messages; your application code subscribes to those events and publishes counters however it likes. This page documents that DIY seam.
+
+:::tip Batteries-included OpenTelemetry
+For a ready-made metrics/traces/logs pipeline, add **`nexus-observability-otel`**. Once observability is wired into the `ActorSystem`, the runtime emits `nexus.actor.messages.processed` and `nexus.actor.message.processing.duration`; with `nexus-cluster-tcp` you also get the `nexus.cluster.*` family (`messages.sent`, `bytes.sent`, `frames.sent`, `frames.decode_failed`, `asks.pending`/`.resolved`/`.timed_out`/`.capacity_rejected`, `ask.duration`, `handshake.rejected`) plus `nexus.actor_system.*` gauges — all exported over OTLP to a collector (e.g. Grafana LGTM). See the [observability guide](observability.md) and `tests/Performance/distributed/README-observability.md`.
+:::
 
 ## What Nexus fires
 
