@@ -21,6 +21,12 @@ use Monadial\Nexus\Observability\Trace\Tracer;
  */
 final readonly class ClusterRefFactory
 {
+    /**
+     * @param Closure(NodeAddress): bool|null $isAlive Per-node liveness probe consulted by
+     *        {@see ClusterRef::isAlive()}. Null (the default) means always-alive;
+     *        {@see \Monadial\Nexus\Cluster\Tcp\ClusterNode::boot()} wires a probe backed by the
+     *        membership {@see \Monadial\Nexus\Cluster\Tcp\Membership\DepartedPeerTracker}.
+     */
     public function __construct(
         private NodeAddress $self,
         private OutboundSink $sink,
@@ -30,16 +36,23 @@ final readonly class ClusterRefFactory
         private TraceContextInjector $trace = new NoopTraceContextInjector(),
         private Tracer $tracer = new NoopTracer(),
         private Meter $meter = new NoopMeter(),
+        private ?Closure $isAlive = null,
     ) {}
 
     /**
-     * @param Closure(): bool $aliveChecker Liveness probe (default: always alive). C1.6b
-     *                                      wires this to the cluster {@see \Monadial\Nexus\Cluster\Tcp\Membership\ClusterView}.
+     * @param Closure(): bool|null $aliveChecker Optional per-ref liveness override. When null (the
+     *        usual case), the factory binds its node-level `$isAlive` probe to `$target`.
      *
      * @return ClusterRef<object>
      */
     public function refFor(NodeAddress $target, ActorPath $targetPath, ?Closure $aliveChecker = null): ClusterRef
     {
+        $isAlive = $this->isAlive;
+        $bound = $aliveChecker
+            ?? ($isAlive !== null
+                ? static fn(): bool => $isAlive($target)
+                : static fn(): bool => true);
+
         return new ClusterRef(
             $this->self,
             $target,
@@ -49,7 +62,7 @@ final readonly class ClusterRefFactory
             $this->askRegistry,
             $this->codec,
             $this->trace,
-            $aliveChecker ?? static fn(): bool => true,
+            $bound,
             $this->tracer,
             $this->meter,
         );
