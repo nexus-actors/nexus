@@ -225,7 +225,7 @@ final class MembershipActorTest extends TestCase
         $this->events->clear();
 
         // PeerLivenessObserved for a known peer (endpoint null = already tracked).
-        $ref->tell(new PeerLivenessObserved($this->peer));
+        $ref->tell(new PeerLivenessObserved($this->peer, null, $this->runtime->clock()->now()));
         $this->runtime->drain();
 
         // Peer must recover to Up and emit NodeUp.
