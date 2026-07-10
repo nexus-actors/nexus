@@ -137,6 +137,8 @@ final class ClusterNode
 
     private ?Counter $handshakeRejected = null;
 
+    private ?Counter $framesDecodeFailed = null;
+
     /**
      * Coalesces per-frame liveness signals to at most one PeerLivenessObserved per peer
      * per detector sample interval — see {@see LivenessThrottle} for why unthrottled
@@ -759,6 +761,8 @@ final class ClusterNode
         try {
             $obj = $this->frameSerializer->deserialize($frame->payload, 'cluster.handshake');
         } catch (Throwable) {
+            $this->recordDecodeFailure('handshake');
+
             return null;
         }
 
@@ -850,6 +854,8 @@ final class ClusterNode
         try {
             $obj = $this->frameSerializer->deserialize($frame->payload, 'cluster.gossip');
         } catch (Throwable) {
+            $this->recordDecodeFailure('gossip');
+
             return;
         }
 
@@ -890,6 +896,8 @@ final class ClusterNode
         try {
             $payload = $this->frameSerializer->deserialize($frame->payload, 'cluster.leave');
         } catch (Throwable) {
+            $this->recordDecodeFailure('leave');
+
             return;
         }
 
@@ -966,6 +974,26 @@ final class ClusterNode
                 'Cluster handshakes rejected due to parse failure',
             );
             $this->handshakeRejected->add(1);
+        } catch (Throwable) {
+            // Telemetry must never break cluster operations.
+        }
+    }
+
+    /**
+     * Make an otherwise-silent structural decode failure observable: a corrupt or version-skewed
+     * peer whose handshake/gossip/leave frame fails to deserialize is dropped, and without this an
+     * operator sees zero signal while the cluster quietly fails to converge.
+     */
+    private function recordDecodeFailure(string $frameType): void
+    {
+        try {
+            $this->framesDecodeFailed ??= $this->meter->counter(
+                'nexus.cluster.frames.decode_failed',
+                '{frame}',
+                'Inbound frames dropped because they could not be decoded',
+            );
+            $this->framesDecodeFailed->add(1, ['frame.type' => $frameType]);
+            $this->logger->debug('cluster.frame.decode_failed', ['frame.type' => $frameType]);
         } catch (Throwable) {
             // Telemetry must never break cluster operations.
         }
