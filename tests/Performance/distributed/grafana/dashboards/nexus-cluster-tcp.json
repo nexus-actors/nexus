@@ -54,7 +54,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (span_name) (rate(traces_spanmetrics_calls_total{service_name=\"nexus-cluster-mesh\"}[1m]))",
+          "expr": "sum by (span_name) (rate(traces_spanmetrics_calls_total{service_name=~\"nexus-cluster-.*\"}[1m]))",
           "legendFormat": "{{span_name}}"
         }
       ]
@@ -70,7 +70,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum by (span_name, le) (rate(traces_spanmetrics_latency_bucket{service_name=\"nexus-cluster-mesh\"}[1m])))",
+          "expr": "histogram_quantile(0.95, sum by (span_name, le) (rate(traces_spanmetrics_latency_bucket{service_name=~\"nexus-cluster-.*\"}[1m])))",
           "legendFormat": "p95 {{span_name}}"
         }
       ]

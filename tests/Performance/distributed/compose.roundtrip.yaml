@@ -49,6 +49,10 @@ x-worker-env: &env
   OTEL_TRACES_SAMPLER: "traceidratio"
   OTEL_TRACES_SAMPLER_ARG: "${OTEL_SAMPLE:-0.1}"
   PAYLOAD: "${PAYLOAD:-1024}"
+  # Ring mode: tokens hop n1 -> n2 -> ... -> n16 -> n1; with per-node service names the
+  # Tempo service graph renders the full ring. RING_TOKENS = tokens kept in flight.
+  RING: "${RING:-0}"
+  RING_TOKENS: "${RING_TOKENS:-8}"
   START_AT: "${START_AT:-0}"
   # Driver pacing target (aggregate round trips/s). Unpaced, the driver saturates the echo
   # node's reactor, starving its gossip and storming the mesh's failure detector.

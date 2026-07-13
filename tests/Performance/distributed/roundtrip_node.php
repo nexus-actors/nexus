@@ -121,7 +121,11 @@ function buildObservability(string $tag, int $nodeId): Observability
         // or attachExportActor() below throws LogicException at boot.
         'OTEL_NEXUS_ASYNC_EXPORT' => envStr('OTEL_NEXUS_ASYNC_EXPORT', '0'),
         'OTEL_RESOURCE_ATTRIBUTES' => sprintf('node.id=%s,node.index=%d', $tag, $nodeId),
-        'OTEL_SERVICE_NAME' => envStr('OTEL_SERVICE_NAME', 'nexus-cluster-roundtrip'),
+        // Per-node service name: Tempo's service graph builds its nodes from service.name,
+        // so a shared name collapses the whole mesh into one blob. With one service per
+        // node the Producer->Consumer span pairs render the real topology (n1 -> n16, or
+        // the full ring in RING mode).
+        'OTEL_SERVICE_NAME' => envStr('OTEL_SERVICE_NAME', 'nexus-cluster-roundtrip') . '-' . $tag,
         'OTEL_TRACES_SAMPLER' => envStr('OTEL_TRACES_SAMPLER', 'traceidratio'),
         'OTEL_TRACES_SAMPLER_ARG' => envStr('OTEL_TRACES_SAMPLER_ARG', '0.1'),
     ]);
@@ -410,6 +414,46 @@ function runRoundtripNode(
             );
             $node->expose($echo);
 
+            // Ring relay (RING=1): every node forwards a token Ping to the NEXT node's relay;
+            // node 1 counts a completed lap instead of forwarding (the driver's seeder injects
+            // a FRESH token per lap, so each lap is one bounded trace: n1 -> n2 -> ... -> n16 -> n1).
+            // With per-node service names, Tempo's service graph renders the full ring.
+            $ring = getenv('RING') === '1';
+
+            if ($ring) {
+                $nextNodeId = ($nodeId % $nodes) + 1;
+                $nextAddr = new NodeAddress('mesh', 'dc1', 'roundtrip', "n{$nextNodeId}");
+                $relayPath = ActorPath::fromString('/user/rt-relay');
+                $nextRef = null;
+
+                $relay = $system->spawn(
+                    Props::fromBehavior(Behavior::receive(
+                        static function (ActorContext $ctx, object $msg) use (
+                            $node,
+                            $nodeId,
+                            $nextAddr,
+                            $relayPath,
+                            &$nextRef,
+                            &$roundtrips,
+                        ): Behavior {
+                            if ($msg instanceof Ping) {
+                                if ($nodeId === 1) {
+                                    // Lap complete — count it; the seeder injects the replacement.
+                                    ++$roundtrips;
+                                } else {
+                                    $nextRef ??= $node->refFor($nextAddr, $relayPath);
+                                    $nextRef->tell(new Ping($msg->text));
+                                }
+                            }
+
+                            return Behavior::same();
+                        },
+                    )),
+                    'rt-relay',
+                );
+                $node->expose($relay);
+            }
+
             // Converge: every node must see the full mesh Up before load starts.
             $expectedNodes = $nodes;
             $upCount = 0;
@@ -519,12 +563,40 @@ function runRoundtripNode(
             // the cluster.ask spans that chain the distributed trace.
             $pacingSleep = max(0.001, $askConcurrency / max(1, $targetRps));
             $payload = str_repeat('x', $payloadBytes);
+            $ringTokens = envInt('RING_TOKENS', 8);
             $intervalStartNs = hrtime(true);
             $intervalStartTrips = 0;
             $nextReportNs = $intervalStartNs + 30 * 1_000_000_000;
             $elapsed = 0;
 
-            for ($c = 0; $c < $askConcurrency; ++$c) {
+            if ($ring) {
+                // Ring seeder: keep RING_TOKENS tokens circulating. Each lap increments
+                // $roundtrips (in the n1 relay); a fresh token is injected per completed lap
+                // so every lap is its own bounded distributed trace around the ring.
+                $runtime->defer(static function () use (
+                    $node,
+                    $nodes,
+                    $payload,
+                    $deadlineNs,
+                    &$roundtrips,
+                    $ringTokens,
+                ): void {
+                    $firstHopAddr = new NodeAddress('mesh', 'dc1', 'roundtrip', 'n' . (($nodes > 1) ? 2 : 1));
+                    $relayRef = $node->refFor($firstHopAddr, ActorPath::fromString('/user/rt-relay'));
+                    $seeded = 0;
+
+                    while (hrtime(true) < $deadlineNs) {
+                        while ($seeded < $roundtrips + $ringTokens) {
+                            $relayRef->tell(new Ping($payload));
+                            ++$seeded;
+                        }
+
+                        Coroutine::sleep(0.002);
+                    }
+                });
+            }
+
+            for ($c = 0; $c < ($ring ? 0 : $askConcurrency); ++$c) {
                 $runtime->defer(static function () use (
                     $node,
                     $targetAddr,
