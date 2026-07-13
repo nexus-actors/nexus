@@ -71,6 +71,10 @@ final readonly class PackageTrimmer
             $remove[] = 'nexus-actors/cluster-tcp';
         }
 
+        if (!(bool) ($selections['messenger'] ?? false)) {
+            $remove[] = 'nexus-actors/messenger';
+        }
+
         // HTTP
         if (!$http) {
             $remove[] = 'nexus-actors/http';

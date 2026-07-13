@@ -34,9 +34,11 @@ final class ProjectConfigurator
         $persistence = $this->askPersistence();
         $otel = $this->askOtel();
         $cluster = $this->askCluster($runtime);
+        $messenger = $this->askMessenger();
 
         $selections = [
             'cluster' => $cluster,
+            'messenger' => $messenger,
             'http' => $http,
             'otel' => $otel,
             'persistence' => $persistence,
@@ -144,6 +146,21 @@ final class ProjectConfigurator
         }
 
         return $this->io->askConfirmation('Add OpenTelemetry tracing? [y/N] ', false);
+    }
+
+    private function askMessenger(): bool
+    {
+        $envVal = getenv('NEXUS_MESSENGER');
+
+        if ($envVal !== false) {
+            return $envVal === '1' || $envVal === 'true';
+        }
+
+        if (!$this->io->isInteractive()) {
+            return false;
+        }
+
+        return $this->io->askConfirmation('Add Symfony Messenger bridge (nexus-messenger)? [y/N] ', false);
     }
 
     private function askCluster(string $runtime): bool
@@ -322,6 +339,7 @@ final class ProjectConfigurator
         $this->io->write('  Persistence: ' . $persistence);
         $this->io->write('  Telemetry:   ' . (((bool) $selections['otel']) ? 'OpenTelemetry (set OTEL_NEXUS_ASYNC_EXPORT=1 on Swoole for actorized export)' : 'no'));
         $this->io->write('  Cluster:     ' . (((bool) ($selections['cluster'] ?? false)) ? 'TCP mesh (configure CLUSTER_* env)' : 'no'));
+        $this->io->write('  Messenger:   ' . (((bool) ($selections['messenger'] ?? false)) ? 'Symfony Messenger bridge' : 'no'));
         $this->io->write('');
         $this->io->write('<comment>Next steps:</comment>');
         $this->io->write('  ' . $composeCmd . ' up -d');

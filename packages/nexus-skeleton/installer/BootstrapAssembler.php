@@ -41,6 +41,10 @@ final class BootstrapAssembler
                 $parts[] = $this->readPartial('cluster.php');
             }
 
+            if ((bool) ($selections['messenger'] ?? false)) {
+                $parts[] = $this->readPartial('messenger.php');
+            }
+
             if ($persistence !== 'none') {
                 $persistenceKey = match ($persistence) {
                     'es-dbal' => 'persistence.dbal.es.php',
@@ -175,6 +179,14 @@ final class BootstrapAssembler
             $lines[] = "        \$node = ClusterNode::boot(\$system, \$topology);";
             $lines[] = "        // \$node->expose(\$ref) makes an actor reachable from other nodes;";
             $lines[] = "        // \$node->refFor(\$address, \$path) sends to remote actors.";
+            $lines[] = "    })";
+        }
+
+        if ((bool) ($selections['messenger'] ?? false)) {
+            $lines[] = "    ->onStart(static function (\$system): void {";
+            $lines[] = "        // Bridge Symfony Messenger transports to actors: wire your SenderInterface /";
+            $lines[] = "        // ReceiverInterface and spawn consumers via MessengerBridge::spawnReceivers().";
+            $lines[] = "        // https://docs.nexusactors.com/docs/packages/messenger";
             $lines[] = "    })";
         }
 

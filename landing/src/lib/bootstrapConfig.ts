@@ -491,7 +491,18 @@ export function generateCreateCommand(s: Selections): string {
     envVars.push(`NEXUS_PERSISTENCE=${persistenceMap[s.persistence]}`);
   }
 
-  // OTel package not yet published — do not emit NEXUS_OTEL=1 until skeleton supports it
+  if (s.otel) {
+    envVars.push('NEXUS_OTEL=1');
+  }
+
+  // Cluster is Swoole-only (the installer refuses it on Fiber anyway).
+  if (s.cluster && s.runtime !== 'fiber') {
+    envVars.push('NEXUS_CLUSTER=1');
+  }
+
+  if (s.messenger) {
+    envVars.push('NEXUS_MESSENGER=1');
+  }
 
   const interactive = [
     'composer create-project nexus-actors/skeleton my-app',
