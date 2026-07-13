@@ -10,6 +10,10 @@ use Monadial\Nexus\Observability\Context\CompositePropagator;
 use Monadial\Nexus\Observability\Context\TraceContextPropagator;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
+use Monadial\Nexus\Observability\Otel\Export\ActorForwardingLogRecordExporter;
+use Monadial\Nexus\Observability\Otel\Export\ActorForwardingMetricExporter;
+use Monadial\Nexus\Observability\Otel\Export\ActorForwardingSpanExporter;
+use Monadial\Nexus\Observability\Otel\Export\AsyncExportHandles;
 use OpenTelemetry\API\Common\Time\Clock;
 use OpenTelemetry\Contrib\Otlp\LogsExporter;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
@@ -61,12 +65,39 @@ final class ObservabilityFactory
             ),
         );
 
+        $spanExporter = new SpanExporter(
+            $transports->create($endpoint . '/v1/traces', 'application/x-protobuf', timeout: $timeout),
+        );
+        $metricExporter = new MetricExporter(
+            $transports->create($endpoint . '/v1/metrics', 'application/x-protobuf', timeout: $timeout),
+            // Force cumulative temporality. Without an explicit choice the exporter's
+            // temporality selector falls back to each metric's own metadata, which is
+            // falsy for synchronous instruments — and ExportingReader::add() then skips
+            // registering their source, so every counter/histogram is silently dropped
+            // and only observable (async) instruments export. Cumulative is also what
+            // Prometheus/Mimir expects.
+            Temporality::CUMULATIVE,
+        );
+        $logsExporter = $config->logsEnabled
+            ? new LogsExporter($transports->create($endpoint . '/v1/logs', 'application/x-protobuf', timeout: $timeout))
+            : null;
+
+        $forwardingSpans = null;
+        $forwardingMetrics = null;
+        $forwardingLogs = null;
+
+        if ($config->asyncExport) {
+            $forwardingSpans = new ActorForwardingSpanExporter($spanExporter);
+            $forwardingMetrics = new ActorForwardingMetricExporter($metricExporter);
+            $forwardingLogs = $logsExporter !== null
+                ? new ActorForwardingLogRecordExporter($logsExporter)
+                : null;
+        }
+
         $tracerProvider = TracerProvider::builder()
             ->addSpanProcessor(
                 new BatchSpanProcessor(
-                    new SpanExporter(
-                        $transports->create($endpoint . '/v1/traces', 'application/x-protobuf', timeout: $timeout),
-                    ),
+                    $forwardingSpans ?? $spanExporter,
                     Clock::getDefault(),
                 ),
             )
@@ -75,33 +106,18 @@ final class ObservabilityFactory
             ->build();
 
         $meterProvider = MeterProvider::builder()
-            ->addReader(
-                new ExportingReader(
-                    new MetricExporter(
-                        $transports->create($endpoint . '/v1/metrics', 'application/x-protobuf', timeout: $timeout),
-                        // Force cumulative temporality. Without an explicit choice the exporter's
-                        // temporality selector falls back to each metric's own metadata, which is
-                        // falsy for synchronous instruments — and ExportingReader::add() then skips
-                        // registering their source, so every counter/histogram is silently dropped
-                        // and only observable (async) instruments export. Cumulative is also what
-                        // Prometheus/Mimir expects.
-                        Temporality::CUMULATIVE,
-                    ),
-                ),
-            )
+            ->addReader(new ExportingReader($forwardingMetrics ?? $metricExporter))
             ->setResource($resource)
             ->build();
 
         $loggerProvider = null;
 
-        if ($config->logsEnabled) {
+        if ($logsExporter !== null) {
             $loggerProvider = LoggerProvider::builder()
                 ->setResource($resource)
                 ->addLogRecordProcessor(
                     new BatchLogRecordProcessor(
-                        new LogsExporter(
-                            $transports->create($endpoint . '/v1/logs', 'application/x-protobuf', timeout: $timeout),
-                        ),
+                        $forwardingLogs ?? $logsExporter,
                         Clock::getDefault(),
                     ),
                 )
@@ -112,13 +128,39 @@ final class ObservabilityFactory
             ? 'nexus'
             : $config->serviceName;
 
+        $asyncExportHandles = $config->asyncExport
+            ? new AsyncExportHandles(
+                spans: $forwardingSpans,
+                metrics: $forwardingMetrics,
+                logs: $forwardingLogs,
+                innerSpans: $spanExporter,
+                innerMetrics: $metricExporter,
+                innerLogs: $logsExporter,
+            )
+            : null;
+
         return new OtelObservability(
             $tracerProvider,
             $meterProvider,
             new CompositePropagator([new TraceContextPropagator(), new BaggagePropagator()]),
             $scope,
             $loggerProvider,
+            $asyncExportHandles,
         );
+    }
+
+    public static function samplerFromConfig(ObservabilityConfig $config): SamplerInterface
+    {
+        $ratio = $config->samplerArg ?? 1.0;
+
+        return match ($config->sampler) {
+            'always_off' => new AlwaysOffSampler(),
+            'always_on' => new AlwaysOnSampler(),
+            'parentbased_always_off' => new ParentBased(new AlwaysOffSampler()),
+            'parentbased_traceidratio' => new ParentBased(new TraceIdRatioBasedSampler($ratio)),
+            'traceidratio' => new TraceIdRatioBasedSampler($ratio),
+            default => new ParentBased(new AlwaysOnSampler()),
+        };
     }
 
     /**
@@ -152,19 +194,5 @@ final class ObservabilityFactory
         }
 
         return new OtlpHttpTransportFactory();
-    }
-
-    public static function samplerFromConfig(ObservabilityConfig $config): SamplerInterface
-    {
-        $ratio = $config->samplerArg ?? 1.0;
-
-        return match ($config->sampler) {
-            'always_off' => new AlwaysOffSampler(),
-            'always_on' => new AlwaysOnSampler(),
-            'parentbased_always_off' => new ParentBased(new AlwaysOffSampler()),
-            'parentbased_traceidratio' => new ParentBased(new TraceIdRatioBasedSampler($ratio)),
-            'traceidratio' => new TraceIdRatioBasedSampler($ratio),
-            default => new ParentBased(new AlwaysOnSampler()),
-        };
     }
 }
