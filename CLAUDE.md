@@ -124,7 +124,7 @@ nexus-core (no dependencies — foundational)
 │   └── nexus-worker-pool-swoole → WorkerPool, Core, RuntimeSwoole
 ├── nexus-psalm            → (standalone Psalm plugin)
 └── nexus-observability    → Core only (OTel contracts + no-op impls — foundational)
-    ├── nexus-observability-otel       → Observability, OTel SDK (concrete OTel backend)
+    ├── nexus-observability-otel       → Observability, Core, Runtime, OTel SDK (concrete OTel backend; actorized async export)
     ├── nexus-observability-actor      → Observability, Core (ActorSystem metrics)
     ├── nexus-observability-http       → Observability, nexus-http (HTTP tracing + metrics)
     ├── nexus-observability-persistence → Observability, nexus-persistence (store tracing)

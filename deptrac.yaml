@@ -306,7 +306,9 @@ deptrac:
       - WorkerPoolSwoole
     Observability: []
     ObservabilityOtel:
+      - Core
       - Observability
+      - Runtime
     ObservabilityHttp:
       - Http
       - Observability
