@@ -51,11 +51,14 @@ use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
 use Monadial\Nexus\Observability\Otel\OtelObservability;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\AbstractLogger;
 use Swoole\Coroutine;
+use Swoole\Event;
+use Swoole\Timer;
 
 require __DIR__ . '/../../../vendor/autoload.php';
 
@@ -106,6 +109,15 @@ function buildObservability(string $tag, int $nodeId): Observability
     if ($endpoint === false || $endpoint === '') {
         return new NoopObservability();
     }
+
+    // Bound every OTLP HTTP call. symfony/http-client derives its inactivity timeout from
+    // this ini (default 60 s), and the OTel exporter retries on top — a collector that
+    // accepts the connection but never responds otherwise blocks the export for minutes.
+    // The exports run on REAL (unhooked) curl here, so a stuck flush freezes the WHOLE
+    // reactor mid-run, and the post-run shutdown flush can hang the process past the
+    // harness's hard deadline (observed: workers stuck with an ESTABLISHED socket to
+    // lgtm:4318 and the cluster listener already closed). 5 s caps the damage.
+    ini_set('default_socket_timeout', '5');
 
     $config = ObservabilityConfig::fromEnv([
         'OTEL_EXPORTER_OTLP_ENDPOINT' => $endpoint,
@@ -235,7 +247,19 @@ function runRoundtripNode(
         }
     };
 
-    $runtime = new SwooleRuntime();
+    // Coroutine hooks WITHOUT the curl hooks, set ONCE before any coroutine exists (mutating
+    // hook flags mid-run intermittently hard-stalled the reactor). This Swoole build has no
+    // native curl hook, so hooked curl falls back to the userland shim, which does not support
+    // CURLOPT_SHARE — symfony/http-client (the discovered PSR-18 client behind the OTLP
+    // exporters) always sets it, so every in-run OTLP export threw, and the stack-trace floods
+    // to stderr stalled reactors mesh-wide (false Suspect/Down storms even on idle nodes).
+    // With the curl hooks off, exports run on real blocking curl against the local lgtm
+    // collector: a few ms per batch, and they succeed. The mesh transport uses
+    // Coroutine\Socket directly and is unaffected. enableCoroutineHook:false stops
+    // SwooleRuntime::run() from overriding these flags with SWOOLE_HOOK_ALL.
+    Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_CURL & ~SWOOLE_HOOK_NATIVE_CURL]);
+
+    $runtime = new SwooleRuntime(new SwooleConfig(enableCoroutineHook: false));
     $system = ActorSystem::create(
         "roundtrip-{$tag}",
         $runtime,
@@ -343,16 +367,6 @@ function runRoundtripNode(
         $node = null;
 
         try {
-            // Exclude the curl hooks that SwooleRuntime::run() just enabled via SWOOLE_HOOK_ALL.
-            // This Swoole build has no native curl hook, so hooked curl falls back to the userland
-            // shim, which does not support CURLOPT_SHARE — symfony/http-client (the discovered
-            // PSR-18 client behind the OTLP exporters) always sets it, so EVERY in-run OTLP export
-            // threw, and the resulting stack-trace floods to stderr stalled reactors mesh-wide
-            // (false Suspect/Down storms even on idle nodes). With the curl hooks off, exports run
-            // on real blocking curl against the local lgtm collector: a few ms per batch, and they
-            // succeed. The mesh transport uses Coroutine\Socket directly and is unaffected.
-            Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_CURL & ~SWOOLE_HOOK_NATIVE_CURL]);
-
             $transport = new SwooleMeshTransport($runtime);
             // Cluster boot logger is OPT-IN (MESH_DEBUG=1) only — NOT the OTLP PSR logger. The
             // cluster's PeerConnection emits debug logs on the connect/frame hot path; routing
@@ -431,33 +445,35 @@ function runRoundtripNode(
             printf("[%s] converged: %d/%d nodes Up at unix=%d\n", $tag, $upCount, $expectedNodes, $convergedAtUnix);
             $meshLogger?->info('cluster converged', ['expected' => $expectedNodes, 'node' => $tag, 'up' => $upCount]);
 
-            // Liveness keepalive: one small tell per peer per second, from EVERY node. The
-            // membership gossip fans out to only 3 random peers per tick, so on a DATA-IDLE
-            // link a peer's heartbeat inter-arrival is exponential with a ~2.5 s mean —
-            // P(gap > maxNoHeartbeat 10 s) ≈ 2% per gap, which across 240 directed links
-            // yields a constant ~1.7 false suspicions/s mesh-wide (measured; throughput- and
-            // OTEL-independent). The 4x4 soak never sees this because its flood traffic feeds
-            // the liveness path (PeerLivenessObserved) on every link continuously. A real app
-            // has traffic; this keepalive stands in for it at a negligible 15 msg/s per node.
-            $keepaliveRefs = [];
+            // Optional liveness keepalive (KEEPALIVE=1): one small tell per peer per second,
+            // from EVERY node. Historically REQUIRED: with RandomPeerSelector, gossip fan-out
+            // of 3 gave data-idle links an exponential heartbeat inter-arrival (~2.5 s mean),
+            // so P(gap > maxNoHeartbeat 10 s) ≈ 2% per gap — a constant ~1.7 false
+            // suspicions/s across the idle mesh's 240 links (measured; throughput- and
+            // OTEL-independent). ShuffledCycleSelector now bounds the gap deterministically
+            // (≤ ~5 s worst case at 16 nodes), so the default is OFF and this demo doubles
+            // as the idle-mesh stability proof for that fix.
+            if (getenv('KEEPALIVE') === '1') {
+                $keepaliveRefs = [];
 
-            foreach ($peerAddrs as $peerAddr) {
-                $keepaliveRefs[] = $node->refFor($peerAddr, $echoPath);
-            }
+                foreach ($peerAddrs as $peerAddr) {
+                    $keepaliveRefs[] = $node->refFor($peerAddr, $echoPath);
+                }
 
-            $runtime->scheduleRepeatedly(
-                Duration::seconds(1),
-                Duration::seconds(1),
-                static function () use ($keepaliveRefs): void {
-                    foreach ($keepaliveRefs as $ref) {
-                        try {
-                            $ref->tell(new Ping('keepalive'));
-                        } catch (Throwable) {
-                            // A closed link drops the keepalive; membership handles the rest.
+                $runtime->scheduleRepeatedly(
+                    Duration::seconds(1),
+                    Duration::seconds(1),
+                    static function () use ($keepaliveRefs): void {
+                        foreach ($keepaliveRefs as $ref) {
+                            try {
+                                $ref->tell(new Ping('keepalive'));
+                            } catch (Throwable) {
+                                // A closed link drops the keepalive; membership handles the rest.
+                            }
                         }
-                    }
-                },
-            );
+                    },
+                );
+            }
 
             // Synchronized load window: all nodes open and close together at START_AT + DURATION.
             $waitFor = $startAt - microtime(true);
@@ -663,6 +679,17 @@ function runRoundtripNode(
             $node?->shutdown();
             $transport?->close();
             $system->shutdown(Duration::seconds(2));
+
+            // Teardown failsafe: cluster shutdown can leak parked coroutines when there was
+            // membership churn (pre-existing product bug — the 4x4 baseline run loses verdicts
+            // to the same hang). Those coroutines never finish, Co\run never returns, and the
+            // process hangs past the harness deadline with its verdict computed but unprinted.
+            // Force the reactor down after a grace period; Swoole then prints a coroutine
+            // deadlock report that doubles as the diagnostic for the underlying leak, run()
+            // returns, and the normal verdict/exit path executes with the correct exit code.
+            Timer::after(3_000, static function (): void {
+                Event::exit();
+            });
         }
     });
 
