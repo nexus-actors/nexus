@@ -38,6 +38,9 @@ x-worker-env: &env
   # Per-request OTLP export deadline (ms). Keeps a stalled collector well inside the
   # cluster's failure-detector window (maxNoHeartbeat 10 s).
   OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_TIMEOUT:-5000}"
+  # Actorized async export: 1 routes all OTLP flush I/O through the otlp-export actor
+  # (bounded DropOldest mailbox) instead of flushing inline on application coroutines.
+  OTEL_NEXUS_ASYNC_EXPORT: "${OTEL_NEXUS_ASYNC_EXPORT:-0}"
   # Silence the OTel SDK's internal error logging: a failed export otherwise dumps a multi-line
   # stack trace to stderr per batch, and blocking stderr writes on the reactor starve gossip
   # timers mesh-wide (defense in depth — exports are expected to succeed, see roundtrip_node.php).

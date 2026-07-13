@@ -259,6 +259,12 @@ function runRoundtripNode(
     if ($observability instanceof OtelObservability) {
         $actorMetrics = new ActorSystemMetrics($observability, $system);
         $actorMetrics->register();
+
+        // Actorized async OTLP export (OTEL_NEXUS_ASYNC_EXPORT=1): all flush I/O moves off
+        // application coroutines onto the 'otlp-export' actor's bounded mailbox.
+        if (getenv('OTEL_NEXUS_ASYNC_EXPORT') === '1') {
+            $observability->attachExportActor($system);
+        }
     }
 
     $selfAddr = new NodeAddress('mesh', 'dc1', 'roundtrip', $tag);
