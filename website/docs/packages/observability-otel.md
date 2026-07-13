@@ -54,6 +54,22 @@ $obs->shutdown();
 | `parentbased_traceidratio` | `ParentBased(TraceIdRatioBasedSampler($samplerArg))` |
 | anything else (default) | `ParentBased(AlwaysOnSampler)` |
 
+## Swoole coroutine hooks and OTLP export
+
+The OTel PHP SDK's HTTP (OTLP) exporter uses ext-curl with `CURLOPT_SHARE`. Under
+`SWOOLE_HOOK_ALL`, Swoole's curl hook does **not** support `CURLOPT_SHARE`, which breaks
+OTLP export entirely (spans/metrics silently fail to leave the process) unless Swoole was
+compiled with native swoole-curl support. When running observability inside a Swoole
+runtime, either:
+
+- exclude the curl hooks from coroutine hooking
+  (`SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_NATIVE_CURL & ~SWOOLE_HOOK_CURL`), or
+- build Swoole with native curl support (`--enable-swoole-curl`).
+
+Also set a bounded exporter timeout (e.g. `OTEL_EXPORTER_OTLP_TIMEOUT`): a stalled OTLP
+collector can otherwise block the exporting call on a single-reactor process and stall the
+event loop at flush time.
+
 ## See also
 
 - [Observability overview](../observability/overview.md) — end-to-end wiring guide
