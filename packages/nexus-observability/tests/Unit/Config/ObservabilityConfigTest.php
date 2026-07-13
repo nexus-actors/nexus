@@ -121,4 +121,30 @@ final class ObservabilityConfigTest extends TestCase
         self::assertSame('renamed', $changed->serviceName);
         self::assertSame('always_on', $changed->sampler);
     }
+
+    #[Test]
+    public function asyncExportDefaultsToFalse(): void
+    {
+        self::assertFalse(ObservabilityConfig::enabled('svc')->asyncExport);
+    }
+
+    #[Test]
+    public function withAsyncExportEnablesTheFlag(): void
+    {
+        $config = ObservabilityConfig::enabled('svc')->withAsyncExport(true);
+
+        self::assertTrue($config->asyncExport);
+    }
+
+    #[Test]
+    public function fromEnvReadsAsyncExportFlag(): void
+    {
+        $config = ObservabilityConfig::fromEnv([
+            'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://localhost:4318',
+            'OTEL_NEXUS_ASYNC_EXPORT' => 'true',
+            'OTEL_SERVICE_NAME' => 'svc',
+        ]);
+
+        self::assertTrue($config->asyncExport);
+    }
 }
