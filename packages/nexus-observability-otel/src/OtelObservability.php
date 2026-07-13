@@ -59,7 +59,9 @@ final readonly class OtelObservability implements Observability
      * before this call. Requires {@see \Monadial\Nexus\Observability\Config\ObservabilityConfig::$asyncExport}
      * to have been enabled when this instance was built via {@see ObservabilityFactory}.
      *
-     * Idempotent: a second call is a no-op.
+     * Idempotent while the previously attached actor is alive: a second call is a no-op.
+     * If that actor has since died, {@see ActorSystem::spawn()} prunes it and a second
+     * call respawns and re-attaches, restoring Live delivery.
      *
      * Deliberately never wires an OTel-backed PSR logger into the actor (leaves the
      * {@see NullLogger} default) — routing the export actor's own logs back through the

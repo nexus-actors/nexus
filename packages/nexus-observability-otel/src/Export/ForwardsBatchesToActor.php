@@ -63,6 +63,8 @@ trait ForwardsBatchesToActor
         }
 
         $this->ref = $ref;
+        // Restore Live: supports recovery when a died export actor is re-spawned and re-attached.
+        $this->direct = false;
 
         foreach ($this->buffer as $batch) {
             $this->deliver($ref, $batch);
