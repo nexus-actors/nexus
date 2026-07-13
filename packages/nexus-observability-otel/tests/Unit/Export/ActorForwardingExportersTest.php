@@ -121,6 +121,30 @@ final class ActorForwardingExportersTest extends TestCase
     }
 
     #[Test]
+    public function attachToDeadRefFlushesBufferDirectlyWithoutGoingLive(): void
+    {
+        $inner = new RecordingSpanExporter();
+        $exporter = new ActorForwardingSpanExporter($inner);
+
+        $exporter->export(['span-1'])->await();
+        $exporter->export(['span-2'])->await();
+
+        $ref = new RecordingRef();
+        $ref->alive = false;
+        $exporter->attach($ref);
+
+        self::assertSame([['span-1'], ['span-2']], $inner->exported);
+        self::assertSame([], $ref->told);
+        self::assertSame([], $ref->offered);
+
+        $exporter->export(['span-3'])->await();
+
+        self::assertSame([['span-1'], ['span-2'], ['span-3']], $inner->exported);
+        self::assertSame([], $ref->told);
+        self::assertSame([], $ref->offered);
+    }
+
+    #[Test]
     public function metricTemporalityDelegatesToInner(): void
     {
         $inner = new class implements PushMetricExporterInterface, AggregationTemporalitySelectorInterface {

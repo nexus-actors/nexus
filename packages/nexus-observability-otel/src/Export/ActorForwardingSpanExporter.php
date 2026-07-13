@@ -24,7 +24,6 @@ use function iterator_to_array;
  */
 final class ActorForwardingSpanExporter implements SpanExporterInterface
 {
-
     use ForwardsBatchesToActor;
 
     public function __construct(

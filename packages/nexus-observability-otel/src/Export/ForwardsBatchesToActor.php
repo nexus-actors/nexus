@@ -18,8 +18,10 @@ use function count;
  * Buffering: batches accumulate in a bounded ring (oldest dropped on overflow) until
  * attach() is called, which drains the buffer to the actor ref in order and flips to Live.
  * Live: batches are handed to the ref (offer() when BackpressureCapable, else tell()).
- * Direct: entered permanently once the ref is found dead; batches are delegated to the
- * inner exporter synchronously.
+ * Direct: entered permanently once the ref is found dead — including at attach() time,
+ * if the ref is already dead, which flushes the buffer through the inner exporter
+ * synchronously instead of going Live; batches are then delegated to the inner exporter
+ * synchronously.
  */
 trait ForwardsBatchesToActor
 {
@@ -48,6 +50,18 @@ trait ForwardsBatchesToActor
 
     public function attach(ActorRef $ref): void
     {
+        if (!$ref->isAlive()) {
+            $this->direct = true;
+
+            foreach ($this->buffer as $batch) {
+                $this->exportDirect($batch->batch);
+            }
+
+            $this->buffer = [];
+
+            return;
+        }
+
         $this->ref = $ref;
 
         foreach ($this->buffer as $batch) {

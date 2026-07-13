@@ -24,7 +24,6 @@ use function iterator_to_array;
  */
 final class ActorForwardingLogRecordExporter implements LogRecordExporterInterface
 {
-
     use ForwardsBatchesToActor;
 
     public function __construct(

@@ -24,7 +24,6 @@ use function iterator_to_array;
  */
 final class ActorForwardingMetricExporter implements PushMetricExporterInterface, AggregationTemporalitySelectorInterface
 {
-
     use ForwardsBatchesToActor;
 
     public function __construct(
