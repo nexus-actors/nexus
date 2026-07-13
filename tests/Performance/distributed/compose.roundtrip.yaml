@@ -1,0 +1,187 @@
+# Distributed round-trip demo — 16 containers = 16 cluster nodes in one full mesh over
+# real cross-container TCP (Docker bridge network). Node 1 (worker1) drives `ask` round
+# trips to node 16 (worker16); node 16 replies. Traces + metrics export to a Grafana LGTM
+# all-in-one (Loki / Grafana / Tempo / Mimir + OTel Collector).
+#
+# Self-contained (NOT an overlay). Driven by run-roundtrip.sh:
+#
+#   ./tests/Performance/distributed/run-roundtrip.sh [durationSeconds] [payloadBytes]
+#
+# Grafana: http://localhost:3000 (anonymous admin). Tempo traces under
+# service nexus-cluster-roundtrip, sliced per node via the node.id resource attribute.
+
+x-worker: &worker
+  image: nexus-mesh-soak:dev
+  build:
+    context: ../../..
+    dockerfile: docker/Dockerfile
+    target: php-swoole
+  # 512 MB memory_limit: the driver holds ASK_CONCURRENCY in-flight asks (each with a Future,
+  # a correlation entry, and a span) plus buffered OTLP telemetry — well past PHP's 128 MB
+  # default. The default OOM-crashes the driver mid-run, which storms the mesh via its silence.
+  command: ["php", "-d", "memory_limit=512M", "tests/Performance/distributed/roundtrip_node.php"]
+  depends_on:
+    lgtm:
+      condition: service_healthy
+  networks:
+    - mesh-net
+  volumes:
+    - ../../..:/app
+  working_dir: /app
+
+x-worker-env: &env
+  ASK_CONCURRENCY: "${ASK_CONCURRENCY:-64}"
+  BASE_PORT: "7361"
+  DURATION: "${DURATION:-240}"
+  NODES: "16"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4318"
+  # Silence the OTel SDK's internal error logging: a failed export otherwise dumps a multi-line
+  # stack trace to stderr per batch, and blocking stderr writes on the reactor starve gossip
+  # timers mesh-wide (defense in depth — exports are expected to succeed, see roundtrip_node.php).
+  OTEL_PHP_LOG_DESTINATION: "none"
+  OTEL_SERVICE_NAME: "nexus-cluster-roundtrip"
+  OTEL_TRACES_SAMPLER: "traceidratio"
+  OTEL_TRACES_SAMPLER_ARG: "${OTEL_SAMPLE:-0.1}"
+  PAYLOAD: "${PAYLOAD:-1024}"
+  START_AT: "${START_AT:-0}"
+  # Driver pacing target (aggregate round trips/s). Unpaced, the driver saturates the echo
+  # node's reactor, starving its gossip and storming the mesh's failure detector.
+  TARGET_RPS: "${TARGET_RPS:-2000}"
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    hostname: lgtm
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP (nodes export here)
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - ./grafana/provisioning/nexus-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-dashboards.yaml:ro
+      - ./grafana/dashboards:/otel-lgtm/nexus-dashboards:ro
+    networks:
+      - mesh-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+
+  worker1:
+    <<: *worker
+    hostname: worker1
+    environment:
+      <<: *env
+      NODE_ID: "1"
+
+  worker2:
+    <<: *worker
+    hostname: worker2
+    environment:
+      <<: *env
+      NODE_ID: "2"
+
+  worker3:
+    <<: *worker
+    hostname: worker3
+    environment:
+      <<: *env
+      NODE_ID: "3"
+
+  worker4:
+    <<: *worker
+    hostname: worker4
+    environment:
+      <<: *env
+      NODE_ID: "4"
+
+  worker5:
+    <<: *worker
+    hostname: worker5
+    environment:
+      <<: *env
+      NODE_ID: "5"
+
+  worker6:
+    <<: *worker
+    hostname: worker6
+    environment:
+      <<: *env
+      NODE_ID: "6"
+
+  worker7:
+    <<: *worker
+    hostname: worker7
+    environment:
+      <<: *env
+      NODE_ID: "7"
+
+  worker8:
+    <<: *worker
+    hostname: worker8
+    environment:
+      <<: *env
+      NODE_ID: "8"
+
+  worker9:
+    <<: *worker
+    hostname: worker9
+    environment:
+      <<: *env
+      NODE_ID: "9"
+
+  worker10:
+    <<: *worker
+    hostname: worker10
+    environment:
+      <<: *env
+      NODE_ID: "10"
+
+  worker11:
+    <<: *worker
+    hostname: worker11
+    environment:
+      <<: *env
+      NODE_ID: "11"
+
+  worker12:
+    <<: *worker
+    hostname: worker12
+    environment:
+      <<: *env
+      NODE_ID: "12"
+
+  worker13:
+    <<: *worker
+    hostname: worker13
+    environment:
+      <<: *env
+      NODE_ID: "13"
+
+  worker14:
+    <<: *worker
+    hostname: worker14
+    environment:
+      <<: *env
+      NODE_ID: "14"
+
+  worker15:
+    <<: *worker
+    hostname: worker15
+    environment:
+      <<: *env
+      NODE_ID: "15"
+
+  worker16:
+    <<: *worker
+    hostname: worker16
+    environment:
+      <<: *env
+      NODE_ID: "16"
+
+networks:
+  mesh-net:
+    driver: bridge
