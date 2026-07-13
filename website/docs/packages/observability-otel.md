@@ -115,6 +115,15 @@ Semantics worth knowing:
   by `tests/Integration/Swoole/AsyncOtlpExportStallTest.php`). On the Fiber runtime an
   in-flight flush still blocks the process up to the transport timeout; the actor still
   provides bounded queues, batching isolation, and identical semantics.
+- **Load characteristics** (indicative, Docker-on-macOS, single reactor —
+  `tests/Performance/AsyncOtlpExportPerformanceTest.php`): the producer-side `export()`
+  call sustains ~750K batch enqueues/sec (~1.3 µs each — it is a mailbox enqueue, no
+  I/O), and application actors held ~270K msg/sec while a deliberately slow collector
+  (50 ms per flush) drained concurrently. System-level: the 16-node cluster round-trip
+  demo passes 16/16 with async export enabled
+  (`OTEL_NEXUS_ASYNC_EXPORT=1 ./run-roundtrip.sh`), with slightly better RTT p50 than
+  inline export. Run the benchmarks:
+  `docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance --filter=AsyncOtlp`.
 
 ## See also
 
