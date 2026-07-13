@@ -70,6 +70,52 @@ Also set a bounded exporter timeout (e.g. `OTEL_EXPORTER_OTLP_TIMEOUT`): a stall
 collector can otherwise block the exporting call on a single-reactor process and stall the
 event loop at flush time.
 
+## Async export (actor)
+
+Opt-in: route all OTLP flush I/O (spans, metrics, logs) through a dedicated
+`OtlpExportActor` with a bounded mailbox, so a slow or stalled collector can never block
+application coroutines. The SDK's batching (`BatchSpanProcessor` / `ExportingReader` /
+`BatchLogRecordProcessor`) is unchanged — only the terminal exporters are swapped for
+forwarding twins whose `export()` is a mailbox enqueue.
+
+Enable with `OTEL_NEXUS_ASYNC_EXPORT=1` (or `ObservabilityConfig::withAsyncExport(true)`;
+default **off** — the sync bounded-timeout path is unchanged), then attach the actor once
+after the system exists:
+
+```php
+$config = ObservabilityConfig::fromEnv($_ENV);           // OTEL_NEXUS_ASYNC_EXPORT=1
+$observability = ObservabilityFactory::fromConfig($config);
+$system = ActorSystem::create('app', $runtime, observability: $observability);
+
+$observability->attachExportActor($system);              // spawns 'otlp-export'
+$system->run();
+```
+
+Telemetry created **before** `attachExportActor()` buffers locally (up to 64 batches per
+signal, oldest dropped beyond that) and drains to the actor on attach. Never attaching is
+safe: shutdown flushes the buffers synchronously. Calling it again is a no-op while the
+actor is alive; if the actor died, the call respawns and re-attaches it.
+
+Semantics worth knowing:
+
+- **Loss model.** The actor's mailbox is `bounded(256, DropOldest)`: under sustained
+  collector outage the oldest queued batches are evicted in favor of fresh telemetry.
+  The `nexus.observability.export.dropped` counter (attributes `signal`, `reason`) counts
+  `buffer_full` (pre-attach overflow) and `export_failed` (a batch the collector rejected
+  or that threw); mailbox evictions themselves are silent by design — loss is bounded,
+  not fully itemized.
+- **Shutdown order.** Call `$system->shutdown(...)` first (the actor's `PostStop`
+  force-flushes the real exporters), then the provider shutdown. Reversed order degrades
+  gracefully: forwarders detect the dead actor and export synchronously.
+- **Failure containment.** A throwing exporter drops only that batch (counted + logged at
+  debug via a non-OTel logger — the export path emits no telemetry about itself; its
+  messages are `UntracedMessage`). The actor restarts under exponential-backoff
+  supervision.
+- **Runtime honesty.** True stall isolation requires Swoole (coroutine-hooked I/O, proven
+  by `tests/Integration/Swoole/AsyncOtlpExportStallTest.php`). On the Fiber runtime an
+  in-flight flush still blocks the process up to the transport timeout; the actor still
+  provides bounded queues, batching isolation, and identical semantics.
+
 ## See also
 
 - [Observability overview](../observability/overview.md) — end-to-end wiring guide
