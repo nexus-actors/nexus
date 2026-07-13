@@ -421,7 +421,10 @@ function runRoundtripNode(
             $ring = getenv('RING') === '1';
 
             if ($ring) {
-                $nextNodeId = ($nodeId % $nodes) + 1;
+                // NB: this block runs inside the boot closure, which does not capture $nodeId —
+                // derive it from $tag ("nN"), which is captured.
+                $ringNodeId = (int) ltrim($tag, 'n');
+                $nextNodeId = ($ringNodeId % $nodes) + 1;
                 $nextAddr = new NodeAddress('mesh', 'dc1', 'roundtrip', "n{$nextNodeId}");
                 $relayPath = ActorPath::fromString('/user/rt-relay');
                 $nextRef = null;
@@ -430,14 +433,14 @@ function runRoundtripNode(
                     Props::fromBehavior(Behavior::receive(
                         static function (ActorContext $ctx, object $msg) use (
                             $node,
-                            $nodeId,
+                            $ringNodeId,
                             $nextAddr,
                             $relayPath,
                             &$nextRef,
                             &$roundtrips,
                         ): Behavior {
                             if ($msg instanceof Ping) {
-                                if ($nodeId === 1) {
+                                if ($ringNodeId === 1) {
                                     // Lap complete — count it; the seeder injects the replacement.
                                     ++$roundtrips;
                                 } else {
