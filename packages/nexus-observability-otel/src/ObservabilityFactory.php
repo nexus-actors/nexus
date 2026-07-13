@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Observability\Otel;
 
+use Http\Discovery\Psr17FactoryDiscovery;
 use Monadial\Nexus\Observability\Config\ObservabilityConfig;
 use Monadial\Nexus\Observability\Context\BaggagePropagator;
 use Monadial\Nexus\Observability\Context\CompositePropagator;
@@ -14,6 +15,7 @@ use Monadial\Nexus\Observability\Otel\Export\ActorForwardingLogRecordExporter;
 use Monadial\Nexus\Observability\Otel\Export\ActorForwardingMetricExporter;
 use Monadial\Nexus\Observability\Otel\Export\ActorForwardingSpanExporter;
 use Monadial\Nexus\Observability\Otel\Export\AsyncExportHandles;
+use Monadial\Nexus\Observability\Otel\Http\SwooleCoroutinePsr18Client;
 use OpenTelemetry\API\Common\Time\Clock;
 use OpenTelemetry\Contrib\Otlp\LogsExporter;
 use OpenTelemetry\Contrib\Otlp\MetricExporter;
@@ -38,6 +40,9 @@ use OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
 use Symfony\Component\HttpClient\NativeHttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
+
+use function class_exists;
+use function extension_loaded;
 
 /**
  * @psalm-api
@@ -166,31 +171,42 @@ final class ObservabilityFactory
     /**
      * OTLP/HTTP transport factory with a bounded, configurable deadline.
      *
-     * Prefers symfony's STREAM-based client (NativeHttpClient) over the discovered
-     * default (CurlHttpClient) for two Swoole-critical reasons:
+     * Under Swoole, BOTH generic PHP HTTP client paths are broken inside coroutines
+     * with SWOOLE_HOOK_ALL (verified empirically on Swoole 6.2):
      *
-     *  1. Swoole's userland curl hook (SWOOLE_HOOK_CURL, used when the extension is
-     *     built without native curl support) does not implement CURLOPT_SHARE, which
-     *     symfony's curl client always sets — every OTLP export then throws and no
-     *     telemetry ever leaves the process.
-     *  2. Under SWOOLE_HOOK_ALL the stream transport is coroutine-hooked, so exports
-     *     yield to the scheduler instead of freezing the whole reactor for up to the
-     *     full timeout per batch — a stalled collector otherwise starves gossip/timer
-     *     processing (the OTel default timeout of 10 s equals common failure-detector
-     *     windows).
+     *  1. the userland curl hook does not implement CURLOPT_SHARE, which symfony's
+     *     curl client always sets — every export throws; and
+     *  2. the hooked `http://` stream wrapper fails outright with
+     *     "Failed to open stream: Failed to parse address" — every export dies after
+     *     the retry limit, SILENTLY when SDK error logging is muted.
      *
-     * Falls back to the SDK's discovery when symfony/http-client is not installed.
+     * So when ext-swoole is loaded the PSR-18 client is wrapped in
+     * {@see SwooleCoroutinePsr18Client}: inside a coroutine it speaks
+     * `Swoole\Coroutine\Http\Client` natively (no hooks involved, yields during I/O);
+     * outside coroutines (boot, post-reactor shutdown flush) it delegates to the
+     * stream client, which works unhooked. Without ext-swoole the stream client is
+     * used directly. Falls back to the SDK's discovery when symfony/http-client is
+     * not installed.
      */
     private static function transportFactory(float $timeoutSeconds): TransportFactoryInterface
     {
         if (class_exists(NativeHttpClient::class) && class_exists(Psr18Client::class)) {
             // Psr18Client also implements the PSR-17 request/stream factories.
-            $client = new Psr18Client(new NativeHttpClient([
+            $psr = new Psr18Client(new NativeHttpClient([
                 'max_duration' => $timeoutSeconds,
                 'timeout' => $timeoutSeconds,
             ]));
 
-            return new PsrTransportFactory($client, $client, $client);
+            $client = extension_loaded('swoole')
+                ? new SwooleCoroutinePsr18Client(
+                    $psr,
+                    Psr17FactoryDiscovery::findResponseFactory(),
+                    Psr17FactoryDiscovery::findStreamFactory(),
+                    $timeoutSeconds,
+                )
+                : $psr;
+
+            return new PsrTransportFactory($client, $psr, $psr);
         }
 
         return new OtlpHttpTransportFactory();

@@ -56,19 +56,23 @@ $obs->shutdown();
 
 ## Swoole coroutine hooks and OTLP export
 
-The OTel PHP SDK's HTTP (OTLP) exporter uses ext-curl with `CURLOPT_SHARE`. Under
-`SWOOLE_HOOK_ALL`, Swoole's curl hook does **not** support `CURLOPT_SHARE`, which breaks
-OTLP export entirely (spans/metrics silently fail to leave the process) unless Swoole was
-compiled with native swoole-curl support. When running observability inside a Swoole
-runtime, either:
+Under `SWOOLE_HOOK_ALL`, **both** generic PHP HTTP client paths are broken inside
+coroutines (verified on Swoole 6.2): the userland curl hook rejects `CURLOPT_SHARE`
+(which symfony's curl client always sets), and the hooked `http://` stream wrapper fails
+outright with `Failed to parse address` — every in-coroutine export then dies after the
+retry limit, *silently* if SDK error logging is muted (`OTEL_PHP_LOG_DESTINATION=none`).
 
-- exclude the curl hooks from coroutine hooking
-  (`SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_NATIVE_CURL & ~SWOOLE_HOOK_CURL`), or
-- build Swoole with native curl support (`--enable-swoole-curl`).
+This package handles it automatically: when ext-swoole is loaded, `ObservabilityFactory`
+wires the OTLP transports through a coroutine-native PSR-18 client
+(`SwooleCoroutinePsr18Client`, backed by `Swoole\Coroutine\Http\Client` — no hooks
+involved, yields to the scheduler during I/O). Outside a coroutine (boot, post-reactor
+shutdown flush) it delegates to the plain stream client, which works unhooked. No hook
+configuration is required.
 
-Also set a bounded exporter timeout (e.g. `OTEL_EXPORTER_OTLP_TIMEOUT`): a stalled OTLP
-collector can otherwise block the exporting call on a single-reactor process and stall the
-event loop at flush time.
+Still set a bounded exporter timeout (`OTEL_EXPORTER_OTLP_TIMEOUT`): it caps how long any
+single flush can hold its coroutine when the collector stalls. If you suspect telemetry
+loss, do NOT run with `OTEL_PHP_LOG_DESTINATION=none` while debugging — it hides export
+failures completely.
 
 ## Async export (actor)
 
