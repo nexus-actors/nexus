@@ -274,6 +274,7 @@ const sidebars = {
             'packages/serialization-msgpack',
             'packages/psalm',
             'packages/nexus',
+            'packages/skeleton',
           ],
         },
       ],

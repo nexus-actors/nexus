@@ -188,6 +188,11 @@ deptrac:
           value: packages/nexus-observability-actor/src/.*
 
 
+    - name: Skeleton
+      collectors:
+        - type: directory
+          value: packages/nexus-skeleton/src/.*
+
   ruleset:
     Core:
       - Observability
@@ -334,3 +339,9 @@ deptrac:
     ObservabilityActor:
       - Core
       - Observability
+    Skeleton:
+      - App
+      - Core
+      - Http
+      - Persistence
+      - Runtime

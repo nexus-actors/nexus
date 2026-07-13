@@ -1,0 +1,10 @@
+services:
+  app:
+    build: !reset
+    image: phpswoole/swoole:6.2.1-php8.5-zts  # ZTS variant required for worker-pool
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: ["php", "bootstrap.php"]
+    environment:
+      - SWOOLE_THREAD_ENABLED=1

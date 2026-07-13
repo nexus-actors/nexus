@@ -1,0 +1,5 @@
+/vendor/
+/var/
+/.env
+/.env.local
+/composer.lock
