@@ -75,6 +75,31 @@ final class MeshStderrLogger extends AbstractLogger
     }
 }
 
+/**
+ * Forwards info-and-above to an inner (OTLP) logger, dropping debug: the cluster layer's
+ * PeerConnection emits debug on the connect/frame hot path, and exporting those would flood
+ * Loki at wire rate. Optionally tees everything (incl. debug) to stderr for MESH_DEBUG=1.
+ */
+final class InfoAndAboveLogger extends AbstractLogger
+{
+    public function __construct(
+        private readonly \Psr\Log\LoggerInterface $inner,
+        private readonly ?MeshStderrLogger $tee = null,
+    ) {}
+
+    /**
+     * @param array<mixed> $context
+     */
+    public function log(mixed $level, Stringable|string $message, array $context = []): void
+    {
+        $this->tee?->log($level, $message, $context);
+
+        if ($level !== 'debug') {
+            $this->inner->log($level, $message, $context);
+        }
+    }
+}
+
 /** Read an integer from the environment, falling back when unset, empty, or zero. */
 function envInt(string $name, int $default): int
 {
@@ -373,9 +398,18 @@ function runRoundtripNode(
             // cluster's PeerConnection emits debug logs on the connect/frame hot path; routing
             // those through the OTLP logs pipeline (a blocking, currently-failing curl export)
             // stalls the reactor and starves gossip. Traces (the deliverable) are unaffected.
-            $bootLogger = getenv('MESH_DEBUG') === '1'
+            // Cluster-layer logs (membership transitions, handshakes, links) now flow to Loki
+            // at info+ whenever OTLP export is on — the historical reason to keep them out
+            // (blocking, silently-failing exports stalling the reactor) is gone: the transport
+            // is coroutine-native and async export makes each log record a mailbox enqueue.
+            // Debug stays off the wire (PeerConnection's frame hot path would flood Loki);
+            // MESH_DEBUG=1 tees the full stream, debug included, to stderr.
+            $stderrTee = getenv('MESH_DEBUG') === '1'
                 ? new MeshStderrLogger($tag)
                 : null;
+            $bootLogger = $meshLogger !== null
+                ? new InfoAndAboveLogger($meshLogger, $stderrTee)
+                : $stderrTee;
             $node = ClusterNode::boot(
                 $system,
                 $topology,
@@ -552,6 +586,7 @@ function runRoundtripNode(
                     $suspectedAtStart,
                     $suspected,
                     $down,
+                    $meshLogger,
                 );
 
                 return;
@@ -734,6 +769,8 @@ function runRoundtripNode(
                 ? 'PASS'
                 : 'FAIL: ' . implode('; ', $reasons);
 
+            $meshLogger?->info('verdict', ['node' => $tag, 'verdict' => $verdict]);
+
             // Driver summary line.
             $windowSecs = max(1, time() - ($startAt));
             [$p50, $p99] = percentiles($rtts);
@@ -798,6 +835,7 @@ function runIdleWindow(
     int $suspectedAtStart,
     int &$suspected,
     int &$down,
+    ?\Psr\Log\LoggerInterface $meshLogger = null,
 ): string {
     $nextReportNs = hrtime(true) + 30 * 1_000_000_000;
     $elapsed = 0;
@@ -818,6 +856,12 @@ function runIdleWindow(
 
         $elapsed += 30;
         printf("[%s t=%03ds] idle | suspected=%d down=%d\n", $tag, $elapsed, $suspected, $down);
+        $meshLogger?->info('mesh health', [
+            'down' => $down,
+            'elapsed_s' => $elapsed,
+            'node' => $tag,
+            'suspected' => $suspected,
+        ]);
         $nextReportNs = hrtime(true) + 30 * 1_000_000_000;
     }
 
