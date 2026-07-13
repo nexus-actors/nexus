@@ -105,3 +105,29 @@ Run on an otherwise-idle host, `OTEL_NEXUS_ASYNC_EXPORT=1`, 240 s, 1 KB payload:
 
 Comparative RTT p50 across the branch's demo runs: inline curl-era —; stream transport
 1.78–1.99 ms; **actorized async export 1.54 ms**.
+
+## Post-assessment correction: OTLP telemetry-loss defect found and fixed
+
+User inspection of Grafana revealed the prior demo runs' telemetry was ~99.9% incomplete
+(101 spans from a 414k-roundtrip run). Root cause (verified by controlled micro-repros +
+collector counters): under `SWOOLE_HOOK_ALL`, BOTH generic PHP HTTP clients fail inside
+coroutines — the userland curl hook rejects `CURLOPT_SHARE` and the hooked `http://`
+stream wrapper fails with "Failed to parse address" — so every in-run OTLP export died
+after retries, silently (`OTEL_PHP_LOG_DESTINATION=none`). The defect predated and was
+orthogonal to the async export actor (reproduced with async OFF at 100% sampling).
+
+Fix `f2483177`: `SwooleCoroutinePsr18Client` — PSR-18 over `Swoole\Coroutine\Http\Client`
+inside coroutines (hook-free, yields during I/O), stream-client delegation outside;
+auto-wired by `ObservabilityFactory` when ext-swoole is loaded. Docs corrected (previous
+workaround advice was obsolete/wrong).
+
+Re-validated demo (16 nodes, async export ON, 10% sampling): 16/16 PASS, 405,616 round
+trips @ 1,690 rt/s, p50 1.69 ms — and telemetry now COMPLETE and internally consistent:
+164,163 spans (cluster.ask 40,351 == process Ping 40,351; cluster.receive 80,702 = exactly
+2×; ≈ 405,616 × 0.1 sampling), 19,224 metric points, 808 log lines. No performance cost
+from real export volume.
+
+Assessment verdict unchanged (READY) — strengthened: the observability pipeline is now
+verified by ingestion COUNTS, not just verdict lines. Standing lesson: never validate
+telemetry by "a trace exists"; validate by expected-vs-ingested arithmetic, and never
+debug with `OTEL_PHP_LOG_DESTINATION=none`.
