@@ -25,9 +25,20 @@ final class BootstrapAssembler
         $parts[] = $this->readPartial('_header.php');
         $parts[] = $this->readPartial('runtime.' . $runtime . '.php');
 
+        $otel = (bool) ($selections['otel'] ?? false);
+        $cluster = (bool) ($selections['cluster'] ?? false);
+
         if ($runtime !== 'worker-pool') {
             if ($http) {
                 $parts[] = $this->readPartial('http.php');
+            }
+
+            if ($otel) {
+                $parts[] = $this->readPartial('observability.php');
+            }
+
+            if ($cluster) {
+                $parts[] = $this->readPartial('cluster.php');
             }
 
             if ($persistence !== 'none') {
@@ -67,6 +78,9 @@ final class BootstrapAssembler
             return $this->assembleWorkerPoolChain($selections);
         }
 
+        $otel = (bool) ($selections['otel'] ?? false);
+        $cluster = (bool) ($selections['cluster'] ?? false);
+
         $runtimeNew = match ($runtime) {
             'fiber' => 'new FiberRuntime()',
             'swoole' => 'new SwooleRuntime()',
@@ -74,7 +88,36 @@ final class BootstrapAssembler
         };
 
         $lines = [];
+
+        if ($otel) {
+            $lines[] = "// OpenTelemetry: configured from OTEL_* env (endpoint, service name, sampler).";
+            $lines[] = "\$observability = ObservabilityFactory::fromConfig(ObservabilityConfig::fromEnv(getenv()));";
+            $lines[] = "";
+        }
+
+        if ($cluster) {
+            $lines[] = "// TCP cluster mesh — identity, endpoints and seeds from CLUSTER_* env.";
+            $lines[] = "// Docs: https://docs.nexusactors.com/docs/guides/clustering-over-tcp";
+            $lines[] = "\$seeds = array_map(";
+            $lines[] = "    static fn(string \$s) => NodeEndpoint::fromString(trim(\$s)),";
+            $lines[] = "    array_filter(explode(',', (string) (getenv('CLUSTER_SEEDS') ?: ''))),";
+            $lines[] = ");";
+            $lines[] = "\$topology = ClusterTopology::create(";
+            $lines[] = "    clusterName: getenv('CLUSTER_NAME') ?: 'my-cluster',";
+            $lines[] = "    self: new NodeAddress(getenv('CLUSTER_NAME') ?: 'my-cluster', 'dc1', 'my-app', getenv('NODE_NAME') ?: 'node-1'),";
+            $lines[] = "    bindEndpoint: NodeEndpoint::fromString(getenv('CLUSTER_BIND') ?: '0.0.0.0:7361'),";
+            $lines[] = "    advertiseEndpoint: NodeEndpoint::fromString(getenv('CLUSTER_ADVERTISE') ?: '127.0.0.1:7361'),";
+            $lines[] = "    seeds: \$seeds,";
+            $lines[] = "    singleNode: \$seeds === [],";
+            $lines[] = ");";
+            $lines[] = "";
+        }
+
         $lines[] = "NexusApp::create('my-app')";
+
+        if ($otel) {
+            $lines[] = "    ->withObservability(\$observability)";
+        }
         $lines[] = "    ->actor('hello', Props::fromBehavior(";
         $lines[] = "        Behavior::receive(static function (\$ctx, \$msg): Behavior {";
         $lines[] = "            \$ctx->log()->info('received', ['type' => \$msg::class]);";
@@ -125,6 +168,25 @@ final class BootstrapAssembler
 
                 $lines[] = "    })";
             }
+        }
+
+        if ($cluster) {
+            $lines[] = "    ->onStart(static function (\$system) use (\$topology): void {";
+            $lines[] = "        \$node = ClusterNode::boot(\$system, \$topology);";
+            $lines[] = "        // \$node->expose(\$ref) makes an actor reachable from other nodes;";
+            $lines[] = "        // \$node->refFor(\$address, \$path) sends to remote actors.";
+            $lines[] = "    })";
+        }
+
+        if ($otel && $runtime === 'swoole') {
+            $lines[] = "    ->onStart(static function (\$system) use (\$observability): void {";
+            $lines[] = "        // Actorized async telemetry export: with OTEL_NEXUS_ASYNC_EXPORT=1 all";
+            $lines[] = "        // OTLP flush I/O runs on a dedicated actor, so a slow collector can";
+            $lines[] = "        // never block your actors.";
+            $lines[] = "        if (\$observability instanceof OtelObservability && getenv('OTEL_NEXUS_ASYNC_EXPORT') === '1') {";
+            $lines[] = "            \$observability->attachExportActor(\$system);";
+            $lines[] = "        }";
+            $lines[] = "    })";
         }
 
         $lines[] = "    ->run({$runtimeNew});";

@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace NexusSkeleton\Installer;
 
 use Composer\IO\IOInterface;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 
 /**
  * Interactive post-install configurator.
@@ -30,8 +33,10 @@ final class ProjectConfigurator
         $http = $this->askHttp();
         $persistence = $this->askPersistence();
         $otel = $this->askOtel();
+        $cluster = $this->askCluster($runtime);
 
         $selections = [
+            'cluster' => $cluster,
             'http' => $http,
             'otel' => $otel,
             'persistence' => $persistence,
@@ -139,6 +144,26 @@ final class ProjectConfigurator
         }
 
         return $this->io->askConfirmation('Add OpenTelemetry tracing? [y/N] ', false);
+    }
+
+    private function askCluster(string $runtime): bool
+    {
+        // The TCP cluster mesh requires the Swoole runtime (coroutine sockets).
+        if ($runtime !== 'swoole') {
+            return false;
+        }
+
+        $envVal = getenv('NEXUS_CLUSTER');
+
+        if ($envVal !== false) {
+            return $envVal === '1' || $envVal === 'true';
+        }
+
+        if (!$this->io->isInteractive()) {
+            return false;
+        }
+
+        return $this->io->askConfirmation('Add TCP cluster mesh (nexus-cluster-tcp)? [y/N] ', false);
     }
 
     /** @param array<string, mixed> $selections */
@@ -250,13 +275,13 @@ final class ProjectConfigurator
             return;
         }
 
-        $items = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \RecursiveDirectoryIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST,
+        $items = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($path, RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST,
         );
 
         foreach ($items as $item) {
-            /** @var \SplFileInfo $item */
+            /** @var SplFileInfo $item */
             if ($item->isDir()) {
                 rmdir($item->getRealPath());
             } else {
@@ -295,6 +320,8 @@ final class ProjectConfigurator
         $this->io->write('  Runtime:     ' . $runtime);
         $this->io->write('  HTTP server: ' . ($http ? 'yes' : 'no'));
         $this->io->write('  Persistence: ' . $persistence);
+        $this->io->write('  Telemetry:   ' . (((bool) $selections['otel']) ? 'OpenTelemetry (set OTEL_NEXUS_ASYNC_EXPORT=1 on Swoole for actorized export)' : 'no'));
+        $this->io->write('  Cluster:     ' . (((bool) ($selections['cluster'] ?? false)) ? 'TCP mesh (configure CLUSTER_* env)' : 'no'));
         $this->io->write('');
         $this->io->write('<comment>Next steps:</comment>');
         $this->io->write('  ' . $composeCmd . ' up -d');

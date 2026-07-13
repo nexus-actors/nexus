@@ -60,6 +60,16 @@ final readonly class PackageTrimmer
         $runtime = (string) $selections['runtime'];
         $http = (bool) $selections['http'];
         $persistence = (string) $selections['persistence'];
+        $otel = (bool) ($selections['otel'] ?? false);
+        $cluster = (bool) ($selections['cluster'] ?? false);
+
+        if (!$otel) {
+            $remove[] = 'nexus-actors/observability-otel';
+        }
+
+        if (!$cluster) {
+            $remove[] = 'nexus-actors/cluster-tcp';
+        }
 
         // HTTP
         if (!$http) {

@@ -60,6 +60,7 @@ Everything is a starting point, not a lock-in — extend, replace, or delete as 
 | Doctrine ORM bridge | yes / no (default no) | `NEXUS_DOCTRINE=1` |
 | Persistence | `none` (default) · `es-dbal` · `es-doctrine` · `durable-dbal` · `durable-doctrine` | `NEXUS_PERSISTENCE` |
 | OpenTelemetry tracing | yes / no (default no) | `NEXUS_OTEL=1` |
+| TCP cluster mesh (Swoole only) | yes / no (default no) | `NEXUS_CLUSTER=1` |
 
 ## Non-interactive install
 
