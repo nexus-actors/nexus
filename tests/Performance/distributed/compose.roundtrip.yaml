@@ -35,6 +35,9 @@ x-worker-env: &env
   DURATION: "${DURATION:-240}"
   NODES: "16"
   OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4318"
+  # Per-request OTLP export deadline (ms). Keeps a stalled collector well inside the
+  # cluster's failure-detector window (maxNoHeartbeat 10 s).
+  OTEL_EXPORTER_OTLP_TIMEOUT: "${OTEL_TIMEOUT:-5000}"
   # Silence the OTel SDK's internal error logging: a failed export otherwise dumps a multi-line
   # stack trace to stderr per batch, and blocking stderr writes on the reactor starve gossip
   # timers mesh-wide (defense in depth — exports are expected to succeed, see roundtrip_node.php).

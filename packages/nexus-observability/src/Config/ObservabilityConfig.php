@@ -36,6 +36,7 @@ final readonly class ObservabilityConfig
         public bool $metricsEnabled,
         public bool $logsEnabled,
         public array $resourceAttributes,
+        public ?int $exporterTimeoutMillis = null,
     ) {}
 
     public static function disabled(): self
@@ -70,6 +71,13 @@ final readonly class ObservabilityConfig
             ? (float) $env['OTEL_TRACES_SAMPLER_ARG']
             : null;
 
+        // Per-request OTLP export deadline in milliseconds (OTLP spec env). Bounds how long a
+        // stalled collector can hold an export; the OTel default of 10 s equals common failure-
+        // detector windows, so latency-sensitive runtimes should set this well below 10 000.
+        $exporterTimeoutMillis = isset($env['OTEL_EXPORTER_OTLP_TIMEOUT']) && is_numeric($env['OTEL_EXPORTER_OTLP_TIMEOUT'])
+            ? (int) $env['OTEL_EXPORTER_OTLP_TIMEOUT']
+            : null;
+
         return new self(
             enabled: !$disabled,
             serviceName: $env['OTEL_SERVICE_NAME'] ?? 'nexus',
@@ -81,6 +89,7 @@ final readonly class ObservabilityConfig
             metricsEnabled: true,
             logsEnabled: true,
             resourceAttributes: self::parseResourceAttributes($env['OTEL_RESOURCE_ATTRIBUTES'] ?? ''),
+            exporterTimeoutMillis: $exporterTimeoutMillis,
         );
     }
 
@@ -97,6 +106,7 @@ final readonly class ObservabilityConfig
             metricsEnabled: $this->metricsEnabled,
             logsEnabled: $this->logsEnabled,
             resourceAttributes: $this->resourceAttributes,
+            exporterTimeoutMillis: $this->exporterTimeoutMillis,
         );
     }
 
@@ -113,6 +123,7 @@ final readonly class ObservabilityConfig
             metricsEnabled: $this->metricsEnabled,
             logsEnabled: $this->logsEnabled,
             resourceAttributes: $this->resourceAttributes,
+            exporterTimeoutMillis: $this->exporterTimeoutMillis,
         );
     }
 
@@ -129,6 +140,24 @@ final readonly class ObservabilityConfig
             metricsEnabled: $this->metricsEnabled,
             logsEnabled: $this->logsEnabled,
             resourceAttributes: $this->resourceAttributes,
+            exporterTimeoutMillis: $this->exporterTimeoutMillis,
+        );
+    }
+
+    public function withExporterTimeoutMillis(?int $exporterTimeoutMillis): self
+    {
+        return new self(
+            enabled: $this->enabled,
+            serviceName: $this->serviceName,
+            exporterEndpoint: $this->exporterEndpoint,
+            exporterProtocol: $this->exporterProtocol,
+            sampler: $this->sampler,
+            samplerArg: $this->samplerArg,
+            tracesEnabled: $this->tracesEnabled,
+            metricsEnabled: $this->metricsEnabled,
+            logsEnabled: $this->logsEnabled,
+            resourceAttributes: $this->resourceAttributes,
+            exporterTimeoutMillis: $exporterTimeoutMillis,
         );
     }
 
@@ -145,6 +174,7 @@ final readonly class ObservabilityConfig
             metricsEnabled: $this->metricsEnabled,
             logsEnabled: $this->logsEnabled,
             resourceAttributes: $this->resourceAttributes,
+            exporterTimeoutMillis: $this->exporterTimeoutMillis,
         );
     }
 

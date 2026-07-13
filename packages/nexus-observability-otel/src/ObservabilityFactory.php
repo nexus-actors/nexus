@@ -16,6 +16,8 @@ use OpenTelemetry\Contrib\Otlp\MetricExporter;
 use OpenTelemetry\Contrib\Otlp\OtlpHttpTransportFactory;
 use OpenTelemetry\Contrib\Otlp\SpanExporter;
 use OpenTelemetry\SDK\Common\Attribute\Attributes;
+use OpenTelemetry\SDK\Common\Export\Http\PsrTransportFactory;
+use OpenTelemetry\SDK\Common\Export\TransportFactoryInterface;
 use OpenTelemetry\SDK\Logs\LoggerProvider;
 use OpenTelemetry\SDK\Logs\Processor\BatchLogRecordProcessor;
 use OpenTelemetry\SDK\Metrics\Data\Temporality;
@@ -30,6 +32,8 @@ use OpenTelemetry\SDK\Trace\Sampler\TraceIdRatioBasedSampler;
 use OpenTelemetry\SDK\Trace\SamplerInterface;
 use OpenTelemetry\SDK\Trace\SpanProcessor\BatchSpanProcessor;
 use OpenTelemetry\SDK\Trace\TracerProvider;
+use Symfony\Component\HttpClient\NativeHttpClient;
+use Symfony\Component\HttpClient\Psr18Client;
 
 /**
  * @psalm-api
@@ -39,6 +43,9 @@ use OpenTelemetry\SDK\Trace\TracerProvider;
  */
 final class ObservabilityFactory
 {
+    /**
+     * @psalm-suppress InvalidOperand int/float mixing computing the timeout in seconds is intentional.
+     */
     public static function fromConfig(ObservabilityConfig $config): Observability
     {
         if (!$config->enabled) {
@@ -46,6 +53,8 @@ final class ObservabilityFactory
         }
 
         $endpoint = $config->exporterEndpoint ?? 'http://localhost:4318';
+        $timeout = ($config->exporterTimeoutMillis ?? 10_000) / 1_000.0;
+        $transports = self::transportFactory($timeout);
         $resource = ResourceInfoFactory::defaultResource()->merge(
             ResourceInfo::create(
                 Attributes::create(['service.name' => $config->serviceName] + $config->resourceAttributes),
@@ -56,7 +65,7 @@ final class ObservabilityFactory
             ->addSpanProcessor(
                 new BatchSpanProcessor(
                     new SpanExporter(
-                        (new OtlpHttpTransportFactory())->create($endpoint . '/v1/traces', 'application/x-protobuf'),
+                        $transports->create($endpoint . '/v1/traces', 'application/x-protobuf', timeout: $timeout),
                     ),
                     Clock::getDefault(),
                 ),
@@ -69,7 +78,7 @@ final class ObservabilityFactory
             ->addReader(
                 new ExportingReader(
                     new MetricExporter(
-                        (new OtlpHttpTransportFactory())->create($endpoint . '/v1/metrics', 'application/x-protobuf'),
+                        $transports->create($endpoint . '/v1/metrics', 'application/x-protobuf', timeout: $timeout),
                         // Force cumulative temporality. Without an explicit choice the exporter's
                         // temporality selector falls back to each metric's own metadata, which is
                         // falsy for synchronous instruments — and ExportingReader::add() then skips
@@ -91,7 +100,7 @@ final class ObservabilityFactory
                 ->addLogRecordProcessor(
                     new BatchLogRecordProcessor(
                         new LogsExporter(
-                            (new OtlpHttpTransportFactory())->create($endpoint . '/v1/logs', 'application/x-protobuf'),
+                            $transports->create($endpoint . '/v1/logs', 'application/x-protobuf', timeout: $timeout),
                         ),
                         Clock::getDefault(),
                     ),
@@ -110,6 +119,39 @@ final class ObservabilityFactory
             $scope,
             $loggerProvider,
         );
+    }
+
+    /**
+     * OTLP/HTTP transport factory with a bounded, configurable deadline.
+     *
+     * Prefers symfony's STREAM-based client (NativeHttpClient) over the discovered
+     * default (CurlHttpClient) for two Swoole-critical reasons:
+     *
+     *  1. Swoole's userland curl hook (SWOOLE_HOOK_CURL, used when the extension is
+     *     built without native curl support) does not implement CURLOPT_SHARE, which
+     *     symfony's curl client always sets — every OTLP export then throws and no
+     *     telemetry ever leaves the process.
+     *  2. Under SWOOLE_HOOK_ALL the stream transport is coroutine-hooked, so exports
+     *     yield to the scheduler instead of freezing the whole reactor for up to the
+     *     full timeout per batch — a stalled collector otherwise starves gossip/timer
+     *     processing (the OTel default timeout of 10 s equals common failure-detector
+     *     windows).
+     *
+     * Falls back to the SDK's discovery when symfony/http-client is not installed.
+     */
+    private static function transportFactory(float $timeoutSeconds): TransportFactoryInterface
+    {
+        if (class_exists(NativeHttpClient::class) && class_exists(Psr18Client::class)) {
+            // Psr18Client also implements the PSR-17 request/stream factories.
+            $client = new Psr18Client(new NativeHttpClient([
+                'max_duration' => $timeoutSeconds,
+                'timeout' => $timeoutSeconds,
+            ]));
+
+            return new PsrTransportFactory($client, $client, $client);
+        }
+
+        return new OtlpHttpTransportFactory();
     }
 
     public static function samplerFromConfig(ObservabilityConfig $config): SamplerInterface

@@ -45,6 +45,18 @@ final class ObservabilityFactoryTest extends TestCase
     }
 
     #[Test]
+    public function enabledConfigWithExporterTimeoutBuildsProvider(): void
+    {
+        $observability = ObservabilityFactory::fromConfig(
+            ObservabilityConfig::enabled('orders')
+                ->withExporterEndpoint('http://localhost:4318')
+                ->withExporterTimeoutMillis(5000),
+        );
+
+        self::assertInstanceOf(OtelObservability::class, $observability);
+    }
+
+    #[Test]
     public function samplerMappingCoversEachMode(): void
     {
         self::assertInstanceOf(

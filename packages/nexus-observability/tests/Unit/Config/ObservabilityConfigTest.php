@@ -44,6 +44,31 @@ final class ObservabilityConfigTest extends TestCase
     }
 
     #[Test]
+    public function fromEnvParsesExporterTimeoutMillis(): void
+    {
+        $config = ObservabilityConfig::fromEnv(['OTEL_EXPORTER_OTLP_TIMEOUT' => '5000']);
+
+        self::assertSame(5000, $config->exporterTimeoutMillis);
+    }
+
+    #[Test]
+    public function exporterTimeoutDefaultsToNullAndIgnoresNonNumericValues(): void
+    {
+        self::assertNull(ObservabilityConfig::fromEnv([])->exporterTimeoutMillis);
+        self::assertNull(ObservabilityConfig::fromEnv(['OTEL_EXPORTER_OTLP_TIMEOUT' => 'abc'])->exporterTimeoutMillis);
+    }
+
+    #[Test]
+    public function withExporterTimeoutMillisReturnsNewInstanceCarryingTheValue(): void
+    {
+        $config = ObservabilityConfig::enabled('orders')->withExporterTimeoutMillis(2500);
+
+        self::assertSame(2500, $config->exporterTimeoutMillis);
+        // Other withers must carry the timeout forward.
+        self::assertSame(2500, $config->withServiceName('billing')->exporterTimeoutMillis);
+    }
+
+    #[Test]
     public function fromEnvParsesResourceAttributesAndSampler(): void
     {
         $config = ObservabilityConfig::fromEnv([

@@ -51,7 +51,6 @@ use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
 use Monadial\Nexus\Observability\Otel\OtelObservability;
 use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Runtime\Swoole\SwooleConfig;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -110,17 +109,14 @@ function buildObservability(string $tag, int $nodeId): Observability
         return new NoopObservability();
     }
 
-    // Bound every OTLP HTTP call. symfony/http-client derives its inactivity timeout from
-    // this ini (default 60 s), and the OTel exporter retries on top — a collector that
-    // accepts the connection but never responds otherwise blocks the export for minutes.
-    // The exports run on REAL (unhooked) curl here, so a stuck flush freezes the WHOLE
-    // reactor mid-run, and the post-run shutdown flush can hang the process past the
-    // harness's hard deadline (observed: workers stuck with an ESTABLISHED socket to
-    // lgtm:4318 and the cluster listener already closed). 5 s caps the damage.
-    ini_set('default_socket_timeout', '5');
-
     $config = ObservabilityConfig::fromEnv([
         'OTEL_EXPORTER_OTLP_ENDPOINT' => $endpoint,
+        // Bound every OTLP HTTP call (milliseconds; nexus-observability-otel honors the
+        // OTLP spec env and builds a stream-based, coroutine-cooperative transport). The
+        // OTel default of 10 s equals the cluster's maxNoHeartbeat, so a stalled collector
+        // could otherwise hold telemetry long enough to matter; 5 s keeps flushes well
+        // inside the failure-detector window.
+        'OTEL_EXPORTER_OTLP_TIMEOUT' => envStr('OTEL_EXPORTER_OTLP_TIMEOUT', '5000'),
         'OTEL_RESOURCE_ATTRIBUTES' => sprintf('node.id=%s,node.index=%d', $tag, $nodeId),
         'OTEL_SERVICE_NAME' => envStr('OTEL_SERVICE_NAME', 'nexus-cluster-roundtrip'),
         'OTEL_TRACES_SAMPLER' => envStr('OTEL_TRACES_SAMPLER', 'traceidratio'),
@@ -247,19 +243,11 @@ function runRoundtripNode(
         }
     };
 
-    // Coroutine hooks WITHOUT the curl hooks, set ONCE before any coroutine exists (mutating
-    // hook flags mid-run intermittently hard-stalled the reactor). This Swoole build has no
-    // native curl hook, so hooked curl falls back to the userland shim, which does not support
-    // CURLOPT_SHARE — symfony/http-client (the discovered PSR-18 client behind the OTLP
-    // exporters) always sets it, so every in-run OTLP export threw, and the stack-trace floods
-    // to stderr stalled reactors mesh-wide (false Suspect/Down storms even on idle nodes).
-    // With the curl hooks off, exports run on real blocking curl against the local lgtm
-    // collector: a few ms per batch, and they succeed. The mesh transport uses
-    // Coroutine\Socket directly and is unaffected. enableCoroutineHook:false stops
-    // SwooleRuntime::run() from overriding these flags with SWOOLE_HOOK_ALL.
-    Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL & ~SWOOLE_HOOK_CURL & ~SWOOLE_HOOK_NATIVE_CURL]);
-
-    $runtime = new SwooleRuntime(new SwooleConfig(enableCoroutineHook: false));
+    // No hook-flag tuning needed: nexus-observability-otel builds its OTLP transports on
+    // symfony's STREAM-based client, which avoids the userland curl shim's CURLOPT_SHARE
+    // gap entirely and is coroutine-cooperative under SWOOLE_HOOK_ALL — exports yield to
+    // the scheduler instead of freezing the reactor.
+    $runtime = new SwooleRuntime();
     $system = ActorSystem::create(
         "roundtrip-{$tag}",
         $runtime,
