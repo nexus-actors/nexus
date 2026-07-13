@@ -26,7 +26,7 @@ use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerDisconnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
-use Monadial\Nexus\Cluster\Tcp\Membership\RandomPeerSelector;
+use Monadial\Nexus\Cluster\Tcp\Membership\ShuffledCycleSelector;
 use Monadial\Nexus\Cluster\Tcp\Membership\TcpMembershipEffectInterpreter;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterMessageCodec;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
@@ -309,7 +309,10 @@ final class ClusterNode
         $membershipActor = new MembershipActor(
             service: $service,
             detector: $detector,
-            selector: new RandomPeerSelector(),
+            // Shuffled-cycle (not uniform-random) selection: bounds per-peer gossip
+            // inter-arrival deterministically so data-idle links cannot fall silent
+            // past the failure detector's thresholds (see ShuffledCycleSelector).
+            selector: new ShuffledCycleSelector(),
             effectInterpreter: $effectInterpreter,
             eventPublisher: $eventPublisher,
             clock: $system->clock(),
