@@ -119,7 +119,7 @@ function CheckCard({
 // ── Step components ──────────────────────────────────────────────────────────
 
 function Step1({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => void }) {
-  const set = (runtime: Runtime) => setSel({ ...sel, runtime });
+  const set = (runtime: Runtime) => setSel({ ...sel, runtime, cluster: runtime === 'fiber' ? false : sel.cluster });
   return (
     <div className="wiz-step-body">
       <h2 className="wiz-step-heading">Choose a runtime</h2>
@@ -148,7 +148,7 @@ function Step1({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => vo
 }
 
 function Step2({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => void }) {
-  const toggle = (key: 'http' | 'websockets' | 'doctrine' | 'otel') => {
+  const toggle = (key: 'http' | 'websockets' | 'doctrine' | 'otel' | 'cluster' | 'messenger') => {
     const next = { ...sel, [key]: !sel[key] };
     // WebSockets requires HTTP
     if (key === 'http' && !next.http) next.websockets = false;
@@ -178,11 +178,23 @@ function Step2({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => vo
           description="EntityBehavior + per-actor EntityManager helpers."
         />
         <CheckCard
-          checked={false}
-          onToggle={() => {}}
-          disabled
-          title="OpenTelemetry tracing"
-          description="Available soon — package not yet on Packagist. Track at github.com/nexus-actors/nexus."
+          checked={sel.otel}
+          onToggle={() => toggle('otel')}
+          title="OpenTelemetry"
+          description="Traces, metrics &amp; logs via OTLP. On Swoole, telemetry export runs on its own actor (set OTEL_NEXUS_ASYNC_EXPORT=1)."
+        />
+        <CheckCard
+          checked={sel.cluster}
+          disabled={sel.runtime === 'fiber'}
+          onToggle={() => sel.runtime !== 'fiber' && toggle('cluster')}
+          title="TCP cluster mesh"
+          description={sel.runtime === 'fiber' ? 'Requires the Swoole runtime (coroutine sockets) — choose Swoole in step 1.' : 'Location-transparent tell()/ask() across nodes over a TCP gossip mesh.'}
+        />
+        <CheckCard
+          checked={sel.messenger}
+          onToggle={() => toggle('messenger')}
+          title="Messenger bridge"
+          description="Publish/consume actor messages over Symfony Messenger transports (AMQP, Redis, Doctrine, …)."
         />
       </div>
     </div>
@@ -248,6 +260,9 @@ function RecapChips({ sel }: { sel: Selections }) {
   if (sel.http) chips.push('HTTP');
   if (sel.websockets) chips.push('WebSockets');
   if (sel.doctrine) chips.push('Doctrine ORM');
+  if (sel.otel) chips.push('OpenTelemetry');
+  if (sel.cluster) chips.push('Cluster');
+  if (sel.messenger) chips.push('Messenger');
   // OTel package not yet published — omit chip until functional
   if (sel.persistence !== 'none') chips.push(`Persistence: ${PERSISTENCE_CHIP[sel.persistence]}`);
   return (
@@ -400,7 +415,7 @@ export default function BootstrapWizard() {
       next.persistence = persistenceParam;
       changed = true;
     }
-    for (const flag of ['http', 'websockets', 'doctrine'] as const) {
+    for (const flag of ['http', 'websockets', 'doctrine', 'otel', 'cluster', 'messenger'] as const) {
       const v = params.get(flag);
       if (v === '1' || v === 'true') {
         next[flag] = true;
@@ -419,7 +434,7 @@ export default function BootstrapWizard() {
     params.set('step', String(step + 1));
     if (sel.runtime !== DEFAULT_SELECTIONS.runtime) params.set('runtime', sel.runtime);
     if (sel.persistence !== DEFAULT_SELECTIONS.persistence) params.set('persistence', sel.persistence);
-    for (const flag of ['http', 'websockets', 'doctrine'] as const) {
+    for (const flag of ['http', 'websockets', 'doctrine', 'otel', 'cluster', 'messenger'] as const) {
       if (sel[flag]) params.set(flag, '1');
     }
     const newUrl = `${window.location.pathname}?${params.toString()}`;

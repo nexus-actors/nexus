@@ -10,6 +10,8 @@ export interface Selections {
   websockets: boolean;
   doctrine: boolean;
   otel: boolean;
+  cluster: boolean;
+  messenger: boolean;
   persistence: Persistence;
 }
 
@@ -65,8 +67,22 @@ function getPackages(s: Selections): { prod: string[]; dev: string[] } {
     prod.push('nexus-actors/doctrine-dbal');
   }
 
-  // OTel — not yet on Packagist; skip from generated command
-  // if (s.otel) { prod.push('nexus-actors/observability-otel'); }
+  if (s.otel) {
+    prod.push('nexus-actors/observability');
+    prod.push('nexus-actors/observability-otel');
+  }
+
+  // TCP cluster mesh — Swoole runtime only (coroutine sockets).
+  if (s.cluster && (s.runtime === 'swoole' || s.runtime === 'worker-pool')) {
+    prod.push('nexus-actors/cluster');
+    prod.push('nexus-actors/cluster-tcp');
+  }
+
+  // Symfony Messenger bridge — publish/consume actor messages over a broker.
+  if (s.messenger) {
+    prod.push('nexus-actors/messenger');
+    prod.push('symfony/messenger');
+  }
 
   const dev = ['nexus-actors/psalm', 'vimeo/psalm'];
 
@@ -104,6 +120,23 @@ function buildBootstrap(s: Selections): string {
   // HTTP import
   const httpImport = s.http || s.websockets ? 'use Monadial\\Nexus\\Http\\Dsl\\HttpApp;' : '';
   const wsImport = s.websockets ? 'use Monadial\\Nexus\\Http\\Ws\\WsApplication;' : '';
+  const clusterEnabled = s.cluster && s.runtime === 'swoole';
+  const otelImport = s.otel
+    ? [
+        'use Monadial\\Nexus\\Observability\\Config\\ObservabilityConfig;',
+        'use Monadial\\Nexus\\Observability\\Otel\\ObservabilityFactory;',
+        'use Monadial\\Nexus\\Observability\\Otel\\OtelObservability;',
+      ].join('\n')
+    : '';
+  const clusterImport = clusterEnabled
+    ? [
+        'use Monadial\\Nexus\\Cluster\\NodeAddress;',
+        'use Monadial\\Nexus\\Cluster\\Tcp\\ClusterNode;',
+        'use Monadial\\Nexus\\Cluster\\Tcp\\ClusterTopology;',
+        'use Monadial\\Nexus\\Cluster\\Tcp\\NodeEndpoint;',
+      ].join('\n')
+    : '';
+  const messengerImport = s.messenger ? 'use Monadial\\Nexus\\Messenger\\MessengerBridge;' : '';
 
   // Persistence imports
   let persistenceImport = '';
@@ -125,7 +158,7 @@ function buildBootstrap(s: Selections): string {
   }
 
   // Collect extra use statements
-  const extraImports = [runtimeImport, httpImport, wsImport, persistenceImport]
+  const extraImports = [runtimeImport, httpImport, wsImport, otelImport, clusterImport, messengerImport, persistenceImport]
     .filter(Boolean)
     .join('\n');
 
@@ -138,6 +171,38 @@ function buildBootstrap(s: Selections): string {
       `        $app = HttpApp::create($system)\n` +
       `            ->discover(__DIR__ . '/src/Http');\n` +
       `        // Hand $app->compile() to SwooleHttpServerAdapter or your server of choice.\n` +
+      `    })`,
+    );
+  }
+
+  if (clusterEnabled) {
+    onStartBlocks.push(
+      `    ->onStart(static function ($system) use ($topology): void {\n` +
+      `        $node = ClusterNode::boot($system, $topology);\n` +
+      `        // $node->expose($ref) makes an actor reachable from other nodes;\n` +
+      `        // $node->refFor($address, $path) sends to remote actors.\n` +
+      `    })`,
+    );
+  }
+
+  if (s.messenger) {
+    onStartBlocks.push(
+      `    ->onStart(static function ($system): void {\n` +
+      `        // Bridge Symfony Messenger transports to actors. Wire your SenderInterface /\n` +
+      `        // ReceiverInterface here; see MessengerBridge::spawnReceivers() / gateway().\n` +
+      `        // https://docs.nexusactors.com/docs/packages/messenger\n` +
+      `    })`,
+    );
+  }
+
+  if (s.otel && s.runtime === 'swoole') {
+    onStartBlocks.push(
+      `    ->onStart(static function ($system) use ($observability): void {\n` +
+      `        // Actorized async export: with OTEL_NEXUS_ASYNC_EXPORT=1 all OTLP flush I/O\n` +
+      `        // runs on a dedicated actor, so a slow collector never blocks your actors.\n` +
+      `        if ($observability instanceof OtelObservability && getenv('OTEL_NEXUS_ASYNC_EXPORT') === '1') {\n` +
+      `            $observability->attachExportActor($system);\n` +
+      `        }\n` +
       `    })`,
     );
   }
@@ -198,7 +263,34 @@ function buildBootstrap(s: Selections): string {
     lines.push(extraImports);
   }
   lines.push(``);
+
+  if (s.otel) {
+    lines.push(`// OpenTelemetry: built from OTEL_* env (endpoint, service name, sampler).`);
+    lines.push(`$observability = ObservabilityFactory::fromConfig(ObservabilityConfig::fromEnv(getenv()));`);
+    lines.push(``);
+  }
+
+  if (clusterEnabled) {
+    lines.push(`// TCP cluster mesh — identity, endpoints and seeds from CLUSTER_* env.`);
+    lines.push(`$seeds = array_map(`);
+    lines.push(`    static fn(string $s) => NodeEndpoint::fromString(trim($s)),`);
+    lines.push(`    array_filter(explode(',', (string) (getenv('CLUSTER_SEEDS') ?: ''))),`);
+    lines.push(`);`);
+    lines.push(`$topology = ClusterTopology::create(`);
+    lines.push(`    clusterName: getenv('CLUSTER_NAME') ?: 'my-cluster',`);
+    lines.push(`    self: new NodeAddress(getenv('CLUSTER_NAME') ?: 'my-cluster', 'dc1', 'my-app', getenv('NODE_NAME') ?: 'node-1'),`);
+    lines.push(`    bindEndpoint: NodeEndpoint::fromString(getenv('CLUSTER_BIND') ?: '0.0.0.0:7361'),`);
+    lines.push(`    advertiseEndpoint: NodeEndpoint::fromString(getenv('CLUSTER_ADVERTISE') ?: '127.0.0.1:7361'),`);
+    lines.push(`    seeds: $seeds,`);
+    lines.push(`    singleNode: $seeds === [],`);
+    lines.push(`);`);
+    lines.push(``);
+  }
+
   lines.push(`NexusApp::create('my-app')`);
+  if (s.otel) {
+    lines.push(`    ->withObservability($observability)`);
+  }
   lines.push(`    ->actor('hello', Props::fromBehavior(`);
   lines.push(`        Behavior::receive(static function ($ctx, $msg): Behavior {`);
   lines.push(`            $ctx->log()->info('received', ['type' => $msg::class]);`);
@@ -440,5 +532,7 @@ export const DEFAULT_SELECTIONS: Selections = {
   websockets: false,
   doctrine: false,
   otel: false,
+  cluster: false,
+  messenger: false,
   persistence: 'none',
 };
