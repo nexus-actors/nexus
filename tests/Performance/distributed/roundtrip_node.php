@@ -117,6 +117,9 @@ function buildObservability(string $tag, int $nodeId): Observability
         // could otherwise hold telemetry long enough to matter; 5 s keeps flushes well
         // inside the failure-detector window.
         'OTEL_EXPORTER_OTLP_TIMEOUT' => envStr('OTEL_EXPORTER_OTLP_TIMEOUT', '5000'),
+        // Actorized async export toggle — must be forwarded into the hand-built env map,
+        // or attachExportActor() below throws LogicException at boot.
+        'OTEL_NEXUS_ASYNC_EXPORT' => envStr('OTEL_NEXUS_ASYNC_EXPORT', '0'),
         'OTEL_RESOURCE_ATTRIBUTES' => sprintf('node.id=%s,node.index=%d', $tag, $nodeId),
         'OTEL_SERVICE_NAME' => envStr('OTEL_SERVICE_NAME', 'nexus-cluster-roundtrip'),
         'OTEL_TRACES_SAMPLER' => envStr('OTEL_TRACES_SAMPLER', 'traceidratio'),
