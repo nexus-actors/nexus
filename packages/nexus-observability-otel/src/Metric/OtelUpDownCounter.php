@@ -11,7 +11,7 @@ use Override;
 /** @psalm-api */
 final readonly class OtelUpDownCounter implements UpDownCounter
 {
-    public function __construct(private UpDownCounterInterface $upDownCounter,) {}
+    public function __construct(private UpDownCounterInterface $upDownCounter) {}
 
     /**
      * @param array<string, scalar> $attributes

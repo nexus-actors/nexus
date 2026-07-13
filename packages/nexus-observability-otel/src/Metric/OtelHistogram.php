@@ -11,7 +11,7 @@ use Override;
 /** @psalm-api */
 final readonly class OtelHistogram implements Histogram
 {
-    public function __construct(private HistogramInterface $histogram,) {}
+    public function __construct(private HistogramInterface $histogram) {}
 
     /**
      * @param array<string, scalar> $attributes

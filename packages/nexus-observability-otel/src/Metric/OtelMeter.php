@@ -21,7 +21,7 @@ use Override;
  */
 final readonly class OtelMeter implements Meter
 {
-    public function __construct(private MeterInterface $meter,) {}
+    public function __construct(private MeterInterface $meter) {}
 
     #[Override]
     public function counter(string $name, string $unit = '', string $description = ''): Counter

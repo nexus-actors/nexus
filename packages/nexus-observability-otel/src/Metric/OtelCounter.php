@@ -11,7 +11,7 @@ use Override;
 /** @psalm-api */
 final readonly class OtelCounter implements Counter
 {
-    public function __construct(private CounterInterface $counter,) {}
+    public function __construct(private CounterInterface $counter) {}
 
     /**
      * @param array<string, scalar> $attributes

@@ -15,5 +15,5 @@ use OpenTelemetry\API\Metrics\ObservableGaugeInterface;
  */
 final readonly class OtelObservableGauge implements ObservableGauge
 {
-    public function __construct(private ObservableGaugeInterface $gauge,) {}
+    public function __construct(private ObservableGaugeInterface $gauge) {}
 }

@@ -67,7 +67,7 @@ final class OtelObservabilityIntegrationTest extends TestCase
             self::assertSame('0af7651916cd43dd8448eb211c80319c', $span->getTraceId());
         }
 
-        $metricNames = array_map(static fn ($metric): string => $metric->name, $metricExporter->collect());
+        $metricNames = array_map(static fn($metric): string => $metric->name, $metricExporter->collect());
         self::assertContains('nexus.messages.processed', $metricNames);
     }
 }
