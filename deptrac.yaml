@@ -27,6 +27,11 @@ deptrac:
         - type: directory
           value: packages/nexus-serialization/src/.*
 
+    - name: SerializationMsgpack
+      collectors:
+        - type: directory
+          value: packages/nexus-serialization-msgpack/src/.*
+
     - name: RuntimeFiber
       collectors:
         - type: directory
@@ -66,6 +71,11 @@ deptrac:
       collectors:
         - type: directory
           value: packages/nexus-messenger-console-swoole/src/.*
+
+    - name: ClusterTcp
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/.*
 
     - name: DoctrineDbal
       collectors:
@@ -185,6 +195,8 @@ deptrac:
       - Runtime
     Serialization:
       - Core
+    SerializationMsgpack:
+      - Serialization
     RuntimeFiber:
       - Core
       - Runtime
@@ -224,6 +236,14 @@ deptrac:
       - Serialization
       - WorkerPool
       - WorkerPoolSwoole
+    ClusterTcp:
+      - Cluster
+      - Core
+      - Observability
+      - Runtime
+      - RuntimeSwoole
+      - Serialization
+      - SerializationMsgpack
     DoctrineDbal:
       - Core
       - Http

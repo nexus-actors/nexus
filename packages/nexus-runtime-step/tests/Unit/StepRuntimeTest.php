@@ -54,6 +54,20 @@ final class StepRuntimeTest extends TestCase
     }
 
     #[Test]
+    public function defer_runs_the_task_on_the_next_step(): void
+    {
+        $ran = false;
+
+        $this->runtime->defer(static function () use (&$ran): void {
+            $ran = true;
+        });
+
+        $this->runtime->step();
+
+        self::assertTrue($ran, 'the deferred task should run when the runtime is stepped');
+    }
+
+    #[Test]
     public function step_processes_messages_one_at_a_time(): void
     {
         $count = 0;

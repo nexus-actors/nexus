@@ -11,9 +11,11 @@
             <directory>packages/nexus-core/tests/Unit</directory>
             <directory>packages/nexus-runtime-fiber/tests/Unit</directory>
             <directory>packages/nexus-serialization/tests/Unit</directory>
+            <directory>packages/nexus-serialization-msgpack/tests/Unit</directory>
             <directory>packages/nexus-cluster/tests/Unit</directory>
             <directory>packages/nexus-messenger/tests/Unit</directory>
             <directory>packages/nexus-messenger-console/tests/Unit</directory>
+            <directory>packages/nexus-cluster-tcp/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
             <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
@@ -57,6 +59,20 @@
         </testsuite>
         <testsuite name="integration-doctrine-swoole">
             <directory>tests/Integration/Doctrine/Swoole</directory>
+        </testsuite>
+        <testsuite name="integration-cluster">
+            <directory>tests/Integration/ClusterTcp</directory>
+        </testsuite>
+        <testsuite name="integration-cluster-loopback">
+            <directory>tests/Integration/ClusterTcp</directory>
+            <!--
+                The Swoole/ subdir holds the real-socket ext-swoole tests; they are covered by the
+                integration-cluster suite in the Xdebug-free php-swoole container (make test-cluster).
+                This loopback suite runs in the php-full container (Swoole + Xdebug), where Xdebug's
+                zend_execute_ex hook + Swoole coroutines segfault at process teardown (exit 139 after a
+                clean OK). Excluding them keeps this suite true to its "no ext-swoole required" purpose.
+            -->
+            <exclude>tests/Integration/ClusterTcp/Swoole</exclude>
         </testsuite>
         <testsuite name="integration-fiber">
             <directory>tests/Integration/Fiber</directory>
@@ -118,9 +134,11 @@
             <directory>packages/nexus-runtime/src</directory>
             <directory>packages/nexus-runtime-swoole/src</directory>
             <directory>packages/nexus-serialization/src</directory>
+            <directory>packages/nexus-serialization-msgpack/src</directory>
             <directory>packages/nexus-cluster/src</directory>
             <directory>packages/nexus-messenger/src</directory>
             <directory>packages/nexus-messenger-console/src</directory>
+            <directory>packages/nexus-cluster-tcp/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>
             <directory>packages/nexus-doctrine-orm/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>

@@ -63,9 +63,15 @@ final class FiberScheduler
 
     public function advanceTimers(DateTimeImmutable $now): void
     {
-        $remaining = [];
+        // Snapshot current timers and reset $this->timers to an empty list before iterating.
+        // This ensures any timer scheduled from within a callback (via scheduleOnce /
+        // scheduleRepeatedly → insertSorted) lands in $this->timers and is NOT discarded
+        // when we finish the loop.  Not-yet-due timers and repeating re-schedules are
+        // inserted back via insertSorted, which keeps the list sorted without a final usort.
+        $due = $this->timers;
+        $this->timers = [];
 
-        foreach ($this->timers as $timer) {
+        foreach ($due as $timer) {
             if ($timer->cancellable->isCancelled()) {
                 continue;
             }
@@ -75,21 +81,18 @@ final class FiberScheduler
 
                 /** @psalm-suppress RedundantCondition -- defensive guard for timer invariants */
                 if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) {
-                    $remaining[] = new TimerEntry(
+                    $this->insertSorted(new TimerEntry(
                         callback: $timer->callback,
                         fireAt: $this->addDuration($timer->fireAt, $timer->interval),
                         repeating: true,
                         interval: $timer->interval,
                         cancellable: $timer->cancellable,
-                    );
+                    ));
                 }
             } else {
-                $remaining[] = $timer;
+                $this->insertSorted($timer);
             }
         }
-
-        $this->timers = $remaining;
-        usort($this->timers, static fn(TimerEntry $a, TimerEntry $b): int => $a->fireAt <=> $b->fireAt);
     }
 
     public function hasPendingTimers(): bool

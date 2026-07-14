@@ -55,6 +55,25 @@ final class SwooleRuntimeTest extends TestCase
     }
 
     #[Test]
+    public function defer_runs_the_task(): void
+    {
+        $runtime = new SwooleRuntime();
+        $value = 0;
+
+        $runtime->defer(static function () use (&$value): void {
+            $value = 9;
+        });
+
+        $runtime->scheduleOnce(Duration::millis(50), static function () use ($runtime): void {
+            $runtime->shutdown(Duration::millis(100));
+        });
+
+        $runtime->run();
+
+        self::assertSame(9, $value);
+    }
+
+    #[Test]
     public function spawn_returns_task_id(): void
     {
         $runtime = new SwooleRuntime();

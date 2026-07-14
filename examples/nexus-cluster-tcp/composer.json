@@ -1,0 +1,41 @@
+{
+    "name": "nexus-actors/example-cluster-tcp",
+    "_comment": "Standalone use outside the monorepo: replace the psr-4 autoload entries with `composer require nexus-actors/cluster-tcp nexus-actors/runtime-swoole` from Packagist and remove the autoload->files and autoload->psr-4 path entries below.",
+    "description": "Nexus example: two-node TCP cluster with gossip membership, phi-accrual failure detection, and location-transparent tell/ask over Swoole.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5",
+        "ext-swoole": ">=6.2.1",
+        "brick/math": "^0.12",
+        "cuyz/valinor": "^2.3",
+        "monolog/monolog": "^3.0",
+        "psr/clock": "^1.0",
+        "psr/container": "^2.0",
+        "psr/event-dispatcher": "^1.0",
+        "psr/log": "^3.0",
+        "rybakit/msgpack": "^0.9",
+        "symfony/uid": "^8.0"
+    },
+    "autoload": {
+        "files": [
+            "/nexus-packages/nexus-core/src/Actor/Functions/functions.php"
+        ],
+        "psr-4": {
+            "Monadial\\Nexus\\Cluster\\": "/nexus-packages/nexus-cluster/src/",
+            "Monadial\\Nexus\\Cluster\\Tcp\\": "/nexus-packages/nexus-cluster-tcp/src/",
+            "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Example\\ClusterTcp\\": "src/",
+            "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
+            "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
+            "Monadial\\Nexus\\Runtime\\Swoole\\": "/nexus-packages/nexus-runtime-swoole/src/",
+            "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/",
+            "Monadial\\Nexus\\Serialization\\Msgpack\\": "/nexus-packages/nexus-serialization-msgpack/src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
