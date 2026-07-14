@@ -13,15 +13,20 @@
   --ifm-color-content: var(--nexus-text);
 }
 
-/* Legacy light-mode overrides — keep for backward compat */
+/* Light-mode overrides. Primary darkened to #047857 for WCAG 2.1 AA: the brand
+   emerald #10B981 is only ~2.5:1 on white, so it fails as link/heading text and as
+   a white-on-emerald filled button (.ctaPrimary, .cardTitle, .ctaSecondary all
+   derive from --ifm-color-primary). #047857 is ~5.9:1 on white — AA for normal
+   text. Dark mode (the site default) keeps the brighter #34D399, which already
+   passes on the dark background. */
 :root {
-  --ifm-color-primary: #10B981;
-  --ifm-color-primary-dark: #059669;
-  --ifm-color-primary-darker: #047857;
-  --ifm-color-primary-darkest: #065f46;
-  --ifm-color-primary-light: #34D399;
-  --ifm-color-primary-lighter: #6EE7B7;
-  --ifm-color-primary-lightest: #A7F3D0;
+  --ifm-color-primary: #047857;
+  --ifm-color-primary-dark: #036848;
+  --ifm-color-primary-darker: #03583d;
+  --ifm-color-primary-darkest: #024534;
+  --ifm-color-primary-light: #059669;
+  --ifm-color-primary-lighter: #10B981;
+  --ifm-color-primary-lightest: #34D399;
   --ifm-code-font-size: 95%;
 }
 
@@ -105,7 +110,7 @@
 
 /* TOC highlight */
 .table-of-contents__link--active {
-  color: #10B981;
+  color: #047857;
 }
 
 [data-theme='dark'] .table-of-contents__link--active {
@@ -190,4 +195,115 @@ blockquote {
 
 [data-theme='dark'] .breadcrumbs__link:hover {
   color: #6EE7B7;
+}
+
+/* ---- WCAG 2.1 AA contrast fixes ---------------------------------- */
+
+/* Footer uses style:'dark' (dark background in both site themes), so its links —
+   including the raw-HTML copyright link to monadial.com — must use a light accent,
+   not the light-mode primary (#047857 is dark-green-on-dark, ~3.75:1). */
+.footer--dark a {
+  color: #6EE7B7;
+}
+
+.footer--dark a:hover {
+  color: #A7F3D0;
+}
+
+/* Keyboard hint (search shortcut): pin explicit dark-on-light / light-on-dark so the
+   <kbd> key meets AA in both color modes regardless of the emphasis-scale resolution. */
+kbd {
+  color: #1c1e21;
+  background-color: #f0f1f3;
+  border-color: #c2c8ce;
+  box-shadow: inset 0 -1px 0 #c2c8ce;
+}
+
+[data-theme='dark'] kbd {
+  color: #e2e8f0;
+  background-color: #1a2332;
+  border-color: #2a3548;
+  box-shadow: inset 0 -1px 0 #2a3548;
+}
+
+/* The local-search shortcut hint (kbd.searchHint_*) defaults to placeholder-colored
+   text on the input background — too low-contrast. The hashed class beats a plain
+   `kbd` selector, so match it hash-independently and beat its specificity. */
+kbd[class*='searchHint'] {
+  color: #1c1e21;
+  background-color: #f0f1f3;
+  border-color: #c2c8ce;
+  box-shadow: inset 0 -1px 0 #c2c8ce;
+}
+
+[data-theme='dark'] kbd[class*='searchHint'] {
+  color: #e2e8f0;
+  background-color: #1a2332;
+  border-color: #2a3548;
+  box-shadow: inset 0 -1px 0 #2a3548;
+}
+
+/* Prism `github` light theme fails WCAG AA on the #f6f8fa code background for several
+   token groups (comment #999988 ~2.3:1, teal number/constant/variable #36acaa ~2.5:1,
+   red function #d73a49 ~4:1). prism-react-renderer sets these inline, so override with
+   !important, scoped to light mode — dark mode uses oneDark, which already passes. */
+html:not([data-theme='dark']) .token.comment,
+html:not([data-theme='dark']) .token.prolog,
+html:not([data-theme='dark']) .token.doctype,
+html:not([data-theme='dark']) .token.cdata {
+  color: #586069 !important;
+}
+
+html:not([data-theme='dark']) .token.function,
+html:not([data-theme='dark']) .token.deleted {
+  color: #b31d28 !important;
+}
+
+html:not([data-theme='dark']) .token.constant,
+html:not([data-theme='dark']) .token.number,
+html:not([data-theme='dark']) .token.boolean,
+html:not([data-theme='dark']) .token.variable,
+html:not([data-theme='dark']) .token.property,
+html:not([data-theme='dark']) .token.symbol,
+html:not([data-theme='dark']) .token.regex,
+html:not([data-theme='dark']) .token.entity,
+html:not([data-theme='dark']) .token.url {
+  color: #0a6e6b !important;
+}
+
+html:not([data-theme='dark']) .token.string,
+html:not([data-theme='dark']) .token.attr-value,
+html:not([data-theme='dark']) .token.char {
+  color: #b0125a !important;
+}
+
+html:not([data-theme='dark']) .token.tag,
+html:not([data-theme='dark']) .token.selector,
+html:not([data-theme='dark']) .token.keyword,
+html:not([data-theme='dark']) .token.atrule,
+html:not([data-theme='dark']) .token.attr-name {
+  color: #0550ae !important;
+}
+
+html:not([data-theme='dark']) .token.inserted {
+  color: #0a6e6b !important;
+}
+
+/* Mermaid diagram edge labels + error-boundary text (light mode): the default
+   Mermaid label text and the error fallback are low-contrast on their backgrounds. */
+html:not([data-theme='dark']) .edgeLabel,
+html:not([data-theme='dark']) .edgeLabel p,
+html:not([data-theme='dark']) foreignObject .edgeLabel {
+  color: #1c1e21 !important;
+}
+
+html:not([data-theme='dark']) .edgeLabel .labelBkg,
+html:not([data-theme='dark']) rect.labelBkg {
+  fill: #ffffff !important;
+  opacity: 1 !important;
+}
+
+[class*='errorBoundaryFallback'] p,
+[class*='errorBoundaryFallback'] {
+  color: #1c1e21 !important;
 }
