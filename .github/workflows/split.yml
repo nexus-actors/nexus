@@ -21,6 +21,7 @@ jobs:
       matrix:
         package:
           - { local: 'nexus-app', remote: 'app' }
+          - { local: 'nexus-cluster-tcp', remote: 'cluster-tcp' }
           - { local: 'nexus-cluster', remote: 'cluster' }
           - { local: 'nexus-core', remote: 'core' }
           - { local: 'nexus-doctrine-dbal', remote: 'doctrine-dbal' }
@@ -52,6 +53,7 @@ jobs:
           - { local: 'nexus-runtime-step', remote: 'runtime-step' }
           - { local: 'nexus-runtime-swoole', remote: 'runtime-swoole' }
           - { local: 'nexus-runtime', remote: 'runtime' }
+          - { local: 'nexus-serialization-msgpack', remote: 'serialization-msgpack' }
           - { local: 'nexus-serialization', remote: 'serialization' }
           - { local: 'nexus-worker-pool-swoole', remote: 'worker-pool-swoole' }
           - { local: 'nexus-worker-pool', remote: 'worker-pool' }
