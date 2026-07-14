@@ -220,6 +220,14 @@ final class MembershipActor implements StatefulActorHandler
         $now = $this->clock->now();
 
         foreach ($transition->events as $event) {
+            if ($event instanceof NodeDown) {
+                // A peer that reached Down — by phi/silence timeout, a graceful Leave, or a gossiped
+                // Down — has departed. Drop its failure-detector window here (the one place every
+                // Down path funnels through) so a later rejoin starts with clean phi state instead of
+                // recording one downtime-sized inter-arrival sample that desensitises the detector.
+                $this->detector->forget($event->node->toPathPrefix());
+            }
+
             if (!$this->shouldPublishEvent($event, $transition->newView, $now)) {
                 continue;
             }

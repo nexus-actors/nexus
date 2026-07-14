@@ -41,8 +41,11 @@ use const JSON_THROW_ON_ERROR;
  * timestamp is checked against `freshnessWindow` (default 60 s) so a captured handshake
  * expires once outside that window; comparison is constant-time. Within the window a
  * bounded, time-evicted seen-nonce set rejects an exact replay of a handshake this
- * verifier has already accepted — so a captured frame cannot be replayed while it is
- * still fresh. The nonce set is evicted lazily on every {@see verify()} call, dropping
+ * verifier has already accepted — so a captured frame cannot be replayed *to the same node*
+ * while it is still fresh. The seen-nonce set is per-node, so this does NOT stop a captured
+ * handshake from being replayed to a *different* node within the freshness window; cross-node
+ * replay is mitigated only by TLS (`withTls(verifyPeer: true)`), which prevents on-path capture
+ * in the first place. The nonce set is evicted lazily on every {@see verify()} call, dropping
  * entries whose issue timestamp has aged past the freshness window, which bounds memory
  * to at most one entry per distinct handshake seen within the last `freshnessWindow`.
  *

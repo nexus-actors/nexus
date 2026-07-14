@@ -176,6 +176,9 @@ jobs:
       - name: Persistence integration tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=integration-persistence --colors=always
 
+      - name: Cluster TCP loopback integration tests (no ext-swoole)
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci vendor/bin/phpunit --testsuite=integration-cluster-loopback --colors=always
+
   integration-swoole:
     needs: build-images
     runs-on: ubuntu-latest
@@ -199,6 +202,9 @@ jobs:
 
       - name: Worker Pool integration tests
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/phpunit --testsuite=integration-workerPool --colors=always
+
+      - name: Cluster TCP integration tests (real sockets)
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/phpunit --testsuite=integration-cluster --colors=always
 
   mutation-testing:
     if: github.event_name == 'pull_request'

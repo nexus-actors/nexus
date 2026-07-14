@@ -145,7 +145,7 @@ final class MessagePayloadCodecTest extends TestCase
     public function rejectsEnvelopeMissingRequiredField(): void
     {
         $this->expectException(MessageDeserializationException::class);
-        $this->expectExceptionMessage('required string field');
+        $this->expectExceptionMessage("Field 'body'");
 
         // No 'body'.
         $this->codec->unpack(new MsgpackCodec()->pack([

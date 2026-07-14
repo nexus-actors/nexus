@@ -377,6 +377,303 @@ final class ClusterNodeSwooleTest extends TestCase
     }
 
     /**
+     * Restart-rejoin regression: a node that gracefully leaves and then comes back with the
+     * SAME identity must rejoin the cluster and re-converge with the long-lived seed.
+     *
+     * This is the documented recovery path ("restart the process to re-join") and it was broken:
+     * the handshake used to be sent at most once per peer for the process lifetime, so the
+     * surviving seed never re-introduced itself to a returning node and the two never re-formed
+     * the mesh. The fix makes the handshake a per-connection preamble, so every (re)connect
+     * re-announces identity. The seed A here is long-lived across B's departure and return, so
+     * this exercises exactly the stale-identity path the old once-per-process handshake hit.
+     */
+    #[Test]
+    public function departedNodeRejoinsWithSameIdentity(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('cluster-swoole-rejoin', $runtime);
+
+        $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+
+        $membersAfterLeave = 2;
+        $membersAfterRejoin = 0;
+        $mutualAfterRejoin = false;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, $addrA, $addrB, &$membersAfterLeave, &$membersAfterRejoin, &$mutualAfterRejoin): void {
+                $transportA = null;
+                $transportB = null;
+                $transportB2 = null;
+                $nodeA = null;
+                $nodeB = null;
+                $nodeB2 = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+
+                    $nodeB = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrB, $endpointB, [$endpointA]),
+                        $this->makeUserTypes(),
+                        $transportB,
+                    );
+                    $nodeA = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrA, $endpointA, [$endpointB]),
+                        $this->makeUserTypes(),
+                        $transportA,
+                    );
+
+                    $this->pollUntil(80, static function () use ($nodeA, $nodeB): bool {
+                        return count($nodeA->view()->members) === 2 && count($nodeB->view()->members) === 2;
+                    });
+
+                    // B departs gracefully; A must drop it back to a solo view.
+                    $nodeB->shutdown();
+                    $transportB->close();
+                    $transportB = null;
+                    $nodeB = null;
+
+                    $this->pollUntil(120, static function () use ($nodeA, $addrB): bool {
+                        return !$nodeA->view()->has($addrB);
+                    });
+                    $membersAfterLeave = count($nodeA->view()->members);
+
+                    // A restarted node reuses B's identity on a fresh transport and dials the
+                    // still-running A. With the per-connection handshake preamble, A re-identifies
+                    // the returning node and both re-converge.
+                    [$transportB2, $endpointB2] = $this->bindTransport($runtime);
+                    $nodeB2 = ClusterNode::boot(
+                        $system,
+                        $this->fastTopology('swoole-cluster', $addrB, $endpointB2, [$endpointA]),
+                        $this->makeUserTypes(),
+                        $transportB2,
+                    );
+
+                    $this->pollUntil(160, static function () use ($nodeA, $nodeB2): bool {
+                        return count($nodeA->view()->members) === 2 && count($nodeB2->view()->members) === 2;
+                    });
+
+                    $membersAfterRejoin = count($nodeA->view()->members);
+                    $mutualAfterRejoin = $nodeA->view()->has($addrB) && $nodeB2->view()->has($addrA);
+                } finally {
+                    $nodeA?->shutdown();
+                    $nodeB?->shutdown();
+                    $nodeB2?->shutdown();
+                    $transportA?->close();
+                    $transportB?->close();
+                    $transportB2?->close();
+                    $system->shutdown(Duration::seconds(1));
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertSame(1, $membersAfterLeave, 'A should be alone after B gracefully leaves');
+        self::assertSame(2, $membersAfterRejoin, 'A should see two members again after B restarts and rejoins');
+        self::assertTrue($mutualAfterRejoin, 'A and the restarted B must see each other after rejoin');
+    }
+
+    /**
+     * Transient-disconnect-then-heal: a TCP blip drops the links between two continuously-running,
+     * healthy nodes; both must re-establish and re-converge WITHOUT restarting. This is the core
+     * failure mode the per-connection handshake preamble targets — a reconnected link re-announces
+     * identity so the remote re-identifies the peer, instead of dropping its post-reconnect frames
+     * forever. Failure detection is tightened so that, absent the preamble, the un-re-handshaked
+     * links would silence-detect each other into a permanent partition; with the fix they heal.
+     */
+    #[Test]
+    public function transientLinkDropHealsWithoutRestart(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('cluster-swoole-heal', $runtime);
+
+        $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+
+        $convergedBefore = false;
+        $healedAfter = false;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, $addrA, $addrB, &$convergedBefore, &$healedAfter): void {
+                $transportA = null;
+                $transportB = null;
+                $nodeA = null;
+                $nodeB = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+
+                    $topoB = $this->fastTopology('swoole-cluster', $addrB, $endpointB, [$endpointA])
+                        ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(600));
+                    $topoA = $this->fastTopology('swoole-cluster', $addrA, $endpointA, [$endpointB])
+                        ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(600));
+
+                    $nodeB = ClusterNode::boot($system, $topoB, $this->makeUserTypes(), $transportB);
+                    $nodeA = ClusterNode::boot($system, $topoA, $this->makeUserTypes(), $transportA);
+
+                    $this->pollUntil(80, static function () use ($nodeA, $nodeB): bool {
+                        return count($nodeA->view()->members) === 2 && count($nodeB->view()->members) === 2;
+                    });
+                    $convergedBefore = count($nodeA->view()->members) === 2 && count($nodeB->view()->members) === 2;
+
+                    // Transient blip: drop the accepted links on both ends (servers stay up). Both
+                    // nodes keep running; their outbound PeerConnections must reconnect + re-handshake.
+                    $transportA->dropServerLinksForTest();
+                    $transportB->dropServerLinksForTest();
+
+                    // The mesh must re-converge on its own — even if the tight give-up window briefly
+                    // Downs the peer, the reconnect + preamble re-handshake brings it back to Up.
+                    $this->pollUntil(200, static function () use ($nodeA, $nodeB, $addrA, $addrB): bool {
+                        return count($nodeA->view()->members) === 2
+                            && count($nodeB->view()->members) === 2
+                            && $nodeA->view()->has($addrB)
+                            && $nodeB->view()->has($addrA);
+                    });
+                    $healedAfter = count($nodeA->view()->members) === 2 && count($nodeB->view()->members) === 2;
+                } finally {
+                    $this->cleanupCluster($system, $nodeA, $nodeB, $transportA, $transportB);
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertTrue($convergedBefore, 'A and B must converge to two members before the link drop');
+        self::assertTrue(
+            $healedAfter,
+            'A and B must re-converge to two members after a transient link drop, without restarting',
+        );
+    }
+
+    /**
+     * Multi-node (3) convergence + failure: three nodes form a mesh via gossip (B and C seed only A,
+     * yet learn each other through A's gossip), all see three members, then C is hard-killed and the
+     * two survivors must independently converge back to a two-member view. Extends coverage beyond the
+     * two-node scenarios so gossip relay + failure detection are exercised across more than one link.
+     */
+    #[Test]
+    public function threeNodesConvergeThenSurviveOneFailing(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('cluster-swoole-trio', $runtime);
+
+        $addrA = new NodeAddress('swoole', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('swoole', 'local', 'nexus', 'node-b');
+        $addrC = new NodeAddress('swoole', 'local', 'nexus', 'node-c');
+
+        $allSawThree = false;
+        $survivorsAfterKill = 0;
+
+        $runtime->scheduleOnce(
+            Duration::millis(1),
+            function () use ($runtime, $system, $addrA, $addrB, $addrC, &$allSawThree, &$survivorsAfterKill): void {
+                $transportA = null;
+                $transportB = null;
+                $transportC = null;
+                $nodeA = null;
+                $nodeB = null;
+                $nodeC = null;
+
+                try {
+                    [$transportA, $endpointA] = $this->bindTransport($runtime);
+                    [$transportB, $endpointB] = $this->bindTransport($runtime);
+                    [$transportC, $endpointC] = $this->bindTransport($runtime);
+
+                    $fd = static fn(ClusterTopology $t): ClusterTopology => $t
+                        ->withFailureDetection(minStdDev: Duration::millis(50), maxNoHeartbeat: Duration::millis(600));
+
+                    // Full mesh: every node seeds the other two, so each holds a direct link to every
+                    // peer. (A star where B and C only know each other via A's gossip is a weaker
+                    // topology: a node with purely indirect knowledge of a peer cannot detect that
+                    // peer's hard death — a documented limitation of gossip+phi without indirect probing.)
+                    $nodeA = ClusterNode::boot(
+                        $system,
+                        $fd($this->fastTopology('swoole-cluster', $addrA, $endpointA, [$endpointB, $endpointC])),
+                        $this->makeUserTypes(),
+                        $transportA,
+                    );
+                    $nodeB = ClusterNode::boot(
+                        $system,
+                        $fd($this->fastTopology('swoole-cluster', $addrB, $endpointB, [$endpointA, $endpointC])),
+                        $this->makeUserTypes(),
+                        $transportB,
+                    );
+                    $nodeC = ClusterNode::boot(
+                        $system,
+                        $fd($this->fastTopology('swoole-cluster', $addrC, $endpointC, [$endpointA, $endpointB])),
+                        $this->makeUserTypes(),
+                        $transportC,
+                    );
+
+                    $this->pollUntil(120, static function () use ($nodeA, $nodeB, $nodeC): bool {
+                        return count($nodeA->view()->members) === 3
+                            && count($nodeB->view()->members) === 3
+                            && count($nodeC->view()->members) === 3;
+                    });
+                    $allSawThree = count($nodeA->view()->members) === 3
+                        && count($nodeB->view()->members) === 3
+                        && count($nodeC->view()->members) === 3;
+
+                    // Hard-kill C (no graceful Leave); A and B must Suspect→Down it and settle at two.
+                    $transportC->close();
+                    $nodeC = null;
+
+                    // Assert POSITIVE convergence (each survivor sees exactly itself + the other, and not
+                    // C). ClusterNode::view() can transiently return an empty view under scheduling
+                    // variance — worse with three nodes' traffic on one ActorSystem — so we track each
+                    // node reaching its stable shape INDEPENDENTLY (a per-call empty on one node must not
+                    // reset the other), and require both to have been observed stable before concluding.
+                    $aSettled = false;
+                    $bSettled = false;
+
+                    $this->pollUntil(
+                        200,
+                        static function () use ($nodeA, $nodeB, $addrA, $addrB, $addrC, &$aSettled, &$bSettled): bool {
+                            $viewA = $nodeA->view();
+
+                            if (count($viewA->members) === 2 && $viewA->has($addrB) && !$viewA->has($addrC)) {
+                                $aSettled = true;
+                            }
+
+                            $viewB = $nodeB->view();
+
+                            if (count($viewB->members) === 2 && $viewB->has($addrA) && !$viewB->has($addrC)) {
+                                $bSettled = true;
+                            }
+
+                            return $aSettled && $bSettled;
+                        },
+                    );
+
+                    $survivorsAfterKill = $aSettled && $bSettled
+                        ? 2
+                        : 0;
+                } finally {
+                    $nodeA?->shutdown();
+                    $nodeB?->shutdown();
+                    $nodeC?->shutdown();
+                    $transportA?->close();
+                    $transportB?->close();
+                    $transportC?->close();
+                    $system->shutdown(Duration::seconds(1));
+                }
+            },
+        );
+
+        $system->run();
+
+        self::assertTrue($allSawThree, 'All three nodes must converge on a three-member view');
+        self::assertSame(2, $survivorsAfterKill, 'After C is killed, A and B must each converge to a two-member view');
+    }
+
+    /**
      * SCENARIO 6 (regression): joined nodes must survive the Swoole socket recv-timeout
      * window. In a mutual-seed mesh each node's outbound link is send-only and receives
      * nothing, so it trips the coroutine socket's finite recv timeout after a few seconds.

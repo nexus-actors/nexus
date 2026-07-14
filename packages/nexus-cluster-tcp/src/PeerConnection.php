@@ -31,6 +31,14 @@ use function count;
  *
  * Outbound queue: frames sent while disconnected are buffered up to `$queueCap`.
  * Frames beyond the cap are silently dropped and counted via `drops()`.
+ *
+ * Connection preamble: an optional `$preamble` closure produces a frame that is sent FIRST
+ * on every freshly established link — the initial connect AND every reconnect. This is what
+ * makes peer identity a per-connection property rather than a per-process one: a dropped and
+ * reconnected link, or a peer that restarts, re-announces itself so the remote's inbound
+ * handler can re-identify it instead of silently dropping every subsequent frame. The closure
+ * is re-invoked per connect so time-sensitive payloads (e.g. a freshly signed handshake) are
+ * regenerated each time.
  */
 final class PeerConnection
 {
@@ -53,6 +61,9 @@ final class PeerConnection
     /** @var list<Closure(Frame): void> */
     private array $frameHandlers = [];
 
+    /**
+     * @param (Closure(): Frame)|null $preamble Frame sent first on every (re)connect — see class docblock.
+     */
     public function __construct(
         private readonly NodeEndpoint $endpoint,
         private readonly MeshTransport $transport,
@@ -61,6 +72,7 @@ final class PeerConnection
         private readonly Duration $maxBackoff,
         private readonly int $queueCap = self::DEFAULT_QUEUE_CAP,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?Closure $preamble = null,
     ) {
         $this->attemptConnect($this->initialBackoff);
     }
@@ -157,6 +169,7 @@ final class PeerConnection
         $this->wireLink($link);
 
         try {
+            $this->sendPreamble($link);
             $this->flushQueue($link);
         } catch (RuntimeException) {
             if (!$this->intentionallyClosed) {
@@ -189,6 +202,19 @@ final class PeerConnection
                 $this->attemptConnect($this->initialBackoff);
             });
         });
+    }
+
+    /**
+     * Send the introduction frame (when configured) as the FIRST frame on a freshly
+     * established link. Invoked on the initial connect and on every reconnect, so peer
+     * identity is re-established after any link drop or peer restart. The closure is
+     * re-evaluated each time so a freshly signed/timestamped payload is produced per connect.
+     */
+    private function sendPreamble(PeerLink $link): void
+    {
+        if ($this->preamble !== null) {
+            $link->sendFrame(($this->preamble)());
+        }
     }
 
     private function flushQueue(PeerLink $link): void

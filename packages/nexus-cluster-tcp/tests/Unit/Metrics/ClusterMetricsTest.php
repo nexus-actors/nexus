@@ -27,6 +27,7 @@ use Monadial\Nexus\Cluster\Tcp\Messaging\RecordingOutboundSink;
 use Monadial\Nexus\Cluster\Tcp\Messaging\TcpAskRegistry;
 use Monadial\Nexus\Cluster\Tcp\Messaging\TraceContextInjector;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
 use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
@@ -309,21 +310,9 @@ final class ClusterMetricsTest extends TestCase
     public function gossipRoundsIncrementsOnSendGossip(): void
     {
         $meter = new RecordingMeter();
-        $topology = ClusterTopology::create(
-            clusterName: 'test',
-            self: new NodeAddress('test', 'dc1', 'app', 'node-1'),
-            bindEndpoint: NodeEndpoint::fromString('0.0.0.0:7355'),
-            advertiseEndpoint: NodeEndpoint::fromString('127.0.0.1:7355'),
-            seeds: [NodeEndpoint::fromString('127.0.0.1:7356')],
-        );
-
-        $typeRegistry = new TypeRegistry();
-        $typeRegistry->registerFromAttribute(GossipPayload::class);
-        $serializer = new MessagePackMessageSerializer($typeRegistry);
 
         $interpreter = new TcpMembershipEffectInterpreter(
-            $topology,
-            $serializer,
+            new ControlFrameCodec(),
             static function (string $prefix, Frame $frame): void {
                 // Noop sender — we only care about the counter.
             },

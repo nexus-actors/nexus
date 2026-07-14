@@ -66,6 +66,17 @@ final class PhiAccrualDetector
         }
     }
 
+    /**
+     * Drop all failure-detection state for a peer that has left the cluster (Down/Leave).
+     * Without this the stale window lingers: on rejoin the first heartbeat records one enormous
+     * inter-arrival sample (the whole downtime), inflating mean/stddev and desensitising phi for
+     * up to a full window of beats — and per-peer state would grow unbounded under name churn.
+     */
+    public function forget(string $peer): void
+    {
+        unset($this->windows[$peer], $this->lastArrivalMs[$peer]);
+    }
+
     public function heartbeat(string $peer, DateTimeImmutable $now): void
     {
         $nowMs = self::toMillis($now);

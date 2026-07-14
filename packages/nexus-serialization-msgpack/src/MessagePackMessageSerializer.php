@@ -40,15 +40,27 @@ final readonly class MessagePackMessageSerializer implements MessageSerializer
     private TreeMapper $mapper;
     private Normalizer $normalizer;
 
+    /**
+     * @param bool $tolerateUnknownKeys When true, decoding ignores payload keys the target type does
+     *        not declare instead of failing — enabling forward-compatible reads (an older node can
+     *        decode a payload a newer version extended with extra fields). Off by default so decoding
+     *        stays strict everywhere it isn't explicitly opted in. Encapsulates the underlying Valinor
+     *        `allowSuperfluousKeys()` so callers do not depend on the mapper library.
+     */
     public function __construct(
         private TypeRegistry $registry,
         ?MapperBuilder $mapperBuilder = null,
         private MsgpackCodec $codec = new MsgpackCodec(),
         ?NormalizerBuilder $normalizerBuilder = null,
+        bool $tolerateUnknownKeys = false,
     ) {
-        $this->mapper = ($mapperBuilder ?? new MapperBuilder())
-            ->allowPermissiveTypes()
-            ->mapper();
+        $builder = ($mapperBuilder ?? new MapperBuilder())->allowPermissiveTypes();
+
+        if ($tolerateUnknownKeys) {
+            $builder = $builder->allowSuperfluousKeys();
+        }
+
+        $this->mapper = $builder->mapper();
         $this->normalizer = ($normalizerBuilder ?? new NormalizerBuilder())
             ->normalizer(Format::array());
     }

@@ -671,7 +671,8 @@ final class MembershipServiceTest extends TestCase
         self::assertSame(MemberStatus::Up, $t1->newView->members[$this->peer->toPathPrefix()]->status);
 
         // T0+11s: silent longer than downAfter — tick must suspect it (absolute-silence fallback,
-        // reason Gossip, NOT Connection since there was no link close).
+        // reason Silence, NOT Connection since there was no link close, and NOT Gossip since no
+        // peer reported it — this node gave up on it directly).
         $this->clock->set($this->clock->now()->modify('+11 seconds'));
         $t2 = $service->applyTick(
             $t1->newView,
@@ -685,7 +686,7 @@ final class MembershipServiceTest extends TestCase
         self::assertSame(MemberStatus::Suspect, $t2->newView->members[$this->peer->toPathPrefix()]->status);
         $suspected = array_filter($t2->events, static fn($e): bool => $e instanceof NodeSuspected);
         self::assertCount(1, $suspected);
-        self::assertSame(SuspicionReason::Gossip, array_values($suspected)[0]->reason);
+        self::assertSame(SuspicionReason::Silence, array_values($suspected)[0]->reason);
 
         // T0+22s: Suspect held longer than downAfter — tick must down and evict it.
         $this->clock->set($this->clock->now()->modify('+11 seconds'));

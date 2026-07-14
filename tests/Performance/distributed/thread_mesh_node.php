@@ -296,16 +296,16 @@ function runMeshNode(
         // up, so first dials fail. With the default 30 s max backoff those retries
         // trickle in for minutes; capping at 2 s converges the 16-node mesh promptly.
         ->withReconnectBackoff(Duration::millis(200), Duration::seconds(2));
-        // No failure-detector tuning here: the previous `minStdDev: seconds(3)` widening
-        // was a workaround for data-plane-saturation phi noise, and it is now OBSOLETE.
-        // Receive-time heartbeat timestamping (the phi detector is fed the socket-ingress
-        // timestamp, not actor-processing time — see
-        // docs/superpowers/plans/2026-07-10-cluster-phi-ingress-timestamp.md) eliminated
-        // that false suspicion under load: steady-state phi drops from ~15 to 0 at DEFAULT
-        // phi in the 16-node soak. The soak below therefore validates the shipping default.
-        // The residual suspicion this soak still observes is a one-time CONVERGENCE-window
-        // gossip-echo (tracked as finding #1 / incarnation-monotonicity), not data-plane
-        // saturation — see the `suspectedUnderLoad` threshold comment below.
+    // No failure-detector tuning here: the previous `minStdDev: seconds(3)` widening
+    // was a workaround for data-plane-saturation phi noise, and it is now OBSOLETE.
+    // Receive-time heartbeat timestamping (the phi detector is fed the socket-ingress
+    // timestamp, not actor-processing time — see
+    // docs/superpowers/plans/2026-07-10-cluster-phi-ingress-timestamp.md) eliminated
+    // that false suspicion under load: steady-state phi drops from ~15 to 0 at DEFAULT
+    // phi in the 16-node soak. The soak below therefore validates the shipping default.
+    // The residual suspicion this soak still observes is a one-time CONVERGENCE-window
+    // gossip-echo (tracked as finding #1 / incarnation-monotonicity), not data-plane
+    // saturation — see the `suspectedUnderLoad` threshold comment below.
 
     $registry = new TypeRegistry();
     $registry->registerFromAttribute(Ping::class);

@@ -46,6 +46,8 @@ final class FrameIngress
 
     private ?Counter $framesReceived = null;
 
+    private ?Counter $framesDecodeFailed = null;
+
     private ?Histogram $bytesReceived = null;
 
     /**
@@ -89,6 +91,12 @@ final class FrameIngress
         try {
             $payload = $this->payloadCodec->unpack($frame->payload);
         } catch (MessageDeserializationException $e) {
+            // Mirror the control-frame decode observability (ClusterNode::recordDecodeFailure): an
+            // undecodable user-message frame is otherwise silent, leaving an operator with no signal
+            // while a corrupt or version-skewed peer's messages quietly vanish.
+            $this->safely(
+                fn(): mixed => $this->framesDecodeFailedCounter()->add(1, ['frame.type' => $frame->type->name]),
+            );
             $this->logger->warning('FrameIngress: dropping undecodable Message frame from peer', [
                 'error' => $e->getMessage(),
                 'peer' => $this->origin->toPathPrefix(),
@@ -118,6 +126,15 @@ final class FrameIngress
             'nexus.cluster.frames.received',
             '{frame}',
             'Cluster frames received from remote peers',
+        );
+    }
+
+    private function framesDecodeFailedCounter(): Counter
+    {
+        return $this->framesDecodeFailed ??= $this->meter->counter(
+            'nexus.cluster.frames.decode_failed',
+            '{frame}',
+            'Inbound frames dropped because they could not be decoded',
         );
     }
 

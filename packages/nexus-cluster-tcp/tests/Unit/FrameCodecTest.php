@@ -212,13 +212,33 @@ final class FrameCodecTest extends TestCase
     }
 
     #[Test]
-    public function unknownTypeByteThrowsProtocolException(): void
+    public function unknownTypeByteIsSkippedForForwardCompatibility(): void
     {
+        // A well-framed frame carrying an unknown type byte (99 is not in FrameType) is SKIPPED,
+        // not treated as an error — an older node must tolerate a frame type a newer protocol
+        // version introduced rather than tear the link down. A following known frame is still
+        // decoded, proving the stream stayed synchronized across the skip.
+        $unknown = pack('N', 2) . chr(99) . 'x';
+        $known = $this->codec->encode(new Frame(FrameType::Gossip, 'g'));
+
+        $result = $this->codec->decodeStream($unknown . $known);
+
+        self::assertCount(1, $result['frames']);
+        self::assertSame(FrameType::Gossip, $result['frames'][0]->type);
+        self::assertSame('g', $result['frames'][0]->payload);
+        self::assertSame('', $result['rest']);
+    }
+
+    #[Test]
+    public function encodeRejectsFrameLargerThanMaxFrameSize(): void
+    {
+        $codec = new FrameCodec(100);
+
+        // 100-byte payload + 1-byte type = 101-byte body, one over the limit. encode() must throw
+        // locally so the sender sees it and no oversized frame reaches the wire to detonate the link.
         $this->expectException(ProtocolException::class);
 
-        // Type byte 99 is not in FrameType enum
-        $buffer = pack('N', 2) . chr(99) . 'x';
-        $this->codec->decodeStream($buffer);
+        $codec->encode(new Frame(FrameType::Message, str_repeat('x', 100)));
     }
 
     #[Test]

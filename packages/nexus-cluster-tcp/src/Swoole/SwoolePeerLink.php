@@ -15,6 +15,7 @@ use Override;
 use Swoole\Coroutine\Channel;
 use Swoole\Coroutine\Client;
 use Swoole\Coroutine\Socket;
+use Throwable;
 
 /**
  * @psalm-api
@@ -45,6 +46,16 @@ final class SwoolePeerLink implements PeerLink
 
     /** Max frames buffered before onFrame() registration — bounds a pre-handshake frame flood. */
     private const int PENDING_FRAME_LIMIT = 1024;
+
+    /**
+     * Send deadline (seconds). {@see Socket::sendAll()} suspends the caller while the peer's receive
+     * buffer is full; without a deadline a single stalled or dead peer would block the coroutine that
+     * drives gossip/heartbeats to EVERY peer (head-of-line blocking), so the whole cluster suspects a
+     * node that is merely stuck behind one slow link. On deadline (or any short write) the link is torn
+     * down and its outbound PeerConnection reconnects with a clean frame boundary. Generous enough not
+     * to trip on transient backpressure, far below the default `maxNoHeartbeat` (10 s).
+     */
+    private const float SEND_TIMEOUT_SECONDS = 5.0;
 
     private bool $closed = false;
 
@@ -94,6 +105,13 @@ final class SwoolePeerLink implements PeerLink
          */
         private readonly ?Client $clientOwner = null,
         private readonly int $maxFrameSize = 8 * 1024 * 1024,
+        /**
+         * Invoked (isolated) when a frame handler throws — lets the transport's owner record a
+         * metric/log for an otherwise-silent dropped frame. Null = no reporting (still swallowed).
+         *
+         * @var (Closure(Throwable): void)|null
+         */
+        private readonly ?Closure $onHandlerError = null,
     ) {
         $this->codec = new FrameCodec($this->maxFrameSize);
         $this->writeLock = new Channel(1);
@@ -135,7 +153,7 @@ final class SwoolePeerLink implements PeerLink
             $this->pendingFrames = [];
 
             foreach ($pending as $frame) {
-                $onFrame($frame);
+                $this->dispatchFrame($frame);
             }
         }
     }
@@ -240,13 +258,39 @@ final class SwoolePeerLink implements PeerLink
 
                         $this->pendingFrames[] = $frame;
                     } else {
-                        foreach ($this->frameHandlers as $handler) {
-                            $handler($frame);
-                        }
+                        $this->dispatchFrame($frame);
                     }
                 }
             }
         });
+    }
+
+    /**
+     * Dispatch a decoded frame to every registered handler, isolating each call so a
+     * throwing handler cannot escape the receive-loop coroutine. An unhandled exception
+     * here (e.g. a bounded mailbox rejecting delivery, or a codec edge in a downstream
+     * handler) would otherwise terminate the recv loop, leaving the socket open but never
+     * read again — the peer keeps sending into a dead pipe and we falsely Suspect a healthy
+     * node. Swallowing per-frame keeps the link alive; a genuinely broken link still ends
+     * via EOF / socket error / the reassembly bound.
+     */
+    private function dispatchFrame(Frame $frame): void
+    {
+        foreach ($this->frameHandlers as $handler) {
+            try {
+                $handler($frame);
+            } catch (Throwable $e) {
+                // A handler failure must never kill the receive loop (see method docblock), but a
+                // silently-dropped frame is undiagnosable — surface it via the reporting hook.
+                if ($this->onHandlerError !== null) {
+                    try {
+                        ($this->onHandlerError)($e);
+                    } catch (Throwable) {
+                        // Reporting must never break the loop either.
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -273,13 +317,29 @@ final class SwoolePeerLink implements PeerLink
      */
     private function write(string $bytes): void
     {
+        if ($this->closed) {
+            return;
+        }
+
         $this->writeLock->pop();
 
         try {
-            $this->socket->sendAll($bytes);
+            $sent = $this->socket->sendAll($bytes, self::SEND_TIMEOUT_SECONDS);
         } finally {
             $this->writeLock->push(true);
         }
+
+        if ($sent === strlen($bytes)) {
+            return;
+        }
+
+        // Short write: the peer did not accept the full frame within the deadline (stalled/dead peer)
+        // or the socket errored, and the wire may be mid-frame. Tear the link down rather than keep
+        // blocking the loop on it — the outbound PeerConnection reconnects with a clean boundary, and
+        // gossip/heartbeats to every other peer keep flowing. notifyClose() fires our onClose handlers
+        // (which drive that reconnect); it is idempotent with the receive loop's own close detection.
+        $this->socket->close();
+        $this->notifyClose();
     }
 
     /**

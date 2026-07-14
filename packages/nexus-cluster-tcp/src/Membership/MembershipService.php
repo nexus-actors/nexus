@@ -370,7 +370,7 @@ final class MembershipService
                         $record->address,
                         $phiExceeded
                             ? SuspicionReason::Phi
-                            : SuspicionReason::Gossip,
+                            : SuspicionReason::Silence,
                     );
 
                     continue;
@@ -388,6 +388,8 @@ final class MembershipService
                     } else {
                         $newView = $newView->withoutNode($record->address);
                         unset($newSuspectSince[$key]);
+                        // NodeDown → MembershipActor::apply() clears the detector window (one place
+                        // every Down path funnels through), so no per-site forget() is needed here.
                         $events[] = new NodeDown($record->address);
                     }
                 }
@@ -664,7 +666,12 @@ final class MembershipService
             return null;
         }
 
-        return new NodeAddress($segments[2], $segments[3], $segments[4], $segments[5]);
+        try {
+            return new NodeAddress($segments[2], $segments[3], $segments[4], $segments[5]);
+        } catch (InvalidArgumentException) {
+            // Gossip carried an identity with non-URL-safe segments — treat as malformed, skip it.
+            return null;
+        }
     }
 
     private static function elapsedMillis(DateTimeImmutable $now, DateTimeImmutable $since): float

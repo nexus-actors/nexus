@@ -5,15 +5,13 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
 use Closure;
-use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
-use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
 use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
-use Monadial\Nexus\Serialization\MessageSerializer;
 use Override;
 use Throwable;
 
@@ -22,11 +20,12 @@ use Throwable;
  *
  * Executes the outbound effects produced by membership transitions over TCP.
  *
- * For HandshakeResponse: sends its own Handshake frame first (so the peer can
- * identify who is replying), then the HandshakeAck. The Handshake is sent only
- * once per prefix — subsequent HandshakeResponse effects reuse the established
- * identity. This keeps the handshake exchange from looping when two nodes both
- * respond to each other's introductions.
+ * For HandshakeResponse: sends the HandshakeAck. The peer's identity is established by the
+ * self-Handshake that {@see \Monadial\Nexus\Cluster\Tcp\ClusterNode} sends as the
+ * {@see \Monadial\Nexus\Cluster\Tcp\PeerConnection} preamble on every (re)connect, so this
+ * interpreter no longer sends a Handshake itself — that made identity a once-per-process fact
+ * and left reconnected/restarted peers unidentifiable. Sending only the ack here keeps the
+ * exchange from looping (an ack never triggers another handshake).
  *
  * For SendGossip: serialises the GossipPayload once and sends to each Up peer
  * via the shared sender closure. Targets that have no registered endpoint are
@@ -38,9 +37,6 @@ use Throwable;
  */
 final class TcpMembershipEffectInterpreter implements MembershipEffectInterpreter
 {
-    /** @var array<string, true> path-prefixes to which we have already sent our Handshake */
-    private array $handshakeSentTo = [];
-
     private ?Counter $gossipRounds = null;
 
     /**
@@ -49,11 +45,9 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
      *        Injected by ClusterNode::boot to share the connection infrastructure.
      */
     public function __construct(
-        private readonly ClusterTopology $topology,
-        private readonly MessageSerializer $frameSerializer,
+        private readonly ControlFrameCodec $controlCodec,
         private readonly Closure $sender,
         private readonly Meter $meter = new NoopMeter(),
-        private readonly ?HandshakeAuthenticator $authenticator = null,
     ) {}
 
     #[Override]
@@ -74,16 +68,11 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
     {
         $prefix = $effect->peer->toPathPrefix();
 
-        // Send our own Handshake first so the peer learns our identity before
-        // processing any subsequent gossip or message frames from us.
-        if (!isset($this->handshakeSentTo[$prefix])) {
-            $this->handshakeSentTo[$prefix] = true;
-            $handshakeBytes = $this->frameSerializer->serialize($this->buildSelfHandshake());
-            ($this->sender)($prefix, new Frame(FrameType::Handshake, $handshakeBytes));
-        }
-
+        // Identity is established by the peer-facing PeerConnection handshake preamble, so this
+        // effect only needs to acknowledge. Sending a Handshake here too would re-introduce the
+        // once-per-process identity coupling this fix removed.
         $ack = new HandshakeAck($effect->accepted, $effect->reason, $effect->view);
-        $ackBytes = $this->frameSerializer->serialize($ack);
+        $ackBytes = $this->controlCodec->packHandshakeAck($ack);
         ($this->sender)($prefix, new Frame(FrameType::HandshakeAck, $ackBytes));
     }
 
@@ -91,19 +80,12 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
     {
         $this->safely(fn(): mixed => $this->gossipRoundsCounter()->add(1));
 
-        $gossipBytes = $this->frameSerializer->serialize($effect->payload);
+        $gossipBytes = $this->controlCodec->packGossip($effect->payload);
         $gossipFrame = new Frame(FrameType::Gossip, $gossipBytes);
 
         foreach ($effect->targets as $prefix) {
             ($this->sender)($prefix, $gossipFrame);
         }
-    }
-
-    private function buildSelfHandshake(): Handshake
-    {
-        $handshake = Handshake::forSelf($this->topology);
-
-        return $this->authenticator?->sign($handshake) ?? $handshake;
     }
 
     /**

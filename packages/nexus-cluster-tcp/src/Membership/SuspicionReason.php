@@ -16,10 +16,15 @@ namespace Monadial\Nexus\Cluster\Tcp\Membership;
  *                  determination independently.
  *   - Phi        — phi-accrual failure detector crossed the configured threshold
  *                  (heartbeats stopped arriving on schedule).
+ *   - Silence    — absolute silence: nothing was heard from the peer for the whole
+ *                  no-heartbeat window, so the local detector gives up on it directly
+ *                  (distinct from Gossip, which is a peer's opinion, and from Phi,
+ *                  which is a statistical threshold crossing).
  */
 enum SuspicionReason
 {
     case Connection;
     case Gossip;
     case Phi;
+    case Silence;
 }

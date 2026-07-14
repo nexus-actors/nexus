@@ -9,9 +9,6 @@ use Monadial\Nexus\Serialization\Exception\MessageSerializationException;
 use Monadial\Nexus\Serialization\Msgpack\MsgpackCodec;
 use Throwable;
 
-use function is_array;
-use function is_string;
-
 /**
  * @psalm-api
  *
@@ -65,59 +62,18 @@ final readonly class MessagePayloadCodec
      */
     public function unpack(string $bytes): MessagePayload
     {
-        try {
-            $data = $this->codec->unpack($bytes);
-        } catch (Throwable $e) {
-            throw new MessageDeserializationException(self::TYPE, $e->getMessage(), $e);
-        }
-
-        $targetPath = $data['targetPath'] ?? null;
-        $messageType = $data['messageType'] ?? null;
-        $body = $data['body'] ?? null;
-        $correlationId = $data['correlationId'] ?? null;
-        $replyPath = $data['replyPath'] ?? null;
-        $trace = $data['trace'] ?? [];
-
-        if (!is_string($targetPath) || !is_string($messageType) || !is_string($body)) {
-            throw new MessageDeserializationException(
-                self::TYPE,
-                'Envelope is missing a required string field (targetPath, messageType, or body).',
-            );
-        }
-
-        if ($correlationId !== null && !is_string($correlationId)) {
-            throw new MessageDeserializationException(self::TYPE, 'Envelope correlationId must be a string or null.');
-        }
-
-        if ($replyPath !== null && !is_string($replyPath)) {
-            throw new MessageDeserializationException(self::TYPE, 'Envelope replyPath must be a string or null.');
-        }
-
-        if (!is_array($trace)) {
-            throw new MessageDeserializationException(self::TYPE, 'Envelope trace must be a map.');
-        }
-
-        $traceHeaders = [];
-
-        /** @psalm-suppress MixedAssignment Wire input is validated entry-by-entry below. */
-        foreach ($trace as $key => $value) {
-            if (!is_string($key) || !is_string($value)) {
-                throw new MessageDeserializationException(
-                    self::TYPE,
-                    'Envelope trace entries must be string-to-string.',
-                );
-            }
-
-            $traceHeaders[$key] = $value;
-        }
+        // Route through the shared MsgpackReader used by the control-frame codecs: same by-key,
+        // type-checked, forward-compatible field resolution (unknown keys ignored), one place to
+        // maintain the wire trust boundary instead of a bespoke parser per payload.
+        $reader = MsgpackReader::from($bytes, $this->codec, self::TYPE);
 
         return new MessagePayload(
-            targetPath: $targetPath,
-            messageType: $messageType,
-            body: $body,
-            correlationId: $correlationId,
-            replyPath: $replyPath,
-            trace: $traceHeaders,
+            targetPath: $reader->string('targetPath'),
+            messageType: $reader->string('messageType'),
+            body: $reader->string('body'),
+            correlationId: $reader->nullableString('correlationId'),
+            replyPath: $reader->nullableString('replyPath'),
+            trace: $reader->stringMap('trace'),
         );
     }
 }

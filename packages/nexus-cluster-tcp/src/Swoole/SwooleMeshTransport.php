@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Swoole;
 
+use Closure;
 use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
@@ -16,6 +17,7 @@ use Swoole\Coroutine\Client;
 use Swoole\Coroutine\Server;
 use Swoole\Coroutine\Server\Connection;
 use Swoole\Coroutine\Socket;
+use Throwable;
 
 use function extension_loaded;
 use function sprintf;
@@ -58,16 +60,24 @@ final class SwooleMeshTransport implements MeshTransport
     /** @var list<SwoolePeerLink> */
     private array $links = [];
 
+    /** @var list<SwoolePeerLink> Server-side (accepted) links only — the subset {@see dropServerLinksForTest()} drops. */
+    private array $serverLinks = [];
+
     /**
      * Pre-bound server awaiting a serve() call. Set by bindEphemeral();
      * consumed and cleared by the next serve() call.
      */
     private ?Server $prebound = null;
 
+    /**
+     * @param (Closure(Throwable): void)|null $onHandlerError Forwarded to every {@see SwoolePeerLink} so
+     *        a frame handler that throws is reported (metric/log) instead of silently dropped.
+     */
     public function __construct(
         private readonly Runtime $runtime,
         private readonly ?TlsConfig $tls = null,
         private readonly int $maxFrameSize = 8 * 1024 * 1024,
+        private readonly ?Closure $onHandlerError = null,
     ) {
         if (!extension_loaded('swoole')) {
             throw new RuntimeException(
@@ -134,8 +144,9 @@ final class SwooleMeshTransport implements MeshTransport
 
         $server->handle(function (Connection $conn) use ($onAccept): void {
             $socket = $conn->exportSocket();
-            $link = new SwoolePeerLink($socket, $this->runtime, null, null, $this->maxFrameSize);
+            $link = new SwoolePeerLink($socket, $this->runtime, null, null, $this->maxFrameSize, $this->onHandlerError);
             $this->links[] = $link;
+            $this->serverLinks[] = $link;
             $onAccept($link);
         });
 
@@ -191,7 +202,14 @@ final class SwooleMeshTransport implements MeshTransport
         // Pass $client to SwoolePeerLink to keep it alive.
         // Swoole\Coroutine\Client::__destruct() closes the underlying socket;
         // without this reference the socket closes as soon as connect() returns.
-        $link = new SwoolePeerLink($socket, $this->runtime, $endpoint, $client, $this->maxFrameSize);
+        $link = new SwoolePeerLink(
+            $socket,
+            $this->runtime,
+            $endpoint,
+            $client,
+            $this->maxFrameSize,
+            $this->onHandlerError,
+        );
         $this->links[] = $link;
 
         return $link;
@@ -218,6 +236,25 @@ final class SwooleMeshTransport implements MeshTransport
         }
 
         $this->links = [];
+        $this->serverLinks = [];
+    }
+
+    /**
+     * Close every server-side (accepted) link while leaving the listening servers up, simulating a
+     * transient network blip: the remote end of each accepted connection sees EOF and its outbound
+     * {@see PeerConnection} reconnects (re-handshaking via the preamble), so the mesh heals without
+     * any node restarting. Closing the accepted (not the outbound) links is what drives the remote's
+     * reconnect, since a PeerConnection only reconnects when the peer closes.
+     *
+     * Not part of the {@see MeshTransport} interface; available for integration tests only.
+     */
+    public function dropServerLinksForTest(): void
+    {
+        foreach ($this->serverLinks as $link) {
+            $link->close();
+        }
+
+        $this->serverLinks = [];
     }
 
     /**
