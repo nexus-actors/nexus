@@ -20,23 +20,41 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - { local: 'nexus-core',                 remote: 'core' }
-          - { local: 'nexus-serialization',        remote: 'serialization' }
-          - { local: 'nexus-runtime',              remote: 'runtime' }
-          - { local: 'nexus-runtime-fiber',        remote: 'runtime-fiber' }
-          - { local: 'nexus-runtime-swoole',       remote: 'runtime-swoole' }
-          - { local: 'nexus-runtime-step',         remote: 'runtime-step' }
-          - { local: 'nexus-psalm',                remote: 'psalm' }
-          - { local: 'nexus-persistence',          remote: 'persistence' }
-          - { local: 'nexus-persistence-dbal',     remote: 'persistence-dbal' }
-          - { local: 'nexus-persistence-doctrine', remote: 'persistence-doctrine' }
-          - { local: 'nexus-app',                  remote: 'app' }
-          - { local: 'nexus-cluster',              remote: 'cluster' }
-          - { local: 'nexus-messenger',            remote: 'messenger' }
-          - { local: 'nexus-messenger-console',         remote: 'messenger-console' }
+          - { local: 'nexus-app', remote: 'app' }
+          - { local: 'nexus-cluster', remote: 'cluster' }
+          - { local: 'nexus-core', remote: 'core' }
+          - { local: 'nexus-doctrine-dbal', remote: 'doctrine-dbal' }
+          - { local: 'nexus-doctrine-orm', remote: 'doctrine-orm' }
+          - { local: 'nexus-http-auth', remote: 'http-auth' }
+          - { local: 'nexus-http-server-swoole-threads', remote: 'http-server-swoole-threads' }
+          - { local: 'nexus-http-server-swoole', remote: 'http-server-swoole' }
+          - { local: 'nexus-http-toolkit', remote: 'http-toolkit' }
+          - { local: 'nexus-http-ws', remote: 'http-ws' }
+          - { local: 'nexus-http', remote: 'http' }
+          - { local: 'nexus-logger', remote: 'logger' }
           - { local: 'nexus-messenger-console-swoole', remote: 'messenger-console-swoole' }
-          - { local: 'nexus-worker-pool',               remote: 'worker-pool' }
-          - { local: 'nexus-worker-pool-swoole',   remote: 'worker-pool-swoole' }
+          - { local: 'nexus-messenger-console', remote: 'messenger-console' }
+          - { local: 'nexus-messenger', remote: 'messenger' }
+          - { local: 'nexus-observability-actor', remote: 'observability-actor' }
+          - { local: 'nexus-observability-doctrine', remote: 'observability-doctrine' }
+          - { local: 'nexus-observability-http', remote: 'observability-http' }
+          - { local: 'nexus-observability-logger', remote: 'observability-logger' }
+          - { local: 'nexus-observability-otel', remote: 'observability-otel' }
+          - { local: 'nexus-observability-persistence', remote: 'observability-persistence' }
+          - { local: 'nexus-observability-swoole', remote: 'observability-swoole' }
+          - { local: 'nexus-observability-worker-pool', remote: 'observability-worker-pool' }
+          - { local: 'nexus-observability', remote: 'observability' }
+          - { local: 'nexus-persistence-dbal', remote: 'persistence-dbal' }
+          - { local: 'nexus-persistence-doctrine', remote: 'persistence-doctrine' }
+          - { local: 'nexus-persistence', remote: 'persistence' }
+          - { local: 'nexus-psalm', remote: 'psalm' }
+          - { local: 'nexus-runtime-fiber', remote: 'runtime-fiber' }
+          - { local: 'nexus-runtime-step', remote: 'runtime-step' }
+          - { local: 'nexus-runtime-swoole', remote: 'runtime-swoole' }
+          - { local: 'nexus-runtime', remote: 'runtime' }
+          - { local: 'nexus-serialization', remote: 'serialization' }
+          - { local: 'nexus-worker-pool-swoole', remote: 'worker-pool-swoole' }
+          - { local: 'nexus-worker-pool', remote: 'worker-pool' }
     steps:
       - uses: actions/checkout@v4
         with:
