@@ -122,6 +122,7 @@ final class BootstrapAssembler
         if ($otel) {
             $lines[] = "    ->withObservability(\$observability)";
         }
+
         $lines[] = "    ->actor('hello', Props::fromBehavior(";
         $lines[] = "        Behavior::receive(static function (\$ctx, \$msg): Behavior {";
         $lines[] = "            \$ctx->log()->info('received', ['type' => \$msg::class]);";
@@ -145,7 +146,7 @@ final class BootstrapAssembler
             if ($isDbal) {
                 $lines[] = "    ->onStart(static function (\$system): void {";
                 $lines[] = "        \$dsnParser  = new DsnParser(['mysql' => 'pdo_mysql', 'postgres' => 'pdo_pgsql', 'sqlite' => 'pdo_sqlite']);";
-                $lines[] = "        \$connection = DriverManager::getConnection(\$dsnParser->parse(\$_ENV['DATABASE_URL']));";
+                $lines[] = "        \$connection = DriverManager::getConnection(\$dsnParser->parse((string) getenv('DATABASE_URL')));";
 
                 if ($isEs) {
                     $lines[] = "        \$eventStore = new DbalEventStore(\$connection);";
@@ -210,6 +211,9 @@ final class BootstrapAssembler
     private function assembleWorkerPoolChain(array $selections = []): string
     {
         $http = (bool) ($selections['http'] ?? false);
+        $otel = (bool) ($selections['otel'] ?? false);
+        $messenger = (bool) ($selections['messenger'] ?? false);
+        $persistence = (string) ($selections['persistence'] ?? 'none');
         $lines = [];
         $lines[] = "final class MyApp extends WorkerPoolApp";
         $lines[] = "{";
@@ -219,6 +223,22 @@ final class BootstrapAssembler
         if ($http) {
             $lines[] = "        // TODO: bind HttpApp inside configure() if you selected HTTP.";
             $lines[] = "        // See https://docs.nexusactors.com/docs/scaling/overview";
+        }
+
+        if ($otel) {
+            $lines[] = "        // TODO: wire OpenTelemetry inside configure() — the worker-pool bootstrap does";
+            $lines[] = "        // not auto-attach observability. Build it from OTEL_* env and pass it to the";
+            $lines[] = "        // ActorSystem your WorkerNode wraps.";
+        }
+
+        if ($messenger) {
+            $lines[] = "        // TODO: wire the Symfony Messenger bridge inside configure() — spawn consumers";
+            $lines[] = "        // via MessengerBridge::spawnReceivers(). See https://docs.nexusactors.com/docs/packages/messenger";
+        }
+
+        if ($persistence !== 'none') {
+            $lines[] = "        // TODO: wire persistence stores inside configure() — build your event/state store";
+            $lines[] = "        // from DATABASE_URL and pass it to EventSourcedBehavior/DurableStateBehavior.";
         }
 
         $lines[] = "        \$node->spawn(Props::fromBehavior(";

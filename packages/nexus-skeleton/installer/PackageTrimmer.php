@@ -73,6 +73,7 @@ final readonly class PackageTrimmer
 
         if (!(bool) ($selections['messenger'] ?? false)) {
             $remove[] = 'nexus-actors/messenger';
+            $remove[] = 'nexus-actors/messenger-console';
         }
 
         // HTTP
