@@ -172,6 +172,11 @@ final class ActorSystem
         $this->children[$name] = $ref;
         $this->cells[$name] = $cell;
 
+        $this->logger->debug('actor spawned', [
+            'actor' => (string) $ref->path(),
+            'name' => $name,
+        ]);
+
         return $ref;
     }
 

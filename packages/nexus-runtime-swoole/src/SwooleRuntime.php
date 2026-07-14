@@ -84,6 +84,12 @@ final class SwooleRuntime implements Runtime
     }
 
     #[Override]
+    public function defer(callable $task): void
+    {
+        $this->spawn($task);
+    }
+
+    #[Override]
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable
     {
         if ($this->insideCoRun) {

@@ -1,0 +1,80 @@
+# Example-local Docker Compose — independent of the parent Nexus monorepo's compose.yaml.
+#
+# Usage:
+#   docker compose build node-a                 # build the Swoole image (one-time)
+#   docker compose run --rm node-a composer install  # install Composer deps
+#   docker compose up                           # start both nodes (logs interleaved)
+#   docker compose logs -f node-a               # or tail each node separately
+#   docker compose logs -f node-b
+#
+# To observe failure detection:
+#   docker compose kill node-a    # hard kill — node-b logs Suspect → Down within ~5 s
+#   docker compose start node-a   # bring it back — node-b logs NodeUp again
+
+services:
+  node-a:
+    build:
+      # Reuse the monorepo's multi-stage Dockerfile; php-swoole target gives us
+      # ZTS PHP 8.5.7 + Swoole 6.2.1 (--enable-swoole-thread) without Xdebug.
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: php-swoole
+    image: nexus-cluster-tcp:dev
+    hostname: node-a
+    command: ["php", "bin/node.php"]
+    environment:
+      CLUSTER_NAME: demo
+      NODE_DC: dc1
+      NODE_APP: greet-app
+      NODE_ID: node-a
+      BIND_HOST: "0.0.0.0"
+      BIND_PORT: "7355"
+      ADVERTISE_HOST: node-a
+      ADVERTISE_PORT: "7355"
+      # Mutual seeding: node-a dials node-b; node-b dials node-a.
+      # The reconnect-with-backoff logic retries until the peer is up.
+      SEEDS: "node-b:7355"
+      NODE_ROLE: greeter
+    networks:
+      - cluster-net
+    volumes:
+      - ./composer.json:/app/composer.json:ro
+      - ./vendor:/app/vendor
+      - ./src:/app/src:ro
+      - ./bin:/app/bin:ro
+      # Path-repository source for nexus-actors/* packages — see composer.json.
+      # When published to its own repo, remove this mount and resolve from Packagist.
+      - ../../packages:/nexus-packages:ro
+
+  node-b:
+    # Reuse node-a's image — same binary, different env.
+    image: nexus-cluster-tcp:dev
+    hostname: node-b
+    depends_on:
+      - node-a
+    command: ["php", "bin/node.php"]
+    environment:
+      CLUSTER_NAME: demo
+      NODE_DC: dc1
+      NODE_APP: greet-app
+      NODE_ID: node-b
+      BIND_HOST: "0.0.0.0"
+      BIND_PORT: "7355"
+      ADVERTISE_HOST: node-b
+      ADVERTISE_PORT: "7355"
+      SEEDS: "node-a:7355"
+      NODE_ROLE: client
+      # Which node hosts the greeter actor: "dc/app/node" (cluster inferred from CLUSTER_NAME).
+      GREETER_NODE: "dc1/greet-app/node-a"
+    networks:
+      - cluster-net
+    volumes:
+      - ./composer.json:/app/composer.json:ro
+      - ./vendor:/app/vendor
+      - ./src:/app/src:ro
+      - ./bin:/app/bin:ro
+      - ../../packages:/nexus-packages:ro
+
+networks:
+  cluster-net:
+    driver: bridge

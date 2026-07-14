@@ -72,6 +72,17 @@ interface Runtime
     public function spawn(callable $actorLoop): string;
 
     /**
+     * Hand `$task` to the runtime to run asynchronously, as soon as possible.
+     *
+     * Fire-and-forget: unlike {@see spawn()}, which models a tracked, long-lived actor loop
+     * and returns an identifier, `defer()` returns nothing — reach for it to kick off a one-shot
+     * unit of work without blocking the caller. Unlike {@see scheduleOnce()}, it carries no delay.
+     * The task runs in the runtime's own execution context (a fiber, a coroutine, or the next
+     * deterministic step), so it may cooperatively yield and sleep just like an actor loop.
+     */
+    public function defer(callable $task): void;
+
+    /**
      * Schedule `$callback` to run once after `$delay` has elapsed.
      *
      * Returns a `Cancellable` that can be used to abort the pending callback before

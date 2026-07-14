@@ -1,0 +1,34 @@
+{
+    "name": "nexus-actors/cluster-tcp",
+    "description": "Nexus cluster TCP — Swoole TCP mesh transport, membership gossip, and phi-accrual failure detection.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "nexus-actors/cluster": "dev-main",
+        "nexus-actors/core": "dev-main",
+        "nexus-actors/observability": "dev-main",
+        "nexus-actors/runtime": "dev-main",
+        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/serialization-msgpack": "dev-main",
+        "psr/clock": "^1.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "suggest": {
+        "ext-swoole": "Required for real TCP transport; loopback and unit tests run without it",
+        "nexus-actors/runtime-swoole": "Required for production TCP cluster transport"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Cluster\\Tcp\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Cluster\\Tcp\\Tests\\": "tests/"
+        }
+    }
+}

@@ -105,6 +105,25 @@ final class FiberRuntimeTest extends TestCase
     }
 
     #[Test]
+    public function defer_runs_the_task_asynchronously(): void
+    {
+        $runtime = new FiberRuntime();
+        $value = 0;
+
+        $runtime->defer(static function () use (&$value): void {
+            $value = 7;
+        });
+
+        $runtime->scheduleOnce(Duration::millis(1), static function () use ($runtime): void {
+            $runtime->shutdown(Duration::millis(100));
+        });
+
+        $runtime->run();
+
+        self::assertSame(7, $value, 'the deferred task should have run once the loop started');
+    }
+
+    #[Test]
     public function schedule_once_delegates_to_scheduler(): void
     {
         $runtime = new FiberRuntime();

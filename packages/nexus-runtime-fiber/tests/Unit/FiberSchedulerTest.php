@@ -163,6 +163,75 @@ final class FiberSchedulerTest extends TestCase
     }
 
     #[Test]
+    public function timer_scheduled_inside_callback_fires_on_next_advance(): void
+    {
+        $scheduler = new FiberScheduler();
+        $innerFired = false;
+
+        $now = new DateTimeImmutable('2026-01-01 00:00:00');
+
+        // Outer timer fires at T+1; its callback schedules an inner timer (fireAt = T+0 + 1s = T+1).
+        $scheduler->scheduleOnce(
+            Duration::seconds(1),
+            static function () use ($scheduler, &$innerFired, $now): void {
+                $scheduler->scheduleOnce(
+                    Duration::seconds(1),
+                    static function () use (&$innerFired): void {
+                        $innerFired = true;
+                    },
+                    $now,
+                );
+            },
+            $now,
+        );
+
+        // Advance to T+1: outer fires and schedules the inner timer — inner must NOT fire yet.
+        $scheduler->advanceTimers(new DateTimeImmutable('2026-01-01 00:00:01'));
+        self::assertFalse($innerFired);
+
+        // Advance to T+2: inner timer (fireAt = T+1) is now due and must fire.
+        $scheduler->advanceTimers(new DateTimeImmutable('2026-01-01 00:00:02'));
+        self::assertTrue($innerFired);
+    }
+
+    #[Test]
+    public function repeating_timer_scheduled_inside_callback_keeps_firing(): void
+    {
+        $scheduler = new FiberScheduler();
+        $repeatCount = 0;
+
+        $now = new DateTimeImmutable('2026-01-01 00:00:00');
+
+        // Outer one-shot fires at T+1; registers a repeating timer (initialDelay=1s, interval=1s, fireAt=T+1).
+        $scheduler->scheduleOnce(
+            Duration::seconds(1),
+            static function () use ($scheduler, &$repeatCount, $now): void {
+                $scheduler->scheduleRepeatedly(
+                    Duration::seconds(1),
+                    Duration::seconds(1),
+                    static function () use (&$repeatCount): void {
+                        $repeatCount++;
+                    },
+                    $now,
+                );
+            },
+            $now,
+        );
+
+        // T+1: outer fires, inner repeating timer is registered (fireAt=T+1) but NOT fired this pass.
+        $scheduler->advanceTimers(new DateTimeImmutable('2026-01-01 00:00:01'));
+        self::assertSame(0, $repeatCount);
+
+        // T+2: repeating fires first time (fireAt=T+1 <= T+2).
+        $scheduler->advanceTimers(new DateTimeImmutable('2026-01-01 00:00:02'));
+        self::assertSame(1, $repeatCount);
+
+        // T+3: repeating fires second time (re-scheduled at T+2 <= T+3).
+        $scheduler->advanceTimers(new DateTimeImmutable('2026-01-01 00:00:03'));
+        self::assertSame(2, $repeatCount);
+    }
+
+    #[Test]
     public function has_pending_timers_reflects_state(): void
     {
         $scheduler = new FiberScheduler();

@@ -256,6 +256,11 @@ final class ActorCell implements ActorContext
      */
     public function restart(Throwable $cause): void
     {
+        $this->logger->debug('actor restarting', [
+            'actor' => (string) $this->actorPath,
+            'cause' => $cause->getMessage(),
+        ]);
+
         // Deliver PreRestart to the current (failed) behavior before we discard
         // it. Best-effort: handleSignal already swallows signal-handler errors.
         $this->handleSignal(new PreRestart($cause));
@@ -719,6 +724,11 @@ final class ActorCell implements ActorContext
 
     private function handleSignal(Signal $signal): void
     {
+        $this->logger->debug('actor signal', [
+            'actor' => (string) $this->actorPath,
+            'signal' => $this->messageType($signal),
+        ]);
+
         $signalHandler = $this->currentBehavior->signalHandler();
 
         if ($signalHandler === null) {
@@ -888,7 +898,9 @@ final class ActorCell implements ActorContext
 
     private function traceUserMessage(Envelope $envelope, object $message): void
     {
-        if (!$this->observability->isEnabled()) {
+        // Skip per-message span + metrics when observability is off, or for infrastructure
+        // messages that opt out (high-frequency ticks/liveness signals) — see UntracedMessage.
+        if (!$this->observability->isEnabled() || $message instanceof UntracedMessage) {
             $this->handleUserMessage($message);
 
             return;
@@ -983,6 +995,12 @@ final class ActorCell implements ActorContext
 
     private function applyDirective(Directive $directive, SupervisionStrategy $strategy, Throwable $cause): void
     {
+        $this->logger->debug('actor supervision directive', [
+            'actor' => (string) $this->actorPath,
+            'cause' => $cause->getMessage(),
+            'directive' => $directive->name,
+        ]);
+
         match ($directive) {
             // Keep behavior + state intact. If suspended by a prior failure,
             // resume message processing.
@@ -1075,6 +1093,11 @@ final class ActorCell implements ActorContext
             throw new InvalidActorStateTransition($this->state, $target);
         }
 
+        $this->logger->debug('actor state transition', [
+            'actor' => (string) $this->actorPath,
+            'from' => $this->state->name,
+            'to' => $target->name,
+        ]);
         $this->state = $target;
     }
 }
