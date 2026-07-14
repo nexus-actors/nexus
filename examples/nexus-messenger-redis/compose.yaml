@@ -25,7 +25,10 @@ services:
     environment:
       REDIS_DSN: "redis://redis:6379"
       REDIS_STREAM: "orders"
+      REPLY_STREAM: "${REPLY_STREAM:-replies}"
       CONSUMER_GROUP: "nexus-workers"
+      RECEIVER_COUNT: "${RECEIVER_COUNT:-3}"
+      MESSAGE_LIMIT: "${MESSAGE_LIMIT:-50}"
       SERIALIZER: "${SERIALIZER:-php-native}"
     depends_on:
       redis:

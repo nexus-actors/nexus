@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Console;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
@@ -27,6 +28,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 use function implode;
+use function is_numeric;
 use function sprintf;
 
 /**
@@ -138,25 +140,32 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
     {
         $io = new SymfonyStyle($input, $output);
 
-        $receiverCount = (int) $input->getOption('receivers');
         /** @var string|null $limitRaw */
         $limitRaw = $input->getOption('limit');
         /** @var string|null $memoryLimitRaw */
         $memoryLimitRaw = $input->getOption('memory-limit');
         /** @var string|null $timeLimitRaw */
         $timeLimitRaw = $input->getOption('time-limit');
-        $pollInterval = (int) $input->getOption('poll-interval');
-        $useDeadLetters = (bool) $input->getOption('dead-letters');
 
-        $limit = $limitRaw !== null
-            ? (int) $limitRaw
-            : null;
-        $memoryLimitBytes = $memoryLimitRaw !== null
-            ? MemoryLimit::parse($memoryLimitRaw)
-            : null;
-        $timeLimit = $timeLimitRaw !== null
-            ? (int) $timeLimitRaw
-            : null;
+        try {
+            $receiverCount = $this->positiveInt($input->getOption('receivers'), '--receivers');
+            $pollInterval = $this->positiveInt($input->getOption('poll-interval'), '--poll-interval');
+            $limit = $limitRaw !== null
+                ? $this->positiveInt($limitRaw, '--limit')
+                : null;
+            $timeLimit = $timeLimitRaw !== null
+                ? $this->positiveInt($timeLimitRaw, '--time-limit')
+                : null;
+            $memoryLimitBytes = $memoryLimitRaw !== null
+                ? MemoryLimit::parse($memoryLimitRaw)
+                : null;
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
+            return Command::INVALID;
+        }
+
+        $useDeadLetters = (bool) $input->getOption('dead-letters');
 
         $this->system = ActorSystem::create(
             'nexus-messenger-consumer',
@@ -252,5 +261,17 @@ final class ConsumeCommand extends Command implements SignalableCommandInterface
         $io->success('Consumer stopped.');
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * @throws InvalidArgumentException When the value is not a positive integer.
+     */
+    private function positiveInt(mixed $value, string $option): int
+    {
+        if (!is_numeric($value) || (string) (int) $value !== (string) $value || (int) $value < 1) {
+            throw new InvalidArgumentException(sprintf('%s must be a positive integer.', $option));
+        }
+
+        return (int) $value;
     }
 }

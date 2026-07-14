@@ -10,6 +10,9 @@
  *   - PSR-14 StdoutDispatcher printing MessageConsumed / WorkerRecyclingTriggered
  *   - PSR-3 logger forwarding to stdout via Monolog
  *
+ * This worker is tell-only: it wires no ReplySenderLocator, so it cannot answer
+ * asks. Use bin/console for the ask/reply demo.
+ *
  * Usage (inside the example container):
  *   php bin/worker.php
  *
@@ -114,6 +117,20 @@ $messageLimit = (int) ($_SERVER['MESSAGE_LIMIT'] ?? 50);
 $router = new MapMessageRouter([OrderPlaced::class => $processorRef]);
 $config = ReceiverActorConfig::default()->withPollInterval(Duration::millis(100));
 
+// ---------------------------------------------------------------------------
+// 7a. LifecycleWatchdog — spawned FIRST so its ref can be wired as the
+//     receivers' processedListener. This is the seam that carries processed
+//     message counts to the watchdog; without it the message-count recycling
+//     below could never fire.
+// ---------------------------------------------------------------------------
+$watchdogRef = $system->spawn(
+    MessengerBridge::watchdogProps(
+        $system,
+        LifecycleThresholds::none()->withMessageLimit($messageLimit),
+    ),
+    'watchdog',
+);
+
 MessengerBridge::spawnReceivers(
     $system,
     $receiverCount,
@@ -121,21 +138,10 @@ MessengerBridge::spawnReceivers(
     $transport,
     $router,
     $config,
-    null,    // deadLetters — let unroutable messages surface in logs
-    null,    // processedListener
+    null,           // deadLetters — let unroutable messages surface in logs
+    $watchdogRef,   // processedListener — feeds MessagesProcessed to the watchdog
     $events,
-    null,    // observability — use NoopObservability default
-);
-
-// ---------------------------------------------------------------------------
-// 8. LifecycleWatchdog — recycles this process after MESSAGE_LIMIT messages
-// ---------------------------------------------------------------------------
-$system->spawn(
-    MessengerBridge::watchdogProps(
-        $system,
-        LifecycleThresholds::none()->withMessageLimit($messageLimit),
-    ),
-    'watchdog',
+    null,           // observability — use NoopObservability default
 );
 
 // ---------------------------------------------------------------------------

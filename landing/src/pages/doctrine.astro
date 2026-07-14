@@ -30,7 +30,7 @@ use Monadial\\Nexus\\App\\NexusApp;
 
 $emPool = DoctrineEmPool::forConfig(
     name: 'wallets',
-    connParams: (new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql']))->parse($_ENV['DATABASE_URL']),
+    connParams: (new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql']))->parse((string) getenv('DATABASE_URL')),
     ormSetup: $ormConfig,
 );
 
@@ -116,7 +116,7 @@ use Doctrine\\Migrations\\DependencyFactory;
 use Doctrine\\ORM\\EntityManager;
 
 $dsnParser  = new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql', 'mysql' => 'pdo_mysql']);
-$connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));
+$connection = DriverManager::getConnection($dsnParser->parse((string) getenv('DATABASE_URL')));
 $entityManager = new EntityManager($connection, $ormConfig);
 
 return DependencyFactory::fromEntityManager(

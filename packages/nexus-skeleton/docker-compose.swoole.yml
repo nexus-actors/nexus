@@ -1,7 +1,7 @@
 services:
   app:
     build: !reset
-    image: phpswoole/swoole:6.2-php8.5-alpine
+    image: phpswoole/swoole:6.2.1-php8.5-alpine
     working_dir: /app
     volumes:
       - .:/app

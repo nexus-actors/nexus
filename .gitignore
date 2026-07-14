@@ -1,5 +1,6 @@
 /vendor/
 /packages/*/vendor/
+/examples/*/vendor/
 composer.lock
 .phpunit.cache/
 .phpunit.result.cache
@@ -35,3 +36,4 @@ tests/Performance/HttpSwoole/.results/
 landing/node_modules/
 landing/dist/
 landing/.astro/
+.whet/

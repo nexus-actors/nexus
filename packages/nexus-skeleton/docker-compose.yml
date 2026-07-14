@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
     working_dir: /app
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - .:/app
     command: ["php", "bootstrap.php"]

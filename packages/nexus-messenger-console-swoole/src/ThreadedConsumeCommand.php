@@ -25,6 +25,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 use function implode;
 use function is_a;
+use function is_numeric;
 use function Opis\Closure\serialize as opis_serialize;
 use function sprintf;
 
@@ -131,26 +132,32 @@ final class ThreadedConsumeCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        $threads        = (int) $input->getOption('threads');
-        $receivers      = (int) $input->getOption('receivers');
         /** @var string|null $limitRaw */
         $limitRaw       = $input->getOption('limit');
         /** @var string|null $memoryLimitRaw */
         $memoryLimitRaw = $input->getOption('memory-limit');
         /** @var string|null $timeLimitRaw */
         $timeLimitRaw   = $input->getOption('time-limit');
-        $pollMs         = (int) $input->getOption('poll-interval');
         $deadLetters    = (bool) $input->getOption('dead-letters');
 
-        $limit       = $limitRaw !== null
-            ? (int) $limitRaw
-            : null;
-        $memoryBytes = $memoryLimitRaw !== null
-            ? MemoryLimit::parse($memoryLimitRaw)
-            : null;
-        $timeSeconds = $timeLimitRaw !== null
-            ? (int) $timeLimitRaw
-            : null;
+        try {
+            $threads     = $this->positiveInt($input->getOption('threads'), '--threads');
+            $receivers   = $this->positiveInt($input->getOption('receivers'), '--receivers');
+            $pollMs      = $this->positiveInt($input->getOption('poll-interval'), '--poll-interval');
+            $limit       = $limitRaw !== null
+                ? $this->positiveInt($limitRaw, '--limit')
+                : null;
+            $timeSeconds = $timeLimitRaw !== null
+                ? $this->positiveInt($timeLimitRaw, '--time-limit')
+                : null;
+            $memoryBytes = $memoryLimitRaw !== null
+                ? MemoryLimit::parse($memoryLimitRaw)
+                : null;
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
+            return Command::INVALID;
+        }
 
         $bootstrapClass = $this->bootstrapClass;
 
@@ -260,5 +267,17 @@ final class ThreadedConsumeCommand extends Command
         $io->success('Consumer stopped.');
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * @throws InvalidArgumentException When the value is not a positive integer.
+     */
+    private function positiveInt(mixed $value, string $option): int
+    {
+        if (!is_numeric($value) || (string) (int) $value !== (string) $value || (int) $value < 1) {
+            throw new InvalidArgumentException(sprintf('%s must be a positive integer.', $option));
+        }
+
+        return (int) $value;
     }
 }

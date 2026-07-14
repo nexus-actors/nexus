@@ -19,12 +19,12 @@
         "nexus-actors/http": "^0.1",
         "nexus-actors/http-server-swoole": "^0.1",
         "nexus-actors/messenger": "^0.1",
+        "nexus-actors/messenger-console": "^0.1",
         "nexus-actors/observability-otel": "^0.1",
         "nexus-actors/persistence": "^0.1",
         "nexus-actors/persistence-dbal": "^0.1",
         "nexus-actors/persistence-doctrine": "^0.1",
         "nexus-actors/runtime-fiber": "^0.1",
-        "nexus-actors/runtime-step": "^0.1",
         "nexus-actors/runtime-swoole": "^0.1",
         "nexus-actors/worker-pool": "^0.1",
         "nexus-actors/worker-pool-swoole": "^0.1",
@@ -33,6 +33,7 @@
     },
     "require-dev": {
         "nexus-actors/psalm": "^0.1",
+        "nexus-actors/runtime-step": "^0.1",
         "phpunit/phpunit": "^13.0",
         "vimeo/psalm": "^6.0"
     },

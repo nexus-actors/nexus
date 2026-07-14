@@ -66,6 +66,51 @@ final class ConsumeCommandTest extends TestCase
     }
 
     #[Test]
+    public function rejectsZeroLimitWithoutStarting(): void
+    {
+        $transport = new InMemoryTransport();
+        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+
+        $command = new ConsumeCommand(new FiberRuntime(), $transport, $router);
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--limit' => '0']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--limit must be a positive integer', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function rejectsNonNumericLimitWithoutStarting(): void
+    {
+        $transport = new InMemoryTransport();
+        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+
+        $command = new ConsumeCommand(new FiberRuntime(), $transport, $router);
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--limit' => 'abc']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--limit must be a positive integer', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function rejectsZeroMemoryLimitWithoutStarting(): void
+    {
+        $transport = new InMemoryTransport();
+        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+
+        $command = new ConsumeCommand(new FiberRuntime(), $transport, $router);
+        $tester = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--memory-limit' => '0']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('greater than 0', $tester->getDisplay());
+    }
+
+    #[Test]
     public function memoryLimitOptionIsAccepted(): void
     {
         $transport = new InMemoryTransport();

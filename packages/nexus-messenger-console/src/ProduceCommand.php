@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Console;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
@@ -16,7 +17,9 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Messenger\Transport\Sender\SenderInterface;
+use Throwable;
 
+use function is_numeric;
 use function sprintf;
 
 /**
@@ -60,7 +63,13 @@ final class ProduceCommand extends Command
                 'Registered message type name (from #[MessageType] attribute).',
             )
             ->addArgument('body', InputArgument::REQUIRED, 'Message body as a JSON object.')
-            ->addOption('count', 'c', InputOption::VALUE_REQUIRED, 'Number of identical messages to publish.', 1);
+            ->addOption(
+                'count',
+                'c',
+                InputOption::VALUE_REQUIRED,
+                'Number of identical messages to publish; must be a positive integer.',
+                1,
+            );
     }
 
     #[Override]
@@ -70,20 +79,39 @@ final class ProduceCommand extends Command
 
         $typeName = (string) $input->getArgument('type');
         $body = (string) $input->getArgument('body');
-        $count = (int) $input->getOption('count');
+
+        try {
+            $count = $this->positiveInt($input->getOption('count'), '--count');
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
+            return Command::INVALID;
+        }
 
         $class = $this->types->classForName($typeName);
 
         if ($class === null) {
             $io->error(sprintf(
-                "Unknown message type '%s'. Register it in the TypeRegistry via #[MessageType] or TypeRegistry::register().",
+                "Unknown message type '%s'; register it or check the name (via #[MessageType] or TypeRegistry::register()).",
                 $typeName,
             ));
 
-            return Command::FAILURE;
+            return Command::INVALID;
         }
 
-        $message = $this->serializer->deserialize($body, $class);
+        try {
+            $message = $this->serializer->deserialize($body, $class);
+        } catch (Throwable $e) {
+            $io->error(sprintf(
+                "Failed to deserialize body for type '%s': %s. The body format must match the configured serializer "
+                . '(e.g. SERIALIZER=php-native expects PHP-serialized data; pass a JSON body with SERIALIZER=json).',
+                $typeName,
+                $e->getMessage(),
+            ));
+
+            return Command::INVALID;
+        }
+
         $gateway = MessengerBridge::gateway($this->sender);
 
         for ($i = 0; $i < $count; $i++) {
@@ -93,5 +121,17 @@ final class ProduceCommand extends Command
         $io->success(sprintf("Published %d message(s) of type '%s'.", $count, $typeName));
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * @throws InvalidArgumentException When the value is not a positive integer.
+     */
+    private function positiveInt(mixed $value, string $option): int
+    {
+        if (!is_numeric($value) || (string) (int) $value !== (string) $value || (int) $value < 1) {
+            throw new InvalidArgumentException(sprintf('%s must be a positive integer.', $option));
+        }
+
+        return (int) $value;
     }
 }

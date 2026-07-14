@@ -1,6 +1,6 @@
 {
     "name": "nexus-actors/example-messenger-redis",
-    "_comment": "Standalone use outside the monorepo: replace the path-autoload entries with `composer require nexus-actors/messenger nexus-actors/runtime-fiber nexus-actors/observability nexus-actors/observability-serialization` from Packagist and remove the autoload->files and autoload->psr-4 path entries below.",
+    "_comment": "Standalone use outside the monorepo: replace the path-autoload entries with `composer require nexus-actors/messenger nexus-actors/messenger-console nexus-actors/messenger-console-swoole nexus-actors/runtime-fiber nexus-actors/runtime-swoole nexus-actors/worker-pool nexus-actors/worker-pool-swoole nexus-actors/observability nexus-actors/observability-serialization` from Packagist and remove the autoload->files and autoload->psr-4 path entries below. The messenger-console-swoole packages (and bin/consume-threads.php) also need ext-swoole >= 6.2.1 with --enable-swoole-thread.",
     "description": "Nexus example: competing-consumer queue worker over Symfony Redis transport with worker recycling, PSR-14 events, and serialization allow-list.",
     "type": "project",
     "license": "MIT",
@@ -9,6 +9,7 @@
         "ext-redis": "*",
         "cuyz/valinor": "^2.3",
         "monolog/monolog": "^3.0",
+        "opis/closure": "^4.0",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
         "rybakit/msgpack": "^0.9",
@@ -17,7 +18,8 @@
         "symfony/redis-messenger": "^7.4 || ^8.0"
     },
     "suggest": {
-        "ext-msgpack": "Native msgpack extension — faster packing when SERIALIZER=msgpack"
+        "ext-msgpack": "Native msgpack extension — faster packing when SERIALIZER=msgpack",
+        "ext-swoole": "Swoole >= 6.2.1 with --enable-swoole-thread (ZTS PHP) — required only by bin/consume-threads.php"
     },
     "autoload": {
         "files": [
@@ -29,12 +31,16 @@
             "Monadial\\Nexus\\Example\\MessengerRedis\\": "src/",
             "Monadial\\Nexus\\Messenger\\": "/nexus-packages/nexus-messenger/src/",
             "Monadial\\Nexus\\Messenger\\Console\\": "/nexus-packages/nexus-messenger-console/src/",
+            "Monadial\\Nexus\\Messenger\\Console\\Swoole\\": "/nexus-packages/nexus-messenger-console-swoole/src/",
             "Monadial\\Nexus\\Observability\\": "/nexus-packages/nexus-observability/src/",
             "Monadial\\Nexus\\Observability\\Serialization\\": "/nexus-packages/nexus-observability-serialization/src/",
             "Monadial\\Nexus\\Runtime\\": "/nexus-packages/nexus-runtime/src/",
             "Monadial\\Nexus\\Runtime\\Fiber\\": "/nexus-packages/nexus-runtime-fiber/src/",
+            "Monadial\\Nexus\\Runtime\\Swoole\\": "/nexus-packages/nexus-runtime-swoole/src/",
             "Monadial\\Nexus\\Serialization\\": "/nexus-packages/nexus-serialization/src/",
-            "Monadial\\Nexus\\Serialization\\Msgpack\\": "/nexus-packages/nexus-serialization-msgpack/src/"
+            "Monadial\\Nexus\\Serialization\\Msgpack\\": "/nexus-packages/nexus-serialization-msgpack/src/",
+            "Monadial\\Nexus\\WorkerPool\\": "/nexus-packages/nexus-worker-pool/src/",
+            "Monadial\\Nexus\\WorkerPool\\Swoole\\": "/nexus-packages/nexus-worker-pool-swoole/src/"
         }
     },
     "config": {
@@ -43,7 +49,9 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "scripts": {
+        "ask": "php bin/ask.php",
         "console": "php bin/console",
+        "consume-threads": "php bin/consume-threads.php",
         "produce": "php bin/produce.php",
         "worker": "php bin/worker.php"
     }

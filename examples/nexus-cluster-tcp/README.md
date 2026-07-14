@@ -54,6 +54,21 @@ docker compose logs -f node-b &
 
 ---
 
+## Local development without ext-swoole
+
+`ext-swoole` is only required for the real-socket TCP mesh (this demo). It is declared under `suggest` — not `require` — in `nexus-cluster-tcp`'s `composer.json`, so the package's loopback and unit tests run in the plain `php` container with no Swoole extension present.
+
+From the monorepo root:
+
+```bash
+make test-cluster-loopback   # loopback + unit tests, plain php container (no ext-swoole)
+make test-cluster            # real-socket Swoole mesh tests, php-swoole container (needs ext-swoole)
+```
+
+Use `test-cluster-loopback` for fast iteration on cluster logic that does not depend on real sockets; reach for `test-cluster` (and this Docker Compose demo) only when you need the actual Swoole TCP transport.
+
+---
+
 ## What to observe
 
 > **Failure detection under load — read this.** Join, convergence (both nodes `UP`), the
@@ -64,10 +79,7 @@ docker compose logs -f node-b &
 > heavy message **saturation** on a single-core node the phi-accrual detector can still emit
 > transient `Suspect` events that self-heal (views always reconverge, no false `Down`). The
 > benchmark soak passes with the documented failure-detection tuning
-> (`withFailureDetection(minStdDev: …)`), and the remaining root cause — incarnation
-> monotonicity on recovery — is tracked in
-> `docs/superpowers/plans/2026-07-09-cluster-tcp-production-hardening.md`. This demo runs well
-> below that regime.
+> (`withFailureDetection(minStdDev: …)`). This demo runs well below that saturation regime.
 
 ### Startup and join (first 3 seconds)
 
@@ -168,6 +180,77 @@ node-b logs `PeerDisconnected` immediately followed by `NodeDown` — no phi wai
 | `SEEDS` | _(empty)_ | Comma-separated seed endpoints, e.g. `node-a:7355`. Empty → `singleNode: true` |
 | `NODE_ROLE` | `greeter` | `greeter` — expose actor and serve; `client` — send greetings every 3 s |
 | `GREETER_NODE` | `dc1/greet-app/node-a` | For client role: `dc/app/node` of the greeter node (cluster inferred from `CLUSTER_NAME`) |
+| `CLUSTER_TLS` | _(empty)_ | Set to `1` to enable Swoole SSL on all cluster links (`ClusterTopology::withTls()`) |
+| `CLUSTER_TLS_CERT` | `/certs/node.crt` | Server certificate file (only read when `CLUSTER_TLS=1`) |
+| `CLUSTER_TLS_KEY` | `/certs/node.key` | Server private key file (only read when `CLUSTER_TLS=1`) |
+| `CLUSTER_TLS_CA` | `/certs/ca.crt` | CA bundle used to verify peers (`verifyPeer: true`; only read when `CLUSTER_TLS=1`) |
+| `CLUSTER_SECRET` | _(empty)_ | Shared HMAC handshake secret (`ClusterTopology::withAuthSecret()`). When set, unauthenticated peers are rejected before ingress. |
+
+---
+
+## Secure mode (TLS + shared-secret handshake)
+
+By default this demo runs **plaintext and open** — fine for a private LAN or a
+throwaway Docker network, never for anything reachable by untrusted hosts. Two
+opt-in, env-gated hardening layers are wired into `bin/node.php`:
+
+| Layer | Topology wither | What it buys you |
+|---|---|---|
+| **TLS** | `withTls(new TlsConfig(certFile, keyFile, caFile, verifyPeer: true))` | Transport encryption + per-node certificate identity via Swoole SSL |
+| **Handshake auth** | `withAuthSecret($secret)` | HMAC-signed handshake; a reachable peer that lacks the secret is rejected before ingress even if it knows the cluster name |
+
+Use both together for defence in depth. They are independent — you can enable
+either alone.
+
+### 1. Generate a self-signed CA + node certificate
+
+No cert fixtures are committed. Generate a throwaway CA and a node cert
+(valid for the compose service names `node-a` / `node-b`) with one openssl
+invocation per file:
+
+```bash
+mkdir -p certs
+
+# CA key + self-signed CA cert
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout certs/ca.key -out certs/ca.crt \
+  -subj "/CN=nexus-demo-ca"
+
+# Node key + CSR (SAN covers both compose service names + loopback)
+openssl req -newkey rsa:2048 -nodes \
+  -keyout certs/node.key -out certs/node.csr \
+  -subj "/CN=nexus-node" \
+  -addext "subjectAltName=DNS:node-a,DNS:node-b,IP:127.0.0.1"
+
+# Sign the node cert with the CA, carrying the SAN through
+openssl x509 -req -in certs/node.csr -CA certs/ca.crt -CAkey certs/ca.key \
+  -CAcreateserial -days 365 -out certs/node.crt \
+  -copy_extensions copyall
+```
+
+Mount `certs/` into each container at `/certs` (the defaults `bin/node.php`
+reads), or point `CLUSTER_TLS_CERT` / `CLUSTER_TLS_KEY` / `CLUSTER_TLS_CA` at
+another path. Both nodes can share the same node cert because the SAN lists
+both service names.
+
+### 2. Run with TLS + auth enabled
+
+```bash
+docker compose run --rm \
+  -e CLUSTER_TLS=1 \
+  -e CLUSTER_SECRET=change-me-32-bytes-min \
+  -v "$PWD/certs:/certs:ro" \
+  node-a
+```
+
+Set the **same** `CLUSTER_SECRET` on every node — a mismatched or missing
+secret makes the handshake fail and the peer never joins. `bin/node.php` logs
+`TLS enabled for cluster links` and `Handshake authentication enabled` on boot
+so you can confirm the secure path is active.
+
+> Leaving `CLUSTER_TLS`/`CLUSTER_SECRET` unset keeps the exact plaintext
+> behaviour documented in the quick-start above — the secure block is a no-op
+> when the env vars are absent.
 
 ---
 
@@ -215,12 +298,11 @@ Only `maxNoHeartbeat` is shortened for the demo (default 10 s) so a hard kill is
 
 ---
 
-## Honest limitations (C1 scope)
+## Honest limitations
 
 | Limitation | Roadmap |
 |---|---|
-| **No service discovery / receptionist** | Greeter path is hardcoded (`/user/greeter`) in both nodes; a receptionist registry arrives in C2 |
-| **AP consistency** | No quorum or split-brain protection; both partitions continue operating independently |
+| **No service discovery / receptionist** | Greeter path is hardcoded (`/user/greeter`) in both nodes; a receptionist registry is planned |
+| **AP consistency** | A quorum floor is opt-in via `ClusterTopology::withMinimumMembers()` (a node below the floor refuses to declare peers Down); there is no automatic downing provider, so partitions otherwise continue operating independently |
 | **No rejoin after Down** | A node declared Down must restart its process to re-join |
-| **No TLS** | `ClusterTopology::withTls(TlsConfig)` wires Swoole SSL options but is not demonstrated here |
 | **Single datacenter** | `NodeAddress` supports multi-DC federation but is not exercised in this two-node demo |

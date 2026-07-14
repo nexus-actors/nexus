@@ -38,6 +38,7 @@ use Monadial\Nexus\Cluster\Tcp\ClusterNode;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\TlsConfig;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
@@ -70,6 +71,18 @@ $advertisePort = (int) ($_SERVER['ADVERTISE_PORT'] ?? 7355);
 $seedsEnv = (string) ($_SERVER['SEEDS'] ?? '');
 $nodeRole = (string) ($_SERVER['NODE_ROLE'] ?? 'greeter');
 $greeterNodeEnv = (string) ($_SERVER['GREETER_NODE'] ?? 'dc1/greet-app/node-a');
+
+// Secure-mode (opt-in). Default path stays plaintext + open for local dev.
+//   CLUSTER_TLS=1      → enable Swoole SSL on the bind + outbound peer links.
+//   CLUSTER_TLS_CERT   → server certificate file  (default: /certs/node.crt)
+//   CLUSTER_TLS_KEY    → server private key file  (default: /certs/node.key)
+//   CLUSTER_TLS_CA     → CA bundle for peer verification (default: /certs/ca.crt)
+//   CLUSTER_SECRET     → shared HMAC handshake secret; rejects unauthenticated peers.
+$tlsEnabled = (string) ($_SERVER['CLUSTER_TLS'] ?? '') === '1';
+$tlsCertFile = (string) ($_SERVER['CLUSTER_TLS_CERT'] ?? '/certs/node.crt');
+$tlsKeyFile = (string) ($_SERVER['CLUSTER_TLS_KEY'] ?? '/certs/node.key');
+$tlsCaFile = (string) ($_SERVER['CLUSTER_TLS_CA'] ?? '/certs/ca.crt');
+$clusterSecret = (string) ($_SERVER['CLUSTER_SECRET'] ?? '');
 
 // ---------------------------------------------------------------------------
 // 2. PSR-3 logger — Monolog to stdout
@@ -136,6 +149,37 @@ $topology = ClusterTopology::create(
 );
 
 // ---------------------------------------------------------------------------
+// 5a. Secure mode (opt-in via env). Off by default so the plaintext local-dev
+//     path is unchanged. Combine both for defence in depth:
+//       - TLS gives transport encryption + per-node identity (Swoole SSL).
+//       - authSecret proves cluster membership via an HMAC-signed handshake, so
+//         a reachable-but-unauthorised peer cannot join merely by matching the
+//         cluster name.
+//     Generate a self-signed CA + node cert with the openssl one-liner in the
+//     README, then run with CLUSTER_TLS=1 CLUSTER_SECRET=... on every node.
+// ---------------------------------------------------------------------------
+if ($tlsEnabled) {
+    $topology = $topology->withTls(new TlsConfig(
+        certFile: $tlsCertFile,
+        keyFile: $tlsKeyFile,
+        caFile: $tlsCaFile,
+        verifyPeer: true,
+    ));
+
+    $logger->info('TLS enabled for cluster links', [
+        'ca' => $tlsCaFile,
+        'cert' => $tlsCertFile,
+        'verify_peer' => true,
+    ]);
+}
+
+if ($clusterSecret !== '') {
+    $topology = $topology->withAuthSecret($clusterSecret);
+
+    $logger->info('Handshake authentication enabled (shared HMAC secret)');
+}
+
+// ---------------------------------------------------------------------------
 // 6. User message type registry — shared with ClusterNode so user message
 //    types are reachable on both encode and decode paths.
 // ---------------------------------------------------------------------------
@@ -181,6 +225,27 @@ $runtime->scheduleOnce(
     ): void {
         // Boot the cluster node: wires transport, membership actor, gossip/heartbeat.
         $node = ClusterNode::boot($system, $topology, $typeRegistry, logger: $logger);
+
+        // -------------------------------------------------------------------
+        // Graceful leave on SIGTERM / SIGINT.
+        //
+        // Swoole\Process::signal registers a coroutine-safe handler inside the
+        // running reactor (we are already inside Co\run() via $system->run()).
+        // On `docker compose stop` (SIGTERM) or Ctrl-C (SIGINT) we broadcast a
+        // Leave frame to every peer via ClusterNode::shutdown(), then drain the
+        // actor system. Peers observe PeerDisconnected + NodeDown immediately —
+        // no phi wait — because the Leave arrives before the socket closes.
+        // Without this the process would just die (TCP EOF → Suspect → Down
+        // after maxNoHeartbeat), indistinguishable from a hard kill.
+        // -------------------------------------------------------------------
+        $gracefulLeave = static function (int $signal) use ($node, $system, $logger): void {
+            $logger->info('Signal received — broadcasting Leave and draining', ['signal' => $signal]);
+            $node->shutdown();
+            $system->shutdown(Duration::seconds(5));
+        };
+
+        \Swoole\Process::signal(SIGTERM, $gracefulLeave);
+        \Swoole\Process::signal(SIGINT, $gracefulLeave);
 
         $logger->info('Cluster node booted', [
             'advertise' => (string) $topology->advertiseEndpoint,

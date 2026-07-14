@@ -18,9 +18,9 @@ $system   = ActorSystem::create('my-cluster', $runtime);
 $topology = ClusterTopology::create(
     clusterName:       'production',
     self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
-    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
-    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
-    seeds:             [NodeEndpoint::fromString('10.0.0.2:7355')],
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7361')],
 );
 
 $registry = new TypeRegistry();
@@ -46,11 +46,11 @@ const meshCode = `<?php
 $topology = ClusterTopology::create(
     clusterName:       'production',
     self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
-    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
-    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
     seeds:             [
-        NodeEndpoint::fromString('10.0.0.2:7355'), // node-2
-        NodeEndpoint::fromString('10.0.0.3:7355'), // node-3
+        NodeEndpoint::fromString('10.0.0.2:7361'), // node-2
+        NodeEndpoint::fromString('10.0.0.3:7361'), // node-3
     ],
     gossipInterval:    Duration::seconds(1),        // default
     heartbeatInterval: Duration::seconds(1),        // default
@@ -116,9 +116,9 @@ $tls = new TlsConfig(
 $topology = ClusterTopology::create(
     clusterName:       'production',
     self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
-    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
-    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
-    seeds:             [NodeEndpoint::fromString('10.0.0.2:7355')],
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7361')],
 )->withTls($tls);
 
 // Transport selection is automatic. No code changes are needed beyond
@@ -198,7 +198,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         gossip propagates the rest within one interval.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">bindEndpoint</code> — the address the TCP server listens on (e.g. <code class="font-mono">0.0.0.0:7355</code>)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">bindEndpoint</code> — the address the TCP server listens on (e.g. <code class="font-mono">0.0.0.0:7361</code>)</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">advertiseEndpoint</code> — what peers connect to (pod IP in Kubernetes, public IP on bare-metal)</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Gossip and heartbeat default to 1 s; the full view propagates within one round</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Auto-reconnect with exponential back-off (100 ms → 30 s) on TCP disconnection</span></li>
@@ -279,7 +279,7 @@ $node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>No code changes beyond topology config; transport selection remains automatic</span></li>
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Inbound links are capped and unfinished handshakes time out — bounded against trivial resource exhaustion (<code class="font-mono">withInboundLimits()</code>)</span></li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Never expose plaintext cluster ports (default 7355) to untrusted networks</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Never expose plaintext cluster ports (default 7361) to untrusted networks</span></li>
       </ul>
     </div>
   </section>

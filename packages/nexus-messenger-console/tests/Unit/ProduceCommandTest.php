@@ -54,6 +54,38 @@ final class ProduceCommandTest extends TestCase
     }
 
     #[Test]
+    public function failsOnZeroCount(): void
+    {
+        $tester = new CommandTester($this->command);
+
+        $exitCode = $tester->execute([
+            '--count' => '0',
+            'body' => '{"id":"x"}',
+            'type' => 'console.ping',
+        ]);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--count', $tester->getDisplay());
+        self::assertCount(0, $this->sender->sent);
+    }
+
+    #[Test]
+    public function failsOnNonNumericCount(): void
+    {
+        $tester = new CommandTester($this->command);
+
+        $exitCode = $tester->execute([
+            '--count' => 'abc',
+            'body' => '{"id":"x"}',
+            'type' => 'console.ping',
+        ]);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--count', $tester->getDisplay());
+        self::assertCount(0, $this->sender->sent);
+    }
+
+    #[Test]
     public function failsOnUnknownType(): void
     {
         $tester = new CommandTester($this->command);
@@ -63,8 +95,23 @@ final class ProduceCommandTest extends TestCase
             'type' => 'unknown.type',
         ]);
 
-        self::assertSame(Command::FAILURE, $exitCode);
+        self::assertSame(Command::INVALID, $exitCode);
         self::assertStringContainsString("unknown.type", $tester->getDisplay());
+        self::assertCount(0, $this->sender->sent);
+    }
+
+    #[Test]
+    public function failsWithInvalidOnUndeserializableBody(): void
+    {
+        $tester = new CommandTester($this->command);
+
+        $exitCode = $tester->execute([
+            'body' => 'not-json-at-all',
+            'type' => 'console.ping',
+        ]);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('deserialize', $tester->getDisplay());
         self::assertCount(0, $this->sender->sent);
     }
 

@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Example\MessengerRedis\Actor;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Example\MessengerRedis\Message\OrderAccepted;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
 
 /**
@@ -15,6 +16,11 @@ use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
  * In a real application this actor would persist the order, publish downstream
  * events, call a payment actor, etc. Here it logs to stdout so the
  * competing-consumer pattern is visible at a glance.
+ *
+ * Ask path: when the message arrives on the ask channel the ReceiverActor sets
+ * a MessengerReplyRef as the sender. We answer with an OrderAccepted, which
+ * routes back over the reply transport and resolves the asker's Future. On the
+ * plain tell path there is no sender, so no reply is published.
  */
 final class OrderProcessor implements ActorHandler
 {
@@ -30,6 +36,8 @@ final class OrderProcessor implements ActorHandler
                     'order_id' => $message->orderId,
                 ],
             );
+
+            $ctx->sender()?->tell(new OrderAccepted($message->orderId, 'accepted'));
         }
 
         return Behavior::same();

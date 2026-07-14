@@ -14,6 +14,8 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Messenger\Transport\InMemory\InMemoryTransport;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
@@ -50,6 +52,42 @@ final class ThreadedConsumeCommandTest extends TestCase
         self::assertTrue($definition->hasOption('time-limit'));
         self::assertTrue($definition->hasOption('poll-interval'));
         self::assertTrue($definition->hasOption('dead-letters'));
+    }
+
+    #[Test]
+    public function rejectsZeroLimitWithoutStarting(): void
+    {
+        $command = new ThreadedConsumeCommand(MinimalBootstrap::class);
+        $tester  = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--limit' => '0']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--limit must be a positive integer', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function rejectsNonNumericThreadsWithoutStarting(): void
+    {
+        $command = new ThreadedConsumeCommand(MinimalBootstrap::class);
+        $tester  = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--threads' => 'abc']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('--threads must be a positive integer', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function rejectsZeroMemoryLimitWithoutStarting(): void
+    {
+        $command = new ThreadedConsumeCommand(MinimalBootstrap::class);
+        $tester  = new CommandTester($command);
+
+        $exitCode = $tester->execute(['--memory-limit' => '0']);
+
+        self::assertSame(Command::INVALID, $exitCode);
+        self::assertStringContainsString('greater than 0', $tester->getDisplay());
     }
 
     #[Test]

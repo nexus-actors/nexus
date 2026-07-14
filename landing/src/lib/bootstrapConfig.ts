@@ -8,7 +8,6 @@ export interface Selections {
   runtime: Runtime;
   http: boolean;
   websockets: boolean;
-  doctrine: boolean;
   otel: boolean;
   cluster: boolean;
   messenger: boolean;
@@ -61,10 +60,6 @@ function getPackages(s: Selections): { prod: string[]; dev: string[] } {
   } else if (s.persistence === 'es-doctrine' || s.persistence === 'ds-doctrine') {
     prod.push('nexus-actors/persistence');
     prod.push('nexus-actors/persistence-doctrine');
-  } else if (s.doctrine) {
-    // Doctrine ORM bridge only (no persistence chosen but doctrine checkbox ticked)
-    prod.push('nexus-actors/doctrine-orm');
-    prod.push('nexus-actors/doctrine-dbal');
   }
 
   if (s.otel) {
@@ -73,14 +68,16 @@ function getPackages(s: Selections): { prod: string[]; dev: string[] } {
   }
 
   // TCP cluster mesh — Swoole runtime only (coroutine sockets).
-  if (s.cluster && (s.runtime === 'swoole' || s.runtime === 'worker-pool')) {
+  if (s.cluster && s.runtime === 'swoole') {
     prod.push('nexus-actors/cluster');
     prod.push('nexus-actors/cluster-tcp');
   }
 
   // Symfony Messenger bridge — publish/consume actor messages over a broker.
+  // messenger-console ships the nexus:messenger:consume / :produce commands.
   if (s.messenger) {
     prod.push('nexus-actors/messenger');
+    prod.push('nexus-actors/messenger-console');
     prod.push('symfony/messenger');
   }
 
@@ -225,7 +222,7 @@ function buildBootstrap(s: Selections): string {
       onStartBlocks.push(
         `    ->onStart(static function ($system): void {\n` +
         `        $dsnParser = new DsnParser(['mysql' => 'pdo_mysql', 'postgres' => 'pdo_pgsql', 'sqlite' => 'pdo_sqlite']);\n` +
-        `        $connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));\n` +
+        `        $connection = DriverManager::getConnection($dsnParser->parse((string) getenv('DATABASE_URL')));\n` +
         storeLines.join('\n') + '\n' +
         `    })`,
       );
@@ -474,10 +471,6 @@ export function generateCreateCommand(s: Selections): string {
     envVars.push('NEXUS_HTTP=1');
   }
 
-  if (s.doctrine) {
-    envVars.push('NEXUS_DOCTRINE=1');
-  }
-
   // Map wizard persistence keys to installer keys (wizard uses ds-*, installer uses durable-*)
   const persistenceMap: Record<Persistence, string> = {
     'none': 'none',
@@ -495,8 +488,8 @@ export function generateCreateCommand(s: Selections): string {
     envVars.push('NEXUS_OTEL=1');
   }
 
-  // Cluster is Swoole-only (the installer refuses it on Fiber anyway).
-  if (s.cluster && s.runtime !== 'fiber') {
+  // Cluster is Swoole-only (the installer refuses it on any other runtime).
+  if (s.cluster && s.runtime === 'swoole') {
     envVars.push('NEXUS_CLUSTER=1');
   }
 
@@ -519,7 +512,7 @@ export function generateCreateCommand(s: Selections): string {
   const envPrefix = envVars.join(' ');
   const nonInteractive = [
     `${envPrefix} \\`,
-    '    composer create-project nexus-actors/skeleton my-app -- --no-interaction',
+    '    composer create-project --no-interaction nexus-actors/skeleton my-app',
     'cd my-app',
   ].join('\n');
 
@@ -541,7 +534,6 @@ export const DEFAULT_SELECTIONS: Selections = {
   runtime: 'fiber',
   http: false,
   websockets: false,
-  doctrine: false,
   otel: false,
   cluster: false,
   messenger: false,

@@ -112,8 +112,8 @@ $askSupport = MessengerBridge::askSupport($system, $channelFactory);
 $ordersRef = MessengerBridge::producer($requestTransport, 'orders-out', askSupport: $askSupport);
 
 // 4. In your actor handler — identical call to a local ask().
-/** @var OrderConfirmed \\$reply */
-\\$reply = \\$ordersRef->ask(new PlaceOrder(\\$orderId), Duration::seconds(10))->await();
+/** @var OrderConfirmed \$reply */
+\$reply = \$ordersRef->ask(new PlaceOrder(\$orderId), Duration::seconds(10))->await();
 
 // Responder side: plain Symfony (no Nexus dependency).
 // Reply by publishing to X-Nexus-Reply-To with X-Nexus-Correlation-Id echoed back.`;

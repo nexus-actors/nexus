@@ -59,10 +59,16 @@ Alternatively, use the Symfony Console runner from `nexus-actors/messenger-conso
 # Consume with the Console command (--limit stops after N messages)
 docker compose run --rm app php bin/console nexus:messenger:consume --receivers=3 --limit=50
 
-# Publish via the Console command
-docker compose run --rm app php bin/console nexus:messenger:produce order-placed \
+# Publish via the Console command. nexus:messenger:produce parses the JSON body
+# through the CONFIGURED serializer, so the body format MUST match SERIALIZER.
+# The default SERIALIZER=php-native expects a PHP-serialized body and rejects
+# JSON with "Failed to unserialize data" — pass SERIALIZER=json for a JSON body:
+docker compose run --rm -e SERIALIZER=json app php bin/console nexus:messenger:produce order-placed \
   '{"orderId":"A-1","customerId":"c-1","amountCents":1999}'
 ```
+
+> The console consumer must run with the **same** `SERIALIZER` value as the producer,
+> otherwise it cannot decode the bodies the producer wrote.
 
 ---
 
@@ -145,7 +151,95 @@ $events = app(\Illuminate\Contracts\Events\Dispatcher::class);
 
 ## Ask/reply
 
-The console worker also answers broker-based asks. `bin/console` wires a `MapReplySenderLocator(['replies' => $repliesTransport])` into `ConsumeCommand`, mapping the logical channel name `replies` to a second Redis Stream (`REPLY_STREAM`, default `replies`). Any asker — a Nexus `MessengerActorRef::ask()` or a plain Symfony producer — stamps its request with the `X-Nexus-Correlation-Id` and `X-Nexus-Reply-To` headers; the receiver then delivers the message with a reply ref as the sender, the responder actor answers via `$ctx->sender()?->tell(...)`, and the request is acked only after the reply is published (process-ack). The reply-to header carries a logical name only — reply destinations are always resolved through the configured locator, never constructed from wire values.
+The console worker answers broker-based asks, and `bin/ask.php` is a runnable
+asker that issues one request and prints the correlated reply.
+
+**Responder side** — `bin/console` wires a `MapReplySenderLocator(['replies' => $repliesTransport])`
+into `ConsumeCommand`, mapping the logical channel name `replies` to a second
+Redis Stream (`REPLY_STREAM`, default `replies`). When a request carries the
+`X-Nexus-Correlation-Id` + `X-Nexus-Reply-To` headers, the receiver delivers it
+with a `MessengerReplyRef` as the sender; `OrderProcessor` answers with
+`$ctx->sender()?->tell(new OrderAccepted(...))`, and the request is acked only
+after the reply is published (process-ack). The reply-to header carries a
+logical name only — reply destinations are always resolved through the
+configured locator, never constructed from wire values.
+
+**Asker side** — `bin/ask.php` wires `MessengerBridge::askSupport()` with a
+`TransportReplyChannelFactory` (channel name `replies`, `ReplyQueueLifecycle::Persistent`
+over the shared reply stream), builds a producer with that ask support, and
+calls `MessengerActorRef::ask($request, $timeout)->await()` inside a Fiber. The
+`ask()` stamps the correlation + reply-to headers; `AskSupport` lazily spawns
+the `nexus-ask-replies` consumer that resolves the returned `Future` when the
+matching reply lands on the reply stream.
+
+Run the responder first (keep it running), then the asker in a second terminal.
+Use the **same `SERIALIZER`** on both sides — the request and reply share one
+serializer:
+
+```bash
+# terminal 1 — responder (blocks, answers asks):
+docker compose run --rm -e SERIALIZER=json app php bin/console nexus:messenger:consume --receivers=1
+
+# terminal 2 — asker (one request, prints the reply, exits):
+docker compose run --rm -e SERIALIZER=json app php bin/ask.php A-42
+```
+
+Asker output:
+
+```
+INFO nexus-asker: ask → publishing request  order_id=A-42
+INFO nexus-asker: ask ← reply received  order_id=A-42 status=accepted
+```
+
+---
+
+## Threaded consumer (Swoole thread pool)
+
+`bin/worker.php` and `bin/console` scale by spawning competing `ReceiverActor`
+Fibers **inside one process/thread**. `bin/consume-threads.php` scales across
+**OS threads** instead: it runs `nexus:messenger:consume-threads`, a Swoole
+thread pool where each thread owns an independent `ActorSystem` + `SwooleRuntime`,
+its own Redis connection, and N competing receivers. The broker load-balances
+across threads because each thread holds a distinct consumer-group connection.
+
+**Requires ext-swoole ≥ 6.2.1 built with `--enable-swoole-thread` (ZTS PHP).**
+The example's default Fiber-only image cannot run it — use a Swoole ZTS image
+(see the monorepo `docker/Dockerfile` `php-swoole` target).
+
+The command takes only a **class-string** — `OrderConsumerBootstrap::class` — so
+no live object crosses the thread boundary. Each thread constructs its own
+bootstrap via `new OrderConsumerBootstrap()`, whose two methods run per-thread:
+
+- `setup(ActorSystem $system): MessageRouter` — spawns `OrderProcessor` on that
+  thread's system and returns the router that targets it.
+- `receiver(): ReceiverInterface` — opens a **fresh** Redis connection for that
+  thread (never a shared object).
+
+Per-thread config (`REDIS_DSN`, `REDIS_STREAM`, `CONSUMER_GROUP`, `SERIALIZER`)
+is read from environment variables by the bootstrap inside each thread, keeping
+the class argument-free.
+
+```bash
+# 4 threads × 2 receivers each = 8 competing consumers; each thread recycles
+# after 1000 messages (--limit is PER-THREAD, each has its own LifecycleWatchdog).
+docker compose run --rm app php bin/consume-threads.php --threads=4 --receivers=2 --limit=1000
+
+# No limits → runs until SIGTERM (stop via the process manager).
+docker compose run --rm app php bin/consume-threads.php --threads=4
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--threads` / `-t` | `2` | Worker threads |
+| `--receivers` / `-r` | `1` | Competing receivers **per thread** |
+| `--limit` | _(none)_ | Stop each thread after N messages |
+| `--memory-limit` | _(none)_ | Stop each thread at e.g. `128M`, `1G` |
+| `--time-limit` | _(none)_ | Stop each thread after N seconds |
+| `--poll-interval` | `100` | Receiver poll interval (ms) |
+| `--dead-letters` | off | Route unroutable messages to dead letters |
+
+> All limit options are **per-thread**: `--limit=1000` on a 4-thread pool means
+> each thread processes up to 1000 messages before recycling, not 1000 total.
 
 ---
 

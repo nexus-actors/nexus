@@ -47,6 +47,12 @@ final readonly class MemoryLimit
         $amount = (int) $matches[1];
         $suffix = strtoupper($matches[2]);
 
+        if ($amount === 0) {
+            throw new InvalidArgumentException(
+                "Invalid memory limit '{$value}'. Expected a value greater than 0 (e.g. '128M', '1G').",
+            );
+        }
+
         return match ($suffix) {
             'K' => $amount * 1024,
             'M' => $amount * 1024 * 1024,

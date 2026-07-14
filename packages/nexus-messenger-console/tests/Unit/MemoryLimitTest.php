@@ -46,7 +46,6 @@ final class MemoryLimitTest extends TestCase
             'M suffix lowercase' => ['1m', 1024 * 1024],
             'M suffix uppercase' => ['128M', 128 * 1024 * 1024],
             'plain integer' => ['1024', 1024],
-            'zero' => ['0', 0],
         ];
     }
 
@@ -63,6 +62,8 @@ final class MemoryLimitTest extends TestCase
             'no digits' => ['M'],
             'unknown suffix' => ['128T'],
             'with spaces' => ['128 M'],
+            'zero' => ['0'],
+            'zero with suffix' => ['0M'],
         ];
     }
 }

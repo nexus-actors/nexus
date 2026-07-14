@@ -25,6 +25,7 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Example\MessengerRedis\Actor\OrderProcessor;
 use Monadial\Nexus\Example\MessengerRedis\Event\StdoutDispatcher;
+use Monadial\Nexus\Example\MessengerRedis\Message\OrderAccepted;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
 use Monadial\Nexus\Example\MessengerRedis\Serialization\SerializerFactory;
 use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
@@ -51,8 +52,9 @@ require __DIR__ . '/../vendor/autoload.php';
 // ---------------------------------------------------------------------------
 $typeRegistry = new TypeRegistry();
 $typeRegistry->registerFromAttribute(OrderPlaced::class);
+$typeRegistry->registerFromAttribute(OrderAccepted::class);
 
-$nexusSerializer = SerializerFactory::fromEnvironment($typeRegistry, [OrderPlaced::class]);
+$nexusSerializer = SerializerFactory::fromEnvironment($typeRegistry, [OrderAccepted::class, OrderPlaced::class]);
 $serializer = new NexusMessengerSerializer($nexusSerializer, $typeRegistry);
 
 // ---------------------------------------------------------------------------
