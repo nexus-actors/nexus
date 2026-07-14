@@ -30,7 +30,7 @@ use Monadial\\Nexus\\App\\NexusApp;
 
 $emPool = DoctrineEmPool::forConfig(
     name: 'wallets',
-    connParams: (new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql']))->parse($_ENV['DATABASE_URL']),
+    connParams: (new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql']))->parse((string) getenv('DATABASE_URL')),
     ormSetup: $ormConfig,
 );
 
@@ -116,7 +116,7 @@ use Doctrine\\Migrations\\DependencyFactory;
 use Doctrine\\ORM\\EntityManager;
 
 $dsnParser  = new \\Doctrine\\DBAL\\Tools\\DsnParser(['postgres' => 'pdo_pgsql', 'mysql' => 'pdo_mysql']);
-$connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));
+$connection = DriverManager::getConnection($dsnParser->parse((string) getenv('DATABASE_URL')));
 $entityManager = new EntityManager($connection, $ormConfig);
 
 return DependencyFactory::fromEntityManager(
@@ -188,10 +188,10 @@ $eventStore = new DoctrineEventStore($entityManager);
         coroutines. Scale to 8 threads and you need exactly 8 connections — not 800.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> One EntityManager per worker — no cross-actor EM sharing</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> autoFlush after each successful command handler</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Connection errors trigger supervisor restart, not a 500</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with Doctrine ORM 3.x and DBAL 4.x</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>One EntityManager per worker — no cross-actor EM sharing</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>autoFlush after each successful command handler</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Connection errors trigger supervisor restart, not a 500</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Works with Doctrine ORM 3.x and DBAL 4.x</span></li>
       </ul>
     </div>
     <CodeBlock code={poolCode} lang="php" title="bootstrap.php" />

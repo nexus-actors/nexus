@@ -1,0 +1,32 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+
+$app = new Application('Nexus App Console', '0.1.0');
+
+// Register your own commands here:
+// $app->add(new App\Command\MyCommand());
+
+// ── Symfony Messenger bridge (nexus-actors/messenger-console) ────────────────
+// If you selected the Messenger bridge, register the consume/produce commands.
+// Both need dependencies you must wire from your transport configuration:
+//
+//   nexus:messenger:consume — poll a ReceiverInterface and route to actors
+//   nexus:messenger:produce — publish a message onto a SenderInterface
+//
+// use Monadial\Nexus\Messenger\Console\ConsumeCommand;
+// use Monadial\Nexus\Messenger\Console\ProduceCommand;
+//
+// if (class_exists(ConsumeCommand::class)) {
+//     $app->add(new ConsumeCommand($runtime, $receiver, $routing));
+//     $app->add(new ProduceCommand($sender, $serializer, $typeRegistry));
+// }
+//
+// See https://docs.nexusactors.com/docs/packages/messenger-console
+
+$app->run();

@@ -50,6 +50,9 @@ export default function MobileNav({ docsHref }: Props) {
             <a href="/messenger" className="px-2 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded transition-colors duration-150">
               Messenger
             </a>
+            <a href="/cluster" className="px-2 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded transition-colors duration-150">
+              Cluster
+            </a>
             <a href="/observability" className="px-2 py-1.5 text-sm text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded transition-colors duration-150">
               Observability
             </a>

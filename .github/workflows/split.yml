@@ -54,6 +54,7 @@ jobs:
           - { local: 'nexus-runtime-swoole', remote: 'runtime-swoole' }
           - { local: 'nexus-runtime', remote: 'runtime' }
           - { local: 'nexus-serialization-msgpack', remote: 'serialization-msgpack' }
+          - { local: 'nexus-skeleton', remote: 'skeleton' }
           - { local: 'nexus-serialization', remote: 'serialization' }
           - { local: 'nexus-worker-pool-swoole', remote: 'worker-pool-swoole' }
           - { local: 'nexus-worker-pool', remote: 'worker-pool' }
