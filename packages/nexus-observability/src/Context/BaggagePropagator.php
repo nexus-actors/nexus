@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Observability\Context;
 
+use Override;
+
 use function explode;
 use function implode;
 use function rawurldecode;
@@ -23,6 +25,7 @@ final class BaggagePropagator implements ContextPropagator
 {
     private const string BAGGAGE = 'baggage';
 
+    #[Override]
     public function inject(Context $context, array &$carrier): void
     {
         if ($context->baggage->isEmpty()) {
@@ -38,6 +41,7 @@ final class BaggagePropagator implements ContextPropagator
         $carrier[self::BAGGAGE] = implode(',', $members);
     }
 
+    #[Override]
     public function extract(array $carrier, ?Context $context = null): Context
     {
         $base = $context ?? Context::root();
@@ -59,14 +63,14 @@ final class BaggagePropagator implements ContextPropagator
                 continue;
             }
 
-            [$key, $value] = explode('=', $pair, 2);
-            $key = rawurldecode(trim($key));
+            $parts = explode('=', $pair, 2);
+            $key = rawurldecode(trim($parts[0]));
 
             if ($key === '') {
                 continue;
             }
 
-            $baggage = $baggage->with($key, rawurldecode(trim($value)));
+            $baggage = $baggage->with($key, rawurldecode(trim($parts[1] ?? '')));
         }
 
         return $base->withBaggage($baggage);

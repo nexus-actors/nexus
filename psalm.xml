@@ -21,6 +21,9 @@
         <directory name="packages/nexus-http-toolkit/src" />
         <directory name="packages/nexus-http-ws/src" />
         <directory name="packages/nexus-logger/src" />
+        <directory name="packages/nexus-observability/src" />
+        <directory name="packages/nexus-observability-otel/src" />
+        <directory name="packages/nexus-observability-serialization/src" />
         <directory name="packages/nexus-persistence/src" />
         <directory name="packages/nexus-persistence-dbal/src" />
         <directory name="packages/nexus-persistence-doctrine/src" />

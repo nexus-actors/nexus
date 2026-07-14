@@ -88,6 +88,7 @@
             "Monadial\\Nexus\\Observability\\Logger\\": "packages/nexus-observability-logger/src/",
             "Monadial\\Nexus\\Observability\\Otel\\": "packages/nexus-observability-otel/src/",
             "Monadial\\Nexus\\Observability\\Persistence\\": "packages/nexus-observability-persistence/src/",
+            "Monadial\\Nexus\\Observability\\Serialization\\": "packages/nexus-observability-serialization/src/",
             "Monadial\\Nexus\\Observability\\Swoole\\": "packages/nexus-observability-swoole/src/",
             "Monadial\\Nexus\\Observability\\WorkerPool\\": "packages/nexus-observability-worker-pool/src/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\": "packages/nexus-persistence-doctrine/src/"
@@ -131,6 +132,7 @@
             "Monadial\\Nexus\\Observability\\Logger\\Tests\\": "packages/nexus-observability-logger/tests/",
             "Monadial\\Nexus\\Observability\\Otel\\Tests\\": "packages/nexus-observability-otel/tests/",
             "Monadial\\Nexus\\Observability\\Persistence\\Tests\\": "packages/nexus-observability-persistence/tests/",
+            "Monadial\\Nexus\\Observability\\Serialization\\Tests\\": "packages/nexus-observability-serialization/tests/",
             "Monadial\\Nexus\\Observability\\Swoole\\Tests\\": "packages/nexus-observability-swoole/tests/",
             "Monadial\\Nexus\\Observability\\WorkerPool\\Tests\\": "packages/nexus-observability-worker-pool/tests/",
             "Monadial\\Nexus\\Persistence\\Doctrine\\Tests\\": "packages/nexus-persistence-doctrine/tests/"

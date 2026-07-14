@@ -34,7 +34,7 @@ final class NoopMeterTest extends TestCase
         $histogram = $meter->histogram('nexus.message.processing.duration', 'ms');
         $histogram->record(12.5, ['nexus.message.type' => 'Greet']);
 
-        $gauge = $meter->observableGauge('nexus.runtime.coroutines', static fn (): int => 3);
+        $gauge = $meter->observableGauge('nexus.runtime.coroutines', static fn(): int => 3);
 
         self::assertInstanceOf(NoopCounter::class, $counter);
         self::assertInstanceOf(NoopUpDownCounter::class, $upDown);

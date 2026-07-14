@@ -22,12 +22,16 @@ use Override;
  * contract. Started spans are activated so nested spans chain via OTEL context
  * storage; the returned {@see OtelSpan} detaches the scope on end.
  */
-final class OtelTracer implements Tracer
+final readonly class OtelTracer implements Tracer
 {
-    public function __construct(
-        private readonly TracerInterface $tracer,
-    ) {}
+    public function __construct(private TracerInterface $tracer,) {}
 
+    /**
+     * @psalm-suppress ArgumentTypeCoercion the OTel SDK requires a non-empty-string span name; the
+     *                 framework Tracer contract accepts any string, so the name is forwarded as-is.
+     * @psalm-suppress InternalMethod OtelContext::getRoot() is the SDK's own supported way to build
+     *                 a fresh root context for a remote parent link.
+     */
     #[Override]
     public function startSpan(
         string $name,
@@ -56,6 +60,9 @@ final class OtelTracer implements Tracer
         return new OtelSpan($span, $span->activate());
     }
 
+    /**
+     * @return 0|1|2|3|4
+     */
     private function mapKind(SpanKind $kind): int
     {
         return match ($kind) {
