@@ -84,7 +84,7 @@ $nodeAddress = new NodeAddress(
 );
 ```
 
-Application code using `WorkerActorRef` works against a future cluster transport without change. The TCP transport is the missing piece; until it lands, you can write your own `ClusterTransport` and plug it into `WorkerNode`.
+Application code using `WorkerActorRef` works against a cluster transport without change. The TCP transport has landed as [`nexus-cluster-tcp`](../packages/cluster-tcp.md) — a Swoole TCP mesh with phi-accrual failure detection and gossip membership. Writing your own `ClusterTransport` and plugging it into `WorkerNode` is now only for bespoke transports.
 
 ## Next steps
 

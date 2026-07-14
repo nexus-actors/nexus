@@ -49,7 +49,8 @@ Nexus is organized as a monorepo of focused packages, each published independent
 | **nexus-runtime-step** | `nexus-actors/runtime-step` | Deterministic step-by-step runtime for tests. |
 | **nexus-worker-pool** | `nexus-actors/worker-pool` | Local thread-based worker pool with consistent-hash routing. |
 | **nexus-worker-pool-swoole** | `nexus-actors/worker-pool-swoole` | Swoole thread primitives: `Thread\Queue` transport, `Thread\Map` directory. |
-| **nexus-cluster** | `nexus-actors/cluster` | Remote contracts for future TCP-based multi-machine clustering. |
+| **nexus-cluster** | `nexus-actors/cluster` | Remote contracts for multi-machine clustering: `NodeAddress`, `ClusterTransport`, `NodeHashRing`. |
+| **nexus-cluster-tcp** | `nexus-actors/cluster-tcp` | Swoole TCP mesh: gossip membership, phi-accrual failure detection, location-transparent `ClusterRef` tell/ask, TLS. |
 | **nexus-persistence** | `nexus-actors/persistence` | Event sourcing and durable state abstractions with in-memory stores. |
 | **nexus-persistence-dbal** | `nexus-actors/persistence-dbal` | Doctrine DBAL storage backends for persistence. |
 | **nexus-persistence-doctrine** | `nexus-actors/persistence-doctrine` | Doctrine ORM adapter for persistence. |

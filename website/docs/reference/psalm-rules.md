@@ -281,6 +281,85 @@ final class CreateOrderHandler
 
 ---
 
+## MismatchedReplyTypeRule
+
+**Hook class:** `Monadial\Nexus\Psalm\Hook\MismatchedReplyTypeRule`
+
+**What it catches:** `ActorContext::reply($x)` calls where the message currently being handled declares a `#[ReplyType(Expected::class)]` attribute but `$x` is not an instance of `Expected`.
+
+**Issue type:** `MismatchedReplyType`
+
+**Example error:**
+
+```
+ERROR: MismatchedReplyType: reply() for message GetOrder expects Order, got User.
+```
+
+**Why:** `#[ReplyType]` documents the reply contract of an ask-able message. Sending the wrong reply type breaks the caller's `ask()` expectation at runtime, where it cannot be type-checked. The rule catches it statically.
+
+**How it identifies the current message:** at a `reply()` call site it walks the variables in scope for exactly one whose narrowed type is a single concrete class carrying `#[ReplyType]`. If zero or more than one qualify, it silently skips rather than false-positive. It supports both the `match (true) { $msg instanceof X => ... }` pattern and typed-parameter handlers. A reply value whose type is a union that includes the expected type is allowed.
+
+**Fix:** reply with the declared type:
+
+```php title="src/Actor/OrderActor.php"
+#[ReplyType(Order::class)]
+final readonly class GetOrder
+{
+    public function __construct(public string $id) {}
+}
+
+// In the handler:
+$ctx->reply($order); // an Order instance, not some other type
+```
+
+**See also:** [Attributes — #[ReplyType]](./attributes.md)
+
+---
+
+## MissingTransactionalDeclarationRule
+
+**Hook class:** `Monadial\Nexus\Psalm\Hook\MissingTransactionalDeclarationRule`
+
+**What it catches:** A class annotated with `#[Transactional]` where none of its methods declare a `Doctrine\DBAL\Connection` or `Doctrine\ORM\EntityManagerInterface` parameter.
+
+**Issue type:** `MissingTransactionalDeclaration`
+
+**Example error:**
+
+```
+ERROR: MissingTransactionalDeclaration: Class OrderService is annotated with #[Transactional]
+       but none of its methods declare a Doctrine\DBAL\Connection or
+       Doctrine\ORM\EntityManagerInterface parameter.
+```
+
+**Why:** The `#[Transactional]` middleware opens a transaction on a connection or entity manager passed into the handler. Without such a parameter, the middleware has nothing to wrap and the annotation is a silent no-op.
+
+**Fix:** accept a `Connection` (or `EntityManagerInterface`) parameter in the transactional method so the middleware can open the transaction.
+
+---
+
+## PooledConnectionInActorPropertyRule
+
+**Hook class:** `Monadial\Nexus\Psalm\Hook\PooledConnectionInActorPropertyRule`
+
+**What it catches:** `ActorHandler` / `StatefulActorHandler` classes that hold a pooled connection resource in an instance property.
+
+**Issue type:** `PooledConnectionInActorProperty`
+
+**Example error:**
+
+```
+ERROR: PooledConnectionInActorProperty: Actor handler OrderActor holds a pooled connection
+       in property $connection. Storing a pooled connection for the actor's lifetime
+       defeats the connection pool.
+```
+
+**Why:** Actor handlers are long-lived. Pinning a pooled connection in a property holds it for the actor's whole lifetime, defeating the pool. Borrow a connection per message via `ConnectionScope` middleware instead.
+
+**Fix:** don't store the connection; obtain it per message from the middleware-provided scope.
+
+---
+
 ## PropsReturnTypeProvider
 
 **Hook class:** `Monadial\Nexus\Psalm\Hook\PropsReturnTypeProvider`

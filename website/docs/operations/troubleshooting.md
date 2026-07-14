@@ -155,17 +155,13 @@ docker compose exec php vendor/bin/phpunit --filter=testActorStopsOnPoisonPill
 
 **Symptom:** The caller receives `AskTimeoutException` but the handler log shows the reply was sent.
 
-**Cause:** The reply arrived after the ask timeout expired. `ask()` creates a temporary one-shot actor with a `ReceiveTimeout`; if the reply is in flight when the timeout fires, the one-shot actor is already stopped and the reply goes to dead letters.
+**Cause:** The reply arrived after the ask timeout expired. `ask()` registers a one-shot reply slot with a timeout; if the reply is in flight when the timeout fires, the slot is already discarded and the reply goes to dead letters.
 
-**Fix:** Increase the ask timeout. If the handler is consistently slow, either move the work to a background actor and use `tell`-based fire-and-forget, or increase the timeout to match the 99th-percentile handler duration:
+**Fix:** Increase the ask timeout. If the handler is consistently slow, either move the work to a background actor and use `tell`-based fire-and-forget, or increase the timeout to match the 99th-percentile handler duration. `ask()` is message-first — pass the message and a `Duration`, then `await()` the returned `Future`:
 
 ```php title="src/Client/OrderClient.php"
 // Increase from 1 s to 5 s
-$result = $ref->ask(
-    /** @param ActorRef<OrderFound> $replyTo */
-    static fn(ActorRef $replyTo) => new GetOrder($id, $replyTo),
-    Duration::seconds(5),
-);
+$result = $ref->ask(new GetOrder($id), Duration::seconds(5))->await();
 ```
 
 **See also:** [Ask pattern](../core-concepts/ask-pattern.md), [Reference overview](../reference/overview.md)
@@ -197,21 +193,22 @@ $name = 'order-' . str_replace(['/', ' '], ['-', '_'], $entityId);
 
 ### 10. `NoSenderException` from `$ctx->reply()`
 
-**Symptom:** `NoSenderException` thrown when calling `$ctx->sender()` without an `Option` check, or when using a hypothetical `reply()` helper.
+**Symptom:** `NoSenderException` thrown from `$ctx->reply()`, or a `TypeError` from dereferencing `$ctx->sender()` without a null check.
 
-**Cause:** `$ctx->sender()` returns `Option<ActorRef>`. When an actor receives a message via `tell()` with no explicit sender (the common case), `sender()` is `None`. Calling `.get()` on a `None` throws.
+**Cause:** `$ctx->sender()` returns `?ActorRef` — it is `null` when an actor receives a message via `tell()` with no explicit sender (the common case). `$ctx->reply()` throws `NoSenderException` for the same reason. Calling a method on the `null` sender is a `TypeError`.
 
-**Fix:** Always check whether the sender is present before replying. Use the ask pattern for request-reply, which automatically wires the reply-to reference:
+**Fix:** Always null-check the sender before replying. Use the ask pattern for request-reply, which automatically wires the reply-to reference:
 
 ```php title="src/Actors/QueryActor.php"
-// Wrong — throws if message was sent with tell()
-$ctx->sender()->get()->tell(new Response($result));
+// Wrong — TypeError if the message was sent with tell()
+$ctx->sender()->tell(new Response($result));
 
-// Correct — check presence first
-$ctx->sender()->ifPresent(
-    /** @param ActorRef<Response> $sender */
-    static fn(ActorRef $sender) => $sender->tell(new Response($result)),
-);
+// Correct — null-check first
+$sender = $ctx->sender();
+
+if ($sender !== null) {
+    $sender->tell(new Response($result));
+}
 ```
 
 **See also:** [Ask pattern](../core-concepts/ask-pattern.md)

@@ -184,7 +184,7 @@ Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 
 | `nexus.messenger.replies.sent` | Consumer (responder) | Incremented when a reply is published back to the requester transport |
 | `nexus.messenger.replies.dropped` | Reply consumer | Incremented when a reply envelope is dropped — missing `CorrelationIdStamp` or unknown correlation ID |
 
-All counters carry a `nexus.message.type` attribute with the message class name, except `nexus.messenger.asks.pending` (gauge), `nexus.messenger.asks.timed_out`, and `nexus.messenger.asks.responder_expired` (correlation IDs are high-cardinality and excluded).
+Only the counters that have the message instance in scope carry a `nexus.message.type` attribute with the message class name: `nexus.messenger.messages.sent`, `nexus.messenger.messages.consumed`, `nexus.messenger.messages.rejected`, `nexus.messenger.messages.dead_lettered`, `nexus.messenger.enqueue.backpressured`, `nexus.messenger.enqueue.dropped`, `nexus.messenger.asks.unroutable_reply_to`, and `nexus.messenger.replies.sent`. The remaining ask/reply counters — `asks.sent`, `asks.resolved`, `asks.timed_out`, `asks.capacity_rejected`, `asks.pending` (gauge), `asks.responder_expired`, and `replies.dropped` — are emitted without the type attribute, because at those sites only a correlation ID (high-cardinality, deliberately excluded) is available rather than the message class.
 
 ### Spans
 

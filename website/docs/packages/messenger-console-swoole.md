@@ -36,6 +36,8 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Messenger\Console\Swoole\ThreadedConsumerBootstrap;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
@@ -49,8 +51,11 @@ final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
 
     public function receiver(): ReceiverInterface
     {
-        // Return a FRESH connection per thread — broker load-balances across them
-        return new RedisTransport(Redis::connect(getenv('REDIS_URL')));
+        // Return a FRESH connection per thread — broker load-balances across them.
+        // $serializer is your NexusMessengerSerializer instance.
+        $connection = Connection::fromDsn(getenv('REDIS_DSN') . '/orders', ['group' => 'workers']);
+
+        return new RedisTransport($connection, $serializer);
     }
 }
 ```

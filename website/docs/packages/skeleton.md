@@ -8,7 +8,7 @@ related:
 
 # nexus-skeleton (project template)
 
-A Composer **project template** that scaffolds a new Nexus application in one command, with your chosen runtime, HTTP/Doctrine integrations, persistence backend, and observability wired up. Think of it as `symfony new my-app` for Nexus.
+A Composer **project template** that scaffolds a new Nexus application in one command, with your chosen runtime, HTTP integration, persistence backend (DBAL or Doctrine ORM), and observability wired up. Think of it as `symfony new my-app` for Nexus.
 
 ## Install
 
@@ -57,8 +57,7 @@ Everything is a starting point, not a lock-in — extend, replace, or delete as 
 |---|---|---|
 | Runtime | `fiber` (default) · `swoole` · `worker-pool` | `NEXUS_RUNTIME` |
 | HTTP server | yes / no (default no) | `NEXUS_HTTP=1` |
-| Doctrine ORM bridge | yes / no (default no) | `NEXUS_DOCTRINE=1` |
-| Persistence | `none` (default) · `es-dbal` · `es-doctrine` · `durable-dbal` · `durable-doctrine` | `NEXUS_PERSISTENCE` |
+| Persistence | `none` (default) · `es-dbal` · `es-doctrine` · `durable-dbal` · `durable-doctrine` — the `*-doctrine` values wire the Doctrine ORM bridge; `*-dbal` values use Doctrine DBAL | `NEXUS_PERSISTENCE` |
 | OpenTelemetry tracing | yes / no (default no) | `NEXUS_OTEL=1` |
 | TCP cluster mesh (Swoole only) | yes / no (default no) | `NEXUS_CLUSTER=1` |
 | Symfony Messenger bridge | yes / no (default no) | `NEXUS_MESSENGER=1` |

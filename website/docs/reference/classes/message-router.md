@@ -73,7 +73,12 @@ $router = new StampMessageRouter([
 ]);
 
 // Custom router: route on any envelope property
-$router = new class implements MessageRouter {
+$router = new class ($priorityRef, $defaultRef) implements MessageRouter {
+    public function __construct(
+        private readonly ActorRef $priorityRef,
+        private readonly ActorRef $defaultRef,
+    ) {}
+
     public function route(object $message, Envelope $envelope): ?ActorRef {
         // inspect stamps, message fields, etc.
         return $message instanceof PriorityMessage

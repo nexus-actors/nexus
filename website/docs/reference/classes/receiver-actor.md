@@ -14,7 +14,9 @@ Supervised poll → route → ack loop over one Symfony Messenger `ReceiverInter
 
 `ReceiverActor` is a behavior factory — it returns a `Behavior<object>` ready to pass to `Props::fromBehavior()` or `MessengerBridge::receiverProps()`. Spawn one actor per Messenger receiver (transport). The actor self-schedules `Poll` ticks and drives the receive loop independently of `symfony/console`.
 
-**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. An accepted envelope is acked immediately; a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms). Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally.
+**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. On the plain (tell) path an accepted envelope is acked as soon as the enqueue is accepted; a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms). Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally.
+
+**Ask / process-ack path:** when a `ReplySenderLocator` is configured and an envelope carries both a `CorrelationIdStamp` and a `ReplyToStamp`, the actor delivers the message to a `LocalActorRef` target with a `MessengerReplyRef` as the sender so the responder can call `$ctx->reply($msg)`. On this path the broker envelope is **not** acked immediately — the process-ack is deferred until the responder publishes its reply (or until `askPendingTimeout`, default 30 s, elapses and the envelope is rejected for redelivery). Redelivered envelopes with an already-pending correlation ID are skipped. Non-local targets cannot carry a reply ref, so an ask envelope routed to one is delivered as a plain `tell()` and acked immediately (no reply possible).
 
 **Unroutable messages:** when `route()` returns `null`, the policy in `ReceiverActorConfig` decides the outcome — `Reject` (default) rejects the envelope back to the transport; `DeadLetters` forwards the inner message to the configured `$deadLetters` ref and acks.
 
@@ -27,16 +29,22 @@ Supervised poll → route → ack loop over one Symfony Messenger `ReceiverInter
 | `dropped` | Target mailbox returned `Dropped`; tick paused without acking. |
 | `rejected` | Unroutable message rejected back to the transport. |
 | `dead_lettered` | Unroutable message forwarded to the dead-letters ref and acked. |
+| `ask_pending` | Ask envelope delivered to a local target with a reply ref; process-ack deferred until the responder replies. |
+| `ask_already_pending` | Redelivered ask envelope whose correlation ID is already pending; skipped without re-delivery. |
+| `ask_non_local` | Ask envelope routed to a non-local target; delivered as plain `tell()` and acked (no reply possible). |
+| `reply_to_rejected` | Ask envelope whose reply-to channel is not in the configured `ReplySenderLocator`; rejected. |
 
 Consumer counters incremented per outcome:
 
 | Counter | Unit | When |
 |---|---|---|
-| `nexus.messenger.messages.consumed` | `{message}` | Envelope acked after successful delivery. |
+| `nexus.messenger.messages.consumed` | `{message}` | Envelope acked (or pending-ask accepted) after successful delivery. |
 | `nexus.messenger.enqueue.backpressured` | `{message}` | Mailbox returned `Backpressured`; tick paused, no ack. |
 | `nexus.messenger.enqueue.dropped` | `{message}` | Mailbox returned `Dropped` (closed or overflow-dropped); tick paused, message stays un-acked for redelivery. |
 | `nexus.messenger.messages.rejected` | `{message}` | Unroutable + `UnroutablePolicy::Reject`. |
 | `nexus.messenger.messages.dead_lettered` | `{message}` | Unroutable + `UnroutablePolicy::DeadLetters`. |
+| `nexus.messenger.asks.unroutable_reply_to` | `{message}` | Ask envelope rejected because its reply-to channel is not in the configured `ReplySenderLocator`. |
+| `nexus.messenger.asks.responder_expired` | `{message}` | Pending ask rejected for redelivery because the responder did not reply within `askPendingTimeout`. |
 
 **PSR-14 events:** when an `EventDispatcherInterface` is provided, the following events are dispatched per outcome:
 
@@ -63,6 +71,7 @@ ReceiverActor::create(
     processedListener: ?ActorRef $processedListener = null,
     events: ?EventDispatcherInterface $events = null,
     observability: ?Observability $observability = null,
+    replySenders: ?ReplySenderLocator $replySenders = null,
 ): Behavior
 ```
 
@@ -75,6 +84,7 @@ ReceiverActor::create(
 | `$processedListener` | `?ActorRef` | `null` | Receives `MessagesProcessed` reports; wire to a `LifecycleWatchdog`. |
 | `$events` | `?EventDispatcherInterface` | `null` | PSR-14 dispatcher for consume/reject/dead-letter events. |
 | `$observability` | `?Observability` | `null` | Used only for trace-context extraction from `TraceContextStamp` to parent-link the `messenger.receive` span. Spans and counters are emitted via `$ctx->tracer()` / `$ctx->meter()` automatically — they are always available as no-ops when observability is disabled. |
+| `$replySenders` | `?ReplySenderLocator` | `null` | Enables the ask/process-ack path: resolves the `X-Nexus-Reply-To` channel to a reply `SenderInterface`. When null, ask envelopes are delivered as plain tells (with a one-time warning). |
 
 ## Example
 

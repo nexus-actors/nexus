@@ -36,6 +36,11 @@ Everything in this section is available today.
 - `WorkerActorRef` — location-transparent cross-worker messaging.
 - `ThreadQueueTransport` — direct `Envelope` over `Thread\Queue` (~260K msgs/sec/pair).
 
+### Multi-machine clustering
+
+- `nexus-cluster` ships the contracts (`NodeAddress`, `ClusterTransport`, `NodeDirectory`, `NodeHashRing`).
+- **`nexus-cluster-tcp`** — a real Swoole TCP mesh implementation: gossip membership, phi-accrual failure detection, location-transparent `ClusterRef` `tell`/`ask`, W3C trace-context propagation, optional TLS and shared-secret handshake auth.
+
 ### HTTP
 
 - `HttpApplication` / `WsApplication` composition root.
@@ -69,10 +74,6 @@ Everything in this section is available today.
 ## In progress
 
 These features are partially shipped. The contracts are in the codebase and the pieces that work today are usable, but the full surface area is still being filled in.
-
-### Multi-machine clustering
-
-The `nexus-cluster` package ships the contracts (`NodeAddress`, `ClusterTransport`, `NodeDirectory`, `NodeHashRing`) so that actor code is forward-compatible with a future TCP transport. A real TCP-based implementation is the next piece. ETA: open.
 
 ### Observability
 

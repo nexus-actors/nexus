@@ -50,6 +50,7 @@ $obs->shutdown();
 |---|---|
 | `always_on` | `AlwaysOnSampler` |
 | `always_off` | `AlwaysOffSampler` |
+| `parentbased_always_off` | `ParentBased(AlwaysOffSampler)` |
 | `traceidratio` | `TraceIdRatioBasedSampler($samplerArg)` |
 | `parentbased_traceidratio` | `ParentBased(TraceIdRatioBasedSampler($samplerArg))` |
 | anything else (default) | `ParentBased(AlwaysOnSampler)` |

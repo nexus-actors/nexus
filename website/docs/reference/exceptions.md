@@ -657,9 +657,49 @@ Extends `RuntimeException`.
 
 ---
 
+## nexus-cluster-tcp
+
+### AskCapacityExceededException (cluster) {#cluster-ask-capacity-exceeded}
+
+`Monadial\Nexus\Cluster\Tcp\Exception\AskCapacityExceededException`
+
+Extends `RuntimeException`. (Distinct from the identically-named [messenger exception](#askcapacityexceededexception).)
+
+**When thrown:** `ClusterRef::ask()` is called when the `TcpAskRegistry` is already at its pending-ask capacity and cannot register another outstanding ask.
+
+**Cause:** More concurrent cluster asks are in flight than the registry allows. No frame is sent — the exception is thrown before any I/O.
+
+**Recovery:** Let outstanding asks resolve or time out before issuing new ones, or raise the registry capacity. Persistent saturation points to slow or unreachable remote responders.
+
+### PeerUnreachableException {#cluster-peer-unreachable}
+
+`Monadial\Nexus\Cluster\Tcp\Exception\PeerUnreachableException`
+
+Extends `RuntimeException` and implements `FutureException`.
+
+**When thrown:** A pending remote ask fails because the target node's link closes before a reply arrives — the ask can never be answered over the dead connection.
+
+**Cause:** The peer disconnected (TCP EOF, network partition, or node shutdown) while an ask was outstanding.
+
+**Recovery:** Failing fast is the intended behaviour — it stops a single dead peer from parking the caller until its own timeout and from filling the ask registry. Retry against a live node, or handle the failure in the ask caller.
+
+### ProtocolException {#cluster-protocol}
+
+`Monadial\Nexus\Cluster\Tcp\Exception\ProtocolException`
+
+Extends `NexusException`.
+
+**When thrown:** A stream buffer violates the cluster TCP framing protocol — an unknown frame type, a declared frame length exceeding the configured maximum, or a structurally invalid frame header.
+
+**Cause:** A malformed or hostile peer, a version mismatch, or corruption on the wire.
+
+**Recovery:** The offending link is closed. Verify all nodes run compatible cluster-tcp versions and that no untrusted traffic reaches the cluster port (never expose plaintext cluster ports to untrusted networks).
+
+---
+
 ## Untyped throws
 
-Beyond the 42 typed exception classes above, the Nexus codebase contains approximately 128 sites that throw standard PHP exceptions — `RuntimeException`, `LogicException`, and `InvalidArgumentException` — directly without a Nexus-specific subclass. These are concentrated in:
+Beyond the typed exception classes above, the Nexus codebase contains approximately 128 sites that throw standard PHP exceptions — `RuntimeException`, `LogicException`, and `InvalidArgumentException` — directly without a Nexus-specific subclass. These are concentrated in:
 
 - Internal runtime plumbing (fiber scheduling, Swoole coroutine management)
 - Validation guards on named constructors (e.g., `WorkerPoolConfig::withThreads()` throws `InvalidArgumentException` for `$workerCount < 1`)

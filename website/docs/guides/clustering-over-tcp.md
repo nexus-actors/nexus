@@ -11,6 +11,12 @@ related:
 
 `nexus-cluster-tcp` provides a Swoole TCP mesh so actor systems on different machines form a cluster, discover each other through gossip, and route messages transparently across node boundaries. This guide covers topology configuration, seed discovery, TLS, failure-detection tuning, and the consistency model you are operating under.
 
+:::note Prerequisites
+- **PHP 8.5+**
+- **ext-swoole ≥ 6.0** — the mesh uses Swoole coroutines. ZTS and `--enable-swoole-thread` are *not* required for the cluster itself (only for `nexus-worker-pool-swoole`).
+- **Docker** — the bundled image ships PHP 8.5 + Swoole. Loopback and unit tests run in the plain `php` container without ext-swoole; real TCP transport needs Swoole.
+:::
+
 ## When to reach for TCP mesh clustering
 
 | | TCP mesh (`nexus-cluster-tcp`) | Broker-edge (`nexus-messenger`) |
@@ -19,7 +25,7 @@ related:
 | **Latency** | Sub-millisecond round-trip on a LAN | Broker-dependent (1–100 ms typical) |
 | **Throughput** | High; no broker bottleneck | Broker-bounded |
 | **Failure model** | Phi-accrual + gossip; AP (partitions continue independently) | Broker availability governs; broker is the SPOF |
-| **Service discovery** | Gossip convergence within ~1 gossip interval (C2 receptionist planned) | Actor paths baked into routing config or stamps |
+| **Service discovery** | Gossip convergence within 2–3 gossip rounds (a receptionist service registry is planned for a future release) | Actor paths baked into routing config or stamps |
 | **Ops footprint** | No extra infra beyond the nodes themselves | Broker infra required |
 | **Best for** | Low-latency actor-to-actor calls across machines, stateful sharding | Durable queuing, cross-language interop, fan-out to many consumers |
 
@@ -183,6 +189,26 @@ In Kubernetes, mount certificates from a `Secret` or use cert-manager to inject 
 Plaintext cluster ports must never be exposed outside an isolated private network. Enable TLS for any deployment that spans datacenters, clouds, or untrusted segments, and complement it with a network policy that restricts who can reach port 7355.
 :::
 
+## Shared-secret handshake authentication
+
+By default `clusterName` is only a label — any peer that can reach the port and speak the handshake protocol is admitted. To restrict membership to nodes that hold a shared secret, set `ClusterTopology::withAuthSecret($secret)`. When set, `HandshakeAuthenticator` signs every outbound handshake with an HMAC over the secret, and `ClusterNode` rejects any inbound handshake that is unsigned or carries a bad signature before it reaches ingress — the rejection is counted as `nexus.cluster.handshake.rejected`.
+
+```php title="Enabling shared-secret auth" verify:lint-only
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu-west-1', 'payments', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7355')],
+)->withAuthSecret(getenv('NEXUS_CLUSTER_SECRET'));
+```
+
+Every node in the cluster must be configured with the same secret. Pass `null` (the default) to disable auth; an empty string is rejected. Shared-secret auth is orthogonal to TLS — auth proves a peer holds the secret, TLS encrypts the link and validates certificates. Use both on untrusted segments.
+
 ## Failure-detection tuning
 
 The phi-accrual detector computes a suspicion level (`phi`) from the inter-arrival time distribution of heartbeats. When `phi` exceeds `phiThreshold`, the peer is suspected. After `maxNoHeartbeat` without any heartbeat, the node is declared `Down` regardless of phi.
@@ -238,12 +264,20 @@ $topology = ClusterTopology::create(
 
 - **No quorum by default; split-brain protection is opt-in.** Out of the box, both sides of a network partition continue accepting messages independently. Any actor that holds mutable state (counters, locks, ledger balances) may diverge across partitions and have no automatic reconciliation path. Set `ClusterTopology::withMinimumMembers()` to a quorum (e.g. N/2 + 1) to bound this: a side that falls below the floor stops declaring peers `Down` and enters a degraded mode (emitting `ClusterDegraded`) instead of evicting the majority as a split-brain minority.
 - **No leader election.** There is no concept of a cluster leader or primary node. All nodes are peers.
-- **Gossip convergence is eventual.** Membership views converge within ~1 gossip interval (1 s by default) under normal conditions. A freshly `Up` node may not be visible to all peers immediately; a freshly `Down` node may still appear in some views for one interval.
-- **No rejoin after `Down`.** A node declared `Down` must restart its process to re-join the cluster. There is no automatic re-admission path in C1.
-- **No receptionist / service registry.** Actor paths are known through naming conventions or deployment configuration. The receptionist pattern (dynamic service lookup) is planned for C2.
+- **Gossip convergence is eventual.** Membership views converge within 2–3 gossip rounds (roughly 2–3 s at the default 1 s interval) under normal conditions, since gossip fans out to a subset of peers per round rather than broadcasting. A freshly `Up` node may not be visible to all peers immediately; a freshly `Down` node may still appear in some views for a round or two.
+- **No rejoin after `Down`.** A node declared `Down` must restart its process to re-join the cluster. There is no automatic re-admission path in the current release.
+- **No receptionist / service registry.** Actor paths are known through naming conventions or deployment configuration. The receptionist pattern (dynamic service lookup) is planned for a future release.
 
 For use cases that require coordination — distributed counters, single-writer aggregates, distributed locks — combine TCP mesh with the [single-writer aggregate pattern](../core-concepts/passivation.md) (one actor per entity, routed by consistent hash) or delegate coordination to an external store.
 :::
+
+## Membership edge cases
+
+Two behaviours are worth understanding when reasoning about how peers appear and disappear from a view:
+
+- **Departed peers are tombstoned.** When a peer leaves gracefully (broadcasts a `Leave` frame) or its link definitively closes, the node records a tombstone for that peer's identity. Lagging gossip that still lists the departed peer is filtered against this tombstone, so a peer that has left cannot be resurrected in the view by an out-of-date gossip message from a third node. The tombstone is cleared the moment the peer re-handshakes on rejoin, so restart-and-rejoin still works — the returning node re-announces itself through the per-connection handshake preamble and is admitted normally. The tombstone set is bounded (Leave frames are unauthenticated, so an unbounded set would be a memory-exhaustion vector).
+
+- **Hard kills are only detected directly when a direct link exists.** A hard kill (crash, OOM, `SIGKILL`) is detected immediately via TCP EOF **only on nodes that hold a direct TCP link to the killed peer**. A node that knows a peer *only through gossip* — it has never dialled that peer directly — receives no EOF when the peer dies, and detects the loss only through phi-accrual on missing heartbeats (slower, `maxNoHeartbeat`-bounded). For clusters up to roughly 50 nodes, the recommended topology is therefore a **full mesh**: every node seeds and dials every other node, so every peer holds a direct link to every other peer and hard kills are caught immediately by TCP EOF everywhere. This limitation of gossip-plus-phi without indirect probing is covered by the three-node integration test (`ClusterNodeSwooleTest::threeNodesConvergeThenSurviveOneFailing`).
 
 ## Rolling restarts and upgrades
 
@@ -259,13 +293,13 @@ Keep `ClusterTopology::withMinimumMembers()` satisfied throughout the rollout �
 
 ## Wire format and serialisation
 
-All cluster frames use MessagePack encoding (via `nexus-serialization-msgpack`). The wire format is:
+All cluster frames are MessagePack-encoded, but two distinct encoders are used. The four control frames (handshake, handshake-ack, gossip, leave) are packed by a hand-rolled `ControlFrameCodec` (its per-frame codecs plus `MsgpackReader`), not by Valinor. The Valinor-backed `MessagePackMessageSerializer` from `nexus-serialization-msgpack` is retained only for user message *bodies*. Both encoders emit the same MessagePack maps and both decoders resolve fields by key, so a node running either encoder interoperates with a node running the other — rolling upgrades across this change are safe. The wire format is:
 
 ```
 [4-byte big-endian uint32: body length][1-byte FrameType][N bytes: msgpack payload]
 ```
 
-Maximum frame size is 8 MB. User messages are embedded in `Message` frames; handshake, gossip, and leave frames use their own types. The `TypeRegistry` passed to `ClusterNode::boot()` covers both cluster wire types and user-defined message types in one shared registry.
+The maximum decoded frame body size defaults to 8 MiB and is tunable with `ClusterTopology::withMaxFrameSize()` — a peer that declares a larger frame is rejected before its body is buffered, bounding per-link reassembly memory. User messages are embedded in `Message` frames; handshake, handshake-ack, gossip, and leave frames use their own types. The `TypeRegistry` passed to `ClusterNode::boot()` covers both cluster wire types and user-defined message types in one shared registry.
 
 ## Reconnect backoff
 
@@ -291,7 +325,7 @@ $topology = ClusterTopology::create(
 
 ## Inbound connection limits
 
-Inbound connections are unauthenticated (see the trust model in the [package reference](../packages/cluster-tcp.md#security--trust-model)), so `ClusterNode` bounds two things by default to blunt trivial resource-exhaustion:
+Inbound connections are unauthenticated by default — enable [shared-secret auth](#shared-secret-handshake-authentication) with `withAuthSecret()` to require a secret (see the trust model in the [package reference](../packages/cluster-tcp.md#security--trust-model)). Regardless of auth, `ClusterNode` bounds two things by default to blunt trivial resource-exhaustion:
 
 - **Concurrent accepted links** are capped at `maxInboundLinks` (default 1024). A connection beyond the ceiling is closed immediately.
 - **Unfinished handshakes** are timed out: an accepted link that has not sent a valid handshake within `handshakeTimeout` (default 10 s) is closed, so a peer cannot hold a socket open without identifying itself.
@@ -329,7 +363,7 @@ use Psr\EventDispatcher\ListenerProviderInterface;
 // Wire into your PSR-14 event dispatcher (Symfony EventDispatcher, etc.)
 // Events: NodeUp, NodeDown, NodeSuspected, PeerConnected, PeerDisconnected, ClusterDegraded
 $dispatcher->addListener(NodeSuspected::class, function (NodeSuspected $event): void {
-    // $event->node: NodeAddress, $event->reason: SuspicionReason (Connection/Gossip/Phi)
+    // $event->node: NodeAddress, $event->reason: SuspicionReason (Connection/Gossip/Phi/Silence)
 });
 
 $dispatcher->addListener(NodeDown::class, function (NodeDown $event): void {

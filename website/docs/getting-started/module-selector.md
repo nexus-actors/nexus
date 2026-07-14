@@ -149,6 +149,8 @@ composer require nexus-actors/doctrine-orm
 | Doctrine ORM | `nexus-doctrine-orm` | `nexus-actors/doctrine-orm` |
 | Worker pool | `nexus-worker-pool` | `nexus-actors/worker-pool` |
 | Worker pool Swoole | `nexus-worker-pool-swoole` | `nexus-actors/worker-pool-swoole` |
+| Cluster contracts | `nexus-cluster` | `nexus-actors/cluster` |
+| Cluster TCP mesh | `nexus-cluster-tcp` | `nexus-actors/cluster-tcp` |
 | PSR logger bridge | `nexus-logger` | `nexus-actors/logger` |
 | App bootstrap | `nexus-app` | `nexus-actors/app` |
 | Psalm plugin | `nexus-psalm` | `nexus-actors/psalm` |

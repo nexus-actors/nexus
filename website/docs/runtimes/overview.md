@@ -48,9 +48,9 @@ Every runtime implementation satisfies the same `Runtime` interface. Actor code 
 
 Selecting "Swoole" here persists that choice across every `groupId="runtime"` tab block site-wide — you won't have to re-select your runtime on each page.
 
-The `Runtime` interface exposes eleven methods organized into three groups:
+The `Runtime` interface exposes twelve methods organized into three groups:
 
-**Lifecycle** — `run()` starts the event loop (blocking until shutdown), `shutdown(Duration $timeout)` signals a graceful stop, `isRunning()` reports current state.
+**Lifecycle** — `name()` returns the runtime's identifier, `run()` starts the event loop (blocking until shutdown), `shutdown(Duration $timeout)` signals a graceful stop, `isRunning()` reports current state.
 
 **Concurrency** — `spawn(callable $actorLoop)` registers a new concurrent task (fiber or coroutine) and returns an ID string, `defer(callable)` runs a one-shot task asynchronously without returning an ID (fire-and-forget), `yield()` cooperatively yields, `sleep(Duration)` suspends the current task.
 

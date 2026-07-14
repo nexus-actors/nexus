@@ -21,6 +21,9 @@ Psalm plugin that enforces actor-model safety rules and improves generic type in
 - `BlockingCallInHandler` — flags `sleep`, `file_get_contents`, `curl_exec`, and similar blocking calls inside handlers
 - `MutableClosureCapture` — `Props::fromFactory()` / `fromStatefulFactory()` closures must not capture by reference (`use (&$var)`)
 - `UntypedActorRefInjection` — injected `ActorRef` params/properties must declare a concrete message type (`ActorRef<MyCommand>`); bare `ActorRef` and `ActorRef<object>` are flagged, `DeadLetterRef` and configured `<excludeRef>` classes are exempt
+- `MismatchedReplyType` — `$ctx->reply($x)` must pass a value matching the `#[ReplyType]` declared on the message being handled
+- `MissingTransactionalDeclaration` — a class annotated `#[Transactional]` must have a method taking a `Doctrine\DBAL\Connection` or `Doctrine\ORM\EntityManagerInterface` parameter, or the middleware cannot open a transaction
+- `PooledConnectionInActorProperty` — actor handlers must not store a pooled connection in a property for their whole lifetime (defeats the pool); borrow per-message via `ConnectionScope` middleware instead
 
 **Type providers**
 
@@ -54,7 +57,7 @@ composer require --dev nexus-actors/psalm
 </psalm>
 ```
 
-All six safety rules fire at Psalm level 1. Suppress per-line with `@psalm-suppress NonReadonlyMessage` (and equivalent names), or globally in `psalm.xml` via `<issueHandlers>`.
+All nine safety rules fire at Psalm level 1. Suppress per-line with `@psalm-suppress NonReadonlyMessage` (and equivalent names), or globally in `psalm.xml` via `<issueHandlers>`.
 
 ## See also
 

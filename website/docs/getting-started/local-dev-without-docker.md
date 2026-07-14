@@ -26,6 +26,8 @@ The Docker setup (`make build && make up`) gives you Xdebug, Swoole, ZTS PHP, an
 | Xdebug | Yes (if installed) | Yes |
 | Swoole runtime | No — Swoole build is non-trivial | Yes |
 | Worker pool (Swoole threads) | No — requires ZTS PHP + Swoole 6 | Yes |
+| Cluster TCP — loopback/unit tests | Yes — `ext-swoole` is optional (in `suggest`) | Yes |
+| Cluster TCP — real Swoole mesh | No — real sockets need `ext-swoole` ≥ 6.0 | Yes |
 
 ## macOS setup
 

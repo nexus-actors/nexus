@@ -26,7 +26,7 @@ The top-level coordinator. `ActorSystem` owns the root supervision tree, the dea
 
 ### Ask pattern
 
-A request-reply interaction where the caller sends a message and suspends (via a PHP Fiber or Swoole coroutine) until the target actor replies or the timeout elapses. Implemented via `ActorRef::ask(callable $requestFactory, Duration $timeout)`. The caller fiber suspends without blocking the event loop; other actors continue processing. Prefer `tell()` for one-way fire-and-forget; reserve the ask pattern for places where the calling code genuinely needs a synchronous-looking result.
+A request-reply interaction where the caller sends a message and awaits the reply (or a timeout). Implemented via `ActorRef::ask(object $message, Duration $timeout): Future` — pass the message and a `Duration`, then `await()` the returned `Future`. The awaiting fiber (or Swoole coroutine) suspends without blocking the event loop; other actors continue processing. Prefer `tell()` for one-way fire-and-forget; reserve the ask pattern for places where the calling code genuinely needs a synchronous-looking result.
 
 ### Backpressure
 
@@ -46,7 +46,7 @@ An actor spawned by another actor via `ActorContext::spawn()`. The spawning acto
 
 ### Cluster (Experimental)
 
-The `nexus-cluster` package provides contracts (`ClusterTransport`, `NodeDirectory`, `NodeHashRing`, `NodeAddress`) for routing messages across multiple PHP processes or machines. The TCP transport implementation is not yet shipped; the package defines the interfaces so application code can be written against the contracts today. Do not use in production without a custom transport implementation.
+The `nexus-cluster` package provides contracts (`ClusterTransport`, `NodeDirectory`, `NodeHashRing`, `NodeAddress`) for routing messages across multiple PHP processes or machines. The TCP transport ships as [`nexus-cluster-tcp`](../packages/cluster-tcp.md) — a Swoole TCP mesh with [phi-accrual](#phi-accrual) failure detection and gossip membership — so application code written against the contracts runs across machines today.
 
 ### Dead letter
 
@@ -80,6 +80,10 @@ A PHP 8.1+ cooperative multitasking primitive (`\Fiber`). Each actor in `FiberRu
 
 A value that will be resolved at some point in the future. In Nexus, `ActorRef::ask()` returns the result synchronously from the caller's perspective (the Fiber suspends), so there is no explicit `Future` type in userland. The term appears in the actor model literature to describe the placeholder for a pending ask result. See [core-concepts/futures](../core-concepts/futures.md) for the Nexus-specific implementation.
 
+### Gossip
+
+The peer-to-peer protocol the TCP cluster (`nexus-cluster-tcp`) uses to spread membership information. Each node periodically sends its view of the cluster to a subset of peers; those peers merge and re-gossip, so the whole mesh converges on a shared membership picture without any central coordinator. Gossip frames double as heartbeats — their inter-arrival times feed the [phi accrual](#phi-accrual) failure detector.
+
 ### Handler
 
 An object that processes messages for an actor. Nexus supports two handler styles: closure-based (the `Behavior::receive()` family) and class-based (`ActorHandler`, `StatefulActorHandler`, `AbstractActor`). Class-based handlers are useful when the actor needs constructor-injected dependencies or lifecycle callbacks beyond `onSignal`.
@@ -87,6 +91,10 @@ An object that processes messages for an actor. Nexus supports two handler style
 ### Hash ring
 
 A consistent-hashing data structure that maps actor names to worker IDs (within a worker pool) or `NodeAddress` values (within a cluster). Nexus uses `ConsistentHashRing` with 150 virtual nodes per real node, distributing actors evenly while minimising redistribution when workers are added or removed. The same actor name always maps to the same worker as long as the worker count is unchanged.
+
+### Incarnation
+
+A monotonically increasing counter that identifies a specific run of a cluster node. Each time a node (re)joins the mesh it advertises a higher incarnation than before, so peers can tell a fresh instance apart from a stale record of the same node. The failure detector uses incarnations to resolve conflicting membership updates: a claim about a node is only accepted if it carries an incarnation at least as high as the one already known, which prevents an old `Suspect`/`Down` report from clobbering a newer `Up` state.
 
 ### Mailbox
 
@@ -99,6 +107,10 @@ An immutable object sent between actors. By convention (and enforced by the Psal
 ### Passivation
 
 The voluntary shutdown of an idle actor to reclaim memory, with automatic restart on the next incoming message. The actor calls `ActorContext::stop(ActorContext::self())` (or the persistence layer calls it after an idle timeout), and the parent re-spawns it on demand. Passivation is the primary tool for keeping memory usage bounded in systems with large numbers of potentially-idle actors.
+
+### Phi accrual
+
+The failure-detection algorithm (Hayashibara et al.) used by the TCP cluster. Instead of a fixed heartbeat timeout, it models the recent inter-arrival times of a peer's heartbeats as a distribution and computes a continuous suspicion value, `phi`, that rises the longer a heartbeat is overdue relative to that history. When `phi` crosses `phiThreshold` (default 8.0) the peer is marked [`Suspect`](#suspect--down); the accrual approach adapts to real network jitter rather than a single hard cutoff. `PhiAccrualDetector` implements it in `nexus-cluster-tcp`.
 
 ### PersistenceId
 
@@ -148,6 +160,10 @@ A consistency guarantee enforced by the persistence layer: only one `ActorSystem
 
 A point-in-time capture of an event-sourced actor's state, stored to speed up recovery. Instead of replaying all events from the beginning of time, recovery loads the latest snapshot and replays only the events that followed it. Configure snapshot frequency with `SnapshotStrategy::everyN(10)`. Retention is controlled by `RetentionPolicy`.
 
+### Split-brain / AP
+
+The TCP cluster is an **AP** system in CAP terms: it favours availability and partition tolerance over strong consistency. When a network partition splits the mesh, each side keeps running independently rather than halting — there is no built-in consensus or quorum. The cost is *split-brain*: both sides can accept writes and any per-partition mutable state may diverge with no automatic reconciliation. Bound the risk with `ClusterTopology::withMinimumMembers()` (a side below the floor enters degraded mode and stops evicting peers instead of acting as a minority), and keep coordination-sensitive state behind a single-writer aggregate or an external store.
+
 ### Stash
 
 A temporary buffer inside the actor for messages that cannot be processed right now — typically during initialization or recovery. Call `ActorContext::stash()` to move the current message to the stash buffer; call `unstashAll()` to prepend all stashed messages back to the front of the mailbox for reprocessing. The stash is bounded by the mailbox capacity.
@@ -155,6 +171,10 @@ A temporary buffer inside the actor for messages that cannot be processed right 
 ### Supervision
 
 The mechanism by which a parent actor manages failures in its children. When a child throws an unhandled exception, the parent's supervision strategy determines the directive: `Restart`, `Stop`, `Resume`, or `Escalate`. Nexus implements "let it crash" — actors are expected to fail occasionally, and supervision trees contain the blast radius. Configure via `Props::withSupervision(SupervisionStrategy::oneForOne(...))`.
+
+### Suspect / Down
+
+The two failing membership states a cluster node moves through. **Suspect** is a tentative state: the [phi accrual](#phi-accrual) detector's suspicion crossed the threshold (`Phi`), a peer gossiped its own suspicion (`Gossip`), the TCP connection hit EOF (`Connection`), or the local detector heard nothing at all for the whole no-heartbeat window (`Silence`) — but the peer may still recover and return to `Up`. **Down** is terminal: the peer has been unreachable past `maxNoHeartbeat`, or it sent a graceful `Leave` frame (which skips the phi wait). A `Down` node is pruned from the view and must restart its process to rejoin — there is no automatic re-admission. Transitions dispatch `NodeSuspected` / `NodeDown` PSR-14 events.
 
 ### Swoole
 

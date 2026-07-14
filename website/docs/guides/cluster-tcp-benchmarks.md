@@ -224,7 +224,7 @@ at a scale of **~950K messages per second per machine**, which covers the overwh
 majority of PHP workloads.
 
 **Where it is not the answer (yet):** ultra-high-throughput streaming, microsecond-latency-critical paths,
-or clusters that need quorum/consensus and strong consistency — C1 is an AP mesh with no built-in
+or clusters that need quorum/consensus and strong consistency — this is an AP mesh with no built-in
 consensus (see the [clustering guide](./clustering-over-tcp.md) and the trust model in the
 [package reference](../packages/cluster-tcp.md#security--trust-model)).
 

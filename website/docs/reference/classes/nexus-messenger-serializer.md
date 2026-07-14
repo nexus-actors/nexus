@@ -48,6 +48,8 @@ new NexusMessengerSerializer(
 | Header | Value | Notes |
 |---|---|---|
 | `type` | `#[MessageType]` name (encode: FQCN fallback) | Required. Encode falls back to FQCN when unregistered; decode throws `MessageDecodingFailedException` if the value is not in the `TypeRegistry`. |
+| `X-Nexus-Correlation-Id` | Correlation ID string | Present when a `CorrelationIdStamp` is on the envelope (ask path). |
+| `X-Nexus-Reply-To` | Reply channel name | Present when a `ReplyToStamp` is on the envelope (ask path). |
 | `X-Nexus-Source-Path` | Actor path string | Present when a `SourceActorPathStamp` is on the envelope. |
 | `X-Nexus-Target-Path` | Actor path string | Present when a `TargetActorPathStamp` is on the envelope. |
 | `X-Nexus-Trace-Context` | JSON object `{"traceparent":"…", …}` | Present when a `TraceContextStamp` is on the envelope. Malformed JSON or non-string-map values are silently skipped on decode. |
@@ -67,7 +69,7 @@ $transport = new RedisTransport($connection, $serializer);
 ```
 
 :::note Non-bridge stamps are not preserved
-Only `SourceActorPathStamp`, `TargetActorPathStamp`, and `TraceContextStamp` round-trip through the wire headers. All other Symfony stamps are dropped on encode and not reconstructed on decode. This is intentional in v1 — use a Symfony `Serializer`-backed serializer if you need full stamp fidelity.
+Only the five bridge stamps — `CorrelationIdStamp`, `ReplyToStamp`, `SourceActorPathStamp`, `TargetActorPathStamp`, and `TraceContextStamp` — round-trip through the wire headers. All other Symfony stamps are dropped on encode and not reconstructed on decode. This is intentional in v1 — use a Symfony `Serializer`-backed serializer if you need full stamp fidelity.
 :::
 
 ## Full API reference

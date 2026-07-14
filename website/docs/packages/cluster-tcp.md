@@ -44,7 +44,9 @@ The loopback transport and unit tests run without Swoole. Production TCP transpo
 
 ```bash title="terminal (production)"
 composer require nexus-actors/runtime-swoole
-# ext-swoole ≥ 6.2.1 compiled with --enable-swoole-thread
+# ext-swoole ≥ 6.0 (coroutines). The cluster mesh uses coroutines only.
+# ZTS + --enable-swoole-thread is required only if you also run
+# nexus-worker-pool-swoole. The bundled Docker image includes both.
 ```
 
 ## Quick example
@@ -84,7 +86,7 @@ $node->expose($processorRef);
 
 // Get a location-transparent ref to the same-named actor on node-2.
 // Both nodes spawn 'order-processor'; paths are agreed by naming convention
-// (a receptionist service-registry arrives in C2).
+// (a receptionist service-registry is planned for a future release).
 $remoteRef = $node->refFor(
     new NodeAddress('production', 'eu', 'orders', 'node-2'),
     $processorRef->path(),
@@ -109,7 +111,7 @@ All messages sent across the cluster must carry `#[MessageType]` and be register
 
 - **`tell(object $message): void`** — fire-and-forget. Short-circuits straight to local delivery when the target is the same node (no frame on the wire). Opens a `cluster.send` Producer span for remote sends.
 - **`ask(object $message, Duration $timeout): Future`** — registers a correlation slot in `TcpAskRegistry`, stamps a reply path derived from the sending node's address, sends the request frame, and returns a `Future` that resolves on reply or fails with `AskTimeoutException` after `$timeout`. Opens a `cluster.ask` Producer span. Throws `AskCapacityExceededException` when the registry is at capacity.
-- **`isAlive(): bool`** — always returns `true` in C1. A `ClusterRef` cannot see the remote actor's lifecycle, and membership-view wiring for this probe is planned for a later milestone. Use `ClusterNode::view()` (or `queryViewAsync()`) to check whether a node is `Up`.
+- **`isAlive(): bool`** — always returns `true` in the current release. A `ClusterRef` cannot see the remote actor's lifecycle, and membership-view wiring for this probe is planned for a future release. Use `ClusterNode::view()` (or `queryViewAsync()`) to check whether a node is `Up`.
 
 ## Failure-detection configuration
 
@@ -147,6 +149,8 @@ $topology = ClusterTopology::create(
 
 The phi detector is fed heartbeat-arrival timestamps captured at TCP-frame ingress, so local scheduler/GC jitter on a busy reactor does not poison the inter-arrival window. The defaults are correct out of the box on a LAN; only raise `phiMinStdDev`/`phiThreshold` to absorb genuine network-level jitter (WAN links, lossy routing) — not local pauses.
 
+**Head-of-line protection.** A per-frame socket write has a finite send deadline (`SwoolePeerLink::SEND_TIMEOUT_SECONDS`, 5 s). If a stalled peer cannot accept the write within that window, its link is torn down and reconnected rather than blocking the reactor. Control-frame sends (gossip, heartbeat, leave) are additionally dispatched off the membership loop (`ClusterNode::dispatchControlSend`), so one slow peer cannot delay failure detection for the others.
+
 See [Clustering over TCP — failure-detection tuning](../guides/clustering-over-tcp.md#failure-detection-tuning) for production guidance and the trade-offs between threshold sensitivity and false-positive risk.
 
 ## TLS
@@ -180,7 +184,7 @@ Plaintext cluster ports must not be exposed to untrusted networks. Use TLS with 
 The mesh runs on a **mutually trusted network**. Understand exactly what that means before deploying:
 
 - **Handshake authentication is available — enable it in production.** Set a shared cluster secret with `ClusterTopology::withAuthSecret('…')` and every joining node must prove it holds the secret with an HMAC-signed handshake (SHA-256 over the identity claim + a per-handshake nonce and timestamp; the timestamp is checked against a 60 s freshness window, and a peer that cannot sign is rejected *before* any ingress is wired — it never joins the view or delivers a frame). This is the Serf/Consul model: holding the secret proves cluster membership, not per-node identity. **When no secret is set, the cluster is open** — `clusterName` is only a label, and any peer that reaches the bind port and speaks the framing is admitted. Run without a secret only on a fully trusted, network-fenced segment.
-- **A trusted peer is fully trusted.** Once admitted, a peer can send messages to any actor you `expose()` (addressed by path, including ask/reply), and its gossip can register member endpoints that this node will subsequently dial. A hostile-but-admitted peer can therefore both inject actor traffic and steer this node's outbound connections (SSRF). There is no per-message authorization and no endpoint allowlist in C1.
+- **A trusted peer is fully trusted.** Once admitted, a peer can send messages to any actor you `expose()` (addressed by path, including ask/reply), and its gossip can register member endpoints that this node will subsequently dial. A hostile-but-admitted peer can therefore both inject actor traffic and steer this node's outbound connections (SSRF). There is no per-message authorization and no endpoint allowlist in the current release.
 - **Wire decode is registry-strict.** A frame body is only deserialized into a type registered via `#[MessageType]`; a peer cannot name an arbitrary class on the wire to force its instantiation.
 - **TLS authenticates the transport; the secret authenticates membership.** With `verifyPeer: true` a peer must present a CA-chained certificate matching the dialled host, stopping network MITM; the shared-secret handshake proves the connecting node belongs to the cluster. Together they are the recommended production posture. Binding an individual node's identity to its client certificate (full mTLS identity, so one leaked secret can't impersonate *every* node) is the next hardening step.
 - **Growth is bounded against exhaustion.** Concurrent accepted inbound links are capped (`maxInboundLinks`, default 1024) and an accepted link that never completes a handshake is closed after `handshakeTimeout` (default 10 s) — both tunable via `withInboundLimits()`. The learned endpoint registry and the Leave-dedup set are likewise bounded. These blunt trivial memory-exhaustion from unauthenticated connections; they are not a substitute for peer authentication.
@@ -200,17 +204,34 @@ Pass an `Observability` instance to `ClusterNode::boot()` to enable full instrum
 | `cluster.ask` | Producer | `messaging.system=nexus-tcp`, `nexus.cluster.peer`, `nexus.message.type` |
 | `cluster.receive` | Consumer | `messaging.system=nexus-tcp`, `nexus.cluster.peer`, `nexus.message.type` — opened on the receiving node for every routed inbound payload, parented to the sender's propagated trace context |
 
-**Metrics** (OTLP):
+**Metrics** (OTLP). All are counters unless the Kind column says otherwise. Metrics marked **alert** are worth wiring to alerts — they signal loss, saturation, or membership instability rather than normal steady-state activity.
 
-| Metric | Unit | Description |
-|---|---|---|
-| `nexus.cluster.messages.sent` | `{message}` | Remote `tell` calls dispatched |
-| `nexus.cluster.messages.local_shortcircuit` | `{message}` | Self-node tells delivered locally |
-| `nexus.cluster.asks.sent` | `{message}` | Remote `ask` calls registered |
-| `nexus.cluster.asks.capacity_rejected` | `{message}` | Asks rejected when registry is at capacity |
-| `nexus.cluster.bytes.sent` | `By` | Outbound frame bytes (histogram) |
-| `nexus.cluster.frames.sent` | `{frame}` | Outbound frames |
-| `nexus.cluster.handshake.rejected` | `{handshake}` | Handshakes rejected due to parse failure |
+| Metric | Kind | Alert | Description |
+|---|---|---|---|
+| `nexus.cluster.messages.sent` | counter | | Remote `tell` calls dispatched |
+| `nexus.cluster.messages.received` | counter | | Inbound message payloads routed to a local actor |
+| `nexus.cluster.messages.local_shortcircuit` | counter | | Self-node tells delivered locally without a frame |
+| `nexus.cluster.messages.unroutable` | counter | **alert** | Inbound messages with no matching exposed actor |
+| `nexus.cluster.asks.sent` | counter | | Remote `ask` calls registered |
+| `nexus.cluster.asks.pending` | counter | | Asks currently outstanding in the registry |
+| `nexus.cluster.asks.resolved` | counter | | Asks that received a reply |
+| `nexus.cluster.asks.timed_out` | counter | **alert** | Asks that expired before a reply |
+| `nexus.cluster.asks.capacity_rejected` | counter | **alert** | Asks rejected because the registry is at capacity |
+| `nexus.cluster.ask.duration` | histogram | | Round-trip latency of resolved asks |
+| `nexus.cluster.frames.sent` | counter | | Outbound frames |
+| `nexus.cluster.frames.received` | counter | | Inbound frames decoded |
+| `nexus.cluster.frames.decode_failed` | counter | **alert** | Frames that failed to decode. Carries a `frame.type` attribute (`Message`, `handshake`, `gossip`, `leave`) so operators can break failures down by frame kind. |
+| `nexus.cluster.frames.handler_failed` | counter | **alert** | Inbound frames whose handler threw and was isolated (frame dropped, link kept alive) |
+| `nexus.cluster.control_send.failed` | counter | **alert** | Control-plane frame sends (gossip / handshake-ack / leave) that failed on their dispatch coroutine. Carries a `frame.type` attribute. |
+| `nexus.cluster.bytes.sent` | histogram | | Outbound frame bytes |
+| `nexus.cluster.bytes.received` | histogram | | Inbound frame bytes |
+| `nexus.cluster.send_buffer.dropped` | counter | **alert** | Outbound payloads dropped because the send buffer was full |
+| `nexus.cluster.heartbeats.received` | counter | | Heartbeat/gossip frames observed by the failure detector |
+| `nexus.cluster.gossip.rounds` | counter | | Gossip rounds executed |
+| `nexus.cluster.nodes.suspected` | counter | **alert** | Peers marked `Suspect` |
+| `nexus.cluster.nodes.recovered` | counter | | Suspected peers that returned to `Up` |
+| `nexus.cluster.nodes.pruned` | counter | | Peers removed from the membership view after `Down` |
+| `nexus.cluster.handshake.rejected` | counter | **alert** | Handshakes rejected (parse failure or failed auth) |
 
 **PSR-14 events** — dispatched through `ActorSystem`'s event dispatcher:
 
@@ -218,7 +239,7 @@ Pass an `Observability` instance to `ClusterNode::boot()` to enable full instrum
 |---|---|
 | `NodeUp` | `$node: NodeAddress`, `$endpoint: NodeEndpoint` |
 | `NodeDown` | `$node: NodeAddress` |
-| `NodeSuspected` | `$node: NodeAddress`, `$reason: SuspicionReason` (Connection / Gossip / Phi) |
+| `NodeSuspected` | `$node: NodeAddress`, `$reason: SuspicionReason` (Connection / Gossip / Phi / Silence) |
 | `PeerConnected` | `$peer: NodeAddress`, `$endpoint: NodeEndpoint` |
 | `PeerDisconnected` | `$peer: NodeAddress` |
 | `ClusterDegraded` | `$reachableMembers: int`, `$requiredMembers: int` — dispatched while the node is below the `ClusterTopology::withMinimumMembers()` floor; the node suppresses new `Down` decisions until quorum is restored |
@@ -251,7 +272,7 @@ $system->shutdown(Duration::seconds(5));
 ## See also
 
 - [nexus-cluster](./cluster.md) — `NodeAddress`, `ClusterTransport`, and `NodeHashRing` contracts that this package implements
-- [nexus-serialization-msgpack](./serialization-msgpack.md) — MessagePack codec used for all cluster wire frames
+- [nexus-serialization-msgpack](./serialization-msgpack.md) — MessagePack codec used for user message bodies on cluster wire frames
 - [nexus-observability](./observability.md) — wiring the `Observability` instance
 - [Clustering over TCP guide](../guides/clustering-over-tcp.md) — topology config for NAT and Kubernetes, seed discovery, failure-detection tuning, and consistency caveats
 - [Two-node example](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-cluster-tcp) — runnable Docker Compose demo: gossip join, tell/ask, kill/recover, graceful leave

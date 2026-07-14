@@ -22,7 +22,7 @@ The scaling progression from development to production:
 flowchart TD
     A["Single-process\nFiberRuntime\n(development / testing)"] --> B["Multi-process\nSwooleRuntime\n(I/O-bound workloads)"]
     B --> C["Worker pool\nSwooleRuntime + ConsistentHashRing\n(CPU-bound / multi-core)"]
-    C --> D["Cluster\nnexus-cluster + NodeHashRing\n(multi-machine — contracts only)"]
+    C --> D["Cluster\nnexus-cluster-tcp (Swoole TCP mesh)\n(multi-machine)"]
 
     style A fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
     style B fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b
@@ -121,7 +121,7 @@ No serialization overhead exists because `Swoole\Thread\Queue` copies PHP object
 
 ## Multi-machine clustering
 
-For distributing actors across multiple machines over a network, see the `nexus-cluster` package. It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts — the same interface shape as `WorkerTransport` and `WorkerDirectory`, but addressed by `NodeAddress` (cluster/datacenter/application/node) rather than worker ID. A TCP transport implementation is not yet available.
+For distributing actors across multiple machines over a network, see the `nexus-cluster` package. It provides the `ClusterTransport`, `NodeDirectory`, and `NodeHashRing` contracts — the same interface shape as `WorkerTransport` and `WorkerDirectory`, but addressed by `NodeAddress` (cluster/datacenter/application/node) rather than worker ID. The shipped TCP transport implementation is [`nexus-cluster-tcp`](../packages/cluster-tcp.md): a Swoole TCP mesh with gossip membership, phi-accrual failure detection, and location-transparent `ClusterRef` tell/ask. See the [Clustering over TCP guide](../guides/clustering-over-tcp.md) for topology, seeds, TLS, and failure-detection tuning.
 
 ## See also
 

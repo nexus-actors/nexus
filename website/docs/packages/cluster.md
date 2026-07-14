@@ -10,11 +10,11 @@ related:
 
 # nexus-cluster
 
-Remote contracts for future TCP-based multi-machine clustering — interfaces and value objects only, no transport implementation.
+Remote contracts for TCP-based multi-machine clustering — interfaces and value objects only. The shipped transport implementation lives in [`nexus-cluster-tcp`](./cluster-tcp.md).
 
 ## What's in this package
 
-- `NodeAddress` — value object identifying a node by cluster/datacenter/application/node hierarchy
+- `NodeAddress` — value object identifying a node by cluster/datacenter/application/node hierarchy. Each of the four segments must match `[a-zA-Z0-9_.-]+` (URL-safe and collision-free); spaces, slashes, and empty segments throw `InvalidArgumentException` at construction, so two distinct addresses can never alias to the same identity key.
 - `ClusterTransport` — interface for byte-level inter-node message delivery
 - `NodeDirectory` — interface mapping actor paths to node addresses
 - `NodeHashRing` — consistent hash ring mapping actor names to `NodeAddress` instances

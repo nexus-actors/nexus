@@ -16,7 +16,7 @@ Three situations call for the bridge:
 
 **1. Standalone queue worker.** You want a long-running PHP process that consumes from a broker and routes work to an actor system. Nexus owns the process lifecycle: boot an `ActorSystem`, spawn `ReceiverActor`(s) and a `LifecycleWatchdog`, and call `$system->run()`. This replaces `bin/console messenger:consume` entirely and eliminates the Symfony framework dependency from your worker image.
 
-**2. Embedded in an existing Symfony app.** Your application already runs `messenger:consume`. Adding the bridge wires Nexus routing and serialization into the existing pipeline — actors run in-process alongside the rest of the app. The framework owns the process; the bridge contributes `ReceiverActor` as a regular Messenger handler adapter.
+**2. Embedded in an existing Symfony app.** Your application already runs Messenger. Adding the bridge wires Nexus routing and serialization into the existing pipeline — actors run in-process alongside the rest of the app, and the bridge's `ReceiverActor` polls the transport and forwards messages into actor mailboxes.
 
 **3. Durable async boundary between services.** A broker is your service boundary: upstream services publish, downstream services consume. `MessengerActorRef` makes a remote topic look like a local actor ref to the producing side, while `NexusMessengerSerializer` ensures the wire format travels with stable `#[MessageType]` identifiers rather than PHP class names.
 
@@ -199,10 +199,12 @@ $serializer = new NexusMessengerSerializer(
 // e.g. new RedisTransport($connection, $serializer)
 ```
 
-`NexusMessengerSerializer` preserves three bridge stamps across the wire as HTTP-style headers:
+`NexusMessengerSerializer` preserves the five bridge stamps across the wire as HTTP-style headers:
 
 | Header | Stamp | Purpose |
 |--------|-------|---------|
+| `X-Nexus-Correlation-Id` | `CorrelationIdStamp` | Correlates an ask request with its reply |
+| `X-Nexus-Reply-To` | `ReplyToStamp` | Logical reply channel for the ask path |
 | `X-Nexus-Source-Path` | `SourceActorPathStamp` | Provenance — which actor sent the message |
 | `X-Nexus-Target-Path` | `TargetActorPathStamp` | Routing hint for `StampMessageRouter` |
 | `X-Nexus-Trace-Context` | `TraceContextStamp` | W3C trace context for distributed tracing |
@@ -403,7 +405,7 @@ final class MessengerEventListener
 }
 ```
 
-All five event classes (`MessagePublished`, `MessageConsumed`, `MessageRejected`, `MessageDeadLettered`, `WorkerRecyclingTriggered`) are `final readonly` and live in `Monadial\Nexus\Messenger\Event`.
+All nine event classes are `final readonly` and live in `Monadial\Nexus\Messenger\Event`: `MessagePublished`, `MessageConsumed`, `MessageRejected`, `MessageDeadLettered`, `WorkerRecyclingTriggered`, and the ask-path events `AskStarted`, `AskResolved`, `AskTimedOut`, and `ReplyPublished`.
 
 ### Trace propagation
 
@@ -454,6 +456,8 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Messenger\Console\Swoole\ThreadedConsumerBootstrap;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
+use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
@@ -467,8 +471,11 @@ final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
 
     public function receiver(): ReceiverInterface
     {
-        // Fresh connection per thread — broker load-balances across threads
-        return new RedisTransport(Redis::connect(getenv('REDIS_URL')));
+        // Fresh connection per thread — broker load-balances across threads.
+        // $serializer is a NexusMessengerSerializer built earlier in this file.
+        $connection = Connection::fromDsn(getenv('REDIS_DSN') . '/orders', ['group' => 'workers']);
+
+        return new RedisTransport($connection, $serializer);
     }
 }
 ```
@@ -652,7 +659,7 @@ On AWS SQS, prefer `Persistent`: SQS queue creation is an asynchronous API call 
 use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 
-$app->add(new ConsumeCommand(
+$app->addCommand(new ConsumeCommand(
     $runtime,
     $requestTransport,
     $consumerSetup,

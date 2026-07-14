@@ -17,19 +17,22 @@ When you want to add a new concurrency backend for Nexus — for example, a Reac
 The interface lives at `packages/nexus-runtime/src/Runtime/Runtime.php`. Every method must be implemented:
 
 ```php title="packages/nexus-my-runtime/src/Runtime/MyRuntime.php"
-use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Monadial\Nexus\Runtime\Async\FutureSlot;
+use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\Mailbox;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 use Monadial\Nexus\Runtime\Runtime\Cancellable;
-use Monadial\Nexus\Core\Duration;
-use Monadial\Nexus\Core\Mailbox\Mailbox;
-use Monadial\Nexus\Core\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Runtime\Runtime;
 
 final class MyRuntime implements Runtime
 {
+    public function name(): string { /* ... */ }
     public function createMailbox(MailboxConfig $config): Mailbox { /* ... */ }
+    public function createFutureSlot(): FutureSlot { /* ... */ }
     public function spawn(callable $actorLoop): string { /* ... */ }
     public function defer(callable $task): void { /* ... */ }
     public function scheduleOnce(Duration $delay, callable $callback): Cancellable { /* ... */ }
-    public function scheduleRepeatedly(Duration $initial, Duration $interval, callable $callback): Cancellable { /* ... */ }
+    public function scheduleRepeatedly(Duration $initialDelay, Duration $interval, callable $callback): Cancellable { /* ... */ }
     public function yield(): void { /* ... */ }
     public function sleep(Duration $duration): void { /* ... */ }
     public function run(): void { /* ... */ }

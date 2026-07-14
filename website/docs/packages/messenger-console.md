@@ -129,9 +129,9 @@ bin/console nexus:messenger:produce order.placed '{"orderId":"load-test","amount
 |------|------|-------------|
 | `type` | Argument | Registered type name (from `#[MessageType]` attribute or `TypeRegistry::register()`) |
 | `body` | Argument | Message body as a JSON object |
-| `--count` / `-c` | Option (default `1`) | Number of identical messages to publish |
+| `--count` / `-c` | Option (default `1`) | Number of identical messages to publish; must be a positive integer (a non-numeric, zero, or negative value is rejected with `Command::INVALID`) |
 
-An unknown type name produces a clear error and exits with `Command::FAILURE` — no messages are sent.
+An unknown type name produces a clear error and exits with `Command::INVALID` — no messages are sent.
 
 ## Using SwooleRuntime
 
