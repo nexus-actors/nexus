@@ -46,7 +46,12 @@ final class OtelObservabilityIntegrationTest extends TestCase
         ]);
         self::assertSame('acme', $parent->baggage->get('tenant.id'));
 
-        $consumer = $observability->tracer()->startSpan('process PlaceOrder', SpanKind::Consumer, ['nexus.actor.path' => '/user/orders'], $parent);
+        $consumer = $observability->tracer()->startSpan(
+            'process PlaceOrder',
+            SpanKind::Consumer,
+            ['nexus.actor.path' => '/user/orders'],
+            $parent,
+        );
         $current = $observability->currentContext();
         self::assertTrue($current->spanContext->isValid());
         self::assertSame($consumer->context()->spanId, $current->spanContext->spanId);
@@ -67,7 +72,7 @@ final class OtelObservabilityIntegrationTest extends TestCase
             self::assertSame('0af7651916cd43dd8448eb211c80319c', $span->getTraceId());
         }
 
-        $metricNames = array_map(static fn ($metric): string => $metric->name, $metricExporter->collect());
+        $metricNames = array_map(static fn($metric): string => $metric->name, $metricExporter->collect());
         self::assertContains('nexus.messages.processed', $metricNames);
     }
 }

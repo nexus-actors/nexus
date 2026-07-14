@@ -44,6 +44,31 @@ final class ObservabilityConfigTest extends TestCase
     }
 
     #[Test]
+    public function fromEnvParsesExporterTimeoutMillis(): void
+    {
+        $config = ObservabilityConfig::fromEnv(['OTEL_EXPORTER_OTLP_TIMEOUT' => '5000']);
+
+        self::assertSame(5000, $config->exporterTimeoutMillis);
+    }
+
+    #[Test]
+    public function exporterTimeoutDefaultsToNullAndIgnoresNonNumericValues(): void
+    {
+        self::assertNull(ObservabilityConfig::fromEnv([])->exporterTimeoutMillis);
+        self::assertNull(ObservabilityConfig::fromEnv(['OTEL_EXPORTER_OTLP_TIMEOUT' => 'abc'])->exporterTimeoutMillis);
+    }
+
+    #[Test]
+    public function withExporterTimeoutMillisReturnsNewInstanceCarryingTheValue(): void
+    {
+        $config = ObservabilityConfig::enabled('orders')->withExporterTimeoutMillis(2500);
+
+        self::assertSame(2500, $config->exporterTimeoutMillis);
+        // Other withers must carry the timeout forward.
+        self::assertSame(2500, $config->withServiceName('billing')->exporterTimeoutMillis);
+    }
+
+    #[Test]
     public function fromEnvParsesResourceAttributesAndSampler(): void
     {
         $config = ObservabilityConfig::fromEnv([
@@ -95,5 +120,31 @@ final class ObservabilityConfigTest extends TestCase
         self::assertSame('svc', $base->serviceName);
         self::assertSame('renamed', $changed->serviceName);
         self::assertSame('always_on', $changed->sampler);
+    }
+
+    #[Test]
+    public function asyncExportDefaultsToFalse(): void
+    {
+        self::assertFalse(ObservabilityConfig::enabled('svc')->asyncExport);
+    }
+
+    #[Test]
+    public function withAsyncExportEnablesTheFlag(): void
+    {
+        $config = ObservabilityConfig::enabled('svc')->withAsyncExport(true);
+
+        self::assertTrue($config->asyncExport);
+    }
+
+    #[Test]
+    public function fromEnvReadsAsyncExportFlag(): void
+    {
+        $config = ObservabilityConfig::fromEnv([
+            'OTEL_EXPORTER_OTLP_ENDPOINT' => 'http://localhost:4318',
+            'OTEL_NEXUS_ASYNC_EXPORT' => 'true',
+            'OTEL_SERVICE_NAME' => 'svc',
+        ]);
+
+        self::assertTrue($config->asyncExport);
     }
 }

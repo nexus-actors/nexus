@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Observability\Otel\Tests\Unit;
 
+use LogicException;
+use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Observability\Config\ObservabilityConfig;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Otel\ObservabilityFactory;
 use Monadial\Nexus\Observability\Otel\OtelObservability;
+use Monadial\Nexus\Runtime\Step\StepRuntime;
 use OpenTelemetry\SDK\Trace\Sampler\AlwaysOffSampler;
 use OpenTelemetry\SDK\Trace\Sampler\AlwaysOnSampler;
 use OpenTelemetry\SDK\Trace\Sampler\ParentBased;
@@ -42,6 +45,55 @@ final class ObservabilityFactoryTest extends TestCase
             'traceparent' => '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01',
         ]);
         self::assertSame('0af7651916cd43dd8448eb211c80319c', $context->spanContext->traceId);
+    }
+
+    #[Test]
+    public function enabledConfigWithExporterTimeoutBuildsProvider(): void
+    {
+        $observability = ObservabilityFactory::fromConfig(
+            ObservabilityConfig::enabled('orders')
+                ->withExporterEndpoint('http://localhost:4318')
+                ->withExporterTimeoutMillis(5000),
+        );
+
+        self::assertInstanceOf(OtelObservability::class, $observability);
+    }
+
+    #[Test]
+    public function asyncExportWrapsExportersInForwardingTwins(): void
+    {
+        $observability = ObservabilityFactory::fromConfig(
+            ObservabilityConfig::enabled('orders')
+                ->withExporterEndpoint('http://localhost:4318')
+                ->withAsyncExport(true),
+        );
+
+        self::assertInstanceOf(OtelObservability::class, $observability);
+
+        $system = ActorSystem::create('async-export-test', new StepRuntime());
+
+        self::assertSame(0, $system->liveActorCount());
+        $observability->attachExportActor($system);
+        self::assertSame(1, $system->liveActorCount());
+
+        // Idempotent: second call must not spawn a second actor or throw.
+        $observability->attachExportActor($system);
+        self::assertSame(1, $system->liveActorCount());
+    }
+
+    #[Test]
+    public function asyncExportOffPreservesTodayWiring(): void
+    {
+        $observability = ObservabilityFactory::fromConfig(
+            ObservabilityConfig::enabled('orders')->withExporterEndpoint('http://localhost:4318'),
+        );
+
+        self::assertInstanceOf(OtelObservability::class, $observability);
+
+        $system = ActorSystem::create('async-export-off-test', new StepRuntime());
+
+        $this->expectException(LogicException::class);
+        $observability->attachExportActor($system);
     }
 
     #[Test]

@@ -20,19 +20,24 @@ use Throwable;
  * If constructed with the activation {@see ScopeInterface}, {@see self::end()}
  * detaches it before ending the span.
  */
-final class OtelSpan implements Span
+final readonly class OtelSpan implements Span
 {
-    public function __construct(
-        private readonly SpanInterface $span,
-        private readonly ?ScopeInterface $scope = null,
-    ) {}
+    public function __construct(private SpanInterface $span, private ?ScopeInterface $scope = null,) {}
 
+    /**
+     * @psalm-suppress ArgumentTypeCoercion the OTel SDK requires a non-empty-string key; the
+     *                 framework Span contract accepts any string, so the key is forwarded as-is.
+     */
     #[Override]
     public function setAttribute(string $key, string|int|float|bool $value): void
     {
         $this->span->setAttribute($key, $value);
     }
 
+    /**
+     * @psalm-suppress InvalidArgument the OTel SDK requires non-empty-string keys; the framework
+     *                 Span contract accepts any string key, so keys are forwarded as-is.
+     */
     #[Override]
     public function setAttributes(array $attributes): void
     {

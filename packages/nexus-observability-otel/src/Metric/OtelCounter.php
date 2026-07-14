@@ -11,10 +11,13 @@ use Override;
 /** @psalm-api */
 final readonly class OtelCounter implements Counter
 {
-    public function __construct(private CounterInterface $counter,) {}
+    public function __construct(private CounterInterface $counter) {}
 
     /**
      * @param array<string, scalar> $attributes
+     *
+     * @psalm-suppress InvalidArgument the OTel SDK requires non-empty-string keys; the framework
+     *                 Counter contract accepts any string key, so keys are forwarded as-is.
      */
     #[Override]
     public function add(int|float $value, array $attributes = []): void

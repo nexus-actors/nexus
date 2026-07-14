@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Observability\Context;
 
 use Monadial\Nexus\Observability\Trace\SpanContext;
+use Override;
 
 use function hexdec;
 use function preg_match;
@@ -24,6 +25,7 @@ final class TraceContextPropagator implements ContextPropagator
     private const string TRACESTATE = 'tracestate';
     private const string TRACEPARENT_PATTERN = '/^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/';
 
+    #[Override]
     public function inject(Context $context, array &$carrier): void
     {
         $spanContext = $context->spanContext;
@@ -44,6 +46,7 @@ final class TraceContextPropagator implements ContextPropagator
         }
     }
 
+    #[Override]
     public function extract(array $carrier, ?Context $context = null): Context
     {
         $base = $context ?? Context::root();
