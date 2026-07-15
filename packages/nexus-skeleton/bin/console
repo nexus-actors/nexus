@@ -1,0 +1,22 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Command\RunCommand;
+use Nexus\Maker\MakerCommands;
+use Symfony\Component\Console\Application;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$app = new Application('Nexus');
+$app->add(new RunCommand());
+
+// Dev-only: register the maker commands when the dev package is installed (Plan 2 adds them).
+if (class_exists(MakerCommands::class)) {
+    foreach (MakerCommands::all(dirname(__DIR__)) as $command) {
+        $app->add($command);
+    }
+}
+
+$app->run();
