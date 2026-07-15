@@ -41,5 +41,8 @@ jobs:
           # --root-dir lets lychee resolve root-relative links (/img/..., /docs/..., /assets/...)
           # in the built HTML against the build output; without it every such link is reported
           # unresolvable (thousands of false "provide a root dir" errors).
-          args: --no-progress --max-concurrency 10 --exclude-loopback --root-dir "${{ github.workspace }}/website/build" "website/build/**/*.html"
+          # --exclude drops Docusaurus "Edit this page" links (tree/<branch>/website/docs/*.md):
+          # they point at the source file on main, which 404s for a brand-new page until the PR
+          # that adds it merges — a false positive on every doc-adding PR, not a broken link.
+          args: --no-progress --max-concurrency 10 --exclude-loopback --exclude 'nexus-actors/nexus/tree/[^"]+/website/docs/' --root-dir "${{ github.workspace }}/website/build" "website/build/**/*.html"
           fail: true
