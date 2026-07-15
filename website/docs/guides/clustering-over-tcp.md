@@ -3,6 +3,7 @@ title: Clustering over TCP
 related:
   - packages/cluster-tcp
   - packages/cluster
+  - packages/serialization-msgpack
 ---
 
 # Clustering over TCP

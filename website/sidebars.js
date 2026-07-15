@@ -258,6 +258,7 @@ const sidebars = {
             'packages/observability-logger',
             'packages/observability-swoole',
             'packages/observability-actor',
+            'packages/observability-serialization',
           ],
         },
         {
@@ -270,6 +271,7 @@ const sidebars = {
             'packages/messenger-console',
             'packages/messenger-console-swoole',
             'packages/serialization',
+            'packages/serialization-msgpack',
             'packages/psalm',
             'packages/nexus',
           ],

@@ -2,6 +2,7 @@
 title: nexus-cluster-tcp
 related:
   - packages/cluster
+  - packages/serialization-msgpack
   - packages/observability
   - guides/clustering-over-tcp
 ---
@@ -271,7 +272,7 @@ $system->shutdown(Duration::seconds(5));
 ## See also
 
 - [nexus-cluster](./cluster.md) — `NodeAddress`, `ClusterTransport`, and `NodeHashRing` contracts that this package implements
-- `nexus-serialization-msgpack` — MessagePack codec used for user message bodies on cluster wire frames
+- [nexus-serialization-msgpack](./serialization-msgpack.md) — MessagePack codec used for user message bodies on cluster wire frames
 - [nexus-observability](./observability.md) — wiring the `Observability` instance
 - [Clustering over TCP guide](../guides/clustering-over-tcp.md) — topology config for NAT and Kubernetes, seed discovery, failure-detection tuning, and consistency caveats
 - [Two-node example](https://github.com/nexus-actors/nexus/tree/main/examples/nexus-cluster-tcp) — runnable Docker Compose demo: gossip join, tell/ask, kill/recover, graceful leave
