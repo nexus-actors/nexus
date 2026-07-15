@@ -8,8 +8,7 @@
         { "type": "path", "url": "../../packages/nexus-app" },
         { "type": "path", "url": "../../packages/nexus-runtime" },
         { "type": "path", "url": "../../packages/nexus-runtime-fiber" },
-        { "type": "path", "url": "../../packages/nexus-observability" },
-        { "type": "path", "url": "../../packages/nexus-serialization" }
+        { "type": "path", "url": "../../packages/nexus-observability" }
     ],
     "require": {
         "php": ">=8.5.7",
