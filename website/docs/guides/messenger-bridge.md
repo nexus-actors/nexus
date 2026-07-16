@@ -83,11 +83,12 @@ final readonly class InventoryReserved
 
 ```php title="src/Worker/RouterSetup.php"
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 
-$router = new MapMessageRouter([
-    OrderPlaced::class    => $ordersActor,
-    PaymentReceived::class => $paymentsActor,
-]);
+$router = new MapMessageRouter(
+    Route::to(OrderPlaced::class, $ordersActor),
+    Route::to(PaymentReceived::class, $paymentsActor),
+);
 ```
 
 For cluster seams where the target actor path travels in the message itself, swap in `StampMessageRouter` — it reads the `TargetActorPathStamp` that the producer side stamps on outbound envelopes.
@@ -311,6 +312,7 @@ The bridge emits spans, metrics, and PSR-14 events out of the box when you wire 
 ```php title="src/Worker/Worker.php"
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Observability\Observability;
 
 /** @var Observability $observability  wired from nexus-observability-otel */
@@ -328,7 +330,7 @@ $orders = MessengerBridge::producer(
 $system->spawn(
     MessengerBridge::receiverProps(
         $amqpTransport,
-        new MapMessageRouter([OrderPlaced::class => $ordersActor]),
+        new MapMessageRouter(Route::to(OrderPlaced::class, $ordersActor)),
         events: $events,
         observability: $observability,
     ),
@@ -424,6 +426,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Messenger\Console\Swoole\ThreadedConsumerBootstrap;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
@@ -432,7 +435,7 @@ final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
     {
         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
 
-        return new MapMessageRouter([OrderPlaced::class => $ref]);
+        return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
     }
 
     public function receiver(): ReceiverInterface
@@ -504,7 +507,7 @@ $replySenders = new MapReplySenderLocator(['orders-replies' => $replyTransport])
 $system->spawn(
     MessengerBridge::receiverProps(
         $requestTransport,
-        new MapMessageRouter([Ping::class => $pingHandlerActor]),
+        new MapMessageRouter(Route::to(Ping::class, $pingHandlerActor)),
         replySenders: $replySenders,
     ),
     'orders-receiver',

@@ -114,7 +114,7 @@ On AWS SQS, prefer `Persistent`: queue creation is an asynchronous API call that
 ```php
 $system->spawn(MessengerBridge::receiverProps(
     $transport,
-    new MapMessageRouter([OrderPlaced::class => $ordersActor]),
+    new MapMessageRouter(Route::to(OrderPlaced::class, $ordersActor)),
 ), 'orders-receiver');
 ```
 

@@ -83,9 +83,10 @@ use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Consumer\UnroutablePolicy;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Runtime\Duration;
 
-$router = new MapMessageRouter([OrderPlaced::class => $ordersActor]);
+$router = new MapMessageRouter(Route::to(OrderPlaced::class, $ordersActor));
 
 // Minimal
 $system->spawn(

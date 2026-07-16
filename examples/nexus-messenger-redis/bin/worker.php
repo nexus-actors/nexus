@@ -46,6 +46,7 @@ use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Lifecycle\LifecycleThresholds;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
@@ -107,7 +108,7 @@ $processorRef = $system->spawn(Props::fromFactory(fn () => new OrderProcessor())
 $receiverCount = (int) ($_SERVER['RECEIVER_COUNT'] ?? 3);
 $messageLimit = (int) ($_SERVER['MESSAGE_LIMIT'] ?? 50);
 
-$router = new MapMessageRouter([OrderPlaced::class => $processorRef]);
+$router = new MapMessageRouter(Route::to(OrderPlaced::class, $processorRef));
 $config = ReceiverActorConfig::default()->withPollInterval(Duration::millis(100));
 
 MessengerBridge::spawnReceivers(

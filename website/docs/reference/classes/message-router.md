@@ -22,12 +22,12 @@ Exact PHP message class → `ActorRef` lookup. This is the right choice for most
 
 ```php
 /**
- * @param array<class-string, ActorRef<object>> $routes
+ * @param Route<object> ...$routes
  */
-public function __construct(private array $routes)
+public function __construct(Route ...$routes)
 ```
 
-`route()` returns `$routes[$message::class]` or `null` if the class is not in the map. The lookup is an O(1) array fetch.
+Routes are built through the typed `Route::to()` boundary, which checks at analysis time that each target ref handles its routed message class. `route()` returns the registered ref for `$message::class` or `null` if the class is not in the map. The lookup is an O(1) array fetch.
 
 ### StampMessageRouter
 
@@ -58,13 +58,14 @@ interface MessageRouter
 
 ```php title="src/bootstrap.php"
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Routing\StampMessageRouter;
 
 // Type-based routing (most common)
-$router = new MapMessageRouter([
-    OrderPlaced::class  => $ordersActor,
-    PaymentMade::class  => $paymentsActor,
-]);
+$router = new MapMessageRouter(
+    Route::to(OrderPlaced::class, $ordersActor),
+    Route::to(PaymentMade::class, $paymentsActor),
+);
 
 // Path-stamp routing (cluster seam)
 $router = new StampMessageRouter([

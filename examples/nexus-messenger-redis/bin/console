@@ -31,6 +31,7 @@ use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Console\ProduceCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
@@ -95,7 +96,7 @@ $app->addCommand(new ConsumeCommand(
             'order-processor',
         );
 
-        return new MapMessageRouter([OrderPlaced::class => $processorRef]);
+        return new MapMessageRouter(Route::to(OrderPlaced::class, $processorRef));
     }),
     logger: $logger,
     events: $events,
