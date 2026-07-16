@@ -48,13 +48,19 @@ use Psr\Log\LoggerInterface;
  */
 final class GameActor
 {
+    /**
+     * @return Behavior<GameEnvelope>
+     */
     public static function behavior(
         string $gameId,
         EventStore $store,
         GameReadModel $readModel,
         LoggerInterface $log,
     ): Behavior {
-        return EventSourcedBehavior::create(
+        // The persistence engine erases the command type at toBehavior();
+        // this actor's protocol is GameEnvelope (dispatch() unhandles the rest).
+        /** @var Behavior<GameEnvelope> $behavior */
+        $behavior = EventSourcedBehavior::create(
             PersistenceId::of('Game', $gameId),
             GameState::empty($gameId),
             static fn(GameState $state, ActorContext $ctx, object $command): Effect => self::dispatch(
@@ -67,6 +73,8 @@ final class GameActor
         )
             ->withEventStore($store)
             ->toBehavior();
+
+        return $behavior;
     }
 
     private static function dispatch(
@@ -103,13 +111,13 @@ final class GameActor
                 $log,
                 $cmd::class,
             ),
-            $cmd instanceof GetSnapshot => Effect::reply($replyTo, $state->toSnapshot()),
+            $cmd instanceof GetSnapshot => Effect::reply(self::replyChannel($replyTo), $state->toSnapshot()),
             default => Effect::unhandled(),
         };
     }
 
     /**
-     * @param ActorRef<GameRejected|Seated> $replyTo
+     * @param ActorRef<GameRejected|Seated|GameSnapshot> $replyTo
      */
     private static function onJoin(
         GameState $state,
@@ -119,12 +127,13 @@ final class GameActor
         GameReadModel $readModel,
         LoggerInterface $log,
     ): Effect {
+        $reply = self::replyChannel($replyTo);
         $decision = GameRules::join($state, $cmd);
 
         if ($decision->isRejected()) {
             $log->debug('join rejected', ['gameId' => $state->gameId, 'reason' => $decision->rejection]);
 
-            return Effect::reply($replyTo, new GameRejected((string) $decision->rejection, $fd));
+            return Effect::reply($reply, new GameRejected((string) $decision->rejection, $fd));
         }
 
         $token = $cmd->playerId;
@@ -132,15 +141,15 @@ final class GameActor
         if ($decision->events === []) {
             // Reconnect to a seat already held — no new fact, just re-welcome
             // this connection with the current snapshot.
-            return Effect::reply($replyTo, new Seated($state->toSnapshot(), $fd, $token));
+            return Effect::reply($reply, new Seated($state->toSnapshot(), $fd, $token));
         }
 
         return self::persistWithProjection($decision->events, $readModel)
-            ->thenReply($replyTo, static fn(GameState $next): Seated => new Seated($next->toSnapshot(), $fd, $token));
+            ->thenReply($reply, static fn(GameState $next): Seated => new Seated($next->toSnapshot(), $fd, $token));
     }
 
     /**
-     * @param ActorRef<GameRejected|GameSnapshot> $replyTo
+     * @param ActorRef<GameRejected|Seated|GameSnapshot> $replyTo
      */
     private static function onMutation(
         GameState $state,
@@ -151,6 +160,8 @@ final class GameActor
         LoggerInterface $log,
         string $commandClass,
     ): Effect {
+        $reply = self::replyChannel($replyTo);
+
         if ($decision->isRejected()) {
             $log->debug('command rejected', [
                 'command' => $commandClass,
@@ -158,11 +169,28 @@ final class GameActor
                 'reason' => $decision->rejection,
             ]);
 
-            return Effect::reply($replyTo, new GameRejected((string) $decision->rejection, $fd));
+            return Effect::reply($reply, new GameRejected((string) $decision->rejection, $fd));
         }
 
         return self::persistWithProjection($decision->events, $readModel)
-            ->thenReply($replyTo, static fn(GameState $next) => $next->toSnapshot());
+            ->thenReply($reply, static fn(GameState $next) => $next->toSnapshot());
+    }
+
+    /**
+     * Erase the reply channel's message type for the persistence reply seam:
+     * `Effect::reply()`/`thenReply()` take an `ActorRef<object>` by design —
+     * the framework's reply-to is type-erased (Akka Typed's ActorRef[Nothing])
+     * and `ActorRef<T>` is invariant in T.
+     *
+     * @param ActorRef<GameRejected|Seated|GameSnapshot> $replyTo
+     * @return ActorRef<object>
+     */
+    private static function replyChannel(ActorRef $replyTo): ActorRef
+    {
+        /** @var ActorRef<object> $erased */
+        $erased = $replyTo;
+
+        return $erased;
     }
 
     /**

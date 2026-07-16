@@ -34,7 +34,7 @@ final class StdoutEventDispatcher implements EventDispatcherInterface
                 "[%s] [MEMBERSHIP] UP       node=%-42s endpoint=%s\n",
                 $time,
                 $event->node->toPathPrefix(),
-                $event->endpoint,
+                (string) $event->endpoint,
             );
         } elseif ($event instanceof NodeDown) {
             printf(
@@ -54,7 +54,7 @@ final class StdoutEventDispatcher implements EventDispatcherInterface
                 "[%s] [TRANSPORT]  CONNECT  peer=%-42s endpoint=%s\n",
                 $time,
                 $event->peer->toPathPrefix(),
-                $event->endpoint,
+                (string) $event->endpoint,
             );
         } elseif ($event instanceof PeerDisconnected) {
             printf(

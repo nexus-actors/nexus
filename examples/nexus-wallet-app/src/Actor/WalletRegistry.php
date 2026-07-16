@@ -24,6 +24,9 @@ final readonly class WalletRegistry
      */
     public function __construct(public array $byOwner = []) {}
 
+    /**
+     * @return ActorRef<WalletCommand>|null
+     */
     public function find(string $ownerId): ?ActorRef
     {
         return $this->byOwner[$ownerId] ?? null;

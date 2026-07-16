@@ -11,8 +11,6 @@ declare(strict_types=1);
  * to a single file with no locks, no per-write open/close, hot fd.
  *
  *   docker compose exec php-swoole php examples/thread-server-q.php
- *
- * @psalm-suppress all
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';

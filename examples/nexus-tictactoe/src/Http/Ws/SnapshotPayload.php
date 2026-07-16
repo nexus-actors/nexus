@@ -12,6 +12,8 @@ use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
  * player's capability token never reaches other clients. This is the whole
  * reason the wire DTO exists separately from the read model — it is a
  * privacy boundary, not duplication for its own sake.
+ *
+ * @psalm-api
  */
 final readonly class SnapshotPayload
 {

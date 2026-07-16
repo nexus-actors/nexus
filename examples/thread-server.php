@@ -49,6 +49,9 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LoggerTrait;
 
+/**
+ * @psalm-api — instantiated by HandlerInstantiator via the `$app->ws()` class-string route.
+ */
 final class EchoHandler extends WebSocketHandler
 {
     public function __construct(

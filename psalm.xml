@@ -47,9 +47,21 @@
         <directory name="packages/nexus-skeleton/src" />
         <directory name="packages/nexus-worker-pool/src" />
         <directory name="packages/nexus-worker-pool-swoole/src" />
-        <ignoreFiles>
+        <directory name="examples" />
+        <directory name="packages/nexus-worker-pool-swoole/bin" />
+        <ignoreFiles allowMissingFiles="true">
             <directory name="vendor" />
-            <directory name="examples" />
+            <!-- example apps keep their own installs/caches; their tests and perf
+                 harnesses are entrypoint-style code outside findUnusedCode's model -->
+            <directory name="examples/nexus-cluster-tcp/vendor" />
+            <directory name="examples/nexus-messenger-redis/vendor" />
+            <directory name="examples/nexus-tictactoe/vendor" />
+            <directory name="examples/nexus-tictactoe/var" />
+            <directory name="examples/nexus-tictactoe/tests" />
+            <directory name="examples/nexus-wallet-app/vendor" />
+            <directory name="examples/nexus-wallet-app/var" />
+            <directory name="examples/nexus-wallet-app/tests" />
+            <directory name="examples/nexus-wallet-app/perf" />
         </ignoreFiles>
     </projectFiles>
 
@@ -110,15 +122,6 @@
                 <directory name="packages/nexus-psalm/src" />
             </errorLevel>
         </InternalClass>
-
-        <!-- WebSocket actor / handler base classes use abstract methods
-             whose params are unused in the base impl; subclasses use them. -->
-        <PossiblyUnusedParam>
-            <errorLevel type="suppress">
-                <directory name="packages/nexus-http-ws/src" />
-                <directory name="packages/nexus-http-toolkit/src" />
-            </errorLevel>
-        </PossiblyUnusedParam>
 
         <!-- SwoolePeerLink::$clientOwner holds a Swoole\Coroutine\Client reference purely
              to prevent PHP's GC from running Client::__destruct(), which closes the

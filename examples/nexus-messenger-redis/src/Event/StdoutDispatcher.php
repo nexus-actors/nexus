@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Example\MessengerRedis\Event;
 
 use Monadial\Nexus\Messenger\Event\MessageConsumed;
 use Monadial\Nexus\Messenger\Event\WorkerRecyclingTriggered;
+use Override;
 use Psr\EventDispatcher\EventDispatcherInterface;
 
 use function get_class;
@@ -24,6 +25,7 @@ use function sprintf;
  */
 final class StdoutDispatcher implements EventDispatcherInterface
 {
+    #[Override]
     public function dispatch(object $event): object
     {
         if ($event instanceof MessageConsumed) {

@@ -17,6 +17,8 @@ use function trim;
  * mints one), present when resuming a seat. The display name is trimmed
  * and stripped of control characters before it is ever persisted or
  * rebroadcast.
+ *
+ * @psalm-api
  */
 final readonly class JoinIntent implements ClientIntent
 {

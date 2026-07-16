@@ -6,6 +6,8 @@ namespace Monadial\Nexus\Example\TicTacToe\Http\Ws;
 
 /**
  * Payload for `{"type": "error", "data": {"message": "..."}}`.
+ *
+ * @psalm-api
  */
 final readonly class ErrorPayload
 {

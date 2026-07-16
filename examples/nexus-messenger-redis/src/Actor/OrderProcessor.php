@@ -8,16 +8,22 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Example\MessengerRedis\Message\OrderPlaced;
+use Override;
 
 /**
+ * @psalm-api — wired by the bin/worker.php entrypoint via Props::fromFactory().
+ *
  * Handles incoming OrderPlaced messages delivered by the ReceiverActor.
  *
  * In a real application this actor would persist the order, publish downstream
  * events, call a payment actor, etc. Here it logs to stdout so the
  * competing-consumer pattern is visible at a glance.
+ *
+ * @implements ActorHandler<object>
  */
 final class OrderProcessor implements ActorHandler
 {
+    #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
         if ($message instanceof OrderPlaced) {

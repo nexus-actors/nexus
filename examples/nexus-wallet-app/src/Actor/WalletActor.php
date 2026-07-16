@@ -9,6 +9,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Example\Wallet\Domain\Command\Deposit;
 use Monadial\Nexus\Example\Wallet\Domain\Command\GetBalance;
+use Monadial\Nexus\Example\Wallet\Domain\Command\WalletCommand;
 use Monadial\Nexus\Example\Wallet\Domain\Command\Withdraw;
 use Monadial\Nexus\Example\Wallet\Domain\Event\MoneyDeposited;
 use Monadial\Nexus\Example\Wallet\Domain\Event\MoneyWithdrawn;
@@ -45,9 +46,15 @@ use Monadial\Nexus\Persistence\PersistenceId;
  */
 final readonly class WalletActor
 {
+    /**
+     * @return Behavior<WalletCommand>
+     */
     public static function behavior(string $ownerId, EventStore $store): Behavior
     {
-        return EventSourcedBehavior::create(
+        // The persistence engine erases the command type at toBehavior();
+        // this actor's protocol is WalletCommand (dispatch() unhandles the rest).
+        /** @var Behavior<WalletCommand> $behavior */
+        $behavior = EventSourcedBehavior::create(
             PersistenceId::of('Wallet', $ownerId),
             WalletState::empty(),
             static fn(WalletState $state, ActorContext $ctx, object $command): Effect => self::dispatch(
@@ -60,18 +67,37 @@ final readonly class WalletActor
         )
             ->withEventStore($store)
             ->toBehavior();
+
+        return $behavior;
     }
 
     private static function dispatch(WalletState $state, ActorContext $ctx, object $command, string $ownerId): Effect
     {
-        $sender = $ctx->sender();
+        // `ctx->sender()` is type-erased by the framework (the envelope
+        // carries the ref by identity); each command's #[ReplyType] pins
+        // what the asker actually awaits, so narrow per command.
+        if ($command instanceof Deposit) {
+            /** @var ActorRef<DepositResult>|null $sender */
+            $sender = $ctx->sender();
 
-        return match (true) {
-            $command instanceof Deposit    => self::onDeposit($state, $command, $sender, $ownerId),
-            $command instanceof Withdraw   => self::onWithdraw($state, $command, $sender, $ownerId),
-            $command instanceof GetBalance => self::onGetBalance($state, $sender),
-            default                        => Effect::unhandled(),
-        };
+            return self::onDeposit($state, $command, $sender, $ownerId);
+        }
+
+        if ($command instanceof Withdraw) {
+            /** @var ActorRef<WithdrawResult>|null $sender */
+            $sender = $ctx->sender();
+
+            return self::onWithdraw($state, $command, $sender, $ownerId);
+        }
+
+        if ($command instanceof GetBalance) {
+            /** @var ActorRef<BalanceSnapshot>|null $sender */
+            $sender = $ctx->sender();
+
+            return self::onGetBalance($state, $sender);
+        }
+
+        return Effect::unhandled();
     }
 
     /**
@@ -131,7 +157,7 @@ final readonly class WalletActor
             return Effect::none();
         }
 
-        return Effect::reply($sender, new BalanceSnapshot($state->balance->cents));
+        return Effect::reply(self::replyChannel($sender), new BalanceSnapshot($state->balance->cents));
     }
 
     /**
@@ -143,11 +169,29 @@ final readonly class WalletActor
             return Effect::none();
         }
 
-        return Effect::reply($sender, new WithdrawResult(
+        return Effect::reply(self::replyChannel($sender), new WithdrawResult(
             accepted: false,
             balanceCents: $state->balance->cents,
             rejectionReason: $reason,
         ));
+    }
+
+    /**
+     * Erase the sender's message type for the persistence reply seam:
+     * `Effect::reply()` takes an `ActorRef<object>` by design — the
+     * framework's reply-to is type-erased (Akka Typed's ActorRef[Nothing])
+     * and `ActorRef<T>` is invariant in T.
+     *
+     * @template R of object
+     * @param ActorRef<R> $sender
+     * @return ActorRef<object>
+     */
+    private static function replyChannel(ActorRef $sender): ActorRef
+    {
+        /** @var ActorRef<object> $erased */
+        $erased = $sender;
+
+        return $erased;
     }
 
     /**

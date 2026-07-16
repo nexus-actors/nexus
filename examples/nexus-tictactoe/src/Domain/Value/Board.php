@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Example\TicTacToe\Domain\Value;
 use Monadial\Nexus\Example\TicTacToe\Domain\Exception\CellOccupiedException;
 use Monadial\Nexus\Example\TicTacToe\Domain\Exception\InvalidCellException;
 
+use function array_values;
 use function count;
 use function in_array;
 
@@ -37,6 +38,8 @@ final readonly class Board
     /**
      * @param list<mixed> $cells Anything can arrive from a corrupted JSON column;
      *        every cell is validated before construction.
+     *
+     * @psalm-pure
      */
     public static function fromCells(array $cells): self
     {
@@ -79,7 +82,7 @@ final readonly class Board
         $next = $this->cells;
         $next[$cellIndex] = $mark;
 
-        return new self($next);
+        return new self(array_values($next));
     }
 
     public function winner(): ?PlayerMark

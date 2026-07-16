@@ -53,17 +53,38 @@ use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Monolog\Handler\StreamHandler;
+use Monolog\Level;
 use Monolog\Logger;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\Connection;
 use Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport;
+use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
-require __DIR__ . '/../vendor/autoload.php';
+// Standalone example install, or monorepo checkout — pick whichever exists.
+$autoload = __DIR__ . '/../vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
+}
+
+require $autoload;
+
+// The Redis bridge ships only with the standalone example install; fail fast
+// with a clear error when running from a checkout without it.
+if (!class_exists('Symfony\Component\Messenger\Bridge\Redis\Transport\Connection')) {
+    fwrite(STDERR, "symfony/redis-messenger is not installed — run `composer install` in examples/nexus-messenger-redis.\n");
+    exit(1);
+}
+
+if (!class_exists('Symfony\Component\Messenger\Bridge\Redis\Transport\RedisTransport')) {
+    fwrite(STDERR, "symfony/redis-messenger is not installed — run `composer install` in examples/nexus-messenger-redis.\n");
+    exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // 1. PSR-3 logger — Monolog to stdout
 // ---------------------------------------------------------------------------
 $logger = new Logger('nexus-worker');
-$logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+$logger->pushHandler(new StreamHandler('php://stdout', Level::Debug));
 
 // ---------------------------------------------------------------------------
 // 2. PSR-14 dispatcher — prints bridge events to stdout
@@ -84,12 +105,15 @@ $serializer = new NexusMessengerSerializer(
 // ---------------------------------------------------------------------------
 // 4. Redis transport
 // ---------------------------------------------------------------------------
-$dsn = (string) ($_SERVER['REDIS_DSN'] ?? 'redis://redis:6379');
-$stream = (string) ($_SERVER['REDIS_STREAM'] ?? 'orders');
-$group = (string) ($_SERVER['CONSUMER_GROUP'] ?? 'nexus-workers');
+$dsn = $_SERVER['REDIS_DSN'] ?? 'redis://redis:6379';
+$stream = $_SERVER['REDIS_STREAM'] ?? 'orders';
+$group = $_SERVER['CONSUMER_GROUP'] ?? 'nexus-workers';
 
-$connection = Connection::fromDsn($dsn . '/' . $stream, ['group' => $group]);
-$transport = new RedisTransport($connection, $serializer);
+/** @var ReceiverInterface $transport — the Redis bridge classes are installed only with the standalone example */
+$transport = new RedisTransport(
+    Connection::fromDsn($dsn . '/' . $stream, ['group' => $group]),
+    $serializer,
+);
 
 // ---------------------------------------------------------------------------
 // 5. Actor system + Fiber runtime
@@ -139,6 +163,7 @@ $system->spawn(
 // 9. Run — blocks until the watchdog triggers graceful shutdown
 // ---------------------------------------------------------------------------
 $logger->info('Worker starting', [
+    'consumer_group' => $group,
     'message_limit' => $messageLimit,
     'receiver_count' => $receiverCount,
     'redis_dsn' => $dsn,

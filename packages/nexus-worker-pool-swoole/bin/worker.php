@@ -9,7 +9,7 @@
  *
  * WorkerPoolConfig is NOT passed as a PHP object (it would require the class
  * to be loaded before Thread::getArguments() reconstructs it). Instead, its
- * two scalar properties are passed and the config is rebuilt after autoload.
+ * two scalar properties are passed and used directly after autoload.
  *
  * Args via Swoole\Thread::getArguments():
  *   [0]  string    $autoloader
@@ -38,67 +38,98 @@ use Monadial\Nexus\WorkerPool\ConsistentHashRing;
 use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
 use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
-use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
+use Monadial\Nexus\WorkerPool\WorkerStartHandler;
+use Psr\Log\LoggerInterface;
 use Swoole\Thread;
+use Swoole\Thread\ArrayList;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
+use Swoole\Thread\Queue;
 
 use function Opis\Closure\unserialize as opis_unserialize;
 
 $args = Thread::getArguments();
 
+if ($args === null) {
+    throw new RuntimeException('worker.php must be started as a Swoole\Thread entry point with thread arguments');
+}
+
 // Extract scalars and Swoole thread-safe types first — no PHP objects yet.
-/** @var string $autoloader */
-$autoloader = $args[0];
-/** @var Map $directory */
-$directory = $args[1];
-/** @var \Swoole\Thread\ArrayList $queues */
-$queues = $args[2];
-/** @var Atomic $workerIdCounter */
-$workerIdCounter = $args[3];
-/** @var int $workerCount */
-$workerCount = (int) $args[4];
-/** @var string $systemNamePrefix */
-$systemNamePrefix = (string) $args[5];
-/** @var string $handlerClass */
-$handlerClass = (string) $args[6];
-/** @var string $serializedConfigure */
-$serializedConfigure = (string) $args[7];
-/** @var string $loggerClass */
-$loggerClass = (string) $args[8];
-/** @var string $serializedLoggerFactory */
+if (
+    !$args[1] instanceof Map
+    || !$args[2] instanceof ArrayList
+    || !$args[3] instanceof Atomic
+    || !$args[10] instanceof Atomic
+    || !$args[11] instanceof Atomic
+) {
+    throw new RuntimeException(
+        'worker.php expects thread arguments [string $autoloader, Map $directory, ArrayList $queues, '
+        . 'Atomic $workerIdCounter, ...scalars, Atomic $readyCounter, Atomic $stopSignal]',
+    );
+}
+
+$autoloader              = (string) $args[0];
+$directory               = $args[1];
+$queues                  = $args[2];
+$workerIdCounter         = $args[3];
+$workerCount             = (int) $args[4];
+$systemNamePrefix        = (string) $args[5];
+$handlerClass            = (string) $args[6];
+$serializedConfigure     = (string) $args[7];
+$loggerClass             = (string) $args[8];
 $serializedLoggerFactory = (string) $args[9];
-/** @var Atomic $readyCounter */
-$readyCounter = $args[10];
-/** @var Atomic $stopSignal */
-$stopSignal = $args[11];
+$readyCounter            = $args[10];
+$stopSignal              = $args[11];
 
 // Load autoloader before using any project classes.
+if (!is_file($autoloader)) {
+    throw new RuntimeException("Autoloader not found: {$autoloader}");
+}
+
 require_once $autoloader;
 
 $workerId = $workerIdCounter->add(1) - 1;
-
-// Reconstruct WorkerPoolConfig from scalars.
-$config = WorkerPoolConfig::withThreads($workerCount)->withSystemNamePrefix($systemNamePrefix);
 
 // Swoole converts PHP arrays to Thread\ArrayList when passing between threads — convert back.
 $queuesArray = [];
 
 for ($i = 0; $i < $workerCount; $i++) {
-    $queuesArray[$i] = $queues[$i];
+    $queue = $queues[$i];
+
+    if (!$queue instanceof Queue) {
+        throw new RuntimeException(
+            'Expected Swoole\Thread\Queue in the queues list, got ' . get_debug_type($queue),
+        );
+    }
+
+    $queuesArray[$i] = $queue;
 }
 
 // Create logger.
 $logger = null;
 
 if ($loggerClass !== '') {
-    /** @psalm-suppress MixedAssignment */
+    if (!is_a($loggerClass, LoggerInterface::class, true)) {
+        throw new RuntimeException("Logger class {$loggerClass} must implement " . LoggerInterface::class);
+    }
+
     $logger = new $loggerClass();
 } elseif ($serializedLoggerFactory !== '') {
-    /** @psalm-suppress MixedFunctionCall */
     $factory = opis_unserialize($serializedLoggerFactory);
-    /** @psalm-suppress MixedAssignment */
-    $logger = $factory();
+
+    if (!$factory instanceof Closure) {
+        throw new RuntimeException('Expected a serialized logger factory closure, got ' . get_debug_type($factory));
+    }
+
+    $produced = $factory();
+
+    if (!$produced instanceof LoggerInterface) {
+        throw new RuntimeException(
+            'Logger factory must return a ' . LoggerInterface::class . ', got ' . get_debug_type($produced),
+        );
+    }
+
+    $logger = $produced;
 }
 
 $runtime    = new SwooleRuntime();
@@ -113,11 +144,18 @@ $node            = new WorkerNode($workerId, $system, $transport, $ring, $thread
 $node->start();
 
 if ($serializedConfigure !== '') {
-    /** @psalm-suppress MixedFunctionCall */
     $configure = opis_unserialize($serializedConfigure);
+
+    if (!$configure instanceof Closure) {
+        throw new RuntimeException('Expected a serialized configure closure, got ' . get_debug_type($configure));
+    }
+
     $configure($node);
 } else {
-    /** @psalm-suppress MixedMethodCall */
+    if (!is_a($handlerClass, WorkerStartHandler::class, true)) {
+        throw new RuntimeException("Handler class {$handlerClass} must implement " . WorkerStartHandler::class);
+    }
+
     (new $handlerClass())->onWorkerStart($node);
 }
 

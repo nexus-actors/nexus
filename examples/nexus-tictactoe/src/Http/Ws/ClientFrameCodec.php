@@ -97,7 +97,7 @@ final readonly class ClientFrameCodec
     }
 
     /**
-     * @return array<string, mixed>|null
+     * @return array<array-key, mixed>|null
      */
     private static function decodeJson(string $payload): ?array
     {

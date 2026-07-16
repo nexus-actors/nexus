@@ -9,6 +9,8 @@ use Monadial\Nexus\Example\TicTacToe\Domain\Exception\InvalidCommandException;
 /**
  * `{"type":"move","cell":4}` — no player id. The channel actor stamps the
  * mover from the authenticated connection.
+ *
+ * @psalm-api
  */
 final readonly class MoveIntent implements ClientIntent
 {
