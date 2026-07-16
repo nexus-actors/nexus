@@ -20,6 +20,7 @@ final readonly class GoodActorHandler implements ActorHandler
 {
     public function __construct(private string $name) {}
 
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -36,6 +37,7 @@ final class BadActorHandler implements ActorHandler
 {
     public int $count = 0;
 
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -54,6 +56,7 @@ final class PrivateMutableActorHandler implements ActorHandler
 {
     private int $count = 0;
 
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -72,6 +75,7 @@ final readonly class PublicReadonlyActorHandler implements ActorHandler
 {
     public function __construct(public string $name) {}
 
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {

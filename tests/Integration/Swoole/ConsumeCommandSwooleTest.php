@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Tests\Integration\Swoole;
 use Monadial\Nexus\Core\Actor\DeadLetterRef;
 use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -41,7 +42,7 @@ final class ConsumeCommandSwooleTest extends TestCase
         // DeadLetterRef does not implement BackpressureCapable; ReceiverActor
         // falls into the plain tell() branch which acks the envelope and
         // increments the processed count — so the watchdog fires after 3 messages.
-        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+        $router = new MapMessageRouter(Route::to(stdClass::class, new DeadLetterRef()));
 
         $command = new ConsumeCommand(
             new SwooleRuntime(),

@@ -12,6 +12,7 @@ use Monadial\Nexus\Messenger\Consumer\ReceiverActor;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Consumer\UnroutablePolicy;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
@@ -49,7 +50,7 @@ final class ReceiverActorTest extends TestCase
 
         $system->spawn(Props::fromBehavior(ReceiverActor::create(
             $transport,
-            new MapMessageRouter([Ping::class => $target]),
+            new MapMessageRouter(Route::to(Ping::class, $target)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
         )), 'receiver');
 
@@ -73,7 +74,7 @@ final class ReceiverActorTest extends TestCase
 
         $system->spawn(Props::fromBehavior(ReceiverActor::create(
             $transport,
-            new MapMessageRouter([]),
+            new MapMessageRouter(),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
         )), 'receiver');
 
@@ -97,7 +98,7 @@ final class ReceiverActorTest extends TestCase
 
         $system->spawn(Props::fromBehavior(ReceiverActor::create(
             $transport,
-            new MapMessageRouter([]),
+            new MapMessageRouter(),
             ReceiverActorConfig::default()
                 ->withPollInterval(Duration::millis(20))
                 ->withUnroutablePolicy(UnroutablePolicy::DeadLetters),
@@ -125,7 +126,7 @@ final class ReceiverActorTest extends TestCase
 
         $system->spawn(Props::fromBehavior(ReceiverActor::create(
             $transport,
-            new MapMessageRouter([Ping::class => $fake]),
+            new MapMessageRouter(Route::to(Ping::class, $fake)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
         )), 'receiver');
 
@@ -156,7 +157,7 @@ final class ReceiverActorTest extends TestCase
 
         $system->spawn(Props::fromBehavior(ReceiverActor::create(
             $transport,
-            new MapMessageRouter([Ping::class => $fake]),
+            new MapMessageRouter(Route::to(Ping::class, $fake)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
             null,
             null,

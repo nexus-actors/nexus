@@ -20,6 +20,7 @@ final readonly class BlockingFixtureMsg {}
  */
 final readonly class BlockingActorHandler implements ActorHandler
 {
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -36,6 +37,7 @@ final readonly class BlockingActorHandler implements ActorHandler
  */
 final readonly class NonBlockingActorHandler implements ActorHandler
 {
+    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {

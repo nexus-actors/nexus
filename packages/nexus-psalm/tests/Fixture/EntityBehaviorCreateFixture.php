@@ -38,9 +38,11 @@ final class EntityBehaviorCreateFixture
      */
     public function fullyTypedCreateReturnsBothGenerics(): EntityBehaviorBuilder
     {
+        /** @psalm-suppress ArgumentTypeCoercion */
         return EntityBehavior::create(
             entityClass: FixtureOrder::class,
             id: '42',
+            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn(ActorContext $ctx, FixtureAddLineItem $cmd, FixtureOrder $o): EntityEffect => EntityEffect::same(),
         );
     }
@@ -55,6 +57,7 @@ final class EntityBehaviorCreateFixture
         $b = EntityBehavior::create(
             entityClass: FixtureOrder::class,
             id: '42',
+            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn(ActorContext $ctx, object $cmd, FixtureOrder $o): EntityEffect => EntityEffect::same(),
         );
         /** @psalm-trace $b */
@@ -70,9 +73,11 @@ final class EntityBehaviorCreateFixture
      */
     public function mismatchedEntityGenericFails(): EntityBehaviorBuilder
     {
+        /** @psalm-suppress ArgumentTypeCoercion */
         return EntityBehavior::create(
             entityClass: FixtureOrder::class,
             id: '42',
+            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn(ActorContext $ctx, FixtureAddLineItem $cmd, FixtureOrder $o): EntityEffect => EntityEffect::same(),
         );
     }
@@ -86,9 +91,11 @@ final class EntityBehaviorCreateFixture
      */
     public function mismatchedCommandGenericFails(): EntityBehaviorBuilder
     {
+        /** @psalm-suppress ArgumentTypeCoercion */
         return EntityBehavior::create(
             entityClass: FixtureOrder::class,
             id: '42',
+            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn(ActorContext $ctx, FixtureAddLineItem $cmd, FixtureOrder $o): EntityEffect => EntityEffect::same(),
         );
     }
