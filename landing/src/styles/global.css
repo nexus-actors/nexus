@@ -1,52 +1,57 @@
-@import '../../../nexus-brand/tokens.css';
+@import '../../../nexus-brand/tokens.css' layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-/* Prevent horizontal page scroll from any unbreakable token or wide element */
-html,
-body {
-  overflow-x: clip;
-}
+@config '../../tailwind.config.mjs';
 
-/* ------------------------------------------------------------------ */
-/* Landing-site design token overrides                                 */
-/* nexus-brand tokens now ship emerald (#047857). These local overrides */
-/* exist because the landing uses a darker dot-grid background and     */
-/* needs slightly brighter accent values (#10B981 / #34D399) than the  */
-/* docs theme. Keep in sync if the brand palette shifts.               */
-/* ------------------------------------------------------------------ */
+@custom-variant dark (&:where(.dark, .dark *));
 
-:root {
-  --nx-bg:          #ffffff;
-  --nx-bg-raised:   #f8fafb;
-  --nx-bg-card:     #f1f5f4;
-  --nx-border:      #e2e8f0;
-  --nx-border-glow: #10B981;
-  --nx-text:        #1a202c;
-  --nx-text-muted:  #64748b;
-  --nx-text-dim:    #64748b;  /* slate-500 — 4.60:1 on white, passes WCAG AA */
-  --nx-accent:      #10B981;
-  --nx-accent-bright: #059669;
-  --nx-green:       #34d399;
-  --nx-red:         #ef4444;
-  --nx-font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
-}
+@layer utilities {
+  /* Prevent horizontal page scroll from any unbreakable token or wide element */
+  html,
+  body {
+    overflow-x: clip;
+  }
 
-.dark {
-  --nx-bg:          #080D19;
-  --nx-bg-raised:   #0c1222;
-  --nx-bg-card:     #111a2e;
-  --nx-border:      #1a2332;
-  --nx-border-glow: #10B981;
-  --nx-text:        #e2e8f0;
-  --nx-text-muted:  #8b9bb4;
-  --nx-text-dim:    #7a92b2;  /* ~4.5:1 on dark bg #080D19 */
-  --nx-accent:      #34D399;
-  --nx-accent-bright: #6EE7B7;
-  --nx-green:       #34d399;
-  --nx-red:         #f87171;
+  /* ------------------------------------------------------------------ */
+  /* Landing-site design token overrides                                 */
+  /* nexus-brand tokens now ship emerald (#047857). These local overrides */
+  /* exist because the landing uses a darker dot-grid background and     */
+  /* needs slightly brighter accent values (#10B981 / #34D399) than the  */
+  /* docs theme. Keep in sync if the brand palette shifts.               */
+  /* ------------------------------------------------------------------ */
+
+  :root {
+    --nx-bg: #ffffff;
+    --nx-bg-raised: #f8fafb;
+    --nx-bg-card: #f1f5f4;
+    --nx-border: #e2e8f0;
+    --nx-border-glow: #10b981;
+    --nx-text: #1a202c;
+    --nx-text-muted: #64748b;
+    --nx-text-dim: #64748b; /* slate-500 — 4.60:1 on white, passes WCAG AA */
+    --nx-accent: #10b981;
+    --nx-accent-bright: #059669;
+    --nx-green: #34d399;
+    --nx-red: #ef4444;
+    --nx-font-mono:
+      'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
+  }
+
+  .dark {
+    --nx-bg: #080d19;
+    --nx-bg-raised: #0c1222;
+    --nx-bg-card: #111a2e;
+    --nx-border: #1a2332;
+    --nx-border-glow: #10b981;
+    --nx-text: #e2e8f0;
+    --nx-text-muted: #8b9bb4;
+    --nx-text-dim: #7a92b2; /* ~4.5:1 on dark bg #080D19 */
+    --nx-accent: #34d399;
+    --nx-accent-bright: #6ee7b7;
+    --nx-green: #34d399;
+    --nx-red: #f87171;
+  }
 }
 
 @layer base {
