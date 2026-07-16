@@ -11,6 +11,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Tests\Integration\Messenger\Messages\OrderPlaced;
@@ -52,7 +53,7 @@ final class CompetingReceiversTest extends TestCase
             3,
             'receiver',
             $transport,
-            new MapMessageRouter([OrderPlaced::class => $target]),
+            new MapMessageRouter(Route::to(OrderPlaced::class, $target)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
         );
 

@@ -39,7 +39,7 @@ final class HeartbeatThreadedConsumerBootstrap implements ThreadedConsumerBootst
             FILE_APPEND | LOCK_EX,
         );
 
-        return new MapMessageRouter([]);
+        return new MapMessageRouter();
     }
 
     public function receiver(): ReceiverInterface

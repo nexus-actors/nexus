@@ -14,6 +14,7 @@ use Monadial\Nexus\Messenger\Event\MessagePublished;
 use Monadial\Nexus\Messenger\Event\MessageRejected;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Tests\Support\FakeContextPropagator;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
@@ -61,7 +62,7 @@ final class ObservabilityTest extends TestCase
 
         $system->spawn(MessengerBridge::receiverProps(
             $transport,
-            new MapMessageRouter([Ping::class => $target]),
+            new MapMessageRouter(Route::to(Ping::class, $target)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
             null,
             null,
@@ -130,7 +131,7 @@ final class ObservabilityTest extends TestCase
 
         $system->spawn(MessengerBridge::receiverProps(
             $transport,
-            new MapMessageRouter([]),
+            new MapMessageRouter(),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
             null,
             null,
@@ -190,7 +191,7 @@ final class ObservabilityTest extends TestCase
 
         $system->spawn(MessengerBridge::receiverProps(
             $transport,
-            new MapMessageRouter([Ping::class => $target]),
+            new MapMessageRouter(Route::to(Ping::class, $target)),
             ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
             null,
             null,

@@ -21,6 +21,7 @@ use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\MessengerBridge;
 use Monadial\Nexus\Messenger\Producer\MessengerActorRef;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingDispatcher;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Runtime\Duration;
@@ -74,7 +75,7 @@ final class AskReplyLoopTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $responder]),
+                new MapMessageRouter(Route::to(Ping::class, $responder)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,
@@ -155,7 +156,7 @@ final class AskReplyLoopTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $responder]),
+                new MapMessageRouter(Route::to(Ping::class, $responder)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,
@@ -254,7 +255,7 @@ final class AskReplyLoopTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $responder]),
+                new MapMessageRouter(Route::to(Ping::class, $responder)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,
@@ -321,7 +322,7 @@ final class AskReplyLoopTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $responder]),
+                new MapMessageRouter(Route::to(Ping::class, $responder)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,

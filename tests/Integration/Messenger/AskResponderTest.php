@@ -12,6 +12,7 @@ use Monadial\Nexus\Messenger\Ask\MapReplySenderLocator;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActor;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Tests\Support\RecordingObservability;
@@ -84,7 +85,7 @@ final class AskResponderTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $target]),
+                new MapMessageRouter(Route::to(Ping::class, $target)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,
@@ -162,7 +163,7 @@ final class AskResponderTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $target]),
+                new MapMessageRouter(Route::to(Ping::class, $target)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
                 null,
                 null,
@@ -219,7 +220,7 @@ final class AskResponderTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $target]),
+                new MapMessageRouter(Route::to(Ping::class, $target)),
                 ReceiverActorConfig::default()->withPollInterval(Duration::millis(20)),
             )),
             'receiver',
@@ -286,7 +287,7 @@ final class AskResponderTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $target]),
+                new MapMessageRouter(Route::to(Ping::class, $target)),
                 ReceiverActorConfig::default()
                     ->withPollInterval(Duration::millis(20))
                     ->withAskPendingTimeout(Duration::millis(100)),
@@ -347,7 +348,7 @@ final class AskResponderTest extends TestCase
         $system->spawn(
             Props::fromBehavior(ReceiverActor::create(
                 $requestTransport,
-                new MapMessageRouter([Ping::class => $target]),
+                new MapMessageRouter(Route::to(Ping::class, $target)),
                 ReceiverActorConfig::default()
                     ->withPollInterval(Duration::millis(20))
                     ->withAskPendingTimeout(Duration::millis(100)),
