@@ -16,7 +16,6 @@ final class RecordingCounter implements Counter
 
     /**
      * @param array<string, scalar> $attributes
-     * @psalm-suppress InvalidOperand
      */
     #[Override]
     public function add(int|float $value, array $attributes = []): void

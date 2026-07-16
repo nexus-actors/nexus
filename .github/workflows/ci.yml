@@ -102,7 +102,7 @@ jobs:
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-fiber:ci composer install --no-interaction --no-progress
 
       - name: Psalm
-        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/psalm --no-progress
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/psalm --no-progress --find-unused-psalm-suppress
 
       - name: Deptrac
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/deptrac analyse --no-progress --formatter=github-actions

@@ -11,6 +11,7 @@ use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelMessageReceived;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use ReflectionClass;
 use RuntimeException;
 use Throwable;
 
@@ -106,11 +107,15 @@ final readonly class WebSocketDispatcher
                 $ctx = $ctx->withRequest($enriched);
 
                 $factory = $route->channelFactory;
-                /** @psalm-suppress InvalidArgument, UnsafeInstantiation */
                 $ref = $this->registry->resolveOrSpawn(
                     $name,
                     Props::fromStatefulFactory(
-                        $factory ?? static fn() => new $actorClass(),
+                        // Reflection-based construction keeps the zero-arg
+                        // fallback type-safe for the dynamic class-string;
+                        // it only runs once per channel-actor spawn.
+                        $factory ?? static fn(): WebSocketChannelActor => new ReflectionClass(
+                            $actorClass,
+                        )->newInstance(),
                     ),
                 );
                 $ref->tell(new ChannelConnectionOpened($ctx->id(), $ctx, $enriched));

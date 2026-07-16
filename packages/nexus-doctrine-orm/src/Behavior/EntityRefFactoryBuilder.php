@@ -19,12 +19,17 @@ use Monadial\Nexus\Runtime\Duration;
  */
 final class EntityRefFactoryBuilder
 {
-    /** @var EntityReplayPolicy<T> */
     private EntityReplayPolicy $replayPolicy;
     private ?Duration $receiveTimeout = null;
     private ?EntityManagerFactory $emFactory = null;
+
+    /** @var (Closure(): \Doctrine\DBAL\Connection)|null */
     private ?Closure $connectionSource = null;
+
+    /** @var (Closure(\Doctrine\DBAL\Connection): void)|null */
     private ?Closure $connectionRelease = null;
+
+    /** @var (Closure(\Monadial\Nexus\Core\Actor\ActorContext<C>, C, T): EntityEffect<T>)|null */
     private ?Closure $commandHandler = null;
 
     /**
@@ -32,7 +37,6 @@ final class EntityRefFactoryBuilder
      */
     public function __construct(private readonly ActorSpawner $spawner, private readonly string $entityClass)
     {
-        /** @var EntityReplayPolicy<T> */
         $this->replayPolicy = new FailIfMissing();
     }
 
@@ -47,6 +51,8 @@ final class EntityRefFactoryBuilder
      * Dedicated-connection mode: each spawned actor owns the connection
      * returned by `$source` and `close()`s it on PostStop. Use for fresh
      * connections (e.g. `DriverManager::getConnection`).
+     *
+     * @param Closure(): \Doctrine\DBAL\Connection $source
      */
     public function withConnectionSource(Closure $source): self
     {
@@ -71,9 +77,6 @@ final class EntityRefFactoryBuilder
         return $this;
     }
 
-    /**
-     * @param EntityReplayPolicy<T> $policy
-     */
     public function withReplayPolicy(EntityReplayPolicy $policy): self
     {
         $this->replayPolicy = $policy;
@@ -88,6 +91,9 @@ final class EntityRefFactoryBuilder
         return $this;
     }
 
+    /**
+     * @param Closure(\Monadial\Nexus\Core\Actor\ActorContext<C>, C, T): EntityEffect<T> $commandHandler
+     */
     public function handle(Closure $commandHandler): self
     {
         $this->commandHandler = $commandHandler;
@@ -96,7 +102,7 @@ final class EntityRefFactoryBuilder
     }
 
     /**
-     * @psalm-suppress ArgumentTypeCoercion,MixedArgumentTypeCoercion
+     * @return EntityRefFactory<T, C>
      */
     public function build(): EntityRefFactory
     {

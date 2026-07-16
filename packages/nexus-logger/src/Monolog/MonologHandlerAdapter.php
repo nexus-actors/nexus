@@ -13,6 +13,7 @@ use Monolog\Level as MonologLevel;
 use Monolog\LogRecord;
 use Override;
 
+use function fmod;
 use function round;
 
 /**
@@ -62,13 +63,10 @@ final readonly class MonologHandlerAdapter implements Handler
         $this->delegate->handle($logRecord);
     }
 
-    /**
-     * @psalm-suppress InvalidOperand
-     */
     private function toMonologRecord(Record $record): LogRecord
     {
         $seconds = (int) $record->timestamp;
-        $millis = (int) round(($record->timestamp - $seconds) * 1000);
+        $millis = (int) round(fmod($record->timestamp, 1.0) * 1000.0);
         $datetime = (new DateTimeImmutable('@' . $seconds))
             ->modify('+' . $millis . ' milliseconds');
 

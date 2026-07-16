@@ -21,9 +21,19 @@
         <directory name="packages/nexus-http-toolkit/src" />
         <directory name="packages/nexus-http-ws/src" />
         <directory name="packages/nexus-logger/src" />
+        <directory name="packages/nexus-messenger/src" />
+        <directory name="packages/nexus-messenger-console/src" />
+        <directory name="packages/nexus-messenger-console-swoole/src" />
         <directory name="packages/nexus-observability/src" />
+        <directory name="packages/nexus-observability-actor/src" />
+        <directory name="packages/nexus-observability-doctrine/src" />
+        <directory name="packages/nexus-observability-http/src" />
+        <directory name="packages/nexus-observability-logger/src" />
         <directory name="packages/nexus-observability-otel/src" />
+        <directory name="packages/nexus-observability-persistence/src" />
         <directory name="packages/nexus-observability-serialization/src" />
+        <directory name="packages/nexus-observability-swoole/src" />
+        <directory name="packages/nexus-observability-worker-pool/src" />
         <directory name="packages/nexus-persistence/src" />
         <directory name="packages/nexus-persistence-dbal/src" />
         <directory name="packages/nexus-persistence-doctrine/src" />
@@ -33,6 +43,8 @@
         <directory name="packages/nexus-runtime-step/src" />
         <directory name="packages/nexus-runtime-swoole/src" />
         <directory name="packages/nexus-serialization/src" />
+        <directory name="packages/nexus-serialization-msgpack/src" />
+        <directory name="packages/nexus-skeleton/src" />
         <directory name="packages/nexus-worker-pool/src" />
         <directory name="packages/nexus-worker-pool-swoole/src" />
         <ignoreFiles>
@@ -65,6 +77,18 @@
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Server.php" />
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Request.php" />
         <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Http/Response.php" />
+        <!-- Swoole 6 thread mode: Pool/Runnable live in swoole_library (pure PHP);
+             Thread/Map/Queue/Atomic are native-ext classes from the ide-helper stubs. -->
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Thread.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Thread/Atomic.php" />
+        <!-- Replacement stubs: the vendor Map/ArrayList stubs implement ArrayAccess
+             without @implements, so Psalm resolves their params to an unusable
+             `TKey:ArrayAccess as mixed` template and flags every concrete key. -->
+        <file name="stubs/Swoole/Thread/Map.php" />
+        <file name="stubs/Swoole/Thread/ArrayList.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole/Swoole/Thread/Queue.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole_library/src/core/Thread/Pool.php" />
+        <file name="vendor/swoole/ide-helper/src/swoole_library/src/core/Thread/Runnable.php" />
     </stubs>
 
     <plugins>
@@ -105,15 +129,6 @@
             </errorLevel>
         </UnusedProperty>
 
-        <!-- Logger Mdc methods are public API surface — Psalm can't see
-             user-code calls. -->
-        <PossiblyUnusedMethod>
-            <errorLevel type="suppress">
-                <directory name="packages/nexus-logger/src" />
-                <directory name="packages/nexus-http-ws/src" />
-            </errorLevel>
-        </PossiblyUnusedMethod>
-
         <PluginIssue name="UntypedActorRefInjection">
             <errorLevel type="suppress">
                 <!-- Heterogeneous children/registry maps: one map holds refs with different message types; PHP has no per-key generics -->
@@ -148,6 +163,10 @@
                 <!-- ReceiverActor / MessengerBridge: $deadLetters is a fan-in sink (any message type); $processedListener accepts MessagesProcessed — both are semantically typed but not expressible as a single concrete ActorRef<T> -->
                 <file name="packages/nexus-messenger/src/Consumer/ReceiverActor.php"/>
                 <file name="packages/nexus-messenger/src/MessengerBridge.php"/>
+                <!-- StampMessageRouter: path-keyed registry (array<string, ActorRef>); the message type is unknowable per runtime path string (cluster routing seam) -->
+                <file name="packages/nexus-messenger/src/Routing/StampMessageRouter.php"/>
+                <!-- Skeleton Kernel: heterogeneous #[AsActor] auto-spawn registry built from config class-strings (same category as ActorSystem) -->
+                <file name="packages/nexus-skeleton/src/Kernel.php"/>
                 <!-- Cluster inbound routing: the local registry, delivery seam, and reply sender carry refs by identity; the remote caller's message type is not expressible at the routing boundary (Akka Typed: ActorRef[Nothing]) -->
                 <file name="packages/nexus-cluster-tcp/src/Messaging/InboundDelivery.php"/>
                 <file name="packages/nexus-cluster-tcp/src/Messaging/LocalActorRegistry.php"/>

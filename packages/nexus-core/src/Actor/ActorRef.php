@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use NoDiscard;
@@ -48,7 +49,11 @@ interface ActorRef
      * The message is enqueued in the actor's mailbox and processed asynchronously.
      * This method never blocks and always returns immediately.
      *
-     * @param T $message
+     * System messages (PoisonPill, Watch, Unwatch, ...) are accepted by every
+     * actor in addition to its protocol T; the cell routes them to the control
+     * path before user messages.
+     *
+     * @param T|SystemMessage $message
      */
     public function tell(object $message): void;
 

@@ -9,6 +9,7 @@ use Psr\Http\Message\ResponseInterface;
 use RuntimeException;
 
 use function array_key_exists;
+use function array_pop;
 use function explode;
 use function is_array;
 use function json_decode;
@@ -51,14 +52,7 @@ final readonly class TestResponse
     /** @return array<array-key, mixed> */
     public function json(): array
     {
-        /** @var mixed $decoded */
-        $decoded = json_decode($this->body(), true, flags: JSON_THROW_ON_ERROR);
-
-        if (!is_array($decoded)) {
-            throw new RuntimeException('Response body is not a JSON object/array.');
-        }
-
-        return $decoded;
+        return self::decodedArray(json_decode($this->body(), true, flags: JSON_THROW_ON_ERROR));
     }
 
     public function header(string $name): string
@@ -159,11 +153,9 @@ final readonly class TestResponse
      */
     public function assertJsonPath(string $path, mixed $expected): self
     {
-        /** @var mixed $actual */
-        $actual = $this->extractJsonPath($path);
         Assert::assertSame(
             $expected,
-            $actual,
+            $this->extractJsonPath($path),
             sprintf('JSON path %s mismatch. Body: %s', $path, $this->body()),
         );
 
@@ -191,11 +183,14 @@ final readonly class TestResponse
 
     private function extractJsonPath(string $path, bool $throwOnMissing = true): mixed
     {
-        /** @var mixed $current */
         $current = $this->json();
 
-        foreach (explode('.', $path) as $segment) {
-            if (!is_array($current) || !array_key_exists($segment, $current)) {
+        // Walk intermediate segments as arrays; only the leaf may be any type.
+        $segments = explode('.', $path);
+        $leaf = array_pop($segments);
+
+        foreach ($segments as $segment) {
+            if (!array_key_exists($segment, $current) || !is_array($current[$segment])) {
                 if ($throwOnMissing) {
                     Assert::fail(sprintf('Path segment "%s" missing while resolving "%s".', $segment, $path));
                 }
@@ -203,10 +198,31 @@ final readonly class TestResponse
                 return null;
             }
 
-            /** @var mixed $current */
             $current = $current[$segment];
         }
 
-        return $current;
+        if (!array_key_exists($leaf, $current)) {
+            if ($throwOnMissing) {
+                Assert::fail(sprintf('Path segment "%s" missing while resolving "%s".', $leaf, $path));
+            }
+
+            return null;
+        }
+
+        return $current[$leaf];
+    }
+
+    /**
+     * json_decode() returns mixed; narrow it at this boundary.
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function decodedArray(mixed $decoded): array
+    {
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Response body is not a JSON object/array.');
+        }
+
+        return $decoded;
     }
 }

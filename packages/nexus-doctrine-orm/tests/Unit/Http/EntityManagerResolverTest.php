@@ -36,7 +36,6 @@ final class EntityManagerResolverTest extends TestCase
     public function compileMatchesEmTypedParameter(): void
     {
         $resolver = new EntityManagerResolver();
-        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (EntityManagerInterface $em): void {});
         $param = $reflection->getParameters()[0];
 
@@ -51,7 +50,6 @@ final class EntityManagerResolverTest extends TestCase
     public function compileSkipsNonEmParameter(): void
     {
         $resolver = new EntityManagerResolver();
-        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (int $i): void {});
         $param = $reflection->getParameters()[0];
 
@@ -69,7 +67,6 @@ final class EntityManagerResolverTest extends TestCase
             ->withAttribute(EntityManagerLease::class, $lease);
 
         $resolver = new EntityManagerResolver();
-        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (EntityManagerInterface $em): void {});
         $metadata = $resolver->compile($reflection->getParameters()[0], $this->compileContext());
 
@@ -85,7 +82,6 @@ final class EntityManagerResolverTest extends TestCase
     {
         $request = new ServerRequest('GET', '/');
         $resolver = new EntityManagerResolver();
-        /** @psalm-suppress UnusedClosureParam */
         $reflection = new ReflectionFunction(static function (EntityManagerInterface $em): void {});
         $metadata = $resolver->compile($reflection->getParameters()[0], $this->compileContext());
 
@@ -107,7 +103,6 @@ final class EntityManagerResolverTest extends TestCase
         return new HttpRequestContext(new ResolverServices(), $request, [], $scope);
     }
 
-    /** @psalm-suppress ArgumentTypeCoercion */
     private function pool(): EntityManagerPool
     {
         $em = $this->createMock(EntityManagerInterface::class);

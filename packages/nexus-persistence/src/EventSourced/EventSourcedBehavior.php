@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\EventSourced;
 
 use Closure;
 use LogicException;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -61,7 +62,11 @@ use Symfony\Component\Uid\Ulid;
  */
 final readonly class EventSourcedBehavior
 {
-    /** @psalm-suppress UnusedConstructor Called by create() */
+    /**
+     * @param S $emptyState
+     * @param Closure(S, ActorContext, object): Effect $commandHandler
+     * @param Closure(S, E): S $eventHandler
+     */
     private function __construct(
         private PersistenceId $persistenceId,
         private object $emptyState,
@@ -78,12 +83,14 @@ final readonly class EventSourcedBehavior
     /**
      * Create a new EventSourcedBehavior builder.
      *
-     * @param PersistenceId $persistenceId Unique identity for this persistent entity
-     * @param object $emptyState Initial empty state before any events
-     * @param Closure $commandHandler Processes commands, returns Effect
-     * @param Closure $eventHandler Applies events to state (pure function)
+     * @template TState of object
+     * @template TEvent of object
      *
-     * @psalm-suppress UnusedParam Parameters are stored via constructor for later use
+     * @param PersistenceId $persistenceId Unique identity for this persistent entity
+     * @param TState $emptyState Initial empty state before any events
+     * @param Closure(TState, ActorContext, object): Effect $commandHandler Processes commands, returns Effect
+     * @param Closure(TState, TEvent): TState $eventHandler Applies events to state (pure function)
+     * @return self<TState, TEvent>
      */
     public static function create(
         PersistenceId $persistenceId,
@@ -91,6 +98,7 @@ final readonly class EventSourcedBehavior
         Closure $commandHandler,
         Closure $eventHandler,
     ): self {
+        /** @var self<TState, TEvent> TEvent only appears contravariantly (event-handler parameter), so Psalm cannot lift it out of the closure */
         return new self($persistenceId, $emptyState, $commandHandler, $eventHandler);
     }
 
@@ -144,8 +152,6 @@ final readonly class EventSourcedBehavior
      * Build the final Behavior using PersistenceEngine.
      *
      * @throws LogicException if EventStore has not been set
-     *
-     * @psalm-suppress MixedArgumentTypeCoercion Stored closures lose generic type info
      */
     public function toBehavior(): Behavior
     {

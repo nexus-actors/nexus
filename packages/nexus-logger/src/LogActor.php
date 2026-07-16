@@ -10,20 +10,18 @@ use Monadial\Nexus\Core\Actor\StatefulActorHandler;
 use Override;
 use Throwable;
 
-use function fwrite;
-
 /**
  * @psalm-api
  *
  * Drains Record messages from its mailbox and dispatches each to the
- * configured handlers. Per-handler exceptions are caught and written to
+ * configured handlers. Per-handler exceptions are caught and reported to
  * STDERR — the actor must never crash on a sink failure, because a crash
  * would lose any records sitting behind it in the mailbox.
  *
  * State is the immutable handler list. The list is supplied via the
  * Props factory at spawn time and never mutates.
  *
- * @implements StatefulActorHandler<object, list<Handler>>
+ * @implements StatefulActorHandler<Record, list<Handler>>
  */
 final readonly class LogActor implements StatefulActorHandler
 {
@@ -32,6 +30,9 @@ final readonly class LogActor implements StatefulActorHandler
      */
     public function __construct(private array $handlers) {}
 
+    /**
+     * @return list<Handler>
+     */
     #[Override]
     public function initialState(): mixed
     {
@@ -39,13 +40,10 @@ final readonly class LogActor implements StatefulActorHandler
     }
 
     /**
-     * @psalm-suppress BlockingCallInHandler — fwrite to STDERR is the
-     *   intentional last-resort fallback when a Handler itself throws.
-     *   The actor must not crash here; losing a log line is preferable
-     *   to dropping every record sitting behind it in the mailbox.
-     * @psalm-suppress MixedReturnTypeCoercion — BehaviorWithState::same()
-     *   returns a parametrically-loose value that psalm cannot tighten to
-     *   our specific <object, list<Handler>> binding.
+     * @param ActorContext<Record> $ctx
+     * @param object $message Wire type; anything other than a Record is ignored defensively.
+     * @param list<Handler> $state
+     * @return BehaviorWithState<Record, list<Handler>>
      */
     #[Override]
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
@@ -58,7 +56,7 @@ final readonly class LogActor implements StatefulActorHandler
             try {
                 $handler->handle($message);
             } catch (Throwable $e) {
-                fwrite(STDERR, "nexus-logger handler failed: {$e->getMessage()}\n");
+                HandlerFailureReporter::report($e);
             }
         }
 

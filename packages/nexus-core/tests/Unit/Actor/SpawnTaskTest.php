@@ -28,9 +28,6 @@ final readonly class SpawnTaskMessage
     public function __construct(public string $value) {}
 }
 
-/**
- * @psalm-suppress PropertyNotSetInConstructor
- */
 #[CoversClass(ActorCell::class)]
 final class SpawnTaskTest extends TestCase
 {
@@ -43,7 +40,6 @@ final class SpawnTaskTest extends TestCase
     {
         /**
          * @var Behavior<SpawnTaskMessage>
-         * @psalm-suppress InvalidArgument
          */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
@@ -71,7 +67,6 @@ final class SpawnTaskTest extends TestCase
         // The runtime stores spawned callables — execute the task
         $spawned = $this->runtime->spawnedActors();
         self::assertNotEmpty($spawned);
-        /** @psalm-suppress PossiblyNullArrayOffset */
         $taskCallable = $spawned[array_key_last($spawned)];
         $taskCallable();
 
@@ -90,7 +85,6 @@ final class SpawnTaskTest extends TestCase
 
         /**
          * @var Behavior<SpawnTaskMessage>
-         * @psalm-suppress InvalidArgument
          */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg) use (&$taskHandle): Behavior {
@@ -131,12 +125,10 @@ final class SpawnTaskTest extends TestCase
     {
         /**
          * @var Behavior<SpawnTaskMessage>
-         * @psalm-suppress InvalidArgument
          */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 if ($msg instanceof SpawnTaskMessage && $msg->value === 'spawn') {
-                    /** @psalm-suppress UnusedClosureParam */
                     $ctx->spawnTask(static function (TaskContext $task): void {
                         throw new RuntimeException('task failed');
                     });
@@ -158,7 +150,6 @@ final class SpawnTaskTest extends TestCase
 
         // Execute the task — it throws
         $spawned = $this->runtime->spawnedActors();
-        /** @psalm-suppress PossiblyNullArrayOffset */
         $taskCallable = $spawned[array_key_last($spawned)];
         $taskCallable();
 
@@ -175,12 +166,10 @@ final class SpawnTaskTest extends TestCase
     {
         /**
          * @var Behavior<SpawnTaskMessage>
-         * @psalm-suppress InvalidArgument
          */
         $behavior = Behavior::receive(
             static function (ActorContext $ctx, object $msg): Behavior {
                 if ($msg instanceof SpawnTaskMessage && $msg->value === 'spawn') {
-                    /** @psalm-suppress UnusedClosureParam */
                     $handle = $ctx->spawnTask(static function (TaskContext $task): void {
                         // no-op
                     });

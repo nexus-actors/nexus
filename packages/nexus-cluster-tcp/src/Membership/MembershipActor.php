@@ -93,7 +93,6 @@ final class MembershipActor implements StatefulActorHandler
      * recover rather than tear the node down). C1.6e may pass a custom strategy.
      *
      * @return Props<object>
-     * @psalm-suppress InvalidArgument Psalm cannot infer the message template through the nested setup→withState closures.
      */
     public function props(?SupervisionStrategy $supervision = null): Props
     {
@@ -102,26 +101,38 @@ final class MembershipActor implements StatefulActorHandler
         $gossipInterval = $this->gossipInterval;
 
         $behavior = Behavior::setup(
+            /**
+             * @param ActorContext<object> $ctx
+             * @return Behavior<object>
+             */
             static function (ActorContext $ctx) use ($actor, $heartbeatInterval, $gossipInterval): Behavior {
                 $hb = $ctx->scheduleRepeatedly($heartbeatInterval, $heartbeatInterval, new HeartbeatTick());
                 $gp = $ctx->scheduleRepeatedly($gossipInterval, $gossipInterval, new GossipTick());
 
                 return Behavior::withState(
                     $actor->initialState(),
+                    /**
+                     * @param ActorContext<object> $c
+                     * @param MembershipState $state
+                     * @return BehaviorWithState<object, MembershipState>
+                     */
                     static function (ActorContext $c, object $msg, mixed $state) use ($actor): BehaviorWithState {
-                        /** @var MembershipState $typedState */
-                        $typedState = $state;
-
-                        return $actor->handle($c, $msg, $typedState);
+                        return $actor->handle($c, $msg, $state);
                     },
-                )->onSignal(static function (ActorContext $ctx, Signal $signal) use ($hb, $gp): Behavior {
-                    if ($signal instanceof PostStop || $signal instanceof PreRestart) {
-                        $hb->cancel();
-                        $gp->cancel();
-                    }
+                )->onSignal(
+                    /**
+                     * @param ActorContext<object> $_ctx
+                     * @return Behavior<object>
+                     */
+                    static function (ActorContext $_ctx, Signal $signal) use ($hb, $gp): Behavior {
+                        if ($signal instanceof PostStop || $signal instanceof PreRestart) {
+                            $hb->cancel();
+                            $gp->cancel();
+                        }
 
-                    return Behavior::same();
-                });
+                        return Behavior::same();
+                    },
+                );
             },
         );
 
@@ -138,9 +149,6 @@ final class MembershipActor implements StatefulActorHandler
         return MembershipState::fromTransition($this->service->initialState($this->clock->now()));
     }
 
-    /**
-     * @psalm-suppress MixedReturnTypeCoercion BehaviorWithState::same() erases the state template to mixed.
-     */
     #[Override]
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {
@@ -168,7 +176,6 @@ final class MembershipActor implements StatefulActorHandler
                 $state->view,
                 $state->suspectSince,
                 $state->selfIncarnation,
-                $message->origin,
                 $message->gossip,
                 $now,
             )),
@@ -275,7 +282,6 @@ final class MembershipActor implements StatefulActorHandler
 
     /**
      * @return BehaviorWithState<object, MembershipState>
-     * @psalm-suppress MixedReturnTypeCoercion BehaviorWithState::same() erases the state template to mixed.
      */
     private function replyView(GetClusterView $message, MembershipState $state): BehaviorWithState
     {

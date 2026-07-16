@@ -35,27 +35,22 @@ final class Plugin implements PluginEntryPointInterface
 {
     /**
      * @return list<string>
-     * @psalm-suppress TypeDoesNotContainType
      */
     private static function parseExcludedRefs(?SimpleXMLElement $config): array
     {
-        if ($config === null || !isset($config->untypedActorRefInjection)) {
+        if ($config === null) {
             return [];
         }
 
-        $injection = $config->untypedActorRefInjection;
+        $nodes = $config->xpath('untypedActorRefInjection/excludeRef');
 
-        if (!($injection instanceof SimpleXMLElement)) {
+        if ($nodes === false || $nodes === null) {
             return [];
         }
 
         $excluded = [];
 
-        foreach ($injection->excludeRef as $node) {
-            if (!($node instanceof SimpleXMLElement)) {
-                continue;
-            }
-
+        foreach ($nodes as $node) {
             $class = ltrim((string) $node['class'], '\\');
 
             if ($class !== '') {

@@ -8,6 +8,8 @@ use Monadial\Nexus\Observability\Observability;
 use Swoole\Coroutine;
 use Swoole\Server;
 
+use function array_key_exists;
+use function is_array;
 use function is_numeric;
 
 /**
@@ -19,11 +21,9 @@ use function is_numeric;
  * Register the gauges once per worker at startup — calling a register* method
  * more than once registers duplicate instruments.
  */
-final class SwooleAdminMetrics
+final readonly class SwooleAdminMetrics
 {
-    public function __construct(
-        private readonly Observability $observability,
-    ) {}
+    public function __construct(private Observability $observability) {}
 
     public function registerCoroutineGauges(): void
     {
@@ -35,13 +35,13 @@ final class SwooleAdminMetrics
 
         $meter->observableGauge(
             'swoole.coroutine.count',
-            static fn (): int => self::stat(Coroutine::stats(), 'coroutine_num'),
+            static fn(): int => self::stat(Coroutine::stats(), 'coroutine_num'),
             '{coroutine}',
             'Number of running Swoole coroutines',
         );
         $meter->observableGauge(
             'swoole.coroutine.peak',
-            static fn (): int => self::stat(Coroutine::stats(), 'coroutine_peak_num'),
+            static fn(): int => self::stat(Coroutine::stats(), 'coroutine_peak_num'),
             '{coroutine}',
             'Peak number of concurrent Swoole coroutines',
         );
@@ -57,31 +57,39 @@ final class SwooleAdminMetrics
 
         $meter->observableGauge(
             'swoole.server.connections',
-            static fn (): int => self::stat($server->stats(), 'connection_num'),
+            static fn(): int => self::stat($server->stats(), 'connection_num'),
             '{connection}',
             'Active Swoole server connections',
         );
         $meter->observableGauge(
             'swoole.server.requests',
-            static fn (): int => self::stat($server->stats(), 'request_count'),
+            static fn(): int => self::stat($server->stats(), 'request_count'),
             '{request}',
             'Total requests handled by the Swoole server',
         );
         $meter->observableGauge(
             'swoole.server.workers.idle',
-            static fn (): int => self::stat($server->stats(), 'idle_worker_num'),
+            static fn(): int => self::stat($server->stats(), 'idle_worker_num'),
             '{worker}',
             'Idle Swoole worker processes',
         );
     }
 
     /**
-     * @param array<string, mixed> $stats
+     * Swoole's admin APIs (`Coroutine::stats()`, `Server::stats()`) are untyped at the
+     * PHP level, so the payload is narrowed here with runtime guards.
      */
-    private static function stat(array $stats, string $key): int
+    private static function stat(mixed $stats, string $key): int
     {
-        $value = $stats[$key] ?? 0;
+        if (!is_array($stats) || !array_key_exists($key, $stats)) {
+            return 0;
+        }
 
+        return self::toInt($stats[$key]);
+    }
+
+    private static function toInt(mixed $value): int
+    {
         return is_numeric($value)
             ? (int) $value
             : 0;

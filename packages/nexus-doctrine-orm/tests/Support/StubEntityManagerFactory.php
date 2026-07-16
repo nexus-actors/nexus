@@ -40,8 +40,6 @@ final class StubEntityManagerFactory implements EntityManagerFactory
         }
 
         /**
-         * @psalm-suppress InternalClass
-         * @psalm-suppress InternalMethod
          * @var EntityManagerInterface $mock
          */
         $mock = (new Generator())->testDouble(

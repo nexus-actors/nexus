@@ -4,8 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Response;
 
+use JsonException;
 use Nyholm\Psr7\Response as Psr7Response;
 use Psr\Http\Message\ResponseInterface;
+
+use function is_string;
+use function json_encode;
+
+use const JSON_THROW_ON_ERROR;
+use const JSON_UNESCAPED_SLASHES;
+use const JSON_UNESCAPED_UNICODE;
 
 /**
  * @psalm-api
@@ -36,12 +44,15 @@ final class JsonResponse
         return $response;
     }
 
-    /**
-     * @psalm-suppress PossiblyFalseArgument JSON_THROW_ON_ERROR guarantees non-false return.
-     */
     private static function build(int $status, mixed $data, int $flags): ResponseInterface
     {
         $body = json_encode($data, $flags | JSON_THROW_ON_ERROR);
+
+        // Unreachable: JSON_THROW_ON_ERROR makes json_encode throw instead of
+        // returning false; the guard narrows the string|false stub return type.
+        if (!is_string($body)) {
+            throw new JsonException('json_encode() returned a non-string value');
+        }
 
         return new Psr7Response(
             $status,

@@ -32,7 +32,6 @@ final readonly class ThreadQueueHandler implements Handler
     #[Override]
     public function handle(Record $record): void
     {
-        /** @psalm-suppress InvalidArgument — Thread\Queue::push accepts mixed at runtime. */
         $this->queue->push($this->formatter->format($record));
     }
 }

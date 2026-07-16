@@ -69,7 +69,6 @@ final class ConnectionScopeMiddlewareTest extends TestCase
                 TestCase::assertInstanceOf(ConnectionLease::class, $lease);
                 $lease->get();
 
-                /** @psalm-suppress InternalMethod */
                 throw new DriverException(new PdoDriverException('connection lost'), null);
             }
         };

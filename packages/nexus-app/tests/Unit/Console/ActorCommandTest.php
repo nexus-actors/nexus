@@ -57,7 +57,6 @@ final class ActorCommandTest extends TestCase
                 $this->buildAppCalled = true;
                 $this->capturedInput = $input;
 
-                /** @psalm-suppress InvalidArgument, UnusedClosureParam */
                 $app->actor('worker', Props::fromBehavior(Behavior::receive(
                     static fn($ctx, $msg) => Behavior::same(),
                 )));
@@ -94,7 +93,6 @@ final class ActorCommandTest extends TestCase
             #[Override]
             protected function buildApp(NexusApp $app, InputInterface $input): void
             {
-                /** @psalm-suppress InvalidArgument, UnusedClosureParam */
                 $app->actor('worker', Props::fromBehavior(Behavior::receive(
                     static fn($ctx, $msg) => Behavior::same(),
                 )));
@@ -165,7 +163,6 @@ final class ActorCommandTest extends TestCase
             #[Override]
             protected function buildApp(NexusApp $app, InputInterface $input): void
             {
-                /** @psalm-suppress InvalidArgument, UnusedClosureParam */
                 $app->actor('worker', Props::fromBehavior(Behavior::receive(
                     static fn($ctx, $msg) => Behavior::same(),
                 )));

@@ -19,6 +19,7 @@ use Symfony\Component\Messenger\Exception\MessageDecodingFailedException;
 use Symfony\Component\Messenger\Stamp\StampInterface;
 use Symfony\Component\Messenger\Transport\Serialization\SerializerInterface;
 
+use function array_keys;
 use function class_exists;
 use function count;
 use function is_array;
@@ -160,49 +161,47 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
     /**
      * @param array<string, mixed> $headers
      * @return list<StampInterface>
-     * @psalm-suppress MixedAssignment
      */
     private function stampsFromHeaders(array $headers): array
     {
         $stamps = [];
-        $correlationId = $headers[self::HEADER_CORRELATION_ID] ?? null;
+        $correlationId = $this->stringHeader($headers, self::HEADER_CORRELATION_ID);
 
-        if (is_string($correlationId) && $correlationId !== '') {
+        if ($correlationId !== null && $correlationId !== '') {
             $stamps[] = new CorrelationIdStamp($correlationId);
         }
 
-        $replyTo = $headers[self::HEADER_REPLY_TO] ?? null;
+        $replyTo = $this->stringHeader($headers, self::HEADER_REPLY_TO);
 
-        if (is_string($replyTo) && $replyTo !== '') {
+        if ($replyTo !== null && $replyTo !== '') {
             $stamps[] = new ReplyToStamp($replyTo);
         }
 
-        $source = $headers[self::HEADER_SOURCE_PATH] ?? null;
+        $source = $this->stringHeader($headers, self::HEADER_SOURCE_PATH);
 
-        if (is_string($source) && $source !== '') {
+        if ($source !== null && $source !== '') {
             $stamps[] = new SourceActorPathStamp($source);
         }
 
-        $target = $headers[self::HEADER_TARGET_PATH] ?? null;
+        $target = $this->stringHeader($headers, self::HEADER_TARGET_PATH);
 
-        if (is_string($target) && $target !== '') {
+        if ($target !== null && $target !== '') {
             $stamps[] = new TargetActorPathStamp($target);
         }
 
-        $traceContext = $headers[self::HEADER_TRACE_CONTEXT] ?? null;
+        $traceContext = $this->stringHeader($headers, self::HEADER_TRACE_CONTEXT);
 
-        if (is_string($traceContext) && $traceContext !== '') {
+        if ($traceContext !== null && $traceContext !== '') {
             try {
-                /** @psalm-suppress MixedAssignment */
+                /** @var array<array-key, mixed>|scalar|null $decoded json_decode(assoc: true) wire data — entries validated below */
                 $decoded = json_decode($traceContext, true, 512, JSON_THROW_ON_ERROR);
 
                 if (is_array($decoded)) {
                     $carrier = [];
 
-                    /** @psalm-suppress MixedAssignment */
-                    foreach ($decoded as $key => $value) {
-                        if (is_string($key) && is_string($value)) {
-                            $carrier[$key] = $value;
+                    foreach (array_keys($decoded) as $key) {
+                        if (is_string($key) && is_string($decoded[$key])) {
+                            $carrier[$key] = $decoded[$key];
                         }
                     }
 
@@ -216,5 +215,17 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
         }
 
         return $stamps;
+    }
+
+    /**
+     * Untrusted-wire boundary: returns the header value only when it is a string.
+     *
+     * @param array<string, mixed> $headers
+     */
+    private function stringHeader(array $headers, string $key): ?string
+    {
+        return isset($headers[$key]) && is_string($headers[$key])
+            ? $headers[$key]
+            : null;
     }
 }

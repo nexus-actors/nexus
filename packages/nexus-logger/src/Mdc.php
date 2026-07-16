@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Logger;
 
 use ArrayObject;
+use Stringable;
 use Swoole\Coroutine;
 
 use function array_merge;
 use function class_exists;
-use function iterator_to_array;
 
 /**
  * @psalm-api
@@ -23,22 +23,29 @@ use function iterator_to_array;
  *     service name.
  *
  *   - **Coroutine tier** — optional, requires ext-swoole. When called
- *     inside a Swoole coroutine, put() stores on Coroutine::getContext()
- *     instead of the static tier, so the value lives only as long as the
- *     coroutine. Good for: requestId, traceId, userId — values that
- *     belong to one in-flight request.
+ *     inside a Swoole coroutine, put() stores under a dedicated key on
+ *     Coroutine::getContext() instead of the static tier, so the value
+ *     lives only as long as the coroutine. Good for: requestId, traceId,
+ *     userId — values that belong to one in-flight request.
  *
  * getAll() returns static ⊕ coroutine (coroutine wins on duplicate keys).
+ *
+ * Values are log-safe primitives: scalars, Stringable objects, or null —
+ * anything the formatters can interpolate or JSON-encode losslessly.
  *
  * Without ext-swoole loaded the coroutine tier transparently disables and
  * everything falls back to the static tier.
  */
-/**
- * @psalm-suppress MixedAssignment — MDC values are intentionally mixed.
- */
 final class Mdc
 {
-    /** @var array<string, mixed> */
+    /**
+     * Key under which the MDC map lives inside Coroutine::getContext().
+     * The coroutine context is a shared per-coroutine store; owning a
+     * single namespaced slot keeps the MDC map fully typed.
+     */
+    private const string CONTEXT_KEY = 'nexus.mdc';
+
+    /** @var array<string, scalar|Stringable|null> */
     private static array $static = [];
 
     /**
@@ -47,17 +54,19 @@ final class Mdc
      * threadId, service) that should survive across all requests on this
      * thread.
      */
-    public static function putStatic(string $key, mixed $value): void
+    public static function putStatic(string $key, string|int|float|bool|Stringable|null $value): void
     {
         self::$static[$key] = $value;
     }
 
-    public static function put(string $key, mixed $value): void
+    public static function put(string $key, string|int|float|bool|Stringable|null $value): void
     {
         $coCtx = self::coroutineContext();
 
         if ($coCtx !== null) {
-            $coCtx[$key] = $value;
+            $tier = self::coroutineTier($coCtx);
+            $tier[$key] = $value;
+            $coCtx[self::CONTEXT_KEY] = $tier;
 
             return;
         }
@@ -65,12 +74,16 @@ final class Mdc
         self::$static[$key] = $value;
     }
 
-    public static function get(string $key): mixed
+    public static function get(string $key): string|int|float|bool|Stringable|null
     {
         $coCtx = self::coroutineContext();
 
-        if ($coCtx !== null && isset($coCtx[$key])) {
-            return $coCtx[$key];
+        if ($coCtx !== null) {
+            $tier = self::coroutineTier($coCtx);
+
+            if (isset($tier[$key])) {
+                return $tier[$key];
+            }
         }
 
         return self::$static[$key] ?? null;
@@ -80,10 +93,15 @@ final class Mdc
     {
         $coCtx = self::coroutineContext();
 
-        if ($coCtx !== null && isset($coCtx[$key])) {
-            unset($coCtx[$key]);
+        if ($coCtx !== null) {
+            $tier = self::coroutineTier($coCtx);
 
-            return;
+            if (isset($tier[$key])) {
+                unset($tier[$key]);
+                $coCtx[self::CONTEXT_KEY] = $tier;
+
+                return;
+            }
         }
 
         unset(self::$static[$key]);
@@ -92,7 +110,7 @@ final class Mdc
     /**
      * Merge of static + coroutine tiers. Coroutine values override static.
      *
-     * @return array<string, mixed>
+     * @return array<string, scalar|Stringable|null>
      */
     public static function getAll(): array
     {
@@ -102,10 +120,7 @@ final class Mdc
             return self::$static;
         }
 
-        /** @var array<string, mixed> $coArray */
-        $coArray = iterator_to_array($coCtx);
-
-        return array_merge(self::$static, $coArray);
+        return array_merge(self::$static, self::coroutineTier($coCtx));
     }
 
     /**
@@ -122,7 +137,7 @@ final class Mdc
      * values (or removes them) in a finally block.
      *
      * @template T
-     * @param array<string, mixed> $values
+     * @param array<string, scalar|Stringable|null> $values
      * @param callable(): T $fn
      * @return T
      */
@@ -148,6 +163,7 @@ final class Mdc
         }
     }
 
+    /** @return ArrayObject<string, mixed>|null */
     private static function coroutineContext(): ?ArrayObject
     {
         if (!class_exists(Coroutine::class)) {
@@ -160,5 +176,17 @@ final class Mdc
 
         /** @var ArrayObject<string, mixed> */
         return Coroutine::getContext();
+    }
+
+    /**
+     * @param ArrayObject<string, mixed> $coCtx
+     * @return array<string, scalar|Stringable|null>
+     */
+    private static function coroutineTier(ArrayObject $coCtx): array
+    {
+        /** @var array<string, scalar|Stringable|null> $tier — CONTEXT_KEY is written exclusively by Mdc::put()/remove(), which only accept these value types. */
+        $tier = $coCtx[self::CONTEXT_KEY] ?? [];
+
+        return $tier;
     }
 }

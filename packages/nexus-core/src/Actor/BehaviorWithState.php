@@ -37,8 +37,8 @@ namespace Monadial\Nexus\Core\Actor;
  * @psalm-api
  * @psalm-immutable
  *
- * @template T of object
- * @template S
+ * @template-covariant T of object
+ * @template-covariant S
  */
 final readonly class BehaviorWithState
 {
@@ -58,33 +58,37 @@ final readonly class BehaviorWithState
      *
      * @template NS
      * @param NS $state
-     * @return BehaviorWithState<object, NS>
+     * @return BehaviorWithState<never, NS>
      */
     public static function next(mixed $state): self
     {
-        /** @var BehaviorWithState<object, NS> */
+        /** @var BehaviorWithState<never, NS> */
         return new self(null, $state, true, false);
     }
 
     /**
      * Keep both behavior and state.
      *
-     * @return BehaviorWithState<T, S>
+     * `never` is the bottom type: under covariance the returned marker is a
+     * subtype of every `BehaviorWithState<T, S>` instantiation (the stateful
+     * analog of Akka's `Behaviors.same`).
+     *
+     * @return BehaviorWithState<never, never>
      */
     public static function same(): self
     {
-        /** @var BehaviorWithState<T, S> */
+        /** @var BehaviorWithState<never, never> */
         return new self(null, null, false, false);
     }
 
     /**
      * Stop the actor.
      *
-     * @return BehaviorWithState<T, S>
+     * @return BehaviorWithState<never, never>
      */
     public static function stopped(): self
     {
-        /** @var BehaviorWithState<T, S> */
+        /** @var BehaviorWithState<never, never> */
         return new self(null, null, false, true);
     }
 

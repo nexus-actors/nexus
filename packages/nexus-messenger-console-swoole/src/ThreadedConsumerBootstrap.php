@@ -29,7 +29,7 @@ use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
  *     {
  *         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
  *
- *         return new MapMessageRouter([OrderPlaced::class => $ref]);
+ *         return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
  *     }
  *
  *     public function receiver(): ReceiverInterface

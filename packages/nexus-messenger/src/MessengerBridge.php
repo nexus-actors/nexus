@@ -51,13 +51,12 @@ use Symfony\Component\Messenger\Transport\Sender\SenderInterface;
  * ```
  *
  * @psalm-api
+ *
+ * A case-less enum: uninstantiable by the language, exists purely as a
+ * namespace for the static wiring factories.
  */
-final readonly class MessengerBridge
+enum MessengerBridge
 {
-    private function __construct()
-    {
-    }
-
     public static function gateway(
         SenderInterface $sender,
         Observability $observability = new NoopObservability(),
@@ -95,7 +94,6 @@ final readonly class MessengerBridge
     /**
      * @template T of object
      * @return MessengerActorRef<T>
-     * @psalm-suppress InvalidReturnType,InvalidReturnStatement Psalm cannot infer T through MessengerActorRef<object> constructor
      */
     public static function producer(
         SenderInterface $sender,
@@ -105,7 +103,16 @@ final readonly class MessengerBridge
         ?EventDispatcherInterface $events = null,
         ?AskSupport $askSupport = null,
     ): MessengerActorRef {
-        return new MessengerActorRef($sender, $name, $sourcePath, $observability, $events, $askSupport);
+        /**
+         * T is a phantom type parameter: it never appears in the constructor
+         * inputs (the ref erases the message type at runtime), so the caller
+         * alone chooses which message type this producer carries.
+         *
+         * @var MessengerActorRef<T> $ref
+         */
+        $ref = new MessengerActorRef($sender, $name, $sourcePath, $observability, $events, $askSupport);
+
+        return $ref;
     }
 
     /**

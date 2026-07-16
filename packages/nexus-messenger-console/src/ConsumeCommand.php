@@ -49,7 +49,7 @@ use function sprintf;
  *     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
  *         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
  *
- *         return new MapMessageRouter([OrderPlaced::class => $ref]);
+ *         return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
  *     }),
  * ));
  * $app->run();

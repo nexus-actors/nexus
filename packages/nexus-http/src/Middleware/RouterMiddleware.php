@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Middleware;
 
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
@@ -100,13 +101,18 @@ final readonly class RouterMiddleware implements MiddlewareInterface
 
         try {
             $tail =
-                /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
                 static function (ServerRequestInterface $r) use ($resolved, $scope, $result): ResponseInterface {
                     $out = ($resolved->invoke)($r, $scope, $result->pathParams);
 
-                    return $out instanceof Future
-                        ? $out->await()
-                        : $out;
+                    if ($out instanceof Future) {
+                        $out = $out->await();
+                    }
+
+                    if (!$out instanceof ResponseInterface) {
+                        throw new LogicException('Resolved handler produced neither a response nor a response future');
+                    }
+
+                    return $out;
                 };
 
             return $this->pipeline->process(

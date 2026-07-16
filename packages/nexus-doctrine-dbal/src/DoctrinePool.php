@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Dbal;
 
+use Doctrine\DBAL\Connection;
+use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\Channel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\SwooleChannel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
@@ -13,11 +15,15 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * @psalm-import-type Params from \Doctrine\DBAL\DriverManager
+ */
 final class DoctrinePool
 {
     /**
-     * @param array<string, mixed> $connParams DBAL connection parameters (e.g. driver, host, dbname).
+     * @param Params $connParams DBAL connection parameters (e.g. driver, host, dbname).
      */
     public static function fromParams(
         string $name,
@@ -28,6 +34,8 @@ final class DoctrinePool
     ): ConnectionPool {
         $config ??= new PoolConfig();
         $factory = new DriverManagerConnectionFactory($connParams);
+
+        /** @var Channel<Connection> $channel fresh, empty channel — the item type is fixed by this pool */
         $channel = extension_loaded('swoole')
             ? new SwooleChannel($config->max)
             : new FiberChannel($config->max);

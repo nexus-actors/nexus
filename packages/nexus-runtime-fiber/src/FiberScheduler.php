@@ -78,17 +78,7 @@ final class FiberScheduler
 
             if ($timer->fireAt <= $now) {
                 ($timer->callback)();
-
-                /** @psalm-suppress RedundantCondition -- defensive guard for timer invariants */
-                if ($timer->repeating && $timer->interval !== null && !$timer->cancellable->isCancelled()) {
-                    $this->insertSorted(new TimerEntry(
-                        callback: $timer->callback,
-                        fireAt: $this->addDuration($timer->fireAt, $timer->interval),
-                        repeating: true,
-                        interval: $timer->interval,
-                        cancellable: $timer->cancellable,
-                    ));
-                }
+                $this->rescheduleIfRepeating($timer);
             } else {
                 $this->insertSorted($timer);
             }
@@ -105,6 +95,27 @@ final class FiberScheduler
         }
 
         return false;
+    }
+
+    /**
+     * Re-arm a repeating timer after its callback ran. A callback may have
+     * cancelled its own timer, so cancellation is re-checked here — in a
+     * fresh scope, because the caller's flow analysis cannot see mutations
+     * performed inside the just-invoked callback.
+     */
+    private function rescheduleIfRepeating(TimerEntry $timer): void
+    {
+        if (!$timer->repeating || $timer->interval === null || $timer->cancellable->isCancelled()) {
+            return;
+        }
+
+        $this->insertSorted(new TimerEntry(
+            callback: $timer->callback,
+            fireAt: $this->addDuration($timer->fireAt, $timer->interval),
+            repeating: true,
+            interval: $timer->interval,
+            cancellable: $timer->cancellable,
+        ));
     }
 
     private function addDuration(DateTimeImmutable $time, Duration $duration): DateTimeImmutable

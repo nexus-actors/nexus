@@ -44,8 +44,6 @@ final class ShuffledCycleSelector implements PeerSelector
      * @param list<string> $peers
      *
      * @return list<string>
-     * @psalm-suppress RedundantFunctionCall array_values is intentional: it returns a fresh array so
-     *                 callers cannot mutate the caller's list through the result (defensive copy).
      */
     #[Override]
     public function select(array $peers, int $count): array
@@ -58,8 +56,9 @@ final class ShuffledCycleSelector implements PeerSelector
             // Every peer is visited this round; start the next partial pass fresh.
             $this->pending = [];
 
-            // Return a copy so callers cannot mutate the caller's array through the result.
-            return array_values($peers);
+            // PHP arrays are values (copy-on-write): callers cannot mutate the
+            // caller's list through the returned array.
+            return $peers;
         }
 
         // Drop peers that left the cluster since the current pass was shuffled.

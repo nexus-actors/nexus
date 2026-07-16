@@ -101,7 +101,6 @@ final class ConnectionPoolTest extends TestCase
 
         $result = $pool->withConnection(static fn(): string => 'ok');
 
-        /** @psalm-suppress RedundantConditionGivenDocblockType */
         self::assertSame('ok', $result);
         self::assertSame(0, $pool->stats()->inUse);
         self::assertSame(1, $pool->stats()->idle);
@@ -122,7 +121,6 @@ final class ConnectionPoolTest extends TestCase
             $pool->withConnection(static function (): void {
                 throw new RuntimeException('boom');
             });
-            /** @psalm-suppress UnevaluatedCode */
             self::fail('expected throw');
         } catch (RuntimeException) {
             // expected

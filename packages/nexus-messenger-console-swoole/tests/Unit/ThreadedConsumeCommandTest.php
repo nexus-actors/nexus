@@ -81,7 +81,7 @@ final class MinimalBootstrap implements ThreadedConsumerBootstrap
 {
     public function setup(ActorSystem $system): MessageRouter
     {
-        return new MapMessageRouter([]);
+        return new MapMessageRouter();
     }
 
     public function receiver(): ReceiverInterface

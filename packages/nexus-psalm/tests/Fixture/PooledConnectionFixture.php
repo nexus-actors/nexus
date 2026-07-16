@@ -24,7 +24,6 @@ final class ActorWithDbalConnection implements ActorHandler
 {
     public function __construct(private Connection $conn) {}
 
-    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -47,7 +46,6 @@ final class StatefulActorWithEntityManager implements StatefulActorHandler
         return 0;
     }
 
-    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState
     {

@@ -125,19 +125,14 @@ final class FiberRuntime implements Runtime
         $this->running = true;
         $this->shutdownRequested = false;
 
-        /** @psalm-suppress RedundantCondition -- running is mutated by tick()/hasWork() */
-        while ($this->running) {
+        while (true) {
             $this->tick();
             $this->scheduler->advanceTimers($this->now());
 
-            /** @psalm-suppress TypeDoesNotContainType -- shutdownRequested is mutated externally */
-            if ($this->shutdownRequested && $this->allFibersComplete()) {
-                $this->running = false;
-
-                break;
-            }
-
-            if (!$this->hasWork()) {
+            // Both exit conditions live in a helper: ticking resumes fibers,
+            // which may flip shutdownRequested reentrantly via shutdown() —
+            // flow analysis inside this loop cannot see that.
+            if ($this->shutdownComplete() || !$this->hasWork()) {
                 $this->running = false;
 
                 break;
@@ -162,6 +157,11 @@ final class FiberRuntime implements Runtime
     public function isRunning(): bool
     {
         return $this->running;
+    }
+
+    private function shutdownComplete(): bool
+    {
+        return $this->shutdownRequested && $this->allFibersComplete();
     }
 
     private function tick(): void

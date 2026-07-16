@@ -10,16 +10,15 @@ use Override;
 /**
  * Cancellable for timers scheduled before Co\run() starts.
  *
- * Holds a reference to a boolean flag shared with the pending timer closure.
- * When cancel() is called, the flag is set to true, preventing the timer
- * from being created when run() executes pending actions.
+ * The pending timer closure captures this instance and checks isCancelled()
+ * when run() executes pending actions. When cancel() is called first, the
+ * timer is never created.
  *
  * @internal
  */
 final class DeferredCancellable implements Cancellable
 {
-    /** @param bool $cancelled Shared reference to the cancelled flag */
-    public function __construct(private bool &$cancelled) {}
+    private bool $cancelled = false;
 
     #[Override]
     public function cancel(): void

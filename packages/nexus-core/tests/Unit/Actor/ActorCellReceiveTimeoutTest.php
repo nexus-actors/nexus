@@ -23,9 +23,6 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use stdClass;
 
-/**
- * @psalm-suppress InvalidArgument, PropertyNotSetInConstructor, UnusedClosureParam, PossiblyNullArgument
- */
 #[CoversClass(ActorCell::class)]
 final class ActorCellReceiveTimeoutTest extends TestCase
 {

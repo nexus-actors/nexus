@@ -29,6 +29,8 @@ use function is_object;
  * interprets the returned DurableEffect, and handles persistence + side effects.
  *
  * @psalm-api
+ *
+ * @psalm-type EngineState = array{state: object, version: int}
  */
 final class DurableStateEngine
 {
@@ -52,65 +54,81 @@ final class DurableStateEngine
         DurableStateStore $stateStore,
         Ulid $writerId = new Ulid(),
     ): Behavior {
-        /** @psalm-suppress UnusedClosureParam, InvalidArgument */
-        return Behavior::setup(static function (ActorContext $_ctx) use (
-            $persistenceId,
-            $emptyState,
-            $commandHandler,
-            $stateStore,
-            $writerId,
-        ): Behavior {
-            // === Recovery Phase ===
-            $state = $emptyState;
-            $version = 0;
+        return Behavior::setup(
+            /**
+             * @param ActorContext<object> $_ctx
+             * @return Behavior<object>
+             */
+            static function (ActorContext $_ctx) use (
+                $persistenceId,
+                $emptyState,
+                $commandHandler,
+                $stateStore,
+                $writerId,
+            ): Behavior {
+                // === Recovery Phase ===
+                $state = $emptyState;
+                $version = 0;
 
-            $existing = $stateStore->get($persistenceId);
+                $existing = $stateStore->get($persistenceId);
 
-            if ($existing !== null) {
-                $state = $existing->state;
-                $version = $existing->version;
-            }
+                if ($existing !== null) {
+                    $state = $existing->state;
+                    $version = $existing->version;
+                }
 
-            // === Command Processing Phase ===
+                // === Command Processing Phase ===
 
-            /** @psalm-suppress InvalidArgument */
-            return Behavior::withState(
-                ['state' => $state, 'version' => $version],
-                static function (ActorContext $ctx, object $msg, mixed $data) use (
-                    $persistenceId,
-                    $commandHandler,
-                    $stateStore,
-                    $writerId,
-                ): BehaviorWithState {
-                    /** @var array{state: object, version: int} $data */
-                    $state = $data['state'];
-                    $version = $data['version'];
+                return Behavior::withState(
+                    ['state' => $state, 'version' => $version],
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @param EngineState $data
+                     * @return BehaviorWithState<object, EngineState>
+                     */
+                    static function (ActorContext $ctx, object $msg, array $data) use (
+                        $persistenceId,
+                        $commandHandler,
+                        $stateStore,
+                        $writerId,
+                    ): BehaviorWithState {
+                        /**
+                         * The engine only ever stores states recovered for this
+                         * PersistenceId or produced by the S-typed command handler,
+                         * so the stored object is always the entity's state type S.
+                         *
+                         * @var S $state
+                         */
+                        $state = $data['state'];
+                        $version = $data['version'];
 
-                    /** @psalm-suppress InvalidArgument */
-                    $effect = $commandHandler($state, $ctx, $msg);
+                        $effect = $commandHandler($state, $ctx, $msg);
 
-                    return match ($effect->type) {
-                        DurableEffectType::Persist => self::handlePersist(
-                            $effect,
-                            $version,
-                            $persistenceId,
-                            $stateStore,
-                            $writerId,
-                        ),
-                        DurableEffectType::None => BehaviorWithState::same(),
-                        DurableEffectType::Unhandled => BehaviorWithState::same(),
-                        DurableEffectType::Stash => self::handleStash($ctx),
-                        DurableEffectType::Stop => BehaviorWithState::stopped(),
-                        DurableEffectType::Reply => self::handleReply($effect),
-                    };
-                },
-            );
-        });
+                        return match ($effect->type) {
+                            DurableEffectType::Persist => self::handlePersist(
+                                $effect,
+                                $version,
+                                $persistenceId,
+                                $stateStore,
+                                $writerId,
+                            ),
+                            DurableEffectType::None => self::sameState(),
+                            DurableEffectType::Unhandled => self::sameState(),
+                            DurableEffectType::Stash => self::handleStash($ctx),
+                            DurableEffectType::Stop => self::stoppedState(),
+                            DurableEffectType::Reply => self::handleReply($effect),
+                        };
+                    },
+                );
+            },
+        );
     }
 
     /**
      * Handle a Persist effect: increment version, upsert state,
      * execute side effects.
+     *
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handlePersist(
         DurableEffect $effect,
@@ -142,16 +160,20 @@ final class DurableStateEngine
 
     /**
      * Handle a Stash effect: stash the current message in the actor context.
+     *
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handleStash(ActorContext $ctx): BehaviorWithState
     {
         $ctx->stash();
 
-        return BehaviorWithState::same();
+        return self::sameState();
     }
 
     /**
      * Handle a Reply effect: send the reply message to the reply target.
+     *
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handleReply(DurableEffect $effect): BehaviorWithState
     {
@@ -159,6 +181,30 @@ final class DurableStateEngine
         assert(is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
+        return self::sameState();
+    }
+
+    /**
+     * BehaviorWithState::same() resolves the class templates to their bounds
+     * (object, mixed) in a static-call context, so pin the keep-current marker
+     * to the engine's state shape.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function sameState(): BehaviorWithState
+    {
+        /** @var BehaviorWithState<object, EngineState> */
         return BehaviorWithState::same();
+    }
+
+    /**
+     * As sameState(), for the stop marker.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function stoppedState(): BehaviorWithState
+    {
+        /** @var BehaviorWithState<object, EngineState> */
+        return BehaviorWithState::stopped();
     }
 }

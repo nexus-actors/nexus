@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Observability\Otel\Export;
 
+use Closure;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -41,18 +42,26 @@ final readonly class OtlpExportActor
         private LoggerInterface $logger = new NullLogger(),
     ) {}
 
+    /**
+     * @return Props<ExportCommand>
+     */
     public function props(): Props
     {
-        /**
-         * @psalm-suppress InvalidArgument Behavior::receive generic constraint; the closure
-         *                 handles a heterogeneous set of export messages, not a single type.
-         */
-        $behavior = Behavior::receive(fn(ActorContext $ctx, object $msg): Behavior => $this->handle($msg))
+        // Re-typed to the full receive signature it satisfies: handle() takes `object`
+        // (strays fall through its match) and returns Behavior<ExportCommand>.
+        /** @var Closure(ActorContext<ExportCommand>, ExportCommand): Behavior<ExportCommand> $handler */
+        $handler = fn(ActorContext $ctx, object $msg): Behavior => $this->handle($msg);
+
+        // onSignal() returns a clone of the same generic behavior, but its bare
+        // `static` return type erases the type param — re-type the composed result.
+        /** @var Behavior<ExportCommand> $behavior */
+        $behavior = Behavior::receive($handler)
             ->onSignal(function (ActorContext $ctx, Signal $signal): Behavior {
                 if ($signal instanceof PostStop) {
                     $this->flushAll();
                 }
 
+                /** @var Behavior<ExportCommand> SameBehavior carries no runtime T; valid for any message type */
                 return Behavior::same();
             });
 
@@ -64,6 +73,12 @@ final readonly class OtlpExportActor
             ));
     }
 
+    /**
+     * Takes `object` (not {@see ExportCommand}) so a stray message falls through the
+     * match's default arm instead of fataling the actor with a TypeError.
+     *
+     * @return Behavior<ExportCommand>
+     */
     private function handle(object $msg): Behavior
     {
         match (true) {
@@ -74,12 +89,10 @@ final readonly class OtlpExportActor
             default => null,
         };
 
+        /** @var Behavior<ExportCommand> SameBehavior carries no runtime T; valid for any message type */
         return Behavior::same();
     }
 
-    /**
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
-     */
     private function exportSpans(ExportSpans $msg): void
     {
         try {
@@ -89,9 +102,6 @@ final readonly class OtlpExportActor
         }
     }
 
-    /**
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
-     */
     private function exportMetrics(ExportMetrics $msg): void
     {
         if ($this->metrics === null) {
@@ -105,9 +115,6 @@ final readonly class OtlpExportActor
         }
     }
 
-    /**
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
-     */
     private function exportLogs(ExportLogs $msg): void
     {
         if ($this->logs === null) {

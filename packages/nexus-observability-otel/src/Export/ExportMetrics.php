@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Observability\Otel\Export;
 
-use Monadial\Nexus\Core\Actor\UntracedMessage;
+use OpenTelemetry\SDK\Metrics\Data\Metric;
 
 /**
  * @psalm-api
@@ -12,8 +12,8 @@ use Monadial\Nexus\Core\Actor\UntracedMessage;
  * A batch of immutable SDK metric data handed off to the OtlpExportActor. Untraced so the
  * export path generates no telemetry about itself.
  */
-final readonly class ExportMetrics implements UntracedMessage
+final readonly class ExportMetrics implements ExportCommand
 {
-    /** @param array<array-key, mixed> $batch */
+    /** @param list<Metric> $batch */
     public function __construct(public array $batch) {}
 }

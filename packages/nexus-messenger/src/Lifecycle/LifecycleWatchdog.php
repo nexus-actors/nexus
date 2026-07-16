@@ -39,17 +39,15 @@ use function memory_get_usage;
  * ```
  *
  * @psalm-api
+ *
+ * A case-less enum: uninstantiable by the language, exists purely as a
+ * namespace for the static behavior factory.
  */
-final readonly class LifecycleWatchdog
+enum LifecycleWatchdog
 {
-    private function __construct()
-    {
-    }
-
     /**
      * @param Closure(): int|null $memoryProbe returns current usage in bytes; defaults to memory_get_usage(true)
      * @return Behavior<object>
-     * @psalm-suppress InvalidArgument Psalm cannot infer U through nested setup→withState generic closures
      */
     public static function create(
         ActorSystem $system,
@@ -63,12 +61,20 @@ final readonly class LifecycleWatchdog
         $probe = $memoryProbe ?? static fn(): int => memory_get_usage(true);
 
         return Behavior::setup(
+            /**
+             * @param ActorContext<object> $ctx
+             * @return Behavior<object>
+             */
             static function (ActorContext $ctx) use ($system, $thresholds, $interval, $timeout, $probe): Behavior {
                 $startedAt = $system->clock()->now()->getTimestamp();
                 $tick = $ctx->scheduleRepeatedly($interval, $interval, new Tick());
 
                 return Behavior::withState(
                     0,
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @return BehaviorWithState<object, mixed>
+                     */
                     static function (ActorContext $ctx, object $message, mixed $processed) use ($system, $thresholds, $timeout, $probe, $startedAt, $tick): BehaviorWithState {
                         $count = is_int($processed)
                             ? $processed

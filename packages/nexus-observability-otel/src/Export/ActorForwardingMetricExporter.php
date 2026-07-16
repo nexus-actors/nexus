@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Observability\Otel\Export;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
 use OpenTelemetry\SDK\Metrics\AggregationTemporalitySelectorInterface;
+use OpenTelemetry\SDK\Metrics\Data\Metric;
 use OpenTelemetry\SDK\Metrics\Data\Temporality;
 use OpenTelemetry\SDK\Metrics\MetricMetadataInterface;
 use OpenTelemetry\SDK\Metrics\PushMetricExporterInterface;
@@ -25,8 +26,10 @@ use function iterator_to_array;
 // phpcs:ignore SlevomatCodingStandard.Classes.ReadonlyClass.ClassCanBeReadonly -- ForwardsBatchesToActor holds a mutable $buffer; the class cannot be readonly
 final class ActorForwardingMetricExporter implements PushMetricExporterInterface, AggregationTemporalitySelectorInterface
 {
-
+    // phpcs:disable SlevomatCodingStandard.Classes.TraitUseSpacing -- PHP-CS-Fixer strips the blank line above the @use docblock
+    /** @use ForwardsBatchesToActor<Metric> */
     use ForwardsBatchesToActor;
+    // phpcs:enable SlevomatCodingStandard.Classes.TraitUseSpacing
 
     public function __construct(
         private readonly PushMetricExporterInterface $inner,
@@ -51,18 +54,13 @@ final class ActorForwardingMetricExporter implements PushMetricExporterInterface
         return true;
     }
 
-    /**
-     * @psalm-suppress MixedArgument buffered batches are opaque SDK payload data by design
-     */
     #[Override]
     public function shutdown(): bool
     {
         if ($this->isBuffering()) {
-            $this->flushBufferSynchronously(function (array $buffered): void {
-                foreach ($buffered as $message) {
-                    $this->inner->export($message->batch);
-                }
-            });
+            foreach ($this->takeBuffer() as $batch) {
+                $this->inner->export($batch);
+            }
 
             return true;
         }
@@ -89,18 +87,16 @@ final class ActorForwardingMetricExporter implements PushMetricExporterInterface
     }
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<Metric> $batch
      */
     #[Override]
-    private function wrap(array $batch): object
+    private function wrap(array $batch): ExportMetrics
     {
         return new ExportMetrics($batch);
     }
 
     /**
-     * @param array<array-key, mixed> $batch
-     *
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
+     * @param list<Metric> $batch
      */
     #[Override]
     private function exportDirect(array $batch): void

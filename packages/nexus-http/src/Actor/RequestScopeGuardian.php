@@ -23,12 +23,10 @@ final class RequestScopeGuardian
     /** @return Props<object> */
     public static function props(): Props
     {
-        /**
-         * @psalm-suppress UnusedClosureParam
-         *
-         * @var Closure(ActorContext<object>, object): Behavior<object> $handler
-         */
-        $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
+        // The guardian ignores every user message; the zero-arg closure is
+        // re-typed to the full receive signature it satisfies.
+        /** @var Closure(ActorContext<object>, object): Behavior<object> $handler */
+        $handler = static fn(): Behavior => Behavior::same();
 
         return Props::fromBehavior(Behavior::receive($handler));
     }

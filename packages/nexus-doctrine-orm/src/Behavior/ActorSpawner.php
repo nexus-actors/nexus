@@ -16,5 +16,10 @@ use Monadial\Nexus\Core\Actor\Props;
  */
 interface ActorSpawner
 {
+    /**
+     * @template T of object
+     * @param Props<T> $props
+     * @return ActorRef<T>
+     */
     public function spawn(Props $props, string $name): ActorRef;
 }

@@ -56,7 +56,6 @@ final class EntityRefFactoryTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('cannot be derived into an actor name');
-        /** @psalm-suppress InvalidArgument */
         EntityRefFactory::deriveName(stdClass::class, ['k' => 1]);
     }
 
@@ -88,7 +87,6 @@ final class EntityRefFactoryTest extends TestCase
         $emFactory = $this->createStub(EntityManagerFactory::class);
         $conn = $this->createStub(Connection::class);
 
-        /** @psalm-suppress MissingClosureParamType, UnusedClosureParam */
         $factory = EntityRefFactory::for($spawner, stdClass::class)
             ->using($emFactory)
             ->withConnectionSource(static fn(): Connection => $conn)

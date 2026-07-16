@@ -146,7 +146,6 @@ final class WorkerPoolBootstrap
      */
     private function runWithPool(Map $directory, array $queues, Atomic $workerIdCounter, string $handlerClass): void
     {
-        /** @psalm-suppress UndefinedClass, MissingDependency, MixedAssignment */
         $pool = new Pool(WorkerRunnable::class, $this->config->workerCount);
 
         // WorkerPoolConfig is NOT passed as an object — its scalar properties are
@@ -158,7 +157,6 @@ final class WorkerPoolBootstrap
         // PHP arrays passed via Pool::withArguments() are converted to
         // Swoole\Thread\ArrayList in the worker thread; WorkerRunnable converts
         // back to a plain array<int, Queue> before constructing the transport.
-        /** @psalm-suppress MixedMethodCall, UndefinedClass */
         $pool->withArguments(
             $directory,
             $queues,
@@ -171,7 +169,6 @@ final class WorkerPoolBootstrap
             $this->serializedLoggerFactory ?? '',
         );
 
-        /** @psalm-suppress MixedMethodCall, UndefinedClass */
         $pool->start();
     }
 
@@ -196,7 +193,6 @@ final class WorkerPoolBootstrap
         $threads = [];
 
         for ($i = 0; $i < $this->config->workerCount; $i++) {
-            /** @psalm-suppress UndefinedClass */
             $threads[] = new Thread(
                 $workerScript,
                 $autoloader,
@@ -222,7 +218,6 @@ final class WorkerPoolBootstrap
                 $stopSignal->set(1);
 
                 foreach ($threads as $thread) {
-                    /** @psalm-suppress UndefinedClass */
                     $thread->join();
                 }
 
@@ -241,7 +236,6 @@ final class WorkerPoolBootstrap
         $stopSignal->set(1);
 
         foreach ($threads as $thread) {
-            /** @psalm-suppress UndefinedClass */
             $thread->join();
         }
     }

@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Messenger\Ask;
 use Closure;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Messenger\Event\ReplyPublished;
 use Monadial\Nexus\Messenger\Exception\UnsupportedOperationException;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
@@ -81,7 +82,7 @@ final readonly class MessengerReplyRef implements ActorRef
      * If `send()` throws, the ack callback is NOT fired (process-ack guarantee: we
      * only ack after the reply is durably handed off to the transport).
      *
-     * @param T $message
+     * @param T|SystemMessage $message
      */
     #[Override]
     public function tell(object $message): void

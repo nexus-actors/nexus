@@ -7,12 +7,12 @@ namespace Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * @template T of object
  * @psalm-api
  */
 interface EntityReplayPolicy
 {
     /**
+     * @template T of object
      * @param class-string<T> $entityClass
      * @return T|null
      */

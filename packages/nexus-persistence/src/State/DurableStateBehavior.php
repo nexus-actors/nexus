@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Persistence\State;
 
 use Closure;
 use LogicException;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Symfony\Component\Uid\Ulid;
@@ -48,7 +49,10 @@ use Symfony\Component\Uid\Ulid;
  */
 final readonly class DurableStateBehavior
 {
-    /** @psalm-suppress UnusedConstructor Called by create() */
+    /**
+     * @param S $emptyState
+     * @param Closure(S, ActorContext, object): DurableEffect $commandHandler
+     */
     private function __construct(
         private PersistenceId $persistenceId,
         private object $emptyState,
@@ -60,11 +64,12 @@ final readonly class DurableStateBehavior
     /**
      * Create a new DurableStateBehavior builder.
      *
-     * @param PersistenceId $persistenceId Unique identity for this persistent entity
-     * @param object $emptyState Initial empty state before any persisted state
-     * @param Closure $commandHandler Processes commands, returns DurableEffect
+     * @template TState of object
      *
-     * @psalm-suppress UnusedParam Parameters are stored via constructor for later use
+     * @param PersistenceId $persistenceId Unique identity for this persistent entity
+     * @param TState $emptyState Initial empty state before any persisted state
+     * @param Closure(TState, ActorContext, object): DurableEffect $commandHandler Processes commands, returns DurableEffect
+     * @return self<TState>
      */
     public static function create(PersistenceId $persistenceId, object $emptyState, Closure $commandHandler): self
     {
@@ -92,8 +97,6 @@ final readonly class DurableStateBehavior
      * Build the final Behavior using DurableStateEngine.
      *
      * @throws LogicException if DurableStateStore has not been set
-     *
-     * @psalm-suppress MixedArgumentTypeCoercion Stored closures lose generic type info
      */
     public function toBehavior(): Behavior
     {

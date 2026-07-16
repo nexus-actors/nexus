@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use NoDiscard;
 
@@ -32,7 +33,7 @@ interface BackpressureCapable
      * - Dropped        — mailbox is closed or the overflow strategy discarded the
      *                    message; it was not enqueued and will not be delivered.
      *
-     * @param T $message
+     * @param T|SystemMessage $message
      */
     #[NoDiscard]
     public function offer(object $message): EnqueueResult;

@@ -52,9 +52,6 @@ use function extension_loaded;
  */
 final class ObservabilityFactory
 {
-    /**
-     * @psalm-suppress InvalidOperand int/float mixing computing the timeout in seconds is intentional.
-     */
     public static function fromConfig(ObservabilityConfig $config): Observability
     {
         if (!$config->enabled) {
@@ -62,7 +59,7 @@ final class ObservabilityFactory
         }
 
         $endpoint = $config->exporterEndpoint ?? 'http://localhost:4318';
-        $timeout = ($config->exporterTimeoutMillis ?? 10_000) / 1_000.0;
+        $timeout = ($config->exporterTimeoutMillis ?? 10_000) / 1_000;
         $transports = self::transportFactory($timeout);
         $resource = ResourceInfoFactory::defaultResource()->merge(
             ResourceInfo::create(

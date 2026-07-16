@@ -26,7 +26,6 @@ final class DoctrineBootstrap
             return;
         }
 
-        /** @psalm-suppress UndefinedClass, UndefinedConstant */
         SwooleRuntime::enableCoroutine(SWOOLE_HOOK_ALL);
         self::$enabled = true;
     }

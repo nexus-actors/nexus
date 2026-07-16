@@ -82,7 +82,7 @@ perf-http-swoole-threads: ## HTTP Swoole performance benchmarks (thread mode)
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole-threads
 
 psalm: ## Run Psalm analysis
-	$(DC) vendor/bin/psalm
+	$(DC) vendor/bin/psalm --find-unused-psalm-suppress
 
 deps-check: ## Verify every package's composer.json declares all used dependencies
 	$(DC) php bin/check-package-deps.php

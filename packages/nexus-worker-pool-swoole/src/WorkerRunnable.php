@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\WorkerPool\Swoole;
 
+use Closure;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\WorkerPool\ConsistentHashRing;
@@ -11,7 +12,11 @@ use Monadial\Nexus\WorkerPool\Swoole\Directory\ThreadMapDirectory;
 use Monadial\Nexus\WorkerPool\Swoole\Transport\ThreadQueueTransport;
 use Monadial\Nexus\WorkerPool\WorkerNode;
 use Monadial\Nexus\WorkerPool\WorkerPoolConfig;
+use Monadial\Nexus\WorkerPool\WorkerStartHandler;
+use Override;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
+use Swoole\Thread\ArrayList;
 use Swoole\Thread\Atomic;
 use Swoole\Thread\Map;
 use Swoole\Thread\Queue;
@@ -46,47 +51,39 @@ use function Opis\Closure\unserialize as opis_unserialize;
  * IMPORTANT: Do NOT wrap the body in Swoole\Coroutine\run() — $system->run()
  * starts the Swoole event loop itself, and nesting another run() inside a
  * coroutine raises "Unable to call Event::wait() in coroutine".
- *
- * @psalm-suppress UnusedClass, UndefinedClass, MissingDependency, PropertyNotSetInConstructor
  */
 final class WorkerRunnable extends Runnable
 {
     /**
      * @param array<int, mixed> $args
-     *
-     * @psalm-suppress UnusedParam
      */
+    #[Override]
     public function run(array $args): void
     {
-        /** @var Map $directory */
-        $directory = $args[0];
-        /** @var \Swoole\Thread\ArrayList $queues */
-        $queues = $args[1];
-        /** @var Atomic $workerIdCounter */
-        $workerIdCounter = $args[2];
-        /** @var int $workerCount */
-        $workerCount = (int) $args[3];
-        /** @var string $systemNamePrefix */
-        $systemNamePrefix = (string) $args[4];
-        /** @var string $handlerClass */
-        $handlerClass = (string) $args[5];
-        /** @var string $serializedConfigure */
-        $serializedConfigure = (string) $args[6];
-        /** @var string $loggerClass */
-        $loggerClass = (string) $args[7];
-        /** @var string $serializedLoggerFactory */
+        if (!$args[0] instanceof Map || !$args[1] instanceof ArrayList || !$args[2] instanceof Atomic) {
+            throw new RuntimeException(
+                'WorkerRunnable expects thread arguments [Map $directory, ArrayList $queues, Atomic $workerIdCounter, ...scalars]',
+            );
+        }
+
+        $directory               = $args[0];
+        $queues                  = $args[1];
+        $workerIdCounter         = $args[2];
+        $workerCount             = (int) $args[3];
+        $systemNamePrefix        = (string) $args[4];
+        $handlerClass            = (string) $args[5];
+        $serializedConfigure     = (string) $args[6];
+        $loggerClass             = (string) $args[7];
         $serializedLoggerFactory = (string) $args[8];
 
         $config = WorkerPoolConfig::withThreads($workerCount)->withSystemNamePrefix($systemNamePrefix);
 
         // Swoole converts PHP arrays to Thread\ArrayList when passing between
         // threads via Pool::withArguments() — convert back to a plain array.
-        /** @var array<int, Queue> $queuesArray */
         $queuesArray = [];
 
         for ($i = 0; $i < $workerCount; $i++) {
-            /** @psalm-suppress MixedAssignment, MixedArrayAccess */
-            $queuesArray[$i] = $queues[$i];
+            $queuesArray[$i] = self::queueOf($queues[$i]);
         }
 
         $workerId   = $workerIdCounter->add(1) - 1;
@@ -103,35 +100,74 @@ final class WorkerRunnable extends Runnable
         $node->start();
 
         if ($serializedConfigure !== '') {
-            /** @psalm-suppress MixedFunctionCall */
-            $configure = opis_unserialize($serializedConfigure);
+            $configure = self::closureOf(opis_unserialize($serializedConfigure));
             $configure($node);
         } else {
-            /** @psalm-suppress MixedMethodCall */
-            $handler = new $handlerClass();
-            /** @psalm-suppress MixedMethodCall */
-            $handler->onWorkerStart($node);
+            self::handlerOf($handlerClass)->onWorkerStart($node);
         }
 
         // Blocks until $system->shutdown() is called.
         $system->run();
     }
 
-    /** @psalm-suppress UnusedMethod */
     private static function createLogger(string $loggerClass, string $serializedLoggerFactory): ?LoggerInterface
     {
         if ($loggerClass !== '') {
-            /** @psalm-suppress MixedReturnStatement, MixedInferredReturnType, MixedMethodCall */
+            if (!is_a($loggerClass, LoggerInterface::class, true)) {
+                throw new RuntimeException("Logger class {$loggerClass} must implement " . LoggerInterface::class);
+            }
+
             return new $loggerClass();
         }
 
         if ($serializedLoggerFactory !== '') {
-            /** @psalm-suppress MixedFunctionCall, MixedReturnStatement, MixedInferredReturnType */
-            $factory = opis_unserialize($serializedLoggerFactory);
+            $factory = self::closureOf(opis_unserialize($serializedLoggerFactory));
 
-            return $factory();
+            return self::loggerOf($factory());
         }
 
         return null;
+    }
+
+    private static function handlerOf(string $handlerClass): WorkerStartHandler
+    {
+        if (!is_a($handlerClass, WorkerStartHandler::class, true)) {
+            throw new RuntimeException("Handler class {$handlerClass} must implement " . WorkerStartHandler::class);
+        }
+
+        return new $handlerClass();
+    }
+
+    private static function queueOf(mixed $value): Queue
+    {
+        if (!$value instanceof Queue) {
+            throw new RuntimeException(
+                'Expected Swoole\Thread\Queue in the queues list, got ' . get_debug_type($value),
+            );
+        }
+
+        return $value;
+    }
+
+    private static function closureOf(mixed $value): Closure
+    {
+        if (!$value instanceof Closure) {
+            throw new RuntimeException(
+                'Expected a serialized closure, got ' . get_debug_type($value),
+            );
+        }
+
+        return $value;
+    }
+
+    private static function loggerOf(mixed $value): LoggerInterface
+    {
+        if (!$value instanceof LoggerInterface) {
+            throw new RuntimeException(
+                'Logger factory must return a ' . LoggerInterface::class . ', got ' . get_debug_type($value),
+            );
+        }
+
+        return $value;
     }
 }

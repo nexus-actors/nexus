@@ -33,16 +33,14 @@ use Throwable;
  * {@see ReplyConsumer::create()} and let {@see AskSupport} spawn it.
  *
  * @internal created by AskSupport
+ *
+ * A case-less enum: uninstantiable by the language, exists purely as a
+ * namespace for the static behavior factory.
  */
-final readonly class ReplyConsumer
+enum ReplyConsumer
 {
-    private function __construct()
-    {
-    }
-
     /**
      * @return Behavior<object>
-     * @psalm-suppress InvalidArgument Psalm cannot infer U through nested setup→receive generic closures
      */
     public static function create(
         ReplyChannel $channel,
@@ -51,6 +49,10 @@ final readonly class ReplyConsumer
         ?EventDispatcherInterface $events = null,
     ): Behavior {
         return Behavior::setup(
+            /**
+             * @param ActorContext<object> $ctx
+             * @return Behavior<object>
+             */
             static function (ActorContext $ctx) use ($channel, $registry, $pollInterval, $events): Behavior {
                 $ctx->self()->tell(new Poll());
 
@@ -63,6 +65,10 @@ final readonly class ReplyConsumer
                 ));
 
                 return Behavior::receive(
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @return Behavior<object>
+                     */
                     static function (ActorContext $ctx, object $message) use ($channel, $registry, $pollInterval, $events): Behavior {
                         if (!$message instanceof Poll) {
                             return Behavior::unhandled();

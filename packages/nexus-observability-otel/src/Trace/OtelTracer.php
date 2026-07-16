@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Observability\Otel\Trace;
 
 use Monadial\Nexus\Observability\Context\Context;
+use Monadial\Nexus\Observability\Otel\AttributeKeys;
 use Monadial\Nexus\Observability\Trace\Span;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Observability\Trace\Tracer;
@@ -13,6 +14,7 @@ use OpenTelemetry\API\Trace\SpanContext as OtelSpanContext;
 use OpenTelemetry\API\Trace\SpanKind as OtelSpanKind;
 use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\Context\Context as OtelContext;
+use OpenTelemetry\Context\ContextInterface;
 use Override;
 
 /**
@@ -24,14 +26,20 @@ use Override;
  */
 final readonly class OtelTracer implements Tracer
 {
-    public function __construct(private TracerInterface $tracer,) {}
-
     /**
-     * @psalm-suppress ArgumentTypeCoercion the OTel SDK requires a non-empty-string span name; the
-     *                 framework Tracer contract accepts any string, so the name is forwarded as-is.
-     * @psalm-suppress InternalMethod OtelContext::getRoot() is the SDK's own supported way to build
-     *                 a fresh root context for a remote parent link.
+     * Captured once at construction (bootstrap, before any actor fiber runs): the
+     * ambient OTEL context — the root context in practice — used as the base when
+     * linking a remote parent. Avoids OtelContext::getRoot(), which the SDK marks
+     * `@internal`, and avoids per-span OtelContext::getCurrent() calls, which warn
+     * under the SDK's fiber-bound storage when made from unattached fibers.
      */
+    private ContextInterface $base;
+
+    public function __construct(private TracerInterface $tracer)
+    {
+        $this->base = OtelContext::getCurrent();
+    }
+
     #[Override]
     public function startSpan(
         string $name,
@@ -39,10 +47,16 @@ final readonly class OtelTracer implements Tracer
         array $attributes = [],
         ?Context $parent = null,
     ): Span {
+        // The OTel SDK requires a non-empty span name; per the OTel spec, spans
+        // without a name receive a placeholder.
+        $spanName = $name === ''
+            ? 'unnamed'
+            : $name;
+
         $builder = $this->tracer
-            ->spanBuilder($name)
+            ->spanBuilder($spanName)
             ->setSpanKind($this->mapKind($kind))
-            ->setAttributes($attributes);
+            ->setAttributes(AttributeKeys::nonEmpty($attributes));
 
         if ($parent !== null && $parent->spanContext->isValid()) {
             $remote = OtelSpanContext::createFromRemoteParent(
@@ -51,7 +65,7 @@ final readonly class OtelTracer implements Tracer
                 $parent->spanContext->traceFlags,
             );
             $builder = $builder->setParent(
-                OtelContext::getRoot()->withContextValue(OtelApiSpan::wrap($remote)),
+                $this->base->withContextValue(OtelApiSpan::wrap($remote)),
             );
         }
 

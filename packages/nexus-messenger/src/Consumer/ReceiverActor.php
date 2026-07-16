@@ -63,18 +63,16 @@ use Throwable;
  * ```
  *
  * @psalm-api
+ *
+ * A case-less enum: uninstantiable by the language, exists purely as a
+ * namespace for the static behavior factory.
  */
-final readonly class ReceiverActor
+enum ReceiverActor
 {
-    private function __construct()
-    {
-    }
-
     /**
      * @param ActorRef<object>|null $deadLetters required when the config policy is UnroutablePolicy::DeadLetters
      * @param ActorRef<object>|null $processedListener receives MessagesProcessed reports (e.g. the LifecycleWatchdog)
      * @return Behavior<object>
-     * @psalm-suppress InvalidArgument Psalm cannot infer U through nested setup→receive generic closures
      */
     public static function create(
         ReceiverInterface $receiver,
@@ -89,6 +87,10 @@ final readonly class ReceiverActor
         $config ??= ReceiverActorConfig::default();
 
         return Behavior::setup(
+            /**
+             * @param ActorContext<object> $ctx
+             * @return Behavior<object>
+             */
             static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability, $replySenders): Behavior {
                 $ctx->self()->tell(new Poll());
 
@@ -97,6 +99,10 @@ final readonly class ReceiverActor
                 $warnedNoLocator = false;
 
                 return Behavior::receive(
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @return Behavior<object>
+                     */
                     static function (ActorContext $ctx, object $message) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability, $replySenders, &$pendingAsks, &$warnedNoLocator): Behavior {
                         if (!$message instanceof Poll) {
                             return Behavior::unhandled();

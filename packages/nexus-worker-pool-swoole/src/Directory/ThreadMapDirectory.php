@@ -19,34 +19,32 @@ final readonly class ThreadMapDirectory implements WorkerDirectory
 {
     public function __construct(private Map $map) {}
 
-    /**
-     * @psalm-suppress InaccessibleProperty, InvalidArgument
-     */
     #[Override]
     public function register(string $path, int $workerId): void
     {
         $this->map[$path] = $workerId;
     }
 
-    /**
-     * @psalm-suppress InvalidArgument
-     */
     #[Override]
     public function lookup(string $path): ?int
     {
-        $value = $this->map[$path] ?? null;
-
-        return $value !== null
-            ? (int) $value
-            : null;
+        return self::asInt($this->map[$path] ?? null);
     }
 
-    /**
-     * @psalm-suppress InvalidArgument
-     */
     #[Override]
     public function has(string $path): bool
     {
         return isset($this->map[$path]);
+    }
+
+    /**
+     * The shared Map stores mixed values; the directory only ever writes
+     * worker IDs (ints), so anything else reads as "not registered".
+     */
+    private static function asInt(mixed $value): ?int
+    {
+        return is_int($value)
+            ? $value
+            : null;
     }
 }

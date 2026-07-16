@@ -64,7 +64,7 @@ final readonly class GossipPayloadCodec
         foreach ($reader->listOfMaps('registrations') as $entry) {
             $registration = [];
 
-            /** @psalm-suppress MixedAssignment Validated entry-by-entry below. */
+            /** @var mixed $value Msgpack wire boundary: untyped until validated entry-by-entry below. */
             foreach ($entry as $key => $value) {
                 if (!is_string($key) || !is_string($value)) {
                     throw new MessageDeserializationException(

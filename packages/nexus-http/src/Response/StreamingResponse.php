@@ -69,8 +69,6 @@ final class StreamingResponse
      *
      * @param iterable<mixed> $items
      * @param (Closure(mixed): string)|null $encoder Custom encoder. Defaults to json_encode.
-     *
-     * @psalm-suppress MixedAssignment ndjson accepts heterogeneous items by design
      */
     public static function ndjson(iterable $items, ?Closure $encoder = null): ResponseInterface
     {
@@ -81,6 +79,9 @@ final class StreamingResponse
 
         $iterator = self::toIterator($items);
         $chunks = (static function () use ($iterator, $encoder): Generator {
+            // ndjson accepts heterogeneous items by design.
+
+            /** @var mixed $item */
             foreach ($iterator as $item) {
                 yield $encoder($item) . "\n";
             }

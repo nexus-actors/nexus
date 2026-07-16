@@ -22,7 +22,6 @@ use Override;
 final readonly class WithStashBehavior extends Behavior
 {
     /**
-     * @psalm-suppress UndefinedDocblockClass StashBuffer will be created in a future task
      * @param Closure(StashBuffer): Behavior<T> $factory
      * @param Closure(ActorContext<T>, Signal): Behavior<T>|null $signalHandler
      */

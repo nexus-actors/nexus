@@ -46,6 +46,9 @@ final class ConnectionPool
     private int $waitingCoroutines = 0;
     private bool $closed = false;
 
+    /**
+     * @param Channel<Connection> $channel
+     */
     public function __construct(
         private readonly string $name,
         private readonly ConnectionFactory $factory,
@@ -54,7 +57,6 @@ final class ConnectionPool
         private readonly ?EventDispatcherInterface $events = null,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
-        /** @var Channel<Connection> $channel */
         $this->idle = $channel;
         /** @var SplObjectStorage<Connection, BorrowMeta> $inUse */
         $inUse = new SplObjectStorage();
@@ -152,12 +154,11 @@ final class ConnectionPool
     }
 
     /**
-     * @psalm-suppress UnusedParam $timeout is part of the public lifecycle
-     *   contract; the current sync drain is fast enough that we don't need
-     *   to enforce the deadline yet, but the param is kept so callers
-     *   compile against a deadline-aware API.
+     * `$_timeout` is part of the public lifecycle contract; the current sync
+     * drain is fast enough that we don't need to enforce the deadline yet,
+     * but the param is kept so callers compile against a deadline-aware API.
      */
-    public function close(Duration $timeout): void
+    public function close(Duration $_timeout): void
     {
         $this->closed = true;
 

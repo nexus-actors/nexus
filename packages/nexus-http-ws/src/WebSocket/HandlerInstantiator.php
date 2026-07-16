@@ -101,8 +101,6 @@ final readonly class HandlerInstantiator
 
     /**
      * @return array<string, string>
-     *
-     * @psalm-suppress MixedAssignment
      */
     private function extractPathParams(ServerRequestInterface $request): array
     {
@@ -111,6 +109,7 @@ final readonly class HandlerInstantiator
         /** @var array<string, mixed> $all */
         $all = $request->getAttributes();
 
+        /** @var mixed $value */
         foreach ($all as $key => $value) {
             if (is_string($value) && !str_starts_with($key, '_')) {
                 $out[$key] = $value;

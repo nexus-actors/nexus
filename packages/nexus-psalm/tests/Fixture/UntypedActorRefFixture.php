@@ -88,7 +88,6 @@ final class UarNullableTypedService
 /** Good: suppression escape hatch. */
 final class UarSuppressedService
 {
-    /** @psalm-suppress UntypedActorRefInjection */
     public function legacy(ActorRef $anything): bool
     {
         return $anything->isAlive();
@@ -164,9 +163,6 @@ final readonly class UarTypedPromotedService
 /** Good: property-level suppression. */
 final class UarSuppressedPropertyService
 {
-    /**
-     * @psalm-suppress UntypedActorRefInjection
-     */
     private ?ActorRef $legacy = null;
 
     public function bound(): bool

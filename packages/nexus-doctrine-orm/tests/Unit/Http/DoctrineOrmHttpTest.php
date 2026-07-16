@@ -38,7 +38,6 @@ final class DoctrineOrmHttpTest extends TestCase
 
         $updated = DoctrineOrmHttp::installOrm(registry: $registry, middlewares: $middlewares, emPool: $pool);
 
-        /** @psalm-suppress UnusedClosureParam */
         $param = (new ReflectionFunction(static function (EntityManagerInterface $em): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 
@@ -84,7 +83,6 @@ final class DoctrineOrmHttpTest extends TestCase
 
         DoctrineOrmHttp::installOrm(registry: $registry, middlewares: $middlewares, emPool: $pool);
 
-        /** @psalm-suppress UnusedClosureParam */
         $param = (new ReflectionFunction(static function (EntityManagerInterface $em): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 
@@ -92,7 +90,6 @@ final class DoctrineOrmHttpTest extends TestCase
         $registry->compile($param, $ctx);
     }
 
-    /** @psalm-suppress ArgumentTypeCoercion */
     private function makePool(): EntityManagerPool
     {
         $connPool = new ConnectionPool(

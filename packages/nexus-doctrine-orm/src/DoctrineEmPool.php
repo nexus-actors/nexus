@@ -20,13 +20,15 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * @psalm-import-type Params from \Doctrine\DBAL\DriverManager
+ */
 final class DoctrineEmPool
 {
     /**
-     * @param array<string, mixed> $connParams
-     *
-     * @psalm-suppress InvalidArgument
+     * @param Params $connParams
      */
     public static function forConfig(
         string $name,

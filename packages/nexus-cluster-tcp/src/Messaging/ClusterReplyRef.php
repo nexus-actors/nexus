@@ -9,6 +9,7 @@ use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
@@ -36,7 +37,7 @@ final readonly class ClusterReplyRef implements ActorRef
     ) {}
 
     /**
-     * @param T $message
+     * @param T|SystemMessage $message
      */
     #[Override]
     public function tell(object $message): void

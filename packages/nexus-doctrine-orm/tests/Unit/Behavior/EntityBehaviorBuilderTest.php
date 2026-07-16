@@ -59,10 +59,8 @@ final class EntityBehaviorBuilderTest extends TestCase
     {
         $base = $this->builder();
         $emFactory = $this->createStub(EntityManagerFactory::class);
-        /** @psalm-suppress UnusedClosureParam */
         $policy = new CreateIfMissing(static fn(mixed $id): object => new stdClass());
 
-        /** @psalm-suppress InvalidArgument */
         $configured = $base
             ->withEntityManagerFactory($emFactory)
             ->withReplayPolicy($policy);
@@ -86,7 +84,6 @@ final class EntityBehaviorBuilderTest extends TestCase
     {
         $conn = $this->createStub(Connection::class);
         $acquire = static fn(): Connection => $conn;
-        /** @psalm-suppress UnusedClosureParam */
         $release = static fn(Connection $c): null => null;
 
         $builder = $this->builder()->withConnectionLifecycle($acquire, $release);
@@ -100,7 +97,6 @@ final class EntityBehaviorBuilderTest extends TestCase
     {
         $conn = $this->createStub(Connection::class);
         $acquire = static fn(): Connection => $conn;
-        /** @psalm-suppress UnusedClosureParam */
         $release = static fn(Connection $c): null => null;
         $dedicated = static fn(): Connection => $conn;
 
@@ -117,7 +113,6 @@ final class EntityBehaviorBuilderTest extends TestCase
         return new EntityBehaviorBuilder(
             entityClass: stdClass::class,
             id: 'k',
-            /** @psalm-suppress UnusedClosureParam */
             commandHandler: static fn($ctx, object $msg, object $entity): EntityEffect => EntityEffect::same(),
         );
     }

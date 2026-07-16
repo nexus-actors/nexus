@@ -133,7 +133,7 @@ final readonly class MessengerActorRef implements ActorRef
         $replyChannel = $this->askSupport->replyChannelName();
 
         try {
-            $future = $this->askSupport->ask($message, $timeout, $correlationId);
+            $future = $this->askSupport->ask($timeout, $correlationId);
         } catch (AskCapacityExceededException $e) {
             $this->safely(fn(): mixed => $this->observability->meter()->counter(
                 'nexus.messenger.asks.capacity_rejected',

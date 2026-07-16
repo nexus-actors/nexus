@@ -46,8 +46,14 @@ final class EntityRefFactory
 
     /**
      * @internal Constructed by EntityRefFactoryBuilder.
-     * @psalm-suppress ArgumentTypeCoercion
-     * @psalm-suppress MixedArgumentTypeCoercion
+     *
+     * @template U of object
+     * @template D of object
+     * @param class-string<U>                                                              $entityClass
+     * @param Closure(): \Doctrine\DBAL\Connection                                        $connectionSource
+     * @param Closure(\Monadial\Nexus\Core\Actor\ActorContext<D>, D, U): EntityEffect<U>  $commandHandler
+     * @param Closure(\Doctrine\DBAL\Connection): void|null                              $connectionRelease
+     * @return self<U, D>
      */
     public static function instantiate(
         ActorSpawner $spawner,
@@ -59,7 +65,12 @@ final class EntityRefFactory
         ?Duration $receiveTimeout = null,
         ?Closure $connectionRelease = null,
     ): self {
-        return new self(
+        /**
+         * @var self<U, D> $factory U/D mirror the constructor's T/C one-to-one;
+         *      Psalm cannot bind D through the command handler's contravariant
+         *      parameter positions when unifying with the constructor's C.
+         */
+        $factory = new self(
             $spawner,
             $entityClass,
             $emFactory,
@@ -69,6 +80,8 @@ final class EntityRefFactory
             $receiveTimeout,
             $connectionRelease,
         );
+
+        return $factory;
     }
 
     /**

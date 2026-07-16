@@ -66,7 +66,6 @@ final class WorkerPool
      */
     public static function withCpuThreads(): self
     {
-        /** @psalm-suppress ForbiddenCode */
         return new self(swoole_cpu_num());
     }
 
@@ -122,7 +121,6 @@ final class WorkerPool
     {
         $clone          = clone $this;
         $clone->steps[] = static function (WorkerNode $node) use ($name, $actorClass, $mailbox): void {
-            /** @psalm-suppress MixedMethodCall */
             $props = Props::fromFactory(static fn(): ActorHandler => new $actorClass());
             $node->spawn(
                 $mailbox !== null
@@ -144,7 +142,6 @@ final class WorkerPool
     {
         $clone          = clone $this;
         $clone->steps[] = static function (WorkerNode $node) use ($name, $actorClass, $mailbox): void {
-            /** @psalm-suppress MixedMethodCall */
             $props = Props::fromStatefulFactory(static fn(): StatefulActorHandler => new $actorClass());
             $node->spawn(
                 $mailbox !== null

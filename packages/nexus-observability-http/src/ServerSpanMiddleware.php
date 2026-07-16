@@ -30,11 +30,9 @@ use function strtolower;
  * telemetry error never breaks the request; the handler's own exception still
  * propagates to the exception-handling middleware.
  */
-final class ServerSpanMiddleware implements MiddlewareInterface
+final readonly class ServerSpanMiddleware implements MiddlewareInterface
 {
-    public function __construct(
-        private readonly Observability $observability,
-    ) {}
+    public function __construct(private Observability $observability) {}
 
     #[Override]
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -66,7 +64,7 @@ final class ServerSpanMiddleware implements MiddlewareInterface
 
             throw $e;
         } finally {
-            $this->safely(static fn (): mixed => $span?->end());
+            $this->safely(static fn(): mixed => $span?->end());
         }
     }
 
@@ -92,7 +90,9 @@ final class ServerSpanMiddleware implements MiddlewareInterface
         $carrier = [];
 
         foreach ($request->getHeaders() as $name => $values) {
-            $carrier[strtolower($name)] = implode(',', $values);
+            // PSR-7 types header names as array-key: PHP re-keys numeric header
+            // names (e.g. "123") to int, so cast back to string.
+            $carrier[strtolower((string) $name)] = implode(',', $values);
         }
 
         return $this->observability->propagator()->extract($carrier);

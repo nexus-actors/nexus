@@ -77,12 +77,11 @@ final class ThreadAwareConnectionContext implements WebSocketContext
         $this->server->disconnect($this->fd, $code, $reason);
     }
 
-    /**
-     * @psalm-suppress MixedReturnStatement,MixedInferredReturnType
-     */
     #[Override]
     public function isAlive(): bool
     {
-        return $this->server->exist($this->fd);
+        // exist() returns bool at runtime; the base Swoole\Server class is not
+        // stubbed, so the comparison narrows the untyped return deterministically.
+        return $this->server->exist($this->fd) === true;
     }
 }

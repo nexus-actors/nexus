@@ -38,9 +38,6 @@ final readonly class TestReply
     public function __construct(public string $value) {}
 }
 
-/**
- * @psalm-suppress InvalidArgument, PropertyNotSetInConstructor, UnusedClosureParam, PossiblyNullArgument, UnnecessaryVarAnnotation, MixedArgumentTypeCoercion
- */
 #[CoversClass(ActorCell::class)]
 final class ActorCellTest extends TestCase
 {

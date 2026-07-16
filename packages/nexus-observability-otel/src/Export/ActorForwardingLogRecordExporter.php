@@ -10,6 +10,7 @@ use OpenTelemetry\SDK\Common\Future\CancellationInterface;
 use OpenTelemetry\SDK\Common\Future\CompletedFuture;
 use OpenTelemetry\SDK\Common\Future\FutureInterface;
 use OpenTelemetry\SDK\Logs\LogRecordExporterInterface;
+use OpenTelemetry\SDK\Logs\ReadableLogRecord;
 use Override;
 
 use function iterator_to_array;
@@ -25,8 +26,10 @@ use function iterator_to_array;
 // phpcs:ignore SlevomatCodingStandard.Classes.ReadonlyClass.ClassCanBeReadonly -- ForwardsBatchesToActor holds a mutable $buffer; the class cannot be readonly
 final class ActorForwardingLogRecordExporter implements LogRecordExporterInterface
 {
-
+    // phpcs:disable SlevomatCodingStandard.Classes.TraitUseSpacing -- PHP-CS-Fixer strips the blank line above the @use docblock
+    /** @use ForwardsBatchesToActor<ReadableLogRecord> */
     use ForwardsBatchesToActor;
+    // phpcs:enable SlevomatCodingStandard.Classes.TraitUseSpacing
 
     public function __construct(
         private readonly LogRecordExporterInterface $inner,
@@ -41,18 +44,13 @@ final class ActorForwardingLogRecordExporter implements LogRecordExporterInterfa
         return new CompletedFuture(true);
     }
 
-    /**
-     * @psalm-suppress MixedArgument buffered batches are opaque SDK payload data by design
-     */
     #[Override]
     public function shutdown(?CancellationInterface $cancellation = null): bool
     {
         if ($this->isBuffering()) {
-            $this->flushBufferSynchronously(function (array $buffered) use ($cancellation): void {
-                foreach ($buffered as $message) {
-                    $this->inner->export($message->batch, $cancellation)->await();
-                }
-            });
+            foreach ($this->takeBuffer() as $batch) {
+                $this->inner->export($batch, $cancellation)->await();
+            }
 
             return true;
         }
@@ -79,18 +77,16 @@ final class ActorForwardingLogRecordExporter implements LogRecordExporterInterfa
     }
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<ReadableLogRecord> $batch
      */
     #[Override]
-    private function wrap(array $batch): object
+    private function wrap(array $batch): ExportLogs
     {
         return new ExportLogs($batch);
     }
 
     /**
-     * @param array<array-key, mixed> $batch
-     *
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
+     * @param list<ReadableLogRecord> $batch
      */
     #[Override]
     private function exportDirect(array $batch): void

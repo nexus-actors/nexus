@@ -150,7 +150,6 @@ final class MsgpackCodecTest extends TestCase
 
         $this->expectException(UnexpectedValueException::class);
 
-        /** @psalm-suppress UndefinedFunction */
         $codec->unpack(msgpack_pack(42));
     }
 }

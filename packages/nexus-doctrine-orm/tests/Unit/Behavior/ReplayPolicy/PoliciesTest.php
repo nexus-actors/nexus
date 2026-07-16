@@ -68,7 +68,6 @@ final class PoliciesTest extends TestCase
         $em->method('find')->willReturn($existing);
         $em->expects(self::never())->method('persist');
 
-        /** @psalm-suppress UnusedClosureParam */
         $policy = new CreateIfMissing(static fn(mixed $id): object => new stdClass());
 
         self::assertSame($existing, $policy->resolve($em, stdClass::class, 'k'));

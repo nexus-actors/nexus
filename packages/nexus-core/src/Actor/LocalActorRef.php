@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Actor;
 use Closure;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
@@ -45,7 +46,7 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
         private Observability $observability,
     ) {}
 
-    /** @param T $message */
+    /** @param T|SystemMessage $message */
     #[Override]
     public function tell(object $message): void
     {
@@ -53,7 +54,7 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
     }
 
     /**
-     * @param T $message
+     * @param T|SystemMessage $message
      */
     #[Override]
     #[NoDiscard]

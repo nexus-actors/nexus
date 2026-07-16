@@ -22,13 +22,12 @@ use InvalidArgumentException;
  * ```
  *
  * @psalm-api
+ *
+ * A case-less enum: uninstantiable by the language, exists purely as a
+ * namespace for the static parser.
  */
-final readonly class MemoryLimit
+enum MemoryLimit
 {
-    private function __construct()
-    {
-    }
-
     /**
      * @throws InvalidArgumentException When the value is not a recognised memory-limit string.
      */

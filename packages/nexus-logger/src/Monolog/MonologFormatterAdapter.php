@@ -13,6 +13,7 @@ use Monolog\Level as MonologLevel;
 use Monolog\LogRecord;
 use Override;
 
+use function fmod;
 use function intval;
 use function is_string;
 use function round;
@@ -33,14 +34,11 @@ final readonly class MonologFormatterAdapter implements Formatter
 {
     public function __construct(private FormatterInterface $delegate) {}
 
-    /**
-     * @psalm-suppress InvalidOperand, MixedAssignment
-     */
     #[Override]
     public function format(Record $record): string
     {
         $seconds = (int) $record->timestamp;
-        $millis = intval(round(($record->timestamp - $seconds) * 1000));
+        $millis = intval(round(fmod($record->timestamp, 1.0) * 1000.0));
         $datetime = (new DateTimeImmutable('@' . $seconds))
             ->modify('+' . $millis . ' milliseconds');
 
@@ -53,8 +51,16 @@ final readonly class MonologFormatterAdapter implements Formatter
             extra: $record->extra,
         );
 
-        $formatted = $this->delegate->format($logRecord);
+        return self::stringify($this->delegate->format($logRecord));
+    }
 
+    /**
+     * Monolog's FormatterInterface declares `@return mixed`; in practice
+     * string-oriented formatters return string (or a Stringable). Narrow
+     * at this boundary instead of letting mixed leak into the pipeline.
+     */
+    private static function stringify(mixed $formatted): string
+    {
         return is_string($formatted)
             ? rtrim($formatted, "\n")
             : (string) $formatted;

@@ -38,7 +38,6 @@ final class DoctrinePoolTest extends TestCase
         // the unit testsuite does not segfault. The test runs green under
         // php-fiber where extension_loaded('swoole') is false.
         if (extension_loaded('swoole')) {
-            /** @psalm-suppress UndefinedClass */
             if (SwooleCoroutine::getCid() === -1) {
                 $this->markTestSkipped('SwooleChannel requires a coroutine context; run under php-fiber.');
             }

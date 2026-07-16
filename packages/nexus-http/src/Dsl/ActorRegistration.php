@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Http\Dsl;
 
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Http\Actor\ActorMode;
-use Monadial\Nexus\Http\Actor\ActorRegistry;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 
 /**
@@ -24,11 +23,8 @@ final class ActorRegistration
 
     private ?MailboxConfig $mailbox = null;
 
-    public function __construct(
-        private readonly string $name,
-        private readonly ActorRegistry $registry,
-        ActorMode $initialMode,
-    ) {
+    public function __construct(private readonly string $name, ActorMode $initialMode)
+    {
         $this->mode = $initialMode;
     }
 
@@ -50,7 +46,6 @@ final class ActorRegistration
     public function mode(ActorMode $mode): self
     {
         $this->mode = $mode;
-        $this->registry->update($this);
 
         return $this;
     }
@@ -68,7 +63,6 @@ final class ActorRegistration
     public function withMailbox(MailboxConfig $config): self
     {
         $this->mailbox = $config;
-        $this->registry->update($this);
 
         return $this;
     }
@@ -76,7 +70,6 @@ final class ActorRegistration
     public function withSupervision(SupervisionStrategy $strategy): self
     {
         $this->supervision = $strategy;
-        $this->registry->update($this);
 
         return $this;
     }

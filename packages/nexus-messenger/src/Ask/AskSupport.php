@@ -95,7 +95,7 @@ final class AskSupport
      *
      * @throws \Monadial\Nexus\Messenger\Exception\AskCapacityExceededException when the registry is at capacity
      */
-    public function ask(object $message, Duration $timeout, string $correlationId): Future
+    public function ask(Duration $timeout, string $correlationId): Future
     {
         $slot = $this->system->runtime()->createFutureSlot();
         $this->registry->register($correlationId, $slot);
