@@ -95,8 +95,7 @@ final class ThreadQueueTransport implements WorkerTransport
             $emptyCount = 0;
 
             while (!$this->closed && !$this->stopping) {
-                /** @var Envelope|null $envelope */
-                $envelope = $queue->pop(0);
+                $envelope = self::envelopeOf($queue->pop(0));
 
                 if ($envelope !== null) {
                     $emptyCount = 0;
@@ -117,5 +116,16 @@ final class ThreadQueueTransport implements WorkerTransport
                 });
             }
         });
+    }
+
+    /**
+     * Thread\Queue transports mixed values; this worker's inbox only ever
+     * receives Envelope instances (see send()) — anything else reads as empty.
+     */
+    private static function envelopeOf(mixed $value): ?Envelope
+    {
+        return $value instanceof Envelope
+            ? $value
+            : null;
     }
 }

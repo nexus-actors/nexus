@@ -38,8 +38,6 @@ final class StubConnectionFactory implements ConnectionFactory
         }
 
         /**
-         * @psalm-suppress InternalClass
-         * @psalm-suppress InternalMethod
          * @var Connection $mock
          */
         $mock = (new Generator())->testDouble(

@@ -19,6 +19,8 @@ use Monadial\Nexus\Runtime\Duration;
  * @template C of object
  *
  * @psalm-api
+ *
+ * @psalm-import-type Params from DriverManager
  */
 final readonly class EntityBehaviorBuilder
 {
@@ -159,9 +161,7 @@ final readonly class EntityBehaviorBuilder
     }
 
     /**
-     * @param array<string, mixed> $params
-     *
-     * @psalm-suppress ArgumentTypeCoercion
+     * @param Params $params
      */
     public function withDirectConnection(array $params): self
     {

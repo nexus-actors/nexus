@@ -215,7 +215,6 @@ final class ActorSystem
      */
     public function stop(ActorRef $ref): void
     {
-        /** @psalm-suppress InvalidArgument — PoisonPill rides the user channel; the system-message path is type-erased by design. */
         $ref->tell(new PoisonPill());
     }
 
@@ -366,7 +365,6 @@ final class ActorSystem
      * @param Props<T> $props
      * @return array{ActorRef<T>, ActorCell<object>}
      * @throws ActorInitializationException
-     * @psalm-suppress MoreSpecificReturnType,LessSpecificReturnStatement
      */
     private function createActorCell(Props $props, string $name): array
     {
@@ -392,14 +390,21 @@ final class ActorSystem
 
         $this->spawnMessageLoop($childCell, $childMailbox);
 
+        $ref = $childCell->self();
+
+        // The children map is heterogeneous (one map, many message types), so the
+        // cell's template is erased to object at this storage boundary; the typed
+        // ActorRef<T> captured above remains the caller-facing handle.
+
         /** @var ActorCell<object> $childCell */
-        return [$childCell->self(), $childCell];
+        return [$ref, $childCell];
     }
 
     /**
      * Spawn a fiber that dequeues messages from the mailbox and processes them.
      *
-     * @param ActorCell<object> $cell
+     * @template C of object
+     * @param ActorCell<C> $cell
      * @param Mailbox<Envelope> $mailbox
      */
     private function spawnMessageLoop(ActorCell $cell, Mailbox $mailbox): void

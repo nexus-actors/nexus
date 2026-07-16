@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Logger;
 use Stringable;
 
 use function array_diff_key;
+use function array_filter;
 use function is_scalar;
 use function microtime;
 use function preg_replace_callback;
@@ -56,32 +57,32 @@ final readonly class Record
         $template = (string) $message;
         $consumed = [];
 
+        // PSR-3 §1.2: only scalar-ish values interpolate; everything else
+        // stays in the context untouched. Narrow once, up front, so the
+        // callback below works on a fully typed map.
+        $interpolatable = array_filter(
+            $context,
+            static fn(mixed $value): bool => is_scalar($value) || $value instanceof Stringable,
+        );
+
         $rendered = $context === []
             ? $template
             : (string) preg_replace_callback(
                 '/\{(\w+)\}/',
-                static function (array $m) use ($context, &$consumed): string {
+                static function (array $m) use ($interpolatable, &$consumed): string {
                     $key = $m[1];
 
-                    if (!isset($context[$key])) {
+                    if (!isset($interpolatable[$key])) {
                         return $m[0];
                     }
 
-                    /** @var mixed $value */
-                    $value = $context[$key];
+                    $consumed[$key] = true;
 
-                    if (is_scalar($value) || $value instanceof Stringable) {
-                        $consumed[$key] = true;
-
-                        return (string) $value;
-                    }
-
-                    return $m[0];
+                    return (string) $interpolatable[$key];
                 },
                 $template,
             );
 
-        /** @var array<string, true> $consumed */
         $remaining = $consumed === []
             ? $context
             : array_diff_key($context, $consumed);

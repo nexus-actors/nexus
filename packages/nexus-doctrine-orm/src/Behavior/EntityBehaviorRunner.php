@@ -21,11 +21,6 @@ use Throwable;
  */
 final class EntityBehaviorRunner
 {
-    /**
-     * @psalm-suppress InvalidArgument Psalm cannot infer generic U/S for Behavior::setup + withState from runtime types
-     * @psalm-suppress MixedArgumentTypeCoercion EntityReplayPolicy::resolve returns mixed|object at call site
-     * @psalm-suppress UnusedClosureParam ActorContext injected by ActorCell; not needed in setup closure
-     */
     public static function build(EntityBehaviorBuilder $builder): Behavior
     {
         if ($builder->emFactory === null) {
@@ -41,6 +36,10 @@ final class EntityBehaviorRunner
         $connectionRelease = $builder->connectionRelease;
 
         return Behavior::setup(
+            /**
+             * @param ActorContext<object> $_ctx
+             * @return Behavior<object>
+             */
             static function (ActorContext $_ctx) use ($builder, $emFactory, $connectionSource, $connectionRelease): Behavior {
                 $connection = ($connectionSource)();
                 $em = $emFactory->create($connection);
@@ -73,7 +72,6 @@ final class EntityBehaviorRunner
                             $state = $resolved;
                         }
 
-                        /** @var EntityEffect $effect */
                         $effect = ($builder->commandHandler)($innerCtx, $msg, $state);
 
                         if ($effect->immediateReplyRef !== null && $effect->immediateReplyMessage !== null) {

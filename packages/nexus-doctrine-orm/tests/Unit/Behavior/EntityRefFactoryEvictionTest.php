@@ -47,7 +47,6 @@ final class EntityRefFactoryEvictionTest extends TestCase
         $emFactory = $this->createStub(EntityManagerFactory::class);
         $conn = $this->createStub(Connection::class);
 
-        /** @psalm-suppress MissingClosureParamType, UnusedClosureParam */
         $factory = EntityRefFactory::for($spawner, stdClass::class)
             ->using($emFactory)
             ->withConnectionSource(static fn(): Connection => $conn)

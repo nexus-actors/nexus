@@ -49,7 +49,7 @@ final readonly class HandlerResolver
     ) {}
 
     /**
-     * @param class-string|Closure $handler
+     * @param string|Closure $handler Class name, 'Class::method' string, or Closure.
      */
     public function resolve(string|Closure $handler): ResolvedHandler
     {
@@ -96,7 +96,7 @@ final readonly class HandlerResolver
             $args = [];
 
             foreach ($params as $p) {
-                /** @psalm-suppress MixedAssignment */
+                /** @var mixed */
                 $args[] = $p->resolver->resolve($p, $ctx);
             }
 
@@ -143,8 +143,9 @@ final readonly class HandlerResolver
             $ctorParams,
         );
 
-        /** @psalm-suppress MixedMethodCall */
-        return new $class(...$args);
+        // Reflection-based construction keeps the dynamic class-string
+        // instantiation type-safe; this runs once per handler at compile time.
+        return new ReflectionClass($class)->newInstanceArgs($args);
     }
 
     /** @param list<ParamMetadata> $params */
@@ -166,7 +167,6 @@ final readonly class HandlerResolver
     private function postProcess(mixed $result): ResponseInterface
     {
         if ($result instanceof Future) {
-            /** @psalm-suppress MixedAssignment */
             $result = $result->await();
         }
 
@@ -221,6 +221,9 @@ final readonly class HandlerResolver
         $needsScope = $this->paramsNeedScope($invokeParams);
 
         $instance = $this->instantiate($class, $ctorParams);
+        // Bind the handler method ONCE at compile time; the per-request hot
+        // path then invokes a plain Closure (no dynamic method dispatch).
+        $callable = $methodRef->getClosure($instance);
         $argBuilder = $this->compileArgBuilder($invokeParams);
 
         $invoke =
@@ -231,16 +234,10 @@ final readonly class HandlerResolver
                 ServerRequestInterface $r,
                 PerRequestActorScope $scope,
                 array $pathParams,
-            ) use ($instance, $method, $argBuilder): ResponseInterface {
-                $args = $argBuilder($r, $scope, $pathParams);
-
-                /** @psalm-suppress MixedMethodCall, MixedAssignment */
-                $result = $instance->{$method}(...$args);
-
-                return $this->postProcess($result);
+            ) use ($callable, $argBuilder): ResponseInterface {
+                return $this->postProcess($callable(...$argBuilder($r, $scope, $pathParams)));
             };
 
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         return new ResolvedHandler($invoke, true, $needsScope);
     }
 
@@ -260,15 +257,9 @@ final readonly class HandlerResolver
                 PerRequestActorScope $scope,
                 array $pathParams,
             ) use ($closure, $argBuilder): ResponseInterface {
-                $args = $argBuilder($r, $scope, $pathParams);
-
-                /** @psalm-suppress MixedAssignment */
-                $result = $closure(...$args);
-
-                return $this->postProcess($result);
+                return $this->postProcess($closure(...$argBuilder($r, $scope, $pathParams)));
             };
 
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         return new ResolvedHandler($invoke, true, $needsScope);
     }
 

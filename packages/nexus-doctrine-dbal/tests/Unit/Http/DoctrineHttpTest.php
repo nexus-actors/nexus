@@ -36,7 +36,6 @@ final class DoctrineHttpTest extends TestCase
         $updated = DoctrineHttp::install(registry: $registry, middlewares: $middlewares, connPool: $pool);
 
         // Behavioral: compiling a Connection-typed parameter must succeed
-        /** @psalm-suppress UnusedClosureParam */
         $param = (new ReflectionFunction(static function (Connection $c): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 
@@ -83,7 +82,6 @@ final class DoctrineHttpTest extends TestCase
         DoctrineHttp::install(registry: $registry, middlewares: $middlewares, connPool: $pool);
 
         // The original registry must remain empty (immutable contract)
-        /** @psalm-suppress UnusedClosureParam */
         $param = (new ReflectionFunction(static function (Connection $c): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 

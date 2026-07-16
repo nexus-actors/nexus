@@ -15,7 +15,6 @@ final readonly class CaptureFixtureMsg {}
 /** @implements ActorHandler<CaptureFixtureMsg> */
 final readonly class CaptureFixtureHandler implements ActorHandler
 {
-    /** @psalm-suppress MoreSpecificReturnType, LessSpecificReturnStatement */
     #[Override]
     public function handle(ActorContext $ctx, object $message): Behavior
     {
@@ -30,7 +29,6 @@ final class ClosureCaptureFixture
     {
         $name = 'test';
 
-        /** @psalm-suppress InvalidArgument, UnusedVariable */
         $props = Props::fromFactory(static function () use ($name): ActorHandler {
             echo $name;
 
@@ -43,7 +41,6 @@ final class ClosureCaptureFixture
     {
         $counter = 0;
 
-        /** @psalm-suppress InvalidArgument, UnusedVariable */
         $props = Props::fromFactory(static function () use (&$counter): ActorHandler {
             $counter++;
 
@@ -54,7 +51,6 @@ final class ClosureCaptureFixture
     /** Good: arrow function — implicit value capture, always safe. */
     public function factoryWithArrowFunction(): void
     {
-        /** @psalm-suppress InvalidArgument, UnusedVariable */
         $props = Props::fromFactory(static fn(): ActorHandler => new CaptureFixtureHandler());
     }
 }

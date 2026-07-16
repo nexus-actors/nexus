@@ -39,7 +39,6 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function receiveCreatesBehaviorWithReceiveTag(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
         $behavior = Behavior::receive($handler);
 
@@ -50,9 +49,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function withStateCreatesBehaviorWithStateTag(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(42, $handler);
 
         self::assertInstanceOf(WithStateBehavior::class, $behavior);
@@ -63,7 +60,6 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function setupCreatesBehaviorWithSetupTag(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $factory = static fn(ActorContext $ctx): Behavior => Behavior::same();
         $behavior = Behavior::setup($factory);
 
@@ -110,9 +106,7 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalReturnsNewBehaviorWithSignalHandler(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();
-        /** @psalm-suppress UnusedClosureParam */
         $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
         $original = Behavior::receive($handler);
@@ -133,12 +127,9 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function onSignalPreservesInitialState(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $handler = static fn(ActorContext $ctx, object $msg, int $state): BehaviorWithState => BehaviorWithState::same();
-        /** @psalm-suppress UnusedClosureParam */
         $signalHandler = static fn(ActorContext $ctx, Signal $sig): Behavior => Behavior::stopped();
 
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         $behavior = Behavior::withState(99, $handler)->onSignal($signalHandler);
 
         self::assertInstanceOf(WithStateBehavior::class, $behavior);
@@ -160,7 +151,6 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function withTimersCreatesBehaviorWithTimersTag(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $factory = static fn(object $timers): Behavior => Behavior::same();
         $behavior = Behavior::withTimers($factory);
 
@@ -171,7 +161,6 @@ final class BehaviorTest extends TestCase
     #[Test]
     public function withStashCreatesBehaviorWithStashTag(): void
     {
-        /** @psalm-suppress UnusedClosureParam */
         $factory = static fn(object $stash): Behavior => Behavior::same();
         $behavior = Behavior::withStash(100, $factory);
 

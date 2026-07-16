@@ -62,7 +62,6 @@ final class FrameIngress
         private readonly Meter $meter = new NoopMeter(),
     ) {
         /**
-         * @psalm-suppress MixedPropertyTypeCoercion The callable-to-Closure coercion via first-class
          *                                           callable syntax is safe here; Psalm cannot infer
          *                                           the specific Closure(Frame): void signature.
          */

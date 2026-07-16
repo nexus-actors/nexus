@@ -80,13 +80,11 @@ final class NexusLogger
         }
 
         $handlers = $this->handlers;
-        /** @psalm-suppress InvalidArgument — Props::fromStatefulFactory accepts the LogActor template params */
         $props = Props::fromStatefulFactory(static fn(): LogActor => new LogActor($handlers));
         $name = 'nexus-logger-' . bin2hex(random_bytes(4));
 
         $ref = $this->system->spawn($props, $name);
 
-        /** @psalm-suppress ArgumentTypeCoercion — ActorRef<object> from spawn is the wire type; the sink only receives Record messages by construction. */
         return new Logger($ref, $this->channel, $this->minLevel, $this->processors);
     }
 }

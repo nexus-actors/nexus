@@ -136,7 +136,7 @@ final readonly class MsgpackReader
 
         $map = [];
 
-        /** @psalm-suppress MixedAssignment Validated entry-by-entry below. */
+        /** @var mixed $v Msgpack wire boundary: untyped until validated entry-by-entry below. */
         foreach ($value as $k => $v) {
             if (!is_string($k) || !is_string($v)) {
                 throw new MessageDeserializationException(
@@ -164,7 +164,7 @@ final readonly class MsgpackReader
 
         $list = [];
 
-        /** @psalm-suppress MixedAssignment Each entry is validated by the caller. */
+        /** @var mixed $entry Msgpack wire boundary: untyped; each entry is validated by the caller. */
         foreach ($value as $entry) {
             if (!is_array($entry)) {
                 throw new MessageDeserializationException($this->type, "Field '{$key}' must be a list of maps.");

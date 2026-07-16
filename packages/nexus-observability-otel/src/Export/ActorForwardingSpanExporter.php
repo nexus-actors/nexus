@@ -9,6 +9,7 @@ use Monadial\Nexus\Observability\Metric\NoopMeter;
 use OpenTelemetry\SDK\Common\Future\CancellationInterface;
 use OpenTelemetry\SDK\Common\Future\CompletedFuture;
 use OpenTelemetry\SDK\Common\Future\FutureInterface;
+use OpenTelemetry\SDK\Trace\SpanDataInterface;
 use OpenTelemetry\SDK\Trace\SpanExporterInterface;
 use Override;
 
@@ -25,8 +26,10 @@ use function iterator_to_array;
 // phpcs:ignore SlevomatCodingStandard.Classes.ReadonlyClass.ClassCanBeReadonly -- ForwardsBatchesToActor holds a mutable $buffer; the class cannot be readonly
 final class ActorForwardingSpanExporter implements SpanExporterInterface
 {
-
+    // phpcs:disable SlevomatCodingStandard.Classes.TraitUseSpacing -- PHP-CS-Fixer strips the blank line above the @use docblock
+    /** @use ForwardsBatchesToActor<SpanDataInterface> */
     use ForwardsBatchesToActor;
+    // phpcs:enable SlevomatCodingStandard.Classes.TraitUseSpacing
 
     public function __construct(
         private readonly SpanExporterInterface $inner,
@@ -41,18 +44,13 @@ final class ActorForwardingSpanExporter implements SpanExporterInterface
         return new CompletedFuture(true);
     }
 
-    /**
-     * @psalm-suppress MixedArgument buffered batches are opaque SDK payload data by design
-     */
     #[Override]
     public function shutdown(?CancellationInterface $cancellation = null): bool
     {
         if ($this->isBuffering()) {
-            $this->flushBufferSynchronously(function (array $buffered) use ($cancellation): void {
-                foreach ($buffered as $message) {
-                    $this->inner->export($message->batch, $cancellation)->await();
-                }
-            });
+            foreach ($this->takeBuffer() as $batch) {
+                $this->inner->export($batch, $cancellation)->await();
+            }
 
             return true;
         }
@@ -79,18 +77,16 @@ final class ActorForwardingSpanExporter implements SpanExporterInterface
     }
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<SpanDataInterface> $batch
      */
     #[Override]
-    private function wrap(array $batch): object
+    private function wrap(array $batch): ExportSpans
     {
         return new ExportSpans($batch);
     }
 
     /**
-     * @param array<array-key, mixed> $batch
-     *
-     * @psalm-suppress PossiblyInvalidArgument batch is opaque SDK payload data by design
+     * @param list<SpanDataInterface> $batch
      */
     #[Override]
     private function exportDirect(array $batch): void

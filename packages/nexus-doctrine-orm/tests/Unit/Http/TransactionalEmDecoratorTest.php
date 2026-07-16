@@ -71,7 +71,6 @@ final class TransactionalEmDecoratorTest extends TestCase
         (new TransactionalEmDecorator($handler))->handle((new Psr17Factory())->createServerRequest('GET', '/'));
     }
 
-    /** @psalm-suppress ArgumentTypeCoercion */
     private function poolReturning(EntityManagerInterface $em): EntityManagerPool
     {
         $emFactory = new StubEntityManagerFactory();

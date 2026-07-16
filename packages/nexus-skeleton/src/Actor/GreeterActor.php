@@ -14,6 +14,8 @@ use Override;
 
 /**
  * @implements ActorHandler<object>
+ *
+ * @psalm-api spawned by the Kernel via #[AsActor] autoconfiguration
  */
 #[AsActor('greeter')]
 final readonly class GreeterActor implements ActorHandler

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Core\Actor;
 
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Async\FutureSlot;
 use Monadial\Nexus\Runtime\Duration;
@@ -27,7 +28,7 @@ final readonly class FutureRef implements ActorRef
 {
     public function __construct(private ActorPath $path, private FutureSlot $slot) {}
 
-    /** @param T $message */
+    /** @param T|SystemMessage $message */
     #[Override]
     public function tell(object $message): void
     {

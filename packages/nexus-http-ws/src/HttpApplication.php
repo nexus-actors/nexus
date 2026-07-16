@@ -63,7 +63,6 @@ final readonly class HttpApplication implements Application
     #[Override]
     public function group(string $prefix, Closure $register): RouteGroup
     {
-        /** @psalm-suppress MixedArgumentTypeCoercion */
         return $this->http->group($prefix, $register);
     }
 

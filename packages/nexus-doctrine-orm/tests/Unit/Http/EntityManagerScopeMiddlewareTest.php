@@ -55,7 +55,6 @@ final class EntityManagerScopeMiddlewareTest extends TestCase
         self::assertSame(0, $pool->stats()->inUse);
     }
 
-    /** @psalm-suppress ArgumentTypeCoercion */
     private function pool(): EntityManagerPool
     {
         $em = $this->createMock(EntityManagerInterface::class);

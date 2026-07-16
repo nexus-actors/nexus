@@ -9,8 +9,10 @@ use MessagePack\Packer;
 use UnexpectedValueException;
 
 use function extension_loaded;
+use function function_exists;
 use function get_debug_type;
 use function is_array;
+use function is_string;
 use function sprintf;
 
 /**
@@ -50,9 +52,18 @@ final readonly class MsgpackCodec
      */
     public function pack(array $data): string
     {
-        if ($this->useExtension) {
-            /** @psalm-suppress UndefinedFunction,MixedReturnStatement */
-            return msgpack_pack($data);
+        // The function_exists() guard is what lets Psalm analyze the call without
+        // ext-msgpack stubs; at runtime it is redundant with useExtension except
+        // when a caller forces useExtension=true without the extension loaded, in
+        // which case the wire-compatible pure backend takes over instead of a
+        // fatal undefined-function error.
+        if ($this->useExtension && function_exists('msgpack_pack')) {
+            /** @var mixed $packed untyped ext boundary — validated by the is_string() guard below */
+            $packed = msgpack_pack($data);
+
+            if (is_string($packed)) {
+                return $packed;
+            }
         }
 
         // rybakit defaults to FORCE_FLOAT64 — floats round-trip bit-exact
@@ -71,17 +82,20 @@ final readonly class MsgpackCodec
      */
     public function unpack(string $bytes): array
     {
-        if ($this->useExtension) {
+        // The function_exists() guard mirrors pack(): it lets Psalm analyze the
+        // call without ext-msgpack stubs and routes to the pure backend when the
+        // extension is unavailable.
+        if ($this->useExtension && function_exists('msgpack_unpack')) {
             // The @ matters: ext-msgpack emits a PHP warning (php_msgpack_unserialize)
             // on malformed or trailing bytes instead of failing cleanly. This method
             // decodes untrusted network input, so garbage must surface only through the
             // is_array() check below — never as log noise, and never as a Throwable
             // under a warning-to-exception error handler.
-            /** @psalm-suppress UndefinedFunction */
+            /** @var mixed $result untyped ext boundary — validated by the is_array() guard below */
             $result = @msgpack_unpack($bytes);
         } else {
             $unpacker = new BufferUnpacker($bytes);
-            /** @psalm-suppress MixedAssignment */
+            /** @var mixed $result unpack() decodes untrusted bytes — validated by the is_array() guard below */
             $result = $unpacker->unpack();
 
             if ($unpacker->hasRemaining()) {

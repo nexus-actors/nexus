@@ -16,7 +16,6 @@ final class RecordingHistogram implements Histogram
 
     /**
      * @param array<string, scalar> $attributes
-     * @psalm-suppress InvalidOperand
      */
     #[Override]
     public function record(int|float $value, array $attributes = []): void

@@ -22,6 +22,10 @@ grumphp:
                 - '/tests/'
                 - '/bin/'
                 - '/examples/'
+                # replacement ext stubs are inputs to Psalm, not analysis targets
+                - '/stubs/'
+                # skeleton's App\ namespace only autoloads in full-project runs (CI)
+                - '/nexus-skeleton/'
         phpunit:
             testsuite: unit
             always_execute: true

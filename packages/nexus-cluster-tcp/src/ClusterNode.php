@@ -49,6 +49,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\Swoole\SwooleMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextExtractor;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextInjector;
+use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
@@ -268,9 +269,7 @@ final class ClusterNode
         $selfNode = null;
 
         /**
-         * @psalm-suppress TypeDoesNotContainType Psalm cannot track by-ref mutation of $selfNode
          *                 across the closure boundary; the variable is always set before first call.
-         * @psalm-suppress MixedMethodCall Same root cause: Psalm types $selfNode as null inside the closure.
          */
         $sender = static function (string $prefix, Frame $frame) use (&$selfNode): void {
             if ($selfNode !== null) {
@@ -449,12 +448,12 @@ final class ClusterNode
         /** @var ClusterView|null $captured */
         $captured = null;
 
-        /**
-         * @psalm-suppress InvalidArgument Behavior::receive generic constraint; the closure
-         *                 handles a heterogeneous reply (ClusterView) from the membership actor.
-         */
         $viewBehavior = Behavior::receive(
-            static function ($ctx, object $msg) use (&$captured): Behavior {
+            /**
+             * @param ActorContext<object> $_ctx
+             * @return Behavior<object>
+             */
+            static function (ActorContext $_ctx, object $msg) use (&$captured): Behavior {
                 if ($msg instanceof ClusterView) {
                     $captured = $msg;
                 }
@@ -1305,10 +1304,6 @@ final class ClusterNode
      * Auto-select the transport based on available extensions and runtime type.
      * Override via the $transport parameter in boot() for tests.
      *
-     * @psalm-suppress UndefinedClass  SwooleMeshTransport / SwooleRuntime are optional; only loaded with ext-swoole.
-     * @psalm-suppress InvalidArgument Same reason: SwooleRuntime class string unavailable without ext-swoole.
-     */
-    /**
      * @param (Closure(Throwable): void)|null $onHandlerError
      */
     private static function selectTransport(

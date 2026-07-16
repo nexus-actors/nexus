@@ -330,7 +330,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -377,7 +376,6 @@ final class MembershipServiceTest extends TestCase
             $t1->newView,
             $t1->newSuspectSince,
             $t1->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -408,14 +406,7 @@ final class MembershipServiceTest extends TestCase
             registrations: [],
         );
 
-        $t1 = $service->applyGossip(
-            $t0->newView,
-            $t0->newSuspectSince,
-            $t0->newSelfIncarnation,
-            $this->peer,
-            $payload,
-            $now,
-        );
+        $t1 = $service->applyGossip($t0->newView, $t0->newSuspectSince, $t0->newSelfIncarnation, $payload, $now);
 
         self::assertTrue($t1->newView->has($third));
         self::assertSame(MemberStatus::Suspect, $t1->newView->members[$third->toPathPrefix()]->status);
@@ -448,7 +439,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -995,7 +985,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -1031,7 +1020,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation, // 1
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -1066,7 +1054,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );
@@ -1101,7 +1088,6 @@ final class MembershipServiceTest extends TestCase
             $t0->newView,
             $t0->newSuspectSince,
             $t0->newSelfIncarnation,
-            $this->peer,
             $payload,
             $this->clock->now(),
         );

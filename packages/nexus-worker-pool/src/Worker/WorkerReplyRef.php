@@ -8,6 +8,7 @@ use Closure;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\WorkerPool\Protocol\WorkerAskReply;
@@ -35,7 +36,7 @@ final readonly class WorkerReplyRef implements ActorRef
         private Closure $onReply,
     ) {}
 
-    /** @param T $message */
+    /** @param T|SystemMessage $message */
     #[Override]
     public function tell(object $message): void
     {

@@ -17,6 +17,7 @@ use Monadial\Nexus\Messenger\Console\Tests\Unit\Fixture\PingMessage;
 use Monadial\Nexus\Messenger\Console\Tests\Unit\Fixture\PongMessage;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
@@ -45,7 +46,7 @@ final class ConsumeCommandTest extends TestCase
         // falls into the plain tell() branch which acks the envelope and
         // increments the processed count — so the watchdog receives
         // MessagesProcessed and fires graceful shutdown after 3 messages.
-        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+        $router = new MapMessageRouter(Route::to(stdClass::class, new DeadLetterRef()));
 
         $command = new ConsumeCommand(
             new FiberRuntime(),
@@ -72,7 +73,7 @@ final class ConsumeCommandTest extends TestCase
         $transport->send(new Envelope(new stdClass()));
         $transport->send(new Envelope(new stdClass()));
 
-        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+        $router = new MapMessageRouter(Route::to(stdClass::class, new DeadLetterRef()));
 
         $command = new ConsumeCommand(
             new FiberRuntime(),
@@ -100,7 +101,7 @@ final class ConsumeCommandTest extends TestCase
         $transport = new InMemoryTransport();
         $transport->send(new Envelope(new stdClass()));
 
-        $router = new MapMessageRouter([stdClass::class => new DeadLetterRef()]);
+        $router = new MapMessageRouter(Route::to(stdClass::class, new DeadLetterRef()));
 
         $command = new ConsumeCommand(
             new FiberRuntime(),
@@ -143,7 +144,7 @@ final class ConsumeCommandTest extends TestCase
                     'handler',
                 );
 
-                return new MapMessageRouter([stdClass::class => $ref]);
+                return new MapMessageRouter(Route::to(stdClass::class, $ref));
             }),
         );
 
@@ -188,7 +189,7 @@ final class ConsumeCommandTest extends TestCase
                     'responder',
                 );
 
-                return new MapMessageRouter([PingMessage::class => $ref]);
+                return new MapMessageRouter(Route::to(PingMessage::class, $ref));
             }),
             replySenders: new MapReplySenderLocator(['replies' => $replyTransport]),
         );
@@ -242,7 +243,7 @@ final class ConsumeCommandTest extends TestCase
                     'handler',
                 );
 
-                return new MapMessageRouter([$routableMsgClass => $ref]);
+                return new MapMessageRouter(Route::to($routableMsgClass, $ref));
             }),
         );
 

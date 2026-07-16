@@ -12,14 +12,12 @@ use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
-use function dirname;
-
 final class KernelBootTest extends TestCase
 {
     #[Test]
     public function bootsTheContainerAndAutoSpawnsAttributedActors(): void
     {
-        $kernel = new Kernel(dirname(__DIR__), 'test-app');
+        $kernel = new Kernel('test-app');
         $system = $kernel->boot();
 
         $ref = $kernel->ref('greeter') ?? self::fail('greeter actor was not spawned');

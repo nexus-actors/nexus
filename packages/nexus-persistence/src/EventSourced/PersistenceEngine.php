@@ -32,6 +32,8 @@ use function is_object;
  *
  * On each message, the engine delegates to the user's commandHandler,
  * interprets the returned Effect, and handles persistence + side effects.
+ *
+ * @psalm-type EngineState = array{sequenceNr: int, state: object}
  */
 final class PersistenceEngine
 {
@@ -70,95 +72,130 @@ final class PersistenceEngine
         $retention = $retentionPolicy ?? RetentionPolicy::none();
         $filter = $replayFilter ?? ReplayFilter::off();
 
-        /** @psalm-suppress UnusedClosureParam, InvalidArgument */
-        return Behavior::setup(static function (ActorContext $_ctx) use (
-            $persistenceId,
-            $emptyState,
-            $commandHandler,
-            $eventHandler,
-            $eventStore,
-            $snapshotStore,
-            $strategy,
-            $retention,
-            $writerId,
-            $filter,
-        ): Behavior {
-            // === Recovery Phase ===
-            $state = $emptyState;
-            $sequenceNr = 0;
+        return Behavior::setup(
+            /**
+             * @param ActorContext<object> $_ctx
+             * @return Behavior<object>
+             */
+            static function (ActorContext $_ctx) use (
+                $persistenceId,
+                $emptyState,
+                $commandHandler,
+                $eventHandler,
+                $eventStore,
+                $snapshotStore,
+                $strategy,
+                $retention,
+                $writerId,
+                $filter,
+            ): Behavior {
+                // === Recovery Phase ===
+                $state = $emptyState;
+                $sequenceNr = 0;
 
-            // 1. Load snapshot (if available)
-            if ($snapshotStore !== null) {
-                $snapshot = $snapshotStore->load($persistenceId);
+                // 1. Load snapshot (if available)
+                if ($snapshotStore !== null) {
+                    $snapshot = $snapshotStore->load($persistenceId);
 
-                if ($snapshot !== null) {
-                    $state = $snapshot->state;
-                    $sequenceNr = $snapshot->sequenceNr;
+                    if ($snapshot !== null) {
+                        /**
+                         * Snapshots stored under this PersistenceId hold states
+                         * produced by the S-typed event handler, so the stored
+                         * object is always the entity's state type S.
+                         *
+                         * @var S $snapshotState
+                         */
+                        $snapshotState = $snapshot->state;
+                        $state = $snapshotState;
+                        $sequenceNr = $snapshot->sequenceNr;
+                    }
                 }
-            }
 
-            // 2. Replay events from snapshot's sequenceNr + 1
-            $events = $eventStore->load($persistenceId, $sequenceNr + 1);
+                // 2. Replay events from snapshot's sequenceNr + 1
+                $events = $eventStore->load($persistenceId, $sequenceNr + 1);
 
-            // 3. Apply replay filter for single-writer violation detection
-            $filteredEvents = $filter->filter($persistenceId, $events, new NullLogger());
+                // 3. Apply replay filter for single-writer violation detection
+                $filteredEvents = $filter->filter($persistenceId, $events, new NullLogger());
 
-            foreach ($filteredEvents as $envelope) {
-                /** @psalm-suppress InvalidArgument */
-                $state = $eventHandler($state, $envelope->event);
-                $sequenceNr = $envelope->sequenceNr;
-            }
+                foreach ($filteredEvents as $envelope) {
+                    /**
+                     * Events stored under this PersistenceId were produced by
+                     * the E-typed command handler, so each stored event is the
+                     * entity's event type E.
+                     *
+                     * @var E $event
+                     */
+                    $event = $envelope->event;
+                    $state = $eventHandler($state, $event);
+                    $sequenceNr = $envelope->sequenceNr;
+                }
 
-            // === Command Processing Phase ===
+                // === Command Processing Phase ===
 
-            /** @psalm-suppress InvalidArgument */
-            return Behavior::withState(
-                ['state' => $state, 'sequenceNr' => $sequenceNr],
-                static function (ActorContext $ctx, object $msg, mixed $data) use (
-                    $persistenceId,
-                    $commandHandler,
-                    $eventHandler,
-                    $eventStore,
-                    $snapshotStore,
-                    $strategy,
-                    $retention,
-                    $writerId,
-                ): BehaviorWithState {
-                    /** @var array{state: object, sequenceNr: int} $data */
-                    $state = $data['state'];
-                    $sequenceNr = $data['sequenceNr'];
+                return Behavior::withState(
+                    ['state' => $state, 'sequenceNr' => $sequenceNr],
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @param EngineState $data
+                     * @return BehaviorWithState<object, EngineState>
+                     */
+                    static function (ActorContext $ctx, object $msg, array $data) use (
+                        $persistenceId,
+                        $commandHandler,
+                        $eventHandler,
+                        $eventStore,
+                        $snapshotStore,
+                        $strategy,
+                        $retention,
+                        $writerId,
+                    ): BehaviorWithState {
+                        /**
+                         * The engine only ever stores states recovered for this
+                         * PersistenceId or produced by the S-typed event handler,
+                         * so the stored object is always the entity's state type S.
+                         *
+                         * @var S $state
+                         */
+                        $state = $data['state'];
+                        $sequenceNr = $data['sequenceNr'];
 
-                    /** @psalm-suppress InvalidArgument */
-                    $effect = $commandHandler($state, $ctx, $msg);
+                        $effect = $commandHandler($state, $ctx, $msg);
 
-                    return match ($effect->type) {
-                        /** @psalm-suppress MixedArgument State loses type through closure capture */
-                        EffectType::Persist => self::handlePersist(
-                            $effect,
-                            $state,
-                            $sequenceNr,
-                            $persistenceId,
-                            $eventHandler,
-                            $eventStore,
-                            $snapshotStore,
-                            $strategy,
-                            $retention,
-                            $writerId,
-                        ),
-                        EffectType::None => BehaviorWithState::same(),
-                        EffectType::Unhandled => BehaviorWithState::same(),
-                        EffectType::Stash => self::handleStash($ctx),
-                        EffectType::Stop => BehaviorWithState::stopped(),
-                        EffectType::Reply => self::handleReply($effect),
-                    };
-                },
-            );
-        });
+                        return match ($effect->type) {
+                            EffectType::Persist => self::handlePersist(
+                                $effect,
+                                $state,
+                                $sequenceNr,
+                                $persistenceId,
+                                $eventHandler,
+                                $eventStore,
+                                $snapshotStore,
+                                $strategy,
+                                $retention,
+                                $writerId,
+                            ),
+                            EffectType::None => self::sameState(),
+                            EffectType::Unhandled => self::sameState(),
+                            EffectType::Stash => self::handleStash($ctx),
+                            EffectType::Stop => self::stoppedState(),
+                            EffectType::Reply => self::handleReply($effect),
+                        };
+                    },
+                );
+            },
+        );
     }
 
     /**
      * Handle a Persist effect: build envelopes, persist events, update state,
      * check snapshot strategy, apply retention, execute side effects.
+     *
+     * @template S of object
+     * @template E of object
+     *
+     * @param S $state
+     * @param Closure(S, E): S $eventHandler
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handlePersist(
         Effect $effect,
@@ -196,14 +233,18 @@ final class PersistenceEngine
         $lastEvent = null;
 
         foreach ($effect->events as $event) {
-            /** @psalm-suppress MixedAssignment eventHandler returns generic S but Psalm sees mixed */
+            /**
+             * Effect::persist() erases the event type, but the events were
+             * produced by the E-typed command handler for this entity.
+             *
+             * @var E $event
+             */
             $newState = $eventHandler($newState, $event);
             $lastEvent = $event;
         }
 
         // 4. Check snapshot strategy and save snapshot if triggered
 
-        /** @psalm-suppress MixedArgument $newState is object but Psalm loses type through closure */
         if (
             $lastEvent !== null
             && $snapshotStore !== null
@@ -230,21 +271,29 @@ final class PersistenceEngine
         }
 
         // 7. Return with updated state and sequenceNr
-        return BehaviorWithState::next(['state' => $newState, 'sequenceNr' => $newSeqNr]);
+
+        /** @var EngineState $nextData Widen state back to the engine's object-typed shape */
+        $nextData = ['state' => $newState, 'sequenceNr' => $newSeqNr];
+
+        return BehaviorWithState::next($nextData);
     }
 
     /**
      * Handle a Stash effect: stash the current message in the actor context.
+     *
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handleStash(ActorContext $ctx): BehaviorWithState
     {
         $ctx->stash();
 
-        return BehaviorWithState::same();
+        return self::sameState();
     }
 
     /**
      * Handle a Reply effect: send the reply message to the reply target.
+     *
+     * @return BehaviorWithState<object, EngineState>
      */
     private static function handleReply(Effect $effect): BehaviorWithState
     {
@@ -252,6 +301,30 @@ final class PersistenceEngine
         assert(is_object($effect->replyMsg));
         $effect->replyTo->tell($effect->replyMsg);
 
+        return self::sameState();
+    }
+
+    /**
+     * BehaviorWithState::same() resolves the class templates to their bounds
+     * (object, mixed) in a static-call context, so pin the keep-current marker
+     * to the engine's state shape.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function sameState(): BehaviorWithState
+    {
+        /** @var BehaviorWithState<object, EngineState> */
         return BehaviorWithState::same();
+    }
+
+    /**
+     * As sameState(), for the stop marker.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function stoppedState(): BehaviorWithState
+    {
+        /** @var BehaviorWithState<object, EngineState> */
+        return BehaviorWithState::stopped();
     }
 }

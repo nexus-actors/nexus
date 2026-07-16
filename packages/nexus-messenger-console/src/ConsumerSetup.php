@@ -20,7 +20,7 @@ use Monadial\Nexus\Messenger\Routing\MessageRouter;
  *     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
  *         $ref = $system->spawn(Props::fromFactory(fn() => new OrderProcessor()), 'orders');
  *
- *         return new MapMessageRouter([OrderPlaced::class => $ref]);
+ *         return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
  *     }),
  * );
  * ```

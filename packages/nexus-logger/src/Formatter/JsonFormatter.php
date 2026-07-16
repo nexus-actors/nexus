@@ -9,6 +9,7 @@ use Monadial\Nexus\Logger\Formatter;
 use Monadial\Nexus\Logger\Record;
 use Override;
 
+use function fmod;
 use function json_encode;
 use function sprintf;
 
@@ -23,13 +24,10 @@ use const JSON_UNESCAPED_UNICODE;
  */
 final class JsonFormatter implements Formatter
 {
-    /**
-     * @psalm-suppress InvalidOperand — int/float arithmetic on millisecond fraction.
-     */
     #[Override]
     public function format(Record $record): string
     {
-        $millis = (int) (($record->timestamp - (int) $record->timestamp) * 1000);
+        $millis = (int) (fmod($record->timestamp, 1.0) * 1000.0);
         $iso = (new DateTimeImmutable('@' . (int) $record->timestamp))->format('Y-m-d\\TH:i:s');
         $payload = [
             'channel' => $record->channel,

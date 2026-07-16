@@ -57,11 +57,6 @@ final class SwooleThreadServer
         // init_arguments.
         $shutdownSignal = new Atomic(0);
 
-        /**
-         * @psalm-suppress InvalidArgument Thread\ArrayList stubs constrain
-         * offsetSet to ArrayAccess values; Swoole 6 accepts any thread-safe
-         * type including Queue.
-         */
         $initArguments = static function () use ($threads, $config, $shutdownSignal): array {
             $directory = new Map();
             $queues = new ArrayList();
@@ -104,10 +99,7 @@ final class SwooleThreadServer
                     $queues = [];
 
                     for ($i = 0; $i < $totalThreads; $i++) {
-                        /**
-                         * @psalm-suppress InvalidArgument
-                         * @var Queue $q
-                         */
+                        /** @var Queue $q */
                         $q = $queueList[$i];
                         $queues[$i] = $q;
                     }

@@ -9,14 +9,14 @@ use Doctrine\ORM\EntityNotFoundException;
 use Override;
 
 /**
- * @template T of object
- * @template-implements EntityReplayPolicy<T>
  * @psalm-api
  */
 final readonly class FailIfMissing implements EntityReplayPolicy
 {
     /**
-     * @psalm-suppress InvalidReturnType, InvalidReturnStatement
+     * @template T of object
+     * @param class-string<T> $entityClass
+     * @return T
      */
     #[Override]
     public function resolve(EntityManagerInterface $em, string $entityClass, mixed $id): object

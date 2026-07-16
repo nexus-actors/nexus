@@ -99,8 +99,6 @@ final class PhiAccrualDetector
     /**
      * Suspicion level for `$peer` at `$now`. Returns 0.0 for an unknown peer or
      * before at least one interval has been observed.
-     *
-     * @psalm-suppress InvalidOperand int/float mixing in the statistical math is intentional.
      */
     public function phi(string $peer, DateTimeImmutable $now): float
     {
@@ -109,12 +107,12 @@ final class PhiAccrualDetector
         }
 
         $window = $this->windows[$peer] ?? [];
-        $sampleCount = count($window);
 
-        if ($sampleCount === 0) {
+        if ($window === []) {
             return 0.0;
         }
 
+        $sampleCount = (float) count($window);
         $mean = array_sum($window) / $sampleCount;
 
         $variance = 0.0;
@@ -156,7 +154,6 @@ final class PhiAccrualDetector
      * P(Z > z) for the standard normal, computed directly to stay accurate and
      * strictly positive in the far tail.
      *
-     * @psalm-suppress InvalidOperand int/float mixing in the statistical math is intentional.
      */
     private static function tailProbability(float $z): float
     {

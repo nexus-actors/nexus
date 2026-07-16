@@ -19,7 +19,7 @@ use Psr\Http\Message\ServerRequestInterface;
 final readonly class ResolvedHandler
 {
     /**
-     * @param Closure(ServerRequestInterface, PerRequestActorScope, array<string, string>): (ResponseInterface|Future) $invoke
+     * @param Closure(ServerRequestInterface, PerRequestActorScope, array<string, string>): (ResponseInterface|Future<ResponseInterface>) $invoke
      */
     public function __construct(public Closure $invoke, public bool $returnsResponse, public bool $needsRequestScope) {}
 }

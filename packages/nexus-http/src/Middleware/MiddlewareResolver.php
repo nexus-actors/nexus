@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Middleware;
 
+use LogicException;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Server\MiddlewareInterface;
+use ReflectionClass;
+
+use function is_subclass_of;
 
 /**
  * @psalm-api
@@ -19,7 +23,6 @@ final readonly class MiddlewareResolver
 {
     public function __construct(private ?ContainerInterface $container) {}
 
-    /** @param class-string $class */
     public function resolve(string $class): MiddlewareInterface
     {
         if ($this->container !== null && $this->container->has($class)) {
@@ -27,10 +30,12 @@ final readonly class MiddlewareResolver
             return $this->container->get($class);
         }
 
-        /**
-         * @var MiddlewareInterface
-         * @psalm-suppress MixedMethodCall
-         */
-        return new $class();
+        if (!is_subclass_of($class, MiddlewareInterface::class)) {
+            throw new LogicException("{$class} must implement " . MiddlewareInterface::class);
+        }
+
+        // Reflection-based construction keeps the dynamic class-string
+        // instantiation type-safe; results are cached by the callers.
+        return new ReflectionClass($class)->newInstance();
     }
 }

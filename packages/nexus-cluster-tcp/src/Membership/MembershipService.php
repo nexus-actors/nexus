@@ -155,13 +155,11 @@ final readonly class MembershipService
      * our own record is only ever changed here (or at startup).
      *
      * @param array<string, DateTimeImmutable> $suspectSince
-     * @psalm-suppress UnusedParam $peer retained for API symmetry; gossip-source validation is a future extension.
      */
     public function applyGossip(
         ClusterView $view,
         array $suspectSince,
         int $selfIncarnation,
-        NodeAddress $peer,
         GossipPayload $payload,
         DateTimeImmutable $now,
     ): MembershipTransition {

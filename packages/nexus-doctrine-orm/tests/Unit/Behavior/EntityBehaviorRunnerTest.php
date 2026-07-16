@@ -26,7 +26,6 @@ final class EntityBehaviorRunnerTest extends TestCase
         $factory = $this->createStub(EntityManagerFactory::class);
         $conn = $this->createStub(Connection::class);
 
-        /** @psalm-suppress MixedArgumentTypeCoercion, MixedArgument, UnusedClosureParam */
         $behavior = EntityBehavior::create(
             entityClass: stdClass::class,
             id: 'k',

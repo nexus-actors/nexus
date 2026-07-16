@@ -398,7 +398,6 @@ final class ActorCell implements ActorContext
     #[Override]
     public function stop(ActorRef $child): void
     {
-        /** @psalm-suppress InvalidArgument — PoisonPill rides the user channel; the system-message path is type-erased by design. */
         $child->tell(new PoisonPill());
     }
 
@@ -423,9 +422,7 @@ final class ActorCell implements ActorContext
     #[Override]
     public function watch(ActorRef $target): void
     {
-        /** @psalm-suppress InvalidArgument — Watch rides the user channel; the system-message path is type-erased by design. */
         $target->tell(new Watch($this->selfRef));
-        /** @psalm-suppress InvalidPropertyAssignmentValue — watchers is a heterogeneous identity map. */
         $this->watchers[(string) $target->path()] = $target;
     }
 
@@ -436,7 +433,6 @@ final class ActorCell implements ActorContext
     #[Override]
     public function unwatch(ActorRef $target): void
     {
-        /** @psalm-suppress InvalidArgument — Unwatch rides the user channel; the system-message path is type-erased by design. */
         $target->tell(new Unwatch($this->selfRef));
         unset($this->watchers[(string) $target->path()]);
     }
@@ -947,9 +943,6 @@ final class ActorCell implements ActorContext
         }
     }
 
-    /**
-     * @psalm-suppress InvalidOperand
-     */
     private function recordProcessingMetrics(string $type, DateTimeImmutable $start): void
     {
         $meter = $this->observability->meter();

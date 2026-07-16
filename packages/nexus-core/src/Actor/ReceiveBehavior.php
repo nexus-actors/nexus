@@ -33,6 +33,10 @@ final readonly class ReceiveBehavior extends Behavior
         return $this->signalHandler;
     }
 
+    /**
+     * @param Closure(ActorContext<T>, Signal): Behavior<T> $handler
+     * @return ReceiveBehavior<T>&static
+     */
     #[Override]
     public function onSignal(Closure $handler): static
     {

@@ -133,7 +133,6 @@ final readonly class Effect
             replyMsg: $this->replyMsg,
             sideEffects: [
                 ...$this->sideEffects,
-                /** @psalm-suppress InvalidArgument $fn accepts any TState; runtime always invokes with the actor's state object */
                 static function (object $state) use ($to, $fn): void {
                     /** @var TState $state */
                     $to->tell($fn($state));
@@ -160,7 +159,6 @@ final readonly class Effect
             replyMsg: $this->replyMsg,
             sideEffects: [
                 ...$this->sideEffects,
-                /** @psalm-suppress InvalidArgument $fn accepts any TState; runtime always invokes with the actor's state object */
                 static function (object $state) use ($fn): void {
                     /** @var TState $state */
                     $fn($state);

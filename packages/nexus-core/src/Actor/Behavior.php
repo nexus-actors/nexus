@@ -128,8 +128,6 @@ abstract readonly class Behavior
      * @template U of object
      * @param Closure(TimerScheduler): Behavior<U> $factory
      * @return WithTimersBehavior<U>
-     * @psalm-suppress UndefinedDocblockClass TimerScheduler will be created in a future task
-     * @psalm-suppress UnusedParam $factory is stored for resolution by ActorCell
      */
     public static function withTimers(Closure $factory): WithTimersBehavior
     {
@@ -147,8 +145,6 @@ abstract readonly class Behavior
      * @param int $capacity Maximum number of messages that can be stashed.
      * @param Closure(StashBuffer): Behavior<U> $factory
      * @return WithStashBehavior<U>
-     * @psalm-suppress UndefinedDocblockClass StashBuffer will be created in a future task
-     * @psalm-suppress UnusedParam $capacity and $factory are stored for resolution by ActorCell
      */
     public static function withStash(int $capacity, Closure $factory): WithStashBehavior
     {

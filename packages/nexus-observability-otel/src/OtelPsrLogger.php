@@ -11,6 +11,7 @@ use Override;
 use Psr\Log\AbstractLogger;
 use Stringable;
 
+use function array_map;
 use function get_debug_type;
 use function is_scalar;
 
@@ -49,23 +50,16 @@ final class OtelPsrLogger extends AbstractLogger
      * @param array<array-key, mixed> $context
      *
      * @return array<array-key, scalar>
-     *
-     * @psalm-suppress MixedAssignment iterating an untyped PSR-3 context; each value is narrowed below.
      */
     private function stringifyContext(array $context): array
     {
-        $attributes = [];
-
-        foreach ($context as $key => $value) {
-            if (is_scalar($value)) {
-                $attributes[$key] = $value;
-            } elseif ($value instanceof Stringable) {
-                $attributes[$key] = (string) $value;
-            } else {
-                $attributes[$key] = get_debug_type($value);
-            }
-        }
-
-        return $attributes;
+        return array_map(
+            static fn(mixed $value): bool|float|int|string => match (true) {
+                is_scalar($value) => $value,
+                $value instanceof Stringable => (string) $value,
+                default => get_debug_type($value),
+            },
+            $context,
+        );
     }
 }

@@ -11,6 +11,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
 use Monadial\Nexus\Observability\Trace\NoopSpan;
@@ -63,7 +64,7 @@ final readonly class ClusterRef implements ActorRef
     ) {}
 
     /**
-     * @param T $message
+     * @param T|SystemMessage $message
      */
     #[Override]
     public function tell(object $message): void

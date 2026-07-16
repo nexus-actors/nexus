@@ -6,6 +6,9 @@
     <arg name="colors" />
     <arg value="sp" />
 
+    <!-- Psalm replacement stubs mirror ext signatures; empty bodies are their nature. -->
+    <exclude-pattern>*/stubs/*</exclude-pattern>
+
     <file>packages/nexus-app/src</file>
     <file>packages/nexus-app/tests</file>
     <file>packages/nexus-cluster/src</file>

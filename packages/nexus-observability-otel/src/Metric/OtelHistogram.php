@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Observability\Otel\Metric;
 
 use Monadial\Nexus\Observability\Metric\Histogram;
+use Monadial\Nexus\Observability\Otel\AttributeKeys;
 use OpenTelemetry\API\Metrics\HistogramInterface;
 use Override;
 
@@ -15,13 +16,10 @@ final readonly class OtelHistogram implements Histogram
 
     /**
      * @param array<string, scalar> $attributes
-     *
-     * @psalm-suppress InvalidArgument the OTel SDK requires non-empty-string keys; the framework
-     *                 Histogram contract accepts any string key, so keys are forwarded as-is.
      */
     #[Override]
     public function record(int|float $value, array $attributes = []): void
     {
-        $this->histogram->record($value, $attributes);
+        $this->histogram->record($value, AttributeKeys::nonEmpty($attributes));
     }
 }

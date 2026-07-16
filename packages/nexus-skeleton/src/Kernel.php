@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App;
 
 use App\DependencyInjection\AsActorPass;
+use LogicException;
 use Monadial\Nexus\App\ActorRegistry;
 use Monadial\Nexus\App\AsActor;
+use Monadial\Nexus\Core\Actor\ActorHandler;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
@@ -17,17 +19,21 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 
+use function dirname;
+use function is_subclass_of;
+use function sprintf;
+
+/**
+ * @psalm-api application entry point of the skeleton — wired by bin/console and user code
+ */
 final class Kernel
 {
     private ?ContainerInterface $container = null;
 
-    /**
-     * @var array<string, ActorRef<object>>
-     * @psalm-suppress UntypedActorRefInjection this is a heterogeneous registry of every spawned actor, so ActorRef<object> is correct
-     */
+    /** @var array<string, ActorRef<object>> heterogeneous registry of every spawned actor */
     private array $refs = [];
 
-    public function __construct(private readonly string $projectDir, private readonly string $appName = 'my-app') {}
+    public function __construct(private readonly string $appName = 'my-app') {}
 
     public function container(): ContainerInterface
     {
@@ -49,7 +55,17 @@ final class Kernel
         $system = ActorSystem::create($this->appName, $runtime);
 
         foreach ($registry->all() as $name => $class) {
-            /** @psalm-suppress ArgumentTypeCoercion registry only ever holds ActorHandler class-strings (enforced by #[AsActor] autoconfiguration) */
+            // #[AsActor] autoconfiguration only tags ActorHandler implementations;
+            // this guard turns a misconfigured registry into a clear boot failure.
+            if (!is_subclass_of($class, ActorHandler::class)) {
+                throw new LogicException(sprintf(
+                    'Actor service "%s" (%s) must implement %s to be spawned via #[AsActor].',
+                    $name,
+                    $class,
+                    ActorHandler::class,
+                ));
+            }
+
             $this->refs[$name] = $system->spawn(Props::fromContainer($container, $class), $name);
         }
 
@@ -81,8 +97,10 @@ final class Kernel
         // Runtime comes from config/packages/runtime.php (a Closure returning a Runtime).
         // The container can't dump a Closure factory, so we invoke it now and inject the
         // instance as a synthetic service (this container is never PHP-dumped).
+        // The path is literal (config/ sits next to src/ in the skeleton layout) so
+        // static analysis can resolve the include.
         /** @var callable(): Runtime $runtimeFactory */
-        $runtimeFactory = require $this->projectDir . '/config/packages/runtime.php';
+        $runtimeFactory = require dirname(__DIR__) . '/config/packages/runtime.php';
         $runtime = $runtimeFactory();
         $container->register('nexus.runtime', Runtime::class)
             ->setSynthetic(true)
@@ -98,7 +116,7 @@ final class Kernel
             },
         );
 
-        $loader = new PhpFileLoader($container, new FileLocator($this->projectDir . '/config'));
+        $loader = new PhpFileLoader($container, new FileLocator(dirname(__DIR__) . '/config'));
         $loader->load('services.php');
 
         $container->addCompilerPass(new AsActorPass());

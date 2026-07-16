@@ -22,7 +22,7 @@ use Psr\Http\Server\MiddlewareInterface;
  */
 final class MiddlewarePipeline
 {
-    /** @var array<class-string, MiddlewareInterface> */
+    /** @var array<string, MiddlewareInterface> */
     private array $instances = [];
 
     private readonly MiddlewareResolver $resolver;
@@ -41,7 +41,6 @@ final class MiddlewarePipeline
         $resolved = [];
 
         foreach ($middlewares as $mw) {
-            /** @psalm-suppress ArgumentTypeCoercion */
             $resolved[] = $mw instanceof MiddlewareInterface
                 ? $mw
                 : $this->resolveCached($mw);
@@ -50,7 +49,6 @@ final class MiddlewarePipeline
         return (new MiddlewareInvoker($resolved, $tail))->handle($request);
     }
 
-    /** @param class-string $class */
     private function resolveCached(string $class): MiddlewareInterface
     {
         if (isset($this->instances[$class])) {

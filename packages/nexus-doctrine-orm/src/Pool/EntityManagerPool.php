@@ -165,10 +165,10 @@ final class EntityManagerPool
     }
 
     /**
-     * @psalm-suppress UnusedParam Parameter kept for API symmetry with
-     *   ConnectionPool::close(); current drain is sync, no deadline needed yet.
+     * `$_timeout` is kept for API symmetry with ConnectionPool::close();
+     * the current drain is sync, no deadline needed yet.
      */
-    public function close(Duration $timeout): void
+    public function close(Duration $_timeout): void
     {
         $this->closed = true;
         $drained = $this->idle->pop(Duration::zero());

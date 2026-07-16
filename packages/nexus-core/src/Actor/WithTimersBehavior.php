@@ -22,7 +22,6 @@ use Override;
 final readonly class WithTimersBehavior extends Behavior
 {
     /**
-     * @psalm-suppress UndefinedDocblockClass TimerScheduler will be created in a future task
      * @param Closure(TimerScheduler): Behavior<T> $factory
      * @param Closure(ActorContext<T>, Signal): Behavior<T>|null $signalHandler
      */

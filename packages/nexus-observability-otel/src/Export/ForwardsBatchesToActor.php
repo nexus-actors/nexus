@@ -22,36 +22,37 @@ use function count;
  * if the ref is already dead, which flushes the buffer through the inner exporter
  * synchronously instead of going Live; batches are then delegated to the inner exporter
  * synchronously.
+ *
+ * @template TItem the SDK batch item type (span data, metric, or log record)
  */
 trait ForwardsBatchesToActor
 {
     private const int BUFFER_LIMIT = 64;
 
-    /** @var list<object> */
+    /** @var list<list<TItem>> */
     private array $buffer = [];
 
+    /** @var ActorRef<ExportCommand>|null */
     private ?ActorRef $ref = null;
 
     private bool $direct = false;
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<TItem> $batch
      */
     abstract private function exportDirect(array $batch): void;
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<TItem> $batch
      */
-    abstract private function wrap(array $batch): object;
+    abstract private function wrap(array $batch): ExportCommand;
 
     abstract private function signalName(): string;
 
     abstract private function meter(): Meter;
 
     /**
-     * @psalm-suppress UntypedActorRefInjection the export actor accepts a heterogeneous union of
-     *                 export messages; the message type is not expressible as a single ActorRef<T>.
-     * @psalm-suppress MixedArgument buffered batches are opaque SDK payload data by design.
+     * @param ActorRef<ExportCommand> $ref
      */
     public function attach(ActorRef $ref): void
     {
@@ -59,7 +60,7 @@ trait ForwardsBatchesToActor
             $this->direct = true;
 
             foreach ($this->buffer as $batch) {
-                $this->exportDirect($batch->batch);
+                $this->exportDirect($batch);
             }
 
             $this->buffer = [];
@@ -72,14 +73,14 @@ trait ForwardsBatchesToActor
         $this->direct = false;
 
         foreach ($this->buffer as $batch) {
-            $this->deliver($ref, $batch);
+            $this->deliver($ref, $this->wrap($batch));
         }
 
         $this->buffer = [];
     }
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<TItem> $batch
      */
     private function forward(array $batch): void
     {
@@ -106,7 +107,7 @@ trait ForwardsBatchesToActor
     }
 
     /**
-     * @param array<array-key, mixed> $batch
+     * @param list<TItem> $batch
      */
     private function bufferBatch(array $batch): void
     {
@@ -118,14 +119,13 @@ trait ForwardsBatchesToActor
             ]);
         }
 
-        $this->buffer[] = $this->wrap($batch);
+        $this->buffer[] = $batch;
     }
 
     /**
-     * @psalm-suppress UntypedActorRefInjection the export actor accepts a heterogeneous union of
-     *                 export messages; the message type is not expressible as a single ActorRef<T>.
+     * @param ActorRef<ExportCommand> $ref
      */
-    private function deliver(ActorRef $ref, object $message): void
+    private function deliver(ActorRef $ref, ExportCommand $message): void
     {
         if ($ref instanceof BackpressureCapable) {
             $result = $ref->offer($message);
@@ -154,16 +154,19 @@ trait ForwardsBatchesToActor
     }
 
     /**
-     * Drains any buffered batches through a synchronous callback (the inner exporter's
-     * own export path). Used by shutdown() while still Buffering, since there is no ref
-     * to hand batches to and the SDK is asking us to flush everything now.
+     * Hands out the buffered batches and empties the buffer. Used by shutdown() while
+     * still Buffering, since there is no ref to hand batches to and the SDK is asking
+     * us to flush everything now — the caller drains them through the inner exporter's
+     * own synchronous export path.
      *
-     * @param callable(list<object>): void $flushThroughInner
+     * @return list<list<TItem>>
      */
-    private function flushBufferSynchronously(callable $flushThroughInner): void
+    private function takeBuffer(): array
     {
-        $flushThroughInner($this->buffer);
+        $buffered = $this->buffer;
         $this->buffer = [];
+
+        return $buffered;
     }
 
     /**

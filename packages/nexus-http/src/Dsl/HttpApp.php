@@ -249,10 +249,8 @@ final class HttpApp
 
         foreach ($routeList as $route) {
             $key = $route->method . ':' . $route->path;
-            /** @psalm-suppress ArgumentTypeCoercion */
             $handlersByKey[$key] = $resolver->resolve($route->handler);
             $routeMwsByKey[$key] = array_map(
-                /** @psalm-suppress ArgumentTypeCoercion */
                 static fn(string|MiddlewareInterface $mw): MiddlewareInterface => $mw instanceof MiddlewareInterface
                     ? $mw
                     : $middlewareResolver->resolve($mw),
@@ -298,7 +296,6 @@ final class HttpApp
         }
 
         foreach ($this->globalMiddleware as $mw) {
-            /** @psalm-suppress ArgumentTypeCoercion */
             $stack[] = $mw instanceof MiddlewareInterface
                 ? $mw
                 : $middlewareResolver->resolve($mw);
@@ -306,8 +303,7 @@ final class HttpApp
 
         $stack[] = $router;
 
-        /** @psalm-suppress UnusedClosureParam */
-        $tail = static function (ServerRequestInterface $r): ResponseInterface {
+        $tail = static function (): ResponseInterface {
             throw new LogicException('RouterMiddleware did not produce a response');
         };
 

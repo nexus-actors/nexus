@@ -22,9 +22,6 @@ final readonly class TimerMessage
     public function __construct(public string $key) {}
 }
 
-/**
- * @psalm-suppress PropertyNotSetInConstructor
- */
 #[CoversClass(DefaultTimerScheduler::class)]
 final class TimerSchedulerTest extends TestCase
 {

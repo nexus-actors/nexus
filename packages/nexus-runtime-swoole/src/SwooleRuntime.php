@@ -97,16 +97,15 @@ final class SwooleRuntime implements Runtime
         }
 
         // Before run() — queue for later, return a deferred cancellable
-        $cancelled = false;
+        $deferred = new DeferredCancellable();
 
-        $this->pendingTimers[] = function () use ($delay, $callback, &$cancelled): void {
-            /** @psalm-suppress RedundantCondition -- $cancelled is mutated via reference by DeferredCancellable */
-            if (!$cancelled) {
+        $this->pendingTimers[] = function () use ($delay, $callback, $deferred): void {
+            if (!$deferred->isCancelled()) {
                 $this->createOnceTimer($delay, $callback);
             }
         };
 
-        return new DeferredCancellable($cancelled);
+        return $deferred;
     }
 
     #[Override]
@@ -117,16 +116,15 @@ final class SwooleRuntime implements Runtime
         }
 
         // Before run() — queue for later
-        $cancelled = false;
+        $deferred = new DeferredCancellable();
 
-        $this->pendingTimers[] = function () use ($initialDelay, $interval, $callback, &$cancelled): void {
-            /** @psalm-suppress RedundantCondition -- $cancelled is mutated via reference by DeferredCancellable */
-            if (!$cancelled) {
+        $this->pendingTimers[] = function () use ($initialDelay, $interval, $callback, $deferred): void {
+            if (!$deferred->isCancelled()) {
                 $this->createRepeatingTimer($initialDelay, $interval, $callback);
             }
         };
 
-        return new DeferredCancellable($cancelled);
+        return $deferred;
     }
 
     #[Override]
@@ -161,8 +159,10 @@ final class SwooleRuntime implements Runtime
             Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL]);
         }
 
-        /** @psalm-suppress UnusedFunctionCall -- Co\run() return value is not needed */
-        run(function (): void {
+        // run() (swoole_library) returns false only when a coroutine
+        // scheduler is already running in this thread — a programming
+        // error, so fail fast in dev builds via assert().
+        $completed = run(function (): void {
             $this->insideCoRun = true;
 
             // Execute all pending timers
@@ -180,7 +180,8 @@ final class SwooleRuntime implements Runtime
             $this->pendingSpawns = [];
 
             // Co\run blocks until all coroutines and timers complete
-        });
+        }) !== false;
+        assert($completed, 'Co\run() failed to start: a coroutine scheduler is already running in this thread');
 
         $this->insideCoRun = false;
         $this->running = false;

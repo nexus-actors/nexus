@@ -9,18 +9,21 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Override;
 
-/** @psalm-api */
+/**
+ * @psalm-api
+ *
+ * @psalm-import-type Params from DriverManager
+ */
 final readonly class DriverManagerConnectionFactory implements ConnectionFactory
 {
     /**
-     * @param array<string, mixed> $params
+     * @param Params $params
      */
     public function __construct(private array $params, private ?Configuration $config = null) {}
 
     #[Override]
     public function create(): Connection
     {
-        /** @psalm-suppress ArgumentTypeCoercion */
         return DriverManager::getConnection($this->params, $this->config);
     }
 }
