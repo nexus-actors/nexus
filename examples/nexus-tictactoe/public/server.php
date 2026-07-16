@@ -10,7 +10,14 @@ declare(strict_types=1);
  * out to all attached sockets — thread mode explicitly rejects channel
  * routes since cross-thread pub/sub is out of scope for this example.
  */
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+// Standalone example install, or monorepo checkout — pick whichever exists.
+$autoload = dirname(__DIR__) . '/vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
+}
+
+require_once $autoload;
 
 use Monadial\Nexus\Example\TicTacToe\Boot\App;
 use Monadial\Nexus\Example\TicTacToe\Boot\Bootstrap;
