@@ -15,7 +15,14 @@ declare(strict_types=1);
  * intentionally short so the shape of the boot — config → bootstrap →
  * server.run — is the first thing a reader sees.
  */
-require_once dirname(__DIR__) . '/vendor/autoload.php';
+// Standalone example install, or monorepo checkout — pick whichever exists.
+$autoload = dirname(__DIR__) . '/vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
+}
+
+require_once $autoload;
 
 use Monadial\Nexus\Example\Wallet\Boot\WalletApp;
 use Monadial\Nexus\Example\Wallet\Boot\WalletBootstrap;
