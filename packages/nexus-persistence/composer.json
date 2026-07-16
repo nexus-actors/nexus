@@ -7,6 +7,7 @@
         "php": ">=8.5.7",
         "nexus-actors/core": "dev-main",
         "nexus-actors/serialization": "dev-main",
+        "psr/log": "^3.0",
         "symfony/uid": "^8.0"
     },
     "require-dev": {

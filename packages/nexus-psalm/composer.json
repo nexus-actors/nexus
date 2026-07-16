@@ -4,8 +4,8 @@
     "type": "psalm-plugin",
     "license": "MIT",
     "require": {
-        "nexus-actors/messenger": "dev-main",
-        "nexus-actors/worker-pool": "dev-main",
+        "ext-simplexml": "*",
+        "nikic/php-parser": "^5.0",
         "php": ">=8.5.7",
         "vimeo/psalm": "^6.0"
     },

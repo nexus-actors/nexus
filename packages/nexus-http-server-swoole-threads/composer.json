@@ -6,12 +6,16 @@
     "require": {
         "php": ">=8.5.7",
         "ext-swoole": ">=6.2.1",
+        "nexus-actors/core": "dev-main",
         "nexus-actors/http": "dev-main",
         "nexus-actors/http-server-swoole": "dev-main",
         "nexus-actors/http-ws": "dev-main",
+        "nexus-actors/runtime": "dev-main",
         "nexus-actors/runtime-swoole": "dev-main",
         "nexus-actors/worker-pool": "dev-main",
-        "nexus-actors/worker-pool-swoole": "dev-main"
+        "nexus-actors/worker-pool-swoole": "dev-main",
+        "psr/http-message": "^2.0",
+        "psr/log": "^3.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"

@@ -1,0 +1,8 @@
+{
+    "symbol-whitelist": [
+        "Swoole\\Coroutine\\Channel",
+        "Swoole\\Runtime",
+        "SWOOLE_CHANNEL_CLOSED",
+        "SWOOLE_HOOK_ALL"
+    ]
+}

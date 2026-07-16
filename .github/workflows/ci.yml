@@ -107,6 +107,16 @@ jobs:
       - name: Deptrac
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci vendor/bin/deptrac analyse --no-progress --formatter=github-actions
 
+      - name: Package dependency completeness
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci php bin/check-package-deps.php
+
+      - name: No Psalm suppressions
+        run: |
+          if grep -rn '@psalm-suppress' packages/*/src --include='*.php'; then
+            echo '::error::@psalm-suppress is banned — fix the root cause instead.'
+            exit 1
+          fi
+
   unit-tests:
     needs: build-images
     runs-on: ubuntu-latest

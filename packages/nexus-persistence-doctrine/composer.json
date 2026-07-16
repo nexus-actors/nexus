@@ -6,7 +6,10 @@
     "require": {
         "php": ">=8.5.7",
         "nexus-actors/persistence": "dev-main",
-        "doctrine/orm": "^3.0"
+        "nexus-actors/serialization": "dev-main",
+        "doctrine/dbal": "^4.0",
+        "doctrine/orm": "^3.0",
+        "symfony/uid": "^8.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"

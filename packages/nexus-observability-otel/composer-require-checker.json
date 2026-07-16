@@ -1,0 +1,6 @@
+{
+    "symbol-whitelist": [
+        "Swoole\\Coroutine",
+        "Swoole\\Coroutine\\Http\\Client"
+    ]
+}

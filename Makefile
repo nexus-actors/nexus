@@ -84,6 +84,9 @@ perf-http-swoole-threads: ## HTTP Swoole performance benchmarks (thread mode)
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm
 
+deps-check: ## Verify every package's composer.json declares all used dependencies
+	$(DC) php bin/check-package-deps.php
+
 phpcs: ## Run PHPCS check
 	$(DC) vendor/bin/phpcs
 
@@ -117,4 +120,4 @@ docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default P
 
 PORT ?= 8081
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-debug test-swoole-debug test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve
+.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-debug test-swoole-debug test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm deps-check phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve

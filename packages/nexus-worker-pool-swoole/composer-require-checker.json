@@ -1,0 +1,6 @@
+{
+    "symbol-whitelist": [
+        "Swoole\\Thread\\Pool",
+        "Swoole\\Thread\\Runnable"
+    ]
+}
