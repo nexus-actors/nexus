@@ -194,7 +194,7 @@ $logger = NexusLogger::create($system, 'app')
     ->build();
 ```
 
-See [nexus-logger architecture](../packages/logger.md#architecture) for the full picture.
+See [nexus-logger](../packages/logger.md) for the full picture.
 
 ### Thread\Queue sink (thread mode only)
 
