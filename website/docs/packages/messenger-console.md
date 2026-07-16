@@ -46,6 +46,7 @@ use Monadial\Nexus\Messenger\Console\ConsumeCommand;
 use Monadial\Nexus\Messenger\Console\ProduceCommand;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Monadial\Nexus\Serialization\ValinorMessageSerializer;
@@ -66,7 +67,7 @@ $app->addCommand(new ConsumeCommand(
     new CallbackConsumerSetup(static function (ActorSystem $system): MessageRouter {
         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
 
-        return new MapMessageRouter([OrderPlaced::class => $ref]);
+        return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
     }),
 ));
 $app->addCommand(new ProduceCommand($transport, $serializer, $registry));

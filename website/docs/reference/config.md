@@ -302,7 +302,7 @@ $ref = MessengerBridge::producer($transport, 'orders-out', askSupport: $askSuppo
 | Method | Description |
 |---|---|
 | `replyChannelName(): string` | Return the logical reply channel name, lazily creating the channel and spawning the consumer actor on the first call. Idempotent. |
-| `ask(object $message, Duration $timeout, string $correlationId): Future` | Register a pending ask and schedule its timeout. Throws `AskCapacityExceededException` at capacity. |
+| `ask(Duration $timeout, string $correlationId): Future` | Register a pending ask and schedule its timeout. Throws `AskCapacityExceededException` at capacity. |
 | `registry(): PendingAskRegistry` | Access the underlying pending-ask registry (for monitoring or testing). |
 | `close(): void` | Release the reply channel. Call during `ActorSystem` shutdown to release transport resources. |
 

@@ -8,9 +8,10 @@ const heroCode = `<?php
 // Wire a two-way bridge in under ten lines.
 use Monadial\\Nexus\\Messenger\\MessengerBridge;
 use Monadial\\Nexus\\Messenger\\Routing\\MapMessageRouter;
+use Monadial\\Nexus\\Messenger\\Routing\\Route;
 
 // Consumer: broker message → actor mailbox
-$router = new MapMessageRouter([OrderPlaced::class => $ordersRef]);
+$router = new MapMessageRouter(Route::to(OrderPlaced::class, $ordersRef));
 $system->spawn(MessengerBridge::receiverProps($amqpTransport, $router), 'in');
 
 // Producer: actor code → broker
@@ -39,13 +40,14 @@ const consumerCode = `<?php
 // ReceiverActor polls the transport, routes by message class, and acks
 // only after the actor's mailbox accepts the message — at-least-once.
 use Monadial\\Nexus\\Messenger\\Routing\\MapMessageRouter;
+use Monadial\\Nexus\\Messenger\\Routing\\Route;
 use Monadial\\Nexus\\Messenger\\MessengerBridge;
 use Monadial\\Nexus\\Messenger\\Consumer\\ReceiverActorConfig;
 
-$router = new MapMessageRouter([
-    OrderPlaced::class  => $ordersRef,
-    PaymentMade::class  => $paymentsRef,
-]);
+$router = new MapMessageRouter(
+    Route::to(OrderPlaced::class, $ordersRef),
+    Route::to(PaymentMade::class, $paymentsRef),
+);
 
 $config = ReceiverActorConfig::default()
     ->withPollInterval(Duration::millis(50));

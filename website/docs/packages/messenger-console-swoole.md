@@ -36,6 +36,7 @@ use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Messenger\Console\Swoole\ThreadedConsumerBootstrap;
 use Monadial\Nexus\Messenger\Routing\MapMessageRouter;
 use Monadial\Nexus\Messenger\Routing\MessageRouter;
+use Monadial\Nexus\Messenger\Routing\Route;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 
 final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
@@ -44,7 +45,7 @@ final class OrderConsumerBootstrap implements ThreadedConsumerBootstrap
     {
         $ref = $system->spawn(Props::fromFactory(fn() => new OrdersActor()), 'orders');
 
-        return new MapMessageRouter([OrderPlaced::class => $ref]);
+        return new MapMessageRouter(Route::to(OrderPlaced::class, $ref));
     }
 
     public function receiver(): ReceiverInterface
