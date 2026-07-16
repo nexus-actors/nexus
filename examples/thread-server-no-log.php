@@ -7,8 +7,6 @@ declare(strict_types=1);
  * everywhere, no Mdc::put() calls, no logger->info() calls. Used to
  * measure the overhead of the async logger + MDC instrumentation by
  * comparing wrk results against the logging variant.
- *
- * @psalm-suppress all
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';

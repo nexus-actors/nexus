@@ -41,6 +41,7 @@ use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\TlsConfig;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -48,29 +49,38 @@ use Monadial\Nexus\Example\ClusterTcp\Event\StdoutEventDispatcher;
 use Monadial\Nexus\Example\ClusterTcp\Message\ClientTick;
 use Monadial\Nexus\Example\ClusterTcp\Message\Greet;
 use Monadial\Nexus\Example\ClusterTcp\Message\Greeted;
+use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\TypeRegistry;
 use Monolog\Handler\StreamHandler;
+use Monolog\Level;
 use Monolog\Logger;
 
-require __DIR__ . '/../vendor/autoload.php';
+// Standalone example install, or monorepo checkout — pick whichever exists.
+$autoload = __DIR__ . '/../vendor/autoload.php';
+
+if (!is_file($autoload)) {
+    $autoload = dirname(__DIR__, 3) . '/vendor/autoload.php';
+}
+
+require $autoload;
 
 // ---------------------------------------------------------------------------
 // 1. Configuration from environment
 // ---------------------------------------------------------------------------
 
-$clusterName = (string) ($_SERVER['CLUSTER_NAME'] ?? 'demo');
-$nodeDc = (string) ($_SERVER['NODE_DC'] ?? 'dc1');
-$nodeApp = (string) ($_SERVER['NODE_APP'] ?? 'greet-app');
-$nodeId = (string) ($_SERVER['NODE_ID'] ?? 'node-a');
-$bindHost = (string) ($_SERVER['BIND_HOST'] ?? '0.0.0.0');
+$clusterName = $_SERVER['CLUSTER_NAME'] ?? 'demo';
+$nodeDc = $_SERVER['NODE_DC'] ?? 'dc1';
+$nodeApp = $_SERVER['NODE_APP'] ?? 'greet-app';
+$nodeId = $_SERVER['NODE_ID'] ?? 'node-a';
+$bindHost = $_SERVER['BIND_HOST'] ?? '0.0.0.0';
 $bindPort = (int) ($_SERVER['BIND_PORT'] ?? 7355);
-$advertiseHost = (string) ($_SERVER['ADVERTISE_HOST'] ?? '127.0.0.1');
+$advertiseHost = $_SERVER['ADVERTISE_HOST'] ?? '127.0.0.1';
 $advertisePort = (int) ($_SERVER['ADVERTISE_PORT'] ?? 7355);
-$seedsEnv = (string) ($_SERVER['SEEDS'] ?? '');
-$nodeRole = (string) ($_SERVER['NODE_ROLE'] ?? 'greeter');
-$greeterNodeEnv = (string) ($_SERVER['GREETER_NODE'] ?? 'dc1/greet-app/node-a');
+$seedsEnv = $_SERVER['SEEDS'] ?? '';
+$nodeRole = $_SERVER['NODE_ROLE'] ?? 'greeter';
+$greeterNodeEnv = $_SERVER['GREETER_NODE'] ?? 'dc1/greet-app/node-a';
 
 // Secure-mode (opt-in). Default path stays plaintext + open for local dev.
 //   CLUSTER_TLS=1      → enable Swoole SSL on the bind + outbound peer links.
@@ -78,18 +88,18 @@ $greeterNodeEnv = (string) ($_SERVER['GREETER_NODE'] ?? 'dc1/greet-app/node-a');
 //   CLUSTER_TLS_KEY    → server private key file  (default: /certs/node.key)
 //   CLUSTER_TLS_CA     → CA bundle for peer verification (default: /certs/ca.crt)
 //   CLUSTER_SECRET     → shared HMAC handshake secret; rejects unauthenticated peers.
-$tlsEnabled = (string) ($_SERVER['CLUSTER_TLS'] ?? '') === '1';
-$tlsCertFile = (string) ($_SERVER['CLUSTER_TLS_CERT'] ?? '/certs/node.crt');
-$tlsKeyFile = (string) ($_SERVER['CLUSTER_TLS_KEY'] ?? '/certs/node.key');
-$tlsCaFile = (string) ($_SERVER['CLUSTER_TLS_CA'] ?? '/certs/ca.crt');
-$clusterSecret = (string) ($_SERVER['CLUSTER_SECRET'] ?? '');
+$tlsEnabled = ($_SERVER['CLUSTER_TLS'] ?? '') === '1';
+$tlsCertFile = $_SERVER['CLUSTER_TLS_CERT'] ?? '/certs/node.crt';
+$tlsKeyFile = $_SERVER['CLUSTER_TLS_KEY'] ?? '/certs/node.key';
+$tlsCaFile = $_SERVER['CLUSTER_TLS_CA'] ?? '/certs/ca.crt';
+$clusterSecret = $_SERVER['CLUSTER_SECRET'] ?? '';
 
 // ---------------------------------------------------------------------------
 // 2. PSR-3 logger — Monolog to stdout
 // ---------------------------------------------------------------------------
 
 $logger = new Logger($nodeId);
-$logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+$logger->pushHandler(new StreamHandler('php://stdout', Level::Debug));
 
 // ---------------------------------------------------------------------------
 // 3. PSR-14 event dispatcher — prints cluster lifecycle events to stdout
@@ -261,18 +271,25 @@ $runtime->scheduleOnce(
             // both tell (no reply, just logs) and ask (returns Greeted).
             // ---------------------------------------------------------------
             $greeterBehavior = Behavior::receive(
+                /**
+                 * @param ActorContext<object> $ctx
+                 * @return Behavior<object>
+                 */
                 static function (ActorContext $ctx, object $msg) use ($nodeId): Behavior {
                     if (!$msg instanceof Greet) {
                         return Behavior::unhandled();
                     }
 
                     $greeting = sprintf('Hello, %s! Greetings from %s.', $msg->name, $nodeId);
-                    $senderClass = $ctx->sender() !== null ? $ctx->sender()::class : 'null';
+                    $sender = $ctx->sender();
+                    $senderClass = $sender !== null
+                        ? $sender::class
+                        : 'null';
                     $ctx->log()->info('Greet received', ['name' => $msg->name, 'sender_class' => $senderClass]);
 
                     // Reply on ask path (sender is ClusterReplyRef); no-op on tell path.
-                    if ($ctx->sender() !== null) {
-                        $ctx->sender()->tell(new Greeted($greeting));
+                    if ($sender !== null) {
+                        $sender->tell(new Greeted($greeting));
                         $ctx->log()->info('Greeted reply sent');
                     }
 
@@ -308,6 +325,10 @@ $runtime->scheduleOnce(
             $greeterPath = ActorPath::fromString('/user/greeter');
 
             $clientBehavior = Behavior::setup(
+                /**
+                 * @param ActorContext<object> $ctx
+                 * @return Behavior<object>
+                 */
                 static function (ActorContext $ctx) use (
                     $node,
                     $greeterAddress,
@@ -323,6 +344,10 @@ $runtime->scheduleOnce(
                     );
 
                     return Behavior::receive(
+                        /**
+                         * @param ActorContext<object> $ctx
+                         * @return Behavior<object>
+                         */
                         static function (
                             ActorContext $ctx,
                             object $msg,
@@ -331,7 +356,9 @@ $runtime->scheduleOnce(
                                 // Request the current cluster view asynchronously.
                                 // The membership actor will deliver a ClusterView message
                                 // to this actor on the next event-loop tick — no yield needed.
-                                $node->queryViewAsync($ctx->self());
+                                /** @var ActorRef<ClusterView> $self — this actor handles ClusterView (and ClientTick) */
+                                $self = $ctx->self();
+                                $node->queryViewAsync($self);
 
                                 return Behavior::same();
                             }
@@ -353,9 +380,10 @@ $runtime->scheduleOnce(
 
                                 // (b) Request-response ask — suspends coroutine until reply arrives.
                                 try {
-                                    $reply = $node->refFor($greeterAddress, $greeterPath)
-                                        ->ask(new Greet($nodeId), Duration::seconds(5))
-                                        ->await();
+                                    /** @var Future<object> $future — the reply type of a remote ask is unknowable at the call site */
+                                    $future = $node->refFor($greeterAddress, $greeterPath)
+                                        ->ask(new Greet($nodeId), Duration::seconds(5));
+                                    $reply = $future->await();
 
                                     if ($reply instanceof Greeted) {
                                         $logger->info('ask  ← Greeted received', ['message' => $reply->message]);

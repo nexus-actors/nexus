@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Example\TicTacToe\Domain\Value;
 
+/**
+ * @psalm-immutable
+ */
 enum PlayerMark: string
 {
     case X = 'X';

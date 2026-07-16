@@ -86,7 +86,6 @@ final class App
 
     private static function asyncLogger(ActorSystem $system, int $workerId): LoggerInterface
     {
-        /** @var resource $stderr */
         $stderr = STDERR;
 
         return NexusLogger::create($system, "worker-{$workerId}")
@@ -114,7 +113,7 @@ final class App
             MessageDeserializationException::class,
             // Do NOT echo the exception message — it can carry mapper internals
             // (paths, expected types). A stable, generic 400 is enough.
-            static fn(MessageDeserializationException $e): Psr7Response => new Psr7Response(
+            static fn(): Psr7Response => new Psr7Response(
                 400,
                 ['content-type' => 'application/json'],
                 (string) json_encode(['error' => 'invalid request body']),

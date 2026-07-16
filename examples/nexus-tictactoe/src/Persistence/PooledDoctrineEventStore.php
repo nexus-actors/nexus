@@ -10,6 +10,9 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineEventStore;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Override;
+
+use function iterator_to_array;
 
 /**
  * A durable, pool-friendly {@see EventStore}.
@@ -26,6 +29,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
 {
     public function __construct(private EntityManagerPool $pool) {}
 
+    #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
         $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $events): void {
@@ -36,15 +40,18 @@ final readonly class PooledDoctrineEventStore implements EventStore
     /**
      * @return list<EventEnvelope>
      */
+    #[Override]
     public function load(PersistenceId $id, int $fromSequenceNr = 0, int $toSequenceNr = PHP_INT_MAX): iterable
     {
         return $this->pool->withEntityManager(
-            static fn(EntityManagerInterface $em): array => [
-                ...new DoctrineEventStore($em)->load($id, $fromSequenceNr, $toSequenceNr),
-            ],
+            static fn(EntityManagerInterface $em): array => iterator_to_array(
+                new DoctrineEventStore($em)->load($id, $fromSequenceNr, $toSequenceNr),
+                preserve_keys: false,
+            ),
         );
     }
 
+    #[Override]
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
         $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $toSequenceNr): void {
@@ -52,6 +59,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
         });
     }
 
+    #[Override]
     public function highestSequenceNr(PersistenceId $id): int
     {
         return $this->pool->withEntityManager(

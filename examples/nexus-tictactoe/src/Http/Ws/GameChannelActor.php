@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\TicTacToe\Http\Ws;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\BehaviorWithState;
 use Monadial\Nexus\Example\TicTacToe\Actor\GameRefFactory;
 use Monadial\Nexus\Example\TicTacToe\Actor\Message\GameEnvelope;
@@ -304,8 +305,13 @@ final class GameChannelActor extends WebSocketChannelActor
      */
     private function forward(ActorContext $ctx, WebSocketContext $conn, string $gameId, GameCommand $command): void
     {
+        // The WebSocketChannelActor base erases this actor's protocol to
+        // `object`; handleAppMessage() handles exactly these three replies.
+        /** @var ActorRef<GameRejected|Seated|GameSnapshot> $replyTo */
+        $replyTo = $ctx->self();
+
         $this->games->of($gameId)->tell(
-            new GameEnvelope($command, $ctx->self(), $conn->id()),
+            new GameEnvelope($command, $replyTo, $conn->id()),
         );
     }
 
@@ -326,6 +332,7 @@ final class GameChannelActor extends WebSocketChannelActor
      */
     private static function gameIdFrom(WebSocketContext $conn): ?string
     {
+        /** @var mixed $id */
         $id = $conn->request()->getAttribute('id');
 
         return is_string($id) && Ulid::isValid($id)

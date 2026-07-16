@@ -91,6 +91,18 @@ final class GameSession
         return $this->status;
     }
 
+    /**
+     * Audit timestamp: when the lobby row was created. Persisted via the
+     * `created_at` column mapping and read by the `(status, created_at)`
+     * index; the demo UI does not display it.
+     *
+     * @psalm-api
+     */
+    public function createdAt(): DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
     public function playerX(): ?PlayerSeat
     {
         return $this->playerXId !== null && $this->playerXName !== null

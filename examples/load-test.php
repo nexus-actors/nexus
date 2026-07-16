@@ -25,15 +25,14 @@ declare(strict_types=1);
  *   --warmup=N             Discard the first N requests' samples (default 0)
  *
  * Reports: requests, duration, RPS, p50/p95/p99/avg/max latency, error count.
- *
- * @psalm-suppress UndefinedClass, UnusedFunctionCall, MixedMethodCall, MixedAssignment, RedundantCondition, TypeDoesNotContainNull
  */
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
 use Swoole\Coroutine\Http\Client as HttpClient;
-use Swoole\Coroutine\WaitGroup;
+use Swoole\WebSocket\Frame;
 
 use function Co\run;
 
@@ -70,8 +69,7 @@ if ($concurrency < 1 || $total < 1) {
     exit(1);
 }
 
-/** @psalm-suppress RedundantCondition, TypeDoesNotContainNull */
-$target = $httpUrl ?? $wsUrl ?? '';
+$target = $httpUrl ?? $wsUrl;
 $parts = parse_url($target);
 
 if ($parts === false) {
@@ -105,18 +103,13 @@ $counter = 0;
 
 $start = hrtime(true);
 
-/**
- * @psalm-suppress UnusedFunctionCall
- * @psalm-suppress UndefinedClass — Swoole\Coroutine\WaitGroup exists at runtime but isn't in the stubs.
- */
-run(
+$completed = (bool) run(
     static function () use ($host, $port, $path, $concurrency, $total, $warmup, $payload, $mode, &$latencies, &$errors, &$counter): void {
         $perWorker = (int) ceil($total / $concurrency);
 
-        $wg = new WaitGroup();
-    
+        $done = new Channel($concurrency);
+
         for ($w = 0; $w < $concurrency; $w++) {
-            $wg->add();
             Coroutine::create(static function () use (
                 $host,
                 $port,
@@ -129,60 +122,62 @@ run(
                 &$latencies,
                 &$errors,
                 &$counter,
-                $wg,
+                $done,
             ): void {
                 for ($i = 0; $i < $perWorker; $i++) {
                     $idx = ++$counter;
-    
+
                     if ($idx > $total) {
                         break;
                     }
-    
+
                     $t0 = hrtime(true);
-                    /** @psalm-suppress MixedAssignment */
                     $ok = $mode === 'WS'
                         ? wsRoundTrip($host, $port, $path, $payload)
                         : httpGet($host, $port, $path);
                     $elapsed = (int) (hrtime(true) - $t0);
-    
+
                     if (!$ok) {
                         $errors++;
-    
+
                         continue;
                     }
-    
+
                     if ($idx > $warmup) {
                         $latencies[] = $elapsed;
                     }
                 }
-    
-                $wg->done();
+
+                $done->push(true);
             });
         }
-    
-        $wg->wait();
+
+        // Wait for every worker coroutine to finish.
+        for ($w = 0; $w < $concurrency; $w++) {
+            $done->pop();
+        }
     },
 );
+
+if (!$completed) {
+    fwrite(STDERR, "Coroutine scheduler failed.\n");
+    exit(1);
+}
 
 $end = hrtime(true);
 $durationNs = $end - $start;
 $durationSec = $durationNs / 1_000_000_000;
 $count = count($latencies);
-/** @psalm-suppress InvalidOperand */
 $rps = $count > 0
-    ? $count / $durationSec
+    ? (float) $count / (float) $durationSec
     : 0.0;
 
 sort($latencies);
-/**
- * @psalm-suppress InvalidOperand
- * @psalm-suppress RedundantCastGivenDocblockType
- */
 $p = static fn(int $percentile): int => $count === 0
     ? 0
-    : (int) $latencies[(int) min(
+    : $latencies[(int) min(
         $count - 1,
-        floor($percentile / 100 * $count),
+        floor($percentile * $count / 100),
     )];
 $avg = $count === 0
     ? 0
@@ -213,23 +208,17 @@ printf(
     fmtNs($max),
 );
 
-/**
- * @psalm-suppress MixedAssignment, MixedOperand
- */
 function httpGet(string $host, int $port, string $path): bool
 {
     $c = new HttpClient($host, $port);
     $c->set(['timeout' => 5.0]);
-    $ok = $c->get($path);
-    $status = $c->statusCode;
+    $ok = (bool) $c->get($path);
+    $status = (int) $c->statusCode;
     $c->close();
 
     return $ok && $status >= 200 && $status < 400;
 }
 
-/**
- * @psalm-suppress MixedAssignment, MixedPropertyFetch
- */
 function wsRoundTrip(string $host, int $port, string $path, string $payload): bool
 {
     $c = new HttpClient($host, $port);
@@ -247,6 +236,7 @@ function wsRoundTrip(string $host, int $port, string $path, string $payload): bo
         return false;
     }
 
+    /** @var Frame|false|null $frame — Swoole's native return type is invisible to Psalm */
     $frame = $c->recv(2.0);
     $c->close();
 

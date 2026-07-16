@@ -17,6 +17,7 @@ use Psr\Http\Message\ServerRequestInterface;
 
 use function array_map;
 use function count;
+use function is_numeric;
 
 /**
  * GET /wallet/ledger/entries?limit=N — last N transaction history rows
@@ -35,8 +36,11 @@ final readonly class LedgerEntriesHandler
         EntityManagerInterface $em,
     ): ResponseInterface {
         $params = $request->getQueryParams();
-        /** @psalm-suppress MixedArgument query param shape is mixed by PSR-7 contract */
-        $limit = (int) ($params['limit'] ?? 20);
+        // Query param shape is mixed by the PSR-7 contract — accept numeric
+        // input only, anything else falls back to the default.
+        $limit = isset($params['limit']) && is_numeric($params['limit'])
+            ? (int) $params['limit']
+            : 20;
 
         if ($limit < 1 || $limit > 200) {
             $limit = 20;

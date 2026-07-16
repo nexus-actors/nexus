@@ -8,6 +8,7 @@ use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
 use Monadial\Nexus\Example\TicTacToe\Domain\Entity\GameSession;
 use Monadial\Nexus\Example\TicTacToe\Domain\View\GameSnapshot;
+use Override;
 
 /**
  * Projects game snapshots into the `games` lobby table.
@@ -22,6 +23,7 @@ final readonly class DoctrineGameReadModel implements GameReadModel
 {
     public function __construct(private EntityManagerPool $pool) {}
 
+    #[Override]
     public function apply(GameSnapshot $snapshot): void
     {
         $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($snapshot): void {

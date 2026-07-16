@@ -9,6 +9,7 @@ use Monadial\Nexus\Logger\Handler\ConsoleHandler;
 use Monadial\Nexus\Logger\Level;
 use Monadial\Nexus\Logger\Mdc;
 use Monadial\Nexus\Logger\Record;
+use Override;
 use Psr\Log\AbstractLogger;
 use Psr\Log\LoggerInterface;
 use Stringable;
@@ -26,10 +27,14 @@ final class StderrLogger extends AbstractLogger
     private function __construct(private readonly ConsoleHandler $handler, private readonly string $channel) {}
 
     /**
-     * @param array<string, mixed> $context
+     * @param array<array-key, mixed> $context
      */
+    #[Override]
     public function log(mixed $level, string|Stringable $message, array $context = []): void
     {
+        // PSR-3 declares array-key keys; context is string-keyed by convention.
+        // Same boundary redeclaration nexus-logger's own Logger::log() uses.
+        /** @var array<string, mixed> $context */
         $record = Record::create(
             Level::fromPsr3((string) $level),
             $message,
@@ -43,9 +48,6 @@ final class StderrLogger extends AbstractLogger
 
     public static function create(string $channel): LoggerInterface
     {
-        /** @var resource $stderr */
-        $stderr = STDERR;
-
-        return new self(new ConsoleHandler($stderr, new LineFormatter()), $channel);
+        return new self(new ConsoleHandler(STDERR, new LineFormatter()), $channel);
     }
 }

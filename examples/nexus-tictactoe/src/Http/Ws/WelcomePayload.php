@@ -11,6 +11,8 @@ namespace Monadial\Nexus\Example\TicTacToe\Http\Ws;
  * `token` is the capability the client stores to reclaim this seat on
  * reconnect. `mark` is which side the connection controls (`null` for a
  * spectator). This frame is NEVER broadcast.
+ *
+ * @psalm-api
  */
 final readonly class WelcomePayload
 {

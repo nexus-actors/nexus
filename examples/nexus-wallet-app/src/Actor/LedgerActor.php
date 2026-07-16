@@ -9,6 +9,7 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\ORM\Configuration;
+use LogicException;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ActorSystemSpawner;
@@ -16,7 +17,6 @@ use Monadial\Nexus\Doctrine\Orm\Behavior\EntityEffect;
 use Monadial\Nexus\Doctrine\Orm\Behavior\EntityRefFactory;
 use Monadial\Nexus\Doctrine\Orm\Behavior\ReplayPolicy\CreateIfMissing;
 use Monadial\Nexus\Doctrine\Orm\Pool\DefaultEntityManagerFactory;
-use Monadial\Nexus\Example\Wallet\Domain\Command\LedgerCommand;
 use Monadial\Nexus\Example\Wallet\Domain\Command\RecordLedger;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\LedgerEntry;
 use Monadial\Nexus\Example\Wallet\Domain\Entity\WalletLedger;
@@ -68,20 +68,27 @@ final class LedgerActor
     }
 
     /**
-     * @return Closure(ActorContext<LedgerCommand>, LedgerCommand, WalletLedger): EntityEffect<WalletLedger>
+     * The builder's handler seam is type-erased (`EntityRefFactory::for()`
+     * fixes the command template to `object`), so accept broad types and
+     * narrow at runtime. An unknown command still crashes the actor with an
+     * UnhandledMatchError — supervision restarts it, same as before.
+     *
+     * @return Closure(ActorContext<object>, object, object): EntityEffect<object>
      */
     private static function commandHandler(): Closure
     {
-        return
-            /**
-             * @return EntityEffect<WalletLedger>
-             */
-            static fn(ActorContext $ctx, LedgerCommand $cmd, WalletLedger $ledger): EntityEffect => match (true) {
-                $cmd instanceof RecordLedger => self::applyAndPersist($ledger, $cmd),
+        return static function (ActorContext $ctx, object $cmd, object $ledger): EntityEffect {
+            $entity = $ledger instanceof WalletLedger
+                ? $ledger
+                : throw new LogicException('LedgerActor state must be a WalletLedger, got ' . $ledger::class);
+
+            return match (true) {
+                $cmd instanceof RecordLedger => self::applyAndPersist($entity, $cmd),
             };
+        };
     }
 
-    /** @return EntityEffect<WalletLedger> */
+    /** @return EntityEffect<object> */
     private static function applyAndPersist(WalletLedger $ledger, RecordLedger $cmd): EntityEffect
     {
         $now = new DateTimeImmutable();
