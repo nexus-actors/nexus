@@ -1,0 +1,6 @@
+{
+    "symbol-whitelist": [
+        "msgpack_pack",
+        "msgpack_unpack"
+    ]
+}

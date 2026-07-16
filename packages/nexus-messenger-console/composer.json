@@ -5,6 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
+        "ext-pcntl": "*",
         "nexus-actors/core": "dev-main",
         "nexus-actors/messenger": "dev-main",
         "nexus-actors/observability": "dev-main",
@@ -12,7 +13,8 @@
         "nexus-actors/serialization": "dev-main",
         "psr/event-dispatcher": "^1.0",
         "psr/log": "^3.0",
-        "symfony/console": "^7.4 || ^8.0"
+        "symfony/console": "^7.4 || ^8.0",
+        "symfony/messenger": "^7.4 || ^8.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"

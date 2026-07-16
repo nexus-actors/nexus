@@ -1,0 +1,11 @@
+{
+    "symbol-whitelist": [
+        "Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime",
+        "SWOOLE_SOCK_TCP",
+        "SWOOLE_SSL",
+        "Swoole\\Coroutine\\Channel",
+        "Swoole\\Coroutine\\Client",
+        "Swoole\\Coroutine\\Server",
+        "Swoole\\Coroutine\\Socket"
+    ]
+}

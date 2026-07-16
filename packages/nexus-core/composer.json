@@ -5,6 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
+        "ext-filter": "*",
         "psr/log": "^3.0",
         "psr/clock": "^1.0",
         "psr/container": "^2.0",

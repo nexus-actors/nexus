@@ -1,0 +1,6 @@
+{
+    "symbol-whitelist": [
+        "Swoole\\Coroutine",
+        "Swoole\\Thread\\Queue"
+    ]
+}

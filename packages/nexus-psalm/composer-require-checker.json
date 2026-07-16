@@ -1,0 +1,21 @@
+{
+    "_comment": "These classes are static-analysis TARGETS the plugin's hooks match against (::class name comparisons inside Psalm's AST walk), never loaded at plugin runtime. Requiring their packages would drag doctrine/messenger/worker-pool into every consumer install.",
+    "symbol-whitelist": [
+        "Monadial\\Nexus\\Core\\Actor\\ActorContext",
+        "Monadial\\Nexus\\Core\\Actor\\ActorHandler",
+        "Monadial\\Nexus\\Core\\Actor\\ActorRef",
+        "Monadial\\Nexus\\Core\\Actor\\Attribute\\ReplyType",
+        "Monadial\\Nexus\\Core\\Actor\\Behavior",
+        "Monadial\\Nexus\\Core\\Actor\\Props",
+        "Monadial\\Nexus\\Core\\Actor\\ReceiveBehavior",
+        "Monadial\\Nexus\\Core\\Actor\\SetupBehavior",
+        "Monadial\\Nexus\\Core\\Actor\\StatefulActorHandler",
+        "Monadial\\Nexus\\Core\\Actor\\WithStateBehavior",
+        "Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehavior",
+        "Monadial\\Nexus\\Doctrine\\Orm\\Behavior\\EntityBehaviorBuilder",
+        "Monadial\\Nexus\\Messenger\\Producer\\MessengerActorRef",
+        "Monadial\\Nexus\\Runtime\\Async\\Future",
+        "Monadial\\Nexus\\Serialization\\MessageType",
+        "Monadial\\Nexus\\WorkerPool\\WorkerActorRef"
+    ]
+}

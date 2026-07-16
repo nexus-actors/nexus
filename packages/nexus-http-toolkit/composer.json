@@ -5,16 +5,17 @@
   "license": "MIT",
   "require": {
     "php": ">=8.5.7",
+    "ext-ctype": "*",
     "nexus-actors/http": "self.version",
     "nexus-actors/http-ws": "self.version",
+    "nexus-actors/logger": "dev-main",
     "nyholm/psr7": "^1.8",
+    "phpunit/phpunit": "^13.0",
     "psr/http-factory": "^1.1",
     "psr/http-message": "^2.0",
+    "psr/http-server-handler": "^1.0",
     "psr/http-server-middleware": "^1.0",
     "psr/log": "^3.0"
-  },
-  "require-dev": {
-    "phpunit/phpunit": "^13.0"
   },
   "autoload": { "psr-4": { "Monadial\\Nexus\\Http\\Toolkit\\": "src/" } },
   "autoload-dev": { "psr-4": { "Monadial\\Nexus\\Http\\Toolkit\\Tests\\": "tests/" } },

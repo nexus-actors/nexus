@@ -5,15 +5,12 @@
   "license": "MIT",
   "require": {
     "php": ">=8.5.7",
+    "monolog/monolog": "^3.0",
     "psr/log": "^3.0",
     "nexus-actors/core": "self.version"
   },
   "require-dev": {
-    "monolog/monolog": "^3.0",
     "phpunit/phpunit": "^13.0"
-  },
-  "suggest": {
-    "monolog/monolog": "^3.0 — install for MonologHandlerAdapter / MonologFormatterAdapter (use any Monolog handler or formatter inside the nexus-logger actor pipeline)."
   },
   "autoload": { "psr-4": { "Monadial\\Nexus\\Logger\\": "src/" } },
   "autoload-dev": { "psr-4": { "Monadial\\Nexus\\Logger\\Tests\\": "tests/" } },
