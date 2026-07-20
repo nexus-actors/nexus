@@ -9,6 +9,10 @@ related:
 
 # Durable state
 
+:::warning Experimental
+The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
+:::
+
 `DurableStateBehavior` persists the actor's full current state as a single snapshot on every write, with no event history retained. Recovery loads the latest snapshot and the actor is immediately ready — no replay loop.
 
 ## The design
@@ -28,10 +32,10 @@ use Monadial\Nexus\Persistence\State\DurableStateBehavior;
 $behavior = DurableStateBehavior::create(
     PersistenceId::of('UserProfile', $userId),
     new UserProfile(),
-    static fn (ActorContext $ctx, object $cmd, UserProfile $state): DurableEffect => match (true) {
+    static fn (UserProfile $state, ActorContext $ctx, object $cmd): DurableEffect => match (true) {
         $cmd instanceof UpdateEmail   => DurableEffect::persist($state->withEmail($cmd->email)),
         $cmd instanceof UpdateName    => DurableEffect::persist($state->withName($cmd->name)),
-        $cmd instanceof GetProfile    => DurableEffect::none()->thenReply($cmd->replyTo, fn($s) => $s),
+        $cmd instanceof GetProfile    => DurableEffect::reply($cmd->replyTo, $state),
         default => DurableEffect::unhandled(),
     },
 )
@@ -44,13 +48,13 @@ $behavior = DurableStateBehavior::create(
 The command handler returns a `DurableEffect`:
 
 - `DurableEffect::persist($newState)` — write the entire new state object to the store.
-- `DurableEffect::none()` — acknowledge the command without writing.
-- `DurableEffect::reply($to, $message)` — send a reply as the sole effect.
+- `DurableEffect::none()` — acknowledge the command without writing; any chained side-effects are dropped.
+- `DurableEffect::reply($to, $message)` — send a reply as the sole effect (use this for read queries).
 - `DurableEffect::stash()` — buffer the command; replay after `$ctx->unstashAll()`.
 - `DurableEffect::stop()` — stop the actor.
 - `DurableEffect::unhandled()` — route to dead letters.
 
-Chain `->thenReply($to, fn($state) => $msg)` or `->thenRun(fn($state) => ...)` to attach side-effects that execute after the state is durably stored.
+Chain `->thenReply($to, fn($state) => $msg)` or `->thenRun(fn($state) => ...)` to attach side-effects that execute after the state is durably stored. These hooks run only on the persist path — chained on any other effect (including `DurableEffect::none()`) they are silently dropped.
 
 ## Comparison with event sourcing
 

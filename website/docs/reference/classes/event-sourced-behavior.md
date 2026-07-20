@@ -29,11 +29,11 @@ $behavior = EventSourcedBehavior::create(
     PersistenceId::of('Order', $orderId),
     new OrderState(),
     // Command handler — must be a pure function; all side effects go in thenRun()
-    static fn (ActorContext $ctx, object $cmd, OrderState $state): Effect => match (true) {
+    static fn (OrderState $state, ActorContext $ctx, object $cmd): Effect => match (true) {
         $cmd instanceof PlaceOrder   => Effect::persist(new OrderPlaced($cmd->items))
             ->thenRun(static fn (OrderState $s) => $ctx->log()->info('Order placed')),
         $cmd instanceof CancelOrder  => Effect::persist(new OrderCancelled()),
-        $cmd instanceof GetOrder     => Effect::none()->thenReply($ctx->sender(), fn ($s) => $s),
+        $cmd instanceof GetOrder     => Effect::reply($ctx->sender(), $state),
         default                      => Effect::none(),
     },
     // Event handler — pure fold; never produces side effects
@@ -57,7 +57,7 @@ $behavior = EventSourcedBehavior::create(
 - `->withSnapshotStore(SnapshotStore $store): self` — optional; enables periodic state snapshots for faster recovery.
 - `->withSnapshotStrategy(SnapshotStrategy $strategy): self` — controls when snapshots are taken (e.g. `SnapshotStrategy::everyN(10)`).
 - `->withRetention(RetentionPolicy $policy): self` — controls how many snapshots and events are kept after a snapshot is written.
-- `->withReplayFilter(ReplayFilter $filter): self` — configures writer-conflict detection during event replay (`Fail`, `Warn`, `RepairByDiscardOld`, `Off`).
+- `->withReplayFilter(ReplayFilter $filter): self` — configures writer-conflict detection during event replay (`Fail`, `Warn`, `RepairByDiscardOld`, `Off`; the default when not called is `Off`).
 - `->toBehavior(): Behavior` — compile everything into a `Behavior` ready to pass to `Props::fromBehavior()`; throws `LogicException` if `withEventStore()` was not called.
 
 ## Full API reference

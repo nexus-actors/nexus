@@ -118,7 +118,7 @@ $system->spawn(MessengerBridge::receiverProps(
 ), 'orders-receiver');
 ```
 
-Delivery is at-least-once: the receiver acks only after the target mailbox accepts the message. A full (backpressured) mailbox pauses broker consumption — no ack, the broker redelivers. Unroutable messages are rejected by default; configure `UnroutablePolicy::DeadLetters` to forward them to `$system->deadLetters()` instead.
+Delivery to the actor mailbox is at-least-once: the receiver acks only after the target mailbox accepts the message. A full (backpressured) mailbox pauses broker consumption — no ack, the broker redelivers. Note that the ack confirms mailbox acceptance, not processing completion: a message accepted into a mailbox can still be lost if the process crashes before the actor handles it. Unroutable messages are rejected by default; configure `UnroutablePolicy::DeadLetters` to forward them to `$system->deadLetters()` instead.
 
 ## Worker recycling
 
@@ -151,7 +151,7 @@ systemctl start nexus-worker@{1..10}
 
 3. Handler-side parallelism: route to a pool of target actors — see the [routing patterns guide](/docs/guides/routing-patterns).
 
-Every receiver acks only what the target mailbox accepted, so all three levers preserve at-least-once semantics.
+Every receiver acks only what the target mailbox accepted, so all three levers preserve at-least-once delivery to the mailbox (acks confirm enqueue, not processing completion).
 
 ## Host models
 

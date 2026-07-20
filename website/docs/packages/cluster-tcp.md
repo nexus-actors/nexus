@@ -9,6 +9,10 @@ related:
 
 # nexus-cluster-tcp
 
+:::caution Experimental
+Clustering is experimental and not yet production-hardened. APIs and semantics may change before 1.0.
+:::
+
 Swoole TCP mesh clustering for Nexus — a full `nexus-cluster` implementation that lets actor systems on different machines discover each other via gossip, detect failures through phi-accrual, and exchange messages with the same `tell`/`ask` API used for local actors.
 
 ## What's in this package
@@ -44,7 +48,7 @@ The loopback transport and unit tests run without Swoole. Production TCP transpo
 
 ```bash title="terminal (production)"
 composer require nexus-actors/runtime-swoole
-# ext-swoole ≥ 6.0 (coroutines). The cluster mesh uses coroutines only.
+# ext-swoole >= 6.2.1 (coroutines). The cluster mesh uses coroutines only.
 # ZTS + --enable-swoole-thread is required only if you also run
 # nexus-worker-pool-swoole. The bundled Docker image includes both.
 ```

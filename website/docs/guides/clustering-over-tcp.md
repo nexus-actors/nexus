@@ -8,11 +8,15 @@ related:
 
 # Clustering over TCP
 
+:::caution Experimental
+Clustering is experimental and not yet production-hardened. APIs and semantics may change before 1.0.
+:::
+
 `nexus-cluster-tcp` provides a Swoole TCP mesh so actor systems on different machines form a cluster, discover each other through gossip, and route messages transparently across node boundaries. This guide covers topology configuration, seed discovery, TLS, failure-detection tuning, and the consistency model you are operating under.
 
 :::note Prerequisites
 - **PHP 8.5+**
-- **ext-swoole ≥ 6.0** — the mesh uses Swoole coroutines. ZTS and `--enable-swoole-thread` are *not* required for the cluster itself (only for `nexus-worker-pool-swoole`).
+- **ext-swoole >= 6.2.1** (via `nexus-actors/runtime-swoole`) — the mesh uses Swoole coroutines. ZTS and `--enable-swoole-thread` are *not* required for the cluster itself (only for `nexus-worker-pool-swoole`).
 - **Docker** — the bundled image ships PHP 8.5 + Swoole. Loopback and unit tests run in the plain `php` container without ext-swoole; real TCP transport needs Swoole.
 :::
 

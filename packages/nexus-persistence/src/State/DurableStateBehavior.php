@@ -29,7 +29,7 @@ use Symfony\Component\Uid\Ulid;
  * $behavior = DurableStateBehavior::create(
  *     PersistenceId::of('UserProfile', $userId),
  *     new UserProfile(),
- *     static fn (ActorContext $ctx, object $cmd, UserProfile $state): DurableEffect => match (true) {
+ *     static fn (UserProfile $state, ActorContext $ctx, object $cmd): DurableEffect => match (true) {
  *         $cmd instanceof UpdateEmail  => DurableEffect::persist($state->withEmail($cmd->email)),
  *         $cmd instanceof GetProfile   => DurableEffect::reply($ctx->sender(), $state),
  *         default => DurableEffect::none(),

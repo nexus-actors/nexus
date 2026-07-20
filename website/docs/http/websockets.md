@@ -10,6 +10,10 @@ related:
 
 # WebSockets
 
+:::caution Experimental
+WebSocket support is experimental and not yet production-hardened. In particular, the WebSocket upgrade currently bypasses the HTTP auth middleware pipeline — enforce authentication outside Nexus (e.g. at a reverse proxy) until this is fixed.
+:::
+
 The [`nexus-http-ws`](../packages/http-ws.md) package adds WebSocket routes to the HTTP application. Two flavours of route are available:
 
 - **`ws()`** — per-connection `WebSocketHandler` class. One instance per upgraded connection. Use for echo, per-user state, and command-style protocols.

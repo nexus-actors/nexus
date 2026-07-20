@@ -16,17 +16,22 @@ use Monadial\Nexus\Core\Actor\ActorRef;
  * after the command handler returns, guaranteeing that side-effects registered via
  * `thenRun()` or `thenReply()` only execute once the events are durably stored.
  *
+ * Side-effect hooks run ONLY on the persist path (`Effect::persist(...)`).
+ * Chained on any other effect — including `Effect::none()` — they are silently
+ * dropped. They also run at most once, after the write: recovery replay folds
+ * events onto state only and never re-executes them.
+ *
  * Example:
  * ```php
  * // Persist an event and then reply with the updated state
  * return Effect::persist(new ItemAdded($item))
  *     ->thenReply($ctx->sender(), fn(CartState $state) => new CartUpdated($state->items));
  *
- * // Do nothing (read-only query)
- * return Effect::none()->thenReply($replyTo, fn(CartState $s) => new CartSnapshot($s));
+ * // Read-only query: reply without persisting
+ * return Effect::reply($replyTo, new CartSnapshot($state));
  *
- * // Stop the actor after persisting a terminal event
- * return Effect::persist(new CartCheckedOut())->thenRun(fn() => Effect::stop());
+ * // Stop the actor
+ * return Effect::stop();
  * ```
  *
  * @see EventSourcedBehavior for wiring the command handler that produces Effects
@@ -63,7 +68,9 @@ final readonly class Effect
      * Acknowledge the command without persisting any events or side-effects.
      *
      * Use this for read-only commands or when a command is intentionally a no-op.
-     * Chain `thenReply()` to still send a response back to the caller.
+     * Note: side-effect hooks chained on `none()` are silently dropped — the
+     * engine only executes `thenRun()`/`thenReply()` on the persist path. To
+     * reply without persisting, use `Effect::reply()` instead.
      */
     public static function none(): self
     {
@@ -120,6 +127,10 @@ final readonly class Effect
      * The closure receives the final projected state and must return the reply object
      * to send to `$to`. Multiple `thenReply()` calls chain additional replies.
      *
+     * Warning: the hook is executed only when the effect is `Effect::persist(...)`.
+     * Chained on any other effect (including `Effect::none()`) it is silently
+     * dropped — use `Effect::reply()` to reply without persisting.
+     *
      * @template TState of object
      * @template TReply of object
      * @param Closure(TState): TReply $fn receives final state, returns reply message
@@ -146,6 +157,10 @@ final readonly class Effect
      *
      * The closure receives the final projected state for inspection. Multiple `thenRun()`
      * calls chain additional side-effects; they execute in registration order.
+     *
+     * Warning: the hook is executed only when the effect is `Effect::persist(...)`.
+     * Chained on any other effect (including `Effect::none()`) it is silently
+     * dropped. It runs at most once, after the write — never during recovery replay.
      *
      * @template TState of object
      * @param Closure(TState): void $fn receives final state

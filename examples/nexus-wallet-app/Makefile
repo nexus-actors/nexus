@@ -5,7 +5,7 @@ DC := docker compose
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | awk 'BEGIN{FS=":.*?## "}{printf "\033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-build: ## Build the Docker image (PHP 8.5 ZTS + Swoole 6.0 thread-mode)
+build: ## Build the Docker image (PHP 8.5 ZTS + Swoole 6.2.1 thread-mode)
 	$(DC) build
 
 install: ## composer install inside the container

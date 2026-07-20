@@ -9,6 +9,10 @@ related:
 
 # Scaling overview
 
+:::caution Experimental
+The worker pool is experimental and not yet production-hardened. APIs and delivery semantics may change before 1.0.
+:::
+
 Nexus scales to multiple CPU cores on a single machine using a thread-based worker pool: each worker thread runs an independent `ActorSystem`, and actors are distributed across workers via a consistent hash ring.
 
 ## The design
@@ -106,6 +110,10 @@ If no reply arrives within the configured timeout, `AskTimeoutException` is thro
 
 ## Performance characteristics
 
+:::caution Indicative numbers only
+The figures below come from an indicative local microbenchmark. No published methodology (hardware, payload, topology, harness) exists yet, and the committed performance suite is partially broken — treat them as unverified until reproducible benchmarks are published.
+:::
+
 | Metric | Value |
 |---|---|
 | Cross-worker throughput | ~260K messages/sec per worker pair |
@@ -117,7 +125,7 @@ No serialization overhead exists because `Swoole\Thread\Queue` copies PHP object
 ## Prerequisites
 
 - ZTS (Zend Thread Safety) PHP 8.5+
-- Swoole 6.0+ compiled with `--enable-swoole-thread`
+- Swoole 6.2.1+ compiled with `--enable-swoole-thread`
 
 ## Multi-machine clustering
 

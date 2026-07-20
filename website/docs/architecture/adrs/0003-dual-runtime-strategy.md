@@ -19,7 +19,7 @@ Accepted
 PHP offers two concurrency mechanisms relevant to an actor system:
 
 1. **Fibers** (PHP 8.1+): Cooperative coroutines built into the language. No extensions needed. Single-threaded, cooperative scheduling. Good for development and testing.
-2. **Swoole** (extension): Full coroutine runtime with real async I/O, channels, timers, and process management. Production-grade but requires a C extension.
+2. **Swoole** (extension): Full coroutine runtime with real async I/O, channels, timers, and process management. A mature runtime widely used in production PHP, but it requires a C extension (Nexus's Swoole integration itself is pre-1.0 and not yet production-hardened).
 
 Choosing one runtime limits adoption. Fiber-only means no production performance. Swoole-only means a hard dependency on an extension that not all environments support.
 

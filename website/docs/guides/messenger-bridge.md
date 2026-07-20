@@ -8,7 +8,7 @@ related:
 
 # Bridging Symfony Messenger
 
-`nexus-messenger` connects Nexus actors to Symfony Messenger transports in both directions: actors can publish messages to any broker Messenger supports (AMQP, Redis, Doctrine, SQS, …), and broker messages can flow into actor mailboxes through a supervised poll loop. This guide walks through every aspect of the bridge — from a first publish to a production-grade multi-worker setup with observability.
+`nexus-messenger` connects Nexus actors to Symfony Messenger transports in both directions: actors can publish messages to any broker Messenger supports (AMQP, Redis, Doctrine, SQS, …), and broker messages can flow into actor mailboxes through a supervised poll loop. This guide walks through every aspect of the bridge — from a first publish to a multi-worker setup with observability.
 
 ## When to reach for the bridge
 
@@ -125,9 +125,9 @@ $system->spawn(
 );
 ```
 
-### At-least-once semantics
+### At-least-once delivery to the mailbox
 
-The bridge acks a broker message only after the target actor's mailbox has accepted the envelope (`EnqueueResult::Accepted`). If the mailbox is bounded and full, the poll returns `Backpressured` — the message is not acked, and the broker redelivers it later. Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally (no backpressure signal). This means:
+The bridge acks a broker message only after the target actor's mailbox has accepted the envelope (`EnqueueResult::Accepted`). If the mailbox is bounded and full, the poll returns `Backpressured` — the message is not acked, and the broker redelivers it later. Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally (no backpressure signal). Note the boundary of this guarantee: the ack confirms mailbox acceptance, not processing completion — a message accepted into a mailbox can still be lost if the process crashes before the actor handles it. This means:
 
 - Mailbox overflow never silently drops messages.
 - Your actor handlers should be idempotent (or deduplicate on a correlation ID) because redelivery is possible.
@@ -264,7 +264,7 @@ This is most effective with Swoole coroutine transports where each receiver can 
 
 ### Lever 2: N worker processes
 
-Run multiple identical worker processes and let the broker distribute load across them. Because each process acks independently, this is inherently at-least-once:
+Run multiple identical worker processes and let the broker distribute load across them. Because each process acks independently, this preserves at-least-once delivery to the mailbox:
 
 ```ini title="systemd/nexus-worker@.service"
 [Unit]
@@ -286,9 +286,9 @@ Each worker carries its own `LifecycleWatchdog` — no coordination needed.
 
 Route to a pool of handler actors rather than a single ref. The pool distributes work across N actors (and on a worker pool, across N threads). Cross-link: see [routing patterns](/docs/guides/routing-patterns) and [fan-out](/docs/guides/fan-out) for concrete pool patterns.
 
-### All levers preserve at-least-once
+### All levers preserve at-least-once mailbox delivery
 
-Every `ReceiverActor` acks only after the target mailbox returned `Accepted`. Whether you have 1 consumer or 10 across 5 processes, the ack-on-accept rule is upheld — broker redelivery is the safety net for any in-flight message when a process crashes.
+Every `ReceiverActor` acks only after the target mailbox returned `Accepted`. Whether you have 1 consumer or 10 across 5 processes, the ack-on-accept rule is upheld — broker redelivery is the safety net for any message that was not yet acked when a process crashes. Messages already acked but still waiting in a mailbox are not covered: a crash at that point loses them, so keep handlers idempotent and treat the guarantee as delivery-to-mailbox, not processing completion.
 
 ## Choosing a host model
 

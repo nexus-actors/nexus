@@ -62,7 +62,7 @@ A persistence model where the actor's current state is stored as a single snapsh
 
 ### Effect
 
-The return type from a persistence command handler. `Effect` describes what the actor wants to do: `Effect::persist(...$events)` to emit domain events, `Effect::none()` to do nothing, `Effect::stash()` to buffer the message until recovery completes, `Effect::stop()` to stop the actor, or `Effect::reply($to, $msg)` to send a response. Side effects are attached via `->thenRun()` and `->thenReply()` and execute only after the event is durably stored.
+The return type from a persistence command handler. `Effect` describes what the actor wants to do: `Effect::persist(...$events)` to emit domain events, `Effect::none()` to do nothing, `Effect::stash()` to buffer the message until recovery completes, `Effect::stop()` to stop the actor, or `Effect::reply($to, $msg)` to send a response. Side effects are attached via `->thenRun()` and `->thenReply()` and execute only after the event is durably stored; they run only on the persist path — chained on any other effect (including `Effect::none()`) they are silently dropped.
 
 ### Envelope
 
@@ -142,7 +142,7 @@ A lifecycle notification delivered to an actor outside the normal message queue.
 
 ### Single-writer
 
-A consistency guarantee enforced by the persistence layer: only one `ActorSystem` (identified by its ULID writer ID) may write to a given `PersistenceId` at a time. If two writer IDs are detected in the same event stream, `WriterConflictException` is thrown (in `Fail` mode). Configure the response via `ReplayFilter` modes: `Fail`, `Warn`, `RepairByDiscardOld`, or `Off`. See [persistence/single-writer](../persistence/single-writer.md).
+A consistency principle in the persistence layer: only one writer (identified by a ULID writer ID; each persistent behavior mints its own unless overridden via `withWriterId()`) should write to a given `PersistenceId` at a time. If two writer IDs are detected in the same event stream, `WriterConflictException` is thrown (in `Fail` mode). Configure the response via `ReplayFilter` modes: `Fail`, `Warn`, `RepairByDiscardOld`, or `Off` (the default). See [persistence/single-writer](../persistence/single-writer.md).
 
 ### Snapshot
 
@@ -158,7 +158,7 @@ The mechanism by which a parent actor manages failures in its children. When a c
 
 ### Swoole
 
-An async PHP extension that provides coroutines, non-blocking I/O, and a built-in HTTP server. `SwooleRuntime` uses Swoole coroutines as the concurrency primitive instead of PHP Fibers. Swoole enables true async network I/O, making it the preferred runtime for production HTTP workloads. Requires PHP compiled with Swoole 6.0+ (and ZTS for the worker pool).
+An async PHP extension that provides coroutines, non-blocking I/O, and a built-in HTTP server. `SwooleRuntime` uses Swoole coroutines as the concurrency primitive instead of PHP Fibers. Swoole enables true async network I/O, making it the preferred runtime for production HTTP workloads. Requires `ext-swoole` >= 6.2.1 (and ZTS for the worker pool).
 
 ### Tell
 

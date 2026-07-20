@@ -20,7 +20,7 @@ Thread-mode HTTP and WebSocket server built on Swoole 6's `SWOOLE_THREAD` runtim
 ## Requirements
 
 - PHP 8.5+ compiled with ZTS (Zend Thread Safety)
-- Swoole 6.0+ compiled with `--enable-swoole-thread`
+- Swoole 6.2.1+ compiled with `--enable-swoole-thread`
 
 ## Install
 

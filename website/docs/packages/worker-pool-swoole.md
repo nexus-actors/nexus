@@ -9,6 +9,10 @@ related:
 
 # nexus-worker-pool-swoole
 
+:::caution Experimental
+The worker pool is experimental and not yet production-hardened. APIs and delivery semantics may change before 1.0.
+:::
+
 Swoole thread primitives for the worker pool: `Thread\Queue` transport, `Thread\Map` directory, and the `WorkerPool` DSL for zero-boilerplate pool setup.
 
 ## What's in this package
@@ -24,7 +28,7 @@ Swoole thread primitives for the worker pool: `Thread\Queue` transport, `Thread\
 ## Requirements
 
 - PHP 8.5+ with ZTS (verify: `php -r 'echo PHP_ZTS;'` must print `1`)
-- Swoole 6.0+ compiled with `--enable-swoole-thread`
+- Swoole 6.2.1+ compiled with `--enable-swoole-thread`
 
 ## Install
 

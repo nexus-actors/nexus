@@ -127,7 +127,7 @@ Then follow Steps 2–5 from the macOS path above.
 The following require the Docker environment and cannot be set up on a standard host PHP install:
 
 - **Swoole runtime** — Swoole requires compilation from source or a pre-built PECL package. Even if installed, the worker pool features require ZTS PHP, which Homebrew and apt do not ship.
-- **ZTS PHP + Swoole threads** — The `nexus-worker-pool-swoole` package requires `php-zts` 8.5+ and Swoole 6.0 compiled with `--enable-swoole-thread`. No standard package manager ships this combination. Use `docker compose exec php-swoole` for worker pool work.
+- **ZTS PHP + Swoole threads** — The `nexus-worker-pool-swoole` package requires `php-zts` 8.5+ and Swoole 6.2.1+ compiled with `--enable-swoole-thread`. No standard package manager ships this combination. Use `docker compose exec php-swoole` for worker pool work.
 - **Xdebug + Swoole** — Xdebug and Swoole are incompatible in the same PHP process (both override `zend_execute_ex()`). The Docker setup keeps them on separate containers (`php-fiber` for Xdebug, `php-swoole` for Swoole) to avoid this.
 
 ## Next steps

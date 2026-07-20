@@ -15,7 +15,7 @@ This page covers installing Nexus into your PHP project. Nexus requires PHP 8.5+
 
 - **PHP 8.5+** — Nexus uses features introduced in PHP 8.5.
 - **Composer 2.x** — for package management.
-- **Swoole 5.0+** (optional) — required only if you use `nexus-runtime-swoole`. Not needed for local development with the Fiber runtime.
+- **Swoole 6.2.1+** (optional) — `nexus-runtime-swoole` requires `ext-swoole >= 6.2.1`. Not needed for local development with the Fiber runtime.
 
 ## Install the meta-package
 
@@ -92,8 +92,10 @@ make build && make up && make install
 | `make down` | Stop containers |
 | `make install` | Run `composer install` inside the container |
 | `make shell` | Open a bash shell in the PHP container |
-| `make test` | Run all tests |
+| `make test` | Run the suites that fit on the `php` container (unit + Fiber/HTTP/Step/serialization/messenger/persistence integration) |
 | `make psalm` | Run Psalm static analysis |
+
+`make test` is **not** every suite: Swoole, worker-pool, cluster, HTTP-Swoole, and Doctrine-Swoole integration tests run on the `php-swoole` container via dedicated targets (`make test-swoole`, `make test-worker-pool-swoole`, `make test-cluster`, `make test-http-swoole`, `make test-doctrine`), and performance benchmarks have their own `perf-*` targets. Run `make help` for the full list.
 
 ## Smoke test
 

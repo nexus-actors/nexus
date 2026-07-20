@@ -9,6 +9,10 @@ related:
 
 # WebSocket channel actors
 
+:::caution Experimental
+WebSocket support is experimental and not yet production-hardened. In particular, the WebSocket upgrade currently bypasses the HTTP auth middleware pipeline — enforce authentication outside Nexus (e.g. at a reverse proxy) until this is fixed.
+:::
+
 A **channel actor** is a single stateful actor that owns every WebSocket connection matching a URL path. Two clients connecting to `/ws/games/{id}` for the same `id` end up attached to the same actor; any frame from any client can trigger the actor to broadcast to all of them.
 
 Channel actors solve the "fan out one client message to N others" problem without threading a connection registry through your code. The framework handles connection lifecycle, name resolution, and cleanup; you write only the message handler.

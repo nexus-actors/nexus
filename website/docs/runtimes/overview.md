@@ -61,7 +61,7 @@ The `Runtime` interface exposes eleven methods organized into three groups:
 | Runtime | Extension required | Concurrency model | Primary use |
 |---|---|---|---|
 | `FiberRuntime` | None | PHP 8.1+ native fibers | Development, CI, simple services |
-| `SwooleRuntime` | Swoole 5.0+ | Swoole coroutines | Production, high concurrency |
+| `SwooleRuntime` | Swoole 6.2.1+ | Swoole coroutines | Production, high concurrency |
 | `StepRuntime` | None | Manual stepping (fibers internally) | Deterministic testing |
 
 ## Tradeoffs

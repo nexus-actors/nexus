@@ -333,7 +333,7 @@ EventSourcedBehavior::create($persistenceId, $emptyState, $cmdHandler, $evHandle
         </li>
         <li class="flex gap-3">
           <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>
-          <span><strong class="text-slate-700 dark:text-slate-200">Input validation &amp; authentication</strong> — use PSR-15 middleware before requests become actor messages.</span>
+          <span><strong class="text-slate-700 dark:text-slate-200">Input validation &amp; authentication</strong> — use PSR-15 middleware before requests become actor messages. Note: the WebSocket upgrade path does not currently pass through the HTTP auth middleware pipeline — enforce WebSocket authentication yourself (e.g. at the proxy) until this lands.</span>
         </li>
         <li class="flex gap-3">
           <span class="text-amber-600 dark:text-amber-400 font-bold mt-0.5">✗</span>

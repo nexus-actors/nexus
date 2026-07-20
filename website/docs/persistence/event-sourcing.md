@@ -9,6 +9,10 @@ related:
 
 # Event sourcing
 
+:::warning Experimental
+The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
+:::
+
 Event sourcing records every state change as an immutable domain event rather than overwriting the current state. On restart, the actor replays its event history to reconstruct the exact state it had when it stopped.
 
 ## The design
@@ -30,10 +34,10 @@ use Monadial\Nexus\Persistence\PersistenceId;
 $behavior = EventSourcedBehavior::create(
     PersistenceId::of('Order', $orderId),
     new OrderState(),
-    static fn (ActorContext $ctx, object $cmd, OrderState $state): Effect => match (true) {
+    static fn (OrderState $state, ActorContext $ctx, object $cmd): Effect => match (true) {
         $cmd instanceof PlaceOrder   => Effect::persist(new OrderPlaced($cmd->items)),
         $cmd instanceof CancelOrder  => Effect::persist(new OrderCancelled()),
-        $cmd instanceof GetOrder     => Effect::none()->thenReply($cmd->replyTo, fn($s) => $s),
+        $cmd instanceof GetOrder     => Effect::reply($cmd->replyTo, $state),
         default => Effect::unhandled(),
     },
     static fn (OrderState $state, object $event): OrderState => match (true) {
@@ -51,16 +55,16 @@ $behavior = EventSourcedBehavior::create(
 
 ### Command handler and `Effect`
 
-The command handler receives the current `ActorContext`, the incoming command, and the current projected state. It returns an `Effect`:
+The command handler receives the current projected state, the `ActorContext`, and the incoming command — in that order: `($state, $ctx, $cmd)`. It returns an `Effect`:
 
 - `Effect::persist(...$events)` — write one or more events to the store, then apply them via the event handler.
-- `Effect::none()` — acknowledge the command without persisting (useful for read queries).
-- `Effect::reply($to, $message)` — send a reply as the sole effect.
+- `Effect::none()` — acknowledge the command without persisting; any chained side-effects are dropped.
+- `Effect::reply($to, $message)` — send a reply as the sole effect (use this for read queries).
 - `Effect::stash()` — buffer the command for later; replay after `$ctx->unstashAll()`.
 - `Effect::stop()` — stop the actor after the effect completes.
 - `Effect::unhandled()` — route to dead letters.
 
-Chain side-effects after persistence using `->thenRun(fn($state) => ...)` and `->thenReply($to, fn($state) => $msg)`. These closures execute only after events are durably written.
+Chain side-effects after persistence using `->thenRun(fn($state) => ...)` and `->thenReply($to, fn($state) => $msg)`. These closures execute only after events are durably written, and only on the persist path — chained on any other effect (including `Effect::none()`) they are silently dropped. They run at most once: recovery replay folds events onto state and never re-executes them.
 
 ### Event handler
 
@@ -81,7 +85,7 @@ The `entityType` and `entityId` together form the event stream key. Choose IDs t
 
 ## Recovery sequence
 
-On actor startup, the `PersistenceEngine` loads the latest snapshot, replays events written after that snapshot, and delivers `RecoveryCompleted` before accepting user commands.
+On actor startup, the `PersistenceEngine` loads the latest snapshot and replays events written after that snapshot before accepting user commands. Recovery happens synchronously inside the actor's setup phase: it folds events onto state only — it does not re-run `thenRun`/`thenReply` side-effects or reissue commands.
 
 ```mermaid
 sequenceDiagram
@@ -97,11 +101,11 @@ sequenceDiagram
     PE->>ES: load(persistenceId, fromSeq=101)
     ES-->>PE: EventEnvelope[101..115]
     PE->>PE: fold events onto snapshot state
-    PE->>A: RecoveryCompleted (state at seq=115)
+    PE->>A: recovered state (seq=115)
     A-->>A: ready for user commands
 ```
 
-_Figure 1: Recovery sequence — snapshot load → event replay → RecoveryCompleted → accepting commands._
+_Figure 1: Recovery sequence — snapshot load → event replay → accepting commands._
 
 ## Command-path flowchart
 
@@ -109,13 +113,13 @@ Once recovered, each incoming command travels through the command handler to the
 
 ```mermaid
 flowchart TD
-    C[Incoming command] --> CH[commandHandler\nActorContext + cmd + state]
+    C[Incoming command] --> CH[commandHandler\nstate + ctx + cmd]
     CH -->|Effect::persist| ES[EventStore.append\nevents written]
-    CH -->|Effect::none| SE[Side-effects only]
+    CH -->|Effect::none| NOP[No-op\nside-effects dropped]
     CH -->|Effect::stash| STB[Stash buffer]
     CH -->|Effect::stop| STOP[Actor stops]
     ES --> EH[eventHandler\nfold events onto state]
-    EH --> SE
+    EH --> SE[Side-effects]
     SE -->|thenRun| SR[Run closure with new state]
     SE -->|thenReply| REP[Send reply to caller]
 ```
@@ -124,7 +128,7 @@ _Figure 2: Command-path flow from incoming command through the event store to si
 
 ## Writer-conflict sequence
 
-Each `ActorSystem` stamps a unique ULID `writerId` on every `EventEnvelope`. If two systems write to the same stream, the `ReplayFilter` detects the interleave during recovery.
+Each `EventSourcedBehavior` stamps a ULID `writerId` on every `EventEnvelope` it persists. The behavior mints a fresh ULID per instance unless you set one explicitly via `withWriterId()` — the `ActorSystem`'s own `writerId()` is not propagated to persistence. If two writers append to the same stream, the `ReplayFilter` can detect the interleave during recovery (when enabled; the default mode is `Off`).
 
 ```mermaid
 sequenceDiagram
@@ -154,7 +158,7 @@ flowchart TD
     LoadSnap --> LoadDelta[Load events\nfrom seqN+1]
     LoadDelta --> Replay[Fold events onto state]
     LoadAll --> Replay
-    Replay --> RC[RecoveryCompleted\ndeliver first user command]
+    Replay --> RC[Recovery complete\ndeliver first user command]
 ```
 
 _Figure 4: Snapshot-and-events vs replay-from-zero decision at actor startup._

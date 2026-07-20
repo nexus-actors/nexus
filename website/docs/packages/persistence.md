@@ -23,7 +23,7 @@ Core persistence abstractions for Nexus actors: event sourcing, durable state, e
 
 **Durable-state actors** (`Monadial\Nexus\Persistence\State\`)
 
-- `DurableStateBehavior` — functional builder; `create` → `withStateStore` → `withReplayFilter` → `toBehavior`
+- `DurableStateBehavior` — functional builder; `create` → `withStateStore` → `withWriterId` → `toBehavior`
 - `AbstractDurableStateActor` — class-based alternative
 - `DurableEffect` — `persist`, `none`, `unhandled`, `stash`, `stop`, `reply`, `thenRun`, `thenReply`
 
@@ -50,13 +50,13 @@ composer require nexus-actors/persistence
 use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
-use Monadial\Nexus\Persistence\InMemoryEventStore;
+use Monadial\Nexus\Persistence\Event\InMemoryEventStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 
 $behavior = EventSourcedBehavior::create(
     PersistenceId::of('Order', $orderId),
     new OrderState(),
-    commandHandler: fn($state, $cmd) => match(true) {
+    commandHandler: fn($state, $ctx, $cmd) => match(true) {
         $cmd instanceof PlaceOrder => Effect::persist(new OrderPlaced($cmd->id)),
         default => Effect::unhandled(),
     },

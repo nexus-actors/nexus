@@ -27,7 +27,7 @@ Both patterns are valuable for different use cases. The persistence layer must i
 Implement persistence as a behavior wrapper layer:
 
 - **`PersistenceEngine`**: Wraps any `Behavior<T>` to add event sourcing. Handles recovery (load snapshot → replay events), event persistence, and snapshot management.
-- **`Effect`** type: Command handlers return effects instead of behaviors. `Effect::persist(events)` to persist, `Effect::none()` to skip, with `thenReply()` and `thenRun()` chaining.
+- **`Effect`** type: Command handlers return effects instead of behaviors. `Effect::persist(events)` to persist, `Effect::none()` to skip, with `thenReply()` and `thenRun()` chaining (side-effect hooks execute only on the persist path).
 - **`DurableStateEngine`**: Simpler variant that persists current state. `DurableEffect::persist($state)`.
 - **Two API styles**: Functional (`EventSourcedBehavior::create()`) and class-based (`AbstractEventSourcedActor`).
 - **Snapshot strategies**: `SnapshotStrategy::everyN(100)` for periodic snapshots, reducing replay overhead.

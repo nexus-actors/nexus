@@ -38,7 +38,8 @@ $ref = MessengerBridge::producer(
 
 const consumerCode = `<?php
 // ReceiverActor polls the transport, routes by message class, and acks
-// only after the actor's mailbox accepts the message — at-least-once.
+// only after the actor's mailbox accepts the message — at-least-once
+// delivery to the mailbox (not processing completion).
 use Monadial\\Nexus\\Messenger\\Routing\\MapMessageRouter;
 use Monadial\\Nexus\\Messenger\\Routing\\Route;
 use Monadial\\Nexus\\Messenger\\MessengerBridge;
@@ -59,7 +60,8 @@ $system->spawn(
 
 const scalingCode = `<?php
 // Spawn N competing ReceiverActors over the same broker transport.
-// Each polls, routes, and acks independently — at-least-once semantics.
+// Each polls, routes, and acks independently — at-least-once delivery
+// to actor mailboxes.
 use Monadial\\Nexus\\Messenger\\MessengerBridge;
 
 $refs = MessengerBridge::spawnReceivers(
@@ -150,7 +152,8 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
       <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
         Publish from actors to any broker Symfony Messenger supports — AMQP, Redis, SQS,
         Doctrine — and consume broker messages directly into actor mailboxes.
-        One bridge. Location-transparent producers. Supervised, at-least-once consumers.
+        One bridge. Location-transparent producers. Supervised consumers with
+        at-least-once delivery to actor mailboxes.
       </p>
       <div class="flex flex-wrap gap-3">
         <a
@@ -196,18 +199,19 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
   <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
     <CodeBlock code={consumerCode} lang="php" title="bootstrap.php — consumer wiring" />
     <div>
-      <h2 class="text-3xl font-bold mb-4">Supervised, at-least-once consumers.</h2>
+      <h2 class="text-3xl font-bold mb-4">Supervised consumers, at-least-once mailbox delivery.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
         <code class="font-mono text-primary">ReceiverActor</code> polls the transport,
         routes by message class via <code class="font-mono">MapMessageRouter</code>, and
         acks the broker only after the target actor's mailbox accepts the message. If
-        enqueue fails — because the mailbox is full — the message is not acked.
-        The broker retains it; your actors never drop a message silently.
+        enqueue fails — because the mailbox is full — the message is not acked and the
+        broker retains it. Note the boundary: the ack confirms mailbox acceptance, not
+        processing completion — a message accepted into a mailbox can still be lost if
+        the process crashes before the actor handles it.
       </p>
       <p class="text-slate-600 dark:text-slate-300">
         The consumer is a first-class Nexus actor. It lives under the supervision tree,
         restarts on failure, and obeys the same lifecycle signals as any other actor.
-        A crash does not leave messages in a half-processed state.
       </p>
       <a
         href={docsUrl('/guides/messenger-bridge')}
@@ -308,8 +312,9 @@ $system->spawn(MessengerBridge::receiverProps($transport, $router, observability
         reply-to channel names travel as
         <code class="font-mono">X-Nexus-Correlation-Id</code> /
         <code class="font-mono">X-Nexus-Reply-To</code> headers.
-        The original broker envelope is acked only after the responder publishes its reply —
-        crash-safe, at-least-once delivery end-to-end.
+        The original broker envelope is acked only after the responder publishes its reply,
+        so unanswered requests are redelivered by the broker. Replies travel over an
+        ephemeral queue and are not themselves crash-safe.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
         <li class="flex gap-2"><span class="text-primary font-bold">→</span> Timeout and return-type parity with local <code class="font-mono">ask()</code></li>
