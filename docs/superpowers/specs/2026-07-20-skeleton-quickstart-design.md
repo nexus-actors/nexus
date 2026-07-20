@@ -90,10 +90,24 @@ already loads.
 
 ## 5. Publishing and infra
 
-- Add `nexus-skeleton` and `nexus-maker` to the `split.yml` matrix (37 -> 39 entries);
-  update the release-process doc counts.
-- Manual handoff (project owner): register `nexus-actors/skeleton` and
-  `nexus-actors/maker` on Packagist once split repos exist.
+Packaging audit (2026-07-20) found the ecosystem largely unpublishable: 25 of 37 split
+packages are not registered on Packagist (entire HTTP stack, observability suite,
+messenger, worker-pool, doctrine, logger, cluster-tcp, serialization-msgpack);
+`nexus-observability-serialization` has a split repo but no split.yml entry; and the
+monorepo root composer.json shares the name `nexus-actors/nexus` with the meta-package,
+with Packagist pointing at the monorepo. The wizard `composer require`s exactly these
+packages, so repo-side fixes are a prerequisite phase of this work:
+
+- Rename root `composer.json` to `nexus-actors/monorepo` (breaks the meta-package name
+  collision; verify nothing in CI/scripts keys on the old name).
+- Add `nexus-observability-serialization` to `split.yml` (repo already exists).
+- Add `nexus-skeleton` and `nexus-maker` to the `split.yml` matrix; update the
+  release-process doc counts.
+- Manual handoff (project owner): register the 25 missing packages plus
+  `nexus-actors/skeleton` and `nexus-actors/maker` on Packagist (scriptable via the
+  Packagist submit API with an API token), and re-point the `nexus-actors/nexus`
+  Packagist entry to a new meta split repo (needs a distinct GitHub repo name, e.g.
+  `nexus-actors/meta`, since `nexus-actors/nexus` is the monorepo).
 - CI: new job validates create-project from the local path (path repos injected), runs
   `nexus:setup --no-interaction`, then `bin/console run` smoke test.
 
