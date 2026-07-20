@@ -231,10 +231,10 @@ final readonly class OrderStatusHandler
         executes with invalid input.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">AuthenticationMiddleware</code> — plug in any Bearer JWT, API key, or custom resolver</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Any PSR-15 middleware drops in without modification — CORS, rate limiting, tracing</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">ExceptionHandlerMiddleware</code> — converts uncaught exceptions to RFC 9457 Problem Details</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">RouterMiddleware</code> — final pipeline stage dispatches to the matched handler</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">AuthenticationMiddleware</code> — plug in any Bearer JWT, API key, or custom resolver</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Any PSR-15 middleware drops in without modification — CORS, rate limiting, tracing</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">ExceptionHandlerMiddleware</code> — converts uncaught exceptions to RFC 9457 Problem Details</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">RouterMiddleware</code> — final pipeline stage dispatches to the matched handler</span></li>
       </ul>
     </div>
     <CodeBlock code={middlewareCode} lang="php" title="bootstrap.php" />

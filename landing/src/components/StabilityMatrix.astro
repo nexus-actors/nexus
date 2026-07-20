@@ -34,6 +34,7 @@ const PACKAGES: Package[] = [
   { name: 'nexus-actors/doctrine-orm', stability: 'Stable', ztsRequired: false, description: 'Pooled EntityManager injection + EntityBehavior DSL for aggregate actors' },
   { name: 'nexus-actors/logger', stability: 'Stable', ztsRequired: false, description: 'Async PSR-3 logger backed by LogActor mailbox with Monolog-compatible handlers' },
   { name: 'nexus-actors/cluster', stability: 'Experimental', ztsRequired: false, description: 'Remote actor contracts — NodeAddress, ClusterTransport, NodeDirectory (API preview; not production-ready)' },
+  { name: 'nexus-actors/cluster-tcp', stability: 'Experimental', ztsRequired: false, description: 'Swoole TCP cluster mesh — gossip membership, phi-accrual failure detection, ClusterRef (not production-ready)' },
   { name: 'nexus-actors/psalm', stability: 'Stable', ztsRequired: false, description: 'Psalm plugin — ReadonlyMessage, MutableState, BlockingCall, and PropsReturnType rules' },
   { name: 'nexus-actors/skeleton', stability: 'Stable', ztsRequired: false, description: 'Project skeleton — composer create-project starter with interactive bootstrap wizard' },
   { name: 'nexus-actors/nexus', stability: 'Stable', ztsRequired: false, description: 'Meta-package — installs nexus-actors/core, runtime, runtime-fiber, and serialization in one step' },

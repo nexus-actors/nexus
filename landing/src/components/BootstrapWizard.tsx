@@ -63,6 +63,8 @@ function RadioCard({
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
       onClick={onSelect}
       className={`wiz-radio-card ${selected ? 'wiz-radio-card--selected' : ''}`}
     >
@@ -97,6 +99,8 @@ function CheckCard({
   return (
     <button
       type="button"
+      role="checkbox"
+      aria-checked={checked}
       onClick={onToggle}
       disabled={disabled}
       className={`wiz-radio-card ${checked ? 'wiz-radio-card--selected' : ''} ${disabled ? 'wiz-radio-card--disabled' : ''}`}
@@ -119,7 +123,7 @@ function CheckCard({
 // ── Step components ──────────────────────────────────────────────────────────
 
 function Step1({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => void }) {
-  const set = (runtime: Runtime) => setSel({ ...sel, runtime });
+  const set = (runtime: Runtime) => setSel({ ...sel, runtime, cluster: runtime === 'swoole' ? sel.cluster : false });
   return (
     <div className="wiz-step-body">
       <h2 className="wiz-step-heading">Choose a runtime</h2>
@@ -148,7 +152,7 @@ function Step1({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => vo
 }
 
 function Step2({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => void }) {
-  const toggle = (key: 'http' | 'websockets' | 'doctrine' | 'otel') => {
+  const toggle = (key: 'http' | 'websockets' | 'otel' | 'cluster' | 'messenger') => {
     const next = { ...sel, [key]: !sel[key] };
     // WebSockets requires HTTP
     if (key === 'http' && !next.http) next.websockets = false;
@@ -172,17 +176,23 @@ function Step2({ sel, setSel }: { sel: Selections; setSel: (s: Selections) => vo
           description={sel.http ? 'Long-lived connections via the same actor topology.' : 'Requires HTTP server (enable above first).'}
         />
         <CheckCard
-          checked={sel.doctrine}
-          onToggle={() => toggle('doctrine')}
-          title="Doctrine ORM bridge"
-          description="EntityBehavior + per-actor EntityManager helpers."
+          checked={sel.otel}
+          onToggle={() => toggle('otel')}
+          title="OpenTelemetry"
+          description="Traces, metrics &amp; logs via OTLP. On Swoole, telemetry export runs on its own actor (set OTEL_NEXUS_ASYNC_EXPORT=1)."
         />
         <CheckCard
-          checked={false}
-          onToggle={() => {}}
-          disabled
-          title="OpenTelemetry tracing"
-          description="Available soon — package not yet on Packagist. Track at github.com/nexus-actors/nexus."
+          checked={sel.cluster}
+          disabled={sel.runtime !== 'swoole'}
+          onToggle={() => sel.runtime === 'swoole' && toggle('cluster')}
+          title="TCP cluster mesh"
+          description={sel.runtime !== 'swoole' ? 'Requires the Swoole runtime (coroutine sockets) — choose Swoole in step 1.' : 'Location-transparent tell()/ask() across nodes over a TCP gossip mesh.'}
+        />
+        <CheckCard
+          checked={sel.messenger}
+          onToggle={() => toggle('messenger')}
+          title="Messenger bridge"
+          description="Publish/consume actor messages over Symfony Messenger transports (AMQP, Redis, Doctrine, …)."
         />
       </div>
     </div>
@@ -247,8 +257,9 @@ function RecapChips({ sel }: { sel: Selections }) {
   const chips: string[] = [`Runtime: ${RUNTIME_CHIP[sel.runtime]}`];
   if (sel.http) chips.push('HTTP');
   if (sel.websockets) chips.push('WebSockets');
-  if (sel.doctrine) chips.push('Doctrine ORM');
-  // OTel package not yet published — omit chip until functional
+  if (sel.otel) chips.push('OpenTelemetry');
+  if (sel.cluster) chips.push('Cluster');
+  if (sel.messenger) chips.push('Messenger');
   if (sel.persistence !== 'none') chips.push(`Persistence: ${PERSISTENCE_CHIP[sel.persistence]}`);
   return (
     <div className="wiz-chips">
@@ -265,7 +276,7 @@ function CopyButton({ getText }: { getText: () => string }) {
     navigator.clipboard.writeText(getText()).then(() => {
       setLabel('Copied!');
       setTimeout(() => setLabel('Copy'), 2000);
-    });
+    }).catch(() => setLabel('Copy failed'));
   };
   return (
     <button type="button" onClick={copy} className="wiz-copy-btn">
@@ -288,7 +299,7 @@ function Step4({ sel, onReset }: { sel: Selections; onReset: () => void }) {
     navigator.clipboard.writeText(createCmd).then(() => {
       setCmdCopyLabel('Copied!');
       setTimeout(() => setCmdCopyLabel('Copy'), 2000);
-    });
+    }).catch(() => setCmdCopyLabel('Copy failed'));
   };
 
   const files = TAB_NAMES.map((name, i) => ({
@@ -400,7 +411,7 @@ export default function BootstrapWizard() {
       next.persistence = persistenceParam;
       changed = true;
     }
-    for (const flag of ['http', 'websockets', 'doctrine'] as const) {
+    for (const flag of ['http', 'websockets', 'otel', 'cluster', 'messenger'] as const) {
       const v = params.get(flag);
       if (v === '1' || v === 'true') {
         next[flag] = true;
@@ -409,6 +420,10 @@ export default function BootstrapWizard() {
         next[flag] = false;
         changed = true;
       }
+    }
+    // Cluster is Swoole-only; ignore a stale cluster=1 for other runtimes.
+    if (next.runtime !== 'swoole') {
+      next.cluster = false;
     }
     if (changed) setSel(next);
   }, []);
@@ -419,7 +434,7 @@ export default function BootstrapWizard() {
     params.set('step', String(step + 1));
     if (sel.runtime !== DEFAULT_SELECTIONS.runtime) params.set('runtime', sel.runtime);
     if (sel.persistence !== DEFAULT_SELECTIONS.persistence) params.set('persistence', sel.persistence);
-    for (const flag of ['http', 'websockets', 'doctrine'] as const) {
+    for (const flag of ['http', 'websockets', 'otel', 'cluster', 'messenger'] as const) {
       if (sel[flag]) params.set(flag, '1');
     }
     const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -471,7 +486,6 @@ export default function BootstrapWizard() {
         .wiz-stepbar {
           display: flex;
           align-items: center;
-          gap: 0;
           margin-bottom: 2rem;
           flex-wrap: wrap;
           gap: 0.25rem;

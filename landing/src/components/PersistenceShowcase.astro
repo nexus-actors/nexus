@@ -85,7 +85,7 @@ use Monadial\\Nexus\\Persistence\\Dbal\\DbalEventStore;
 use Monadial\\Nexus\\Persistence\\Dbal\\DbalSnapshotStore;
 
 $dsnParser  = new DsnParser(['mysql' => 'pdo_mysql', 'postgres' => 'pdo_pgsql', 'sqlite' => 'pdo_sqlite']);
-$connection = DriverManager::getConnection($dsnParser->parse($_ENV['DATABASE_URL']));
+$connection = DriverManager::getConnection($dsnParser->parse((string) getenv('DATABASE_URL')));
 
 $eventStore = new DbalEventStore($connection);
 $snapshotStore = new DbalSnapshotStore($connection);
