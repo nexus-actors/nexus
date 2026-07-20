@@ -1,0 +1,402 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const heroCode = `<?php
+use Monadial\\Nexus\\Cluster\\NodeAddress;
+use Monadial\\Nexus\\Cluster\\Tcp\\ClusterNode;
+use Monadial\\Nexus\\Cluster\\Tcp\\ClusterTopology;
+use Monadial\\Nexus\\Cluster\\Tcp\\NodeEndpoint;
+use Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime;
+use Monadial\\Nexus\\Serialization\\TypeRegistry;
+
+$runtime  = new SwooleRuntime();
+$system   = ActorSystem::create('my-cluster', $runtime);
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7361')],
+);
+
+$registry = new TypeRegistry();
+$registry->registerFromAttribute(OrderPlaced::class);
+
+$node = ClusterNode::boot($system, $topology, $registry);
+$node->expose($processorRef);           // register actor for remote delivery
+
+// Location-transparent: same tell() whether the target is local or remote.
+$remoteRef = $node->refFor(
+    new NodeAddress('production', 'eu', 'orders', 'node-2'),
+    $processorRef->path(),
+);
+$remoteRef->tell(new OrderPlaced($orderId));
+
+$system->run(); // starts event loop; gossip and failure detection are self-driving`;
+
+const meshCode = `<?php
+// bindEndpoint   — the address the TCP server listens on (can be 0.0.0.0).
+// advertiseEndpoint — what peers use to connect back (pod IP in Kubernetes,
+//                     public IP on bare-metal). May be identical on bare-metal.
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [
+        NodeEndpoint::fromString('10.0.0.2:7361'), // node-2
+        NodeEndpoint::fromString('10.0.0.3:7361'), // node-3
+    ],
+    gossipInterval:    Duration::seconds(1),        // default
+    heartbeatInterval: Duration::seconds(1),        // default
+);
+
+// On boot, ClusterNode dials each seed and exchanges a Handshake frame.
+// The HandshakeAck carries a full endpoint view of the current cluster —
+// endpoint discovery completes within one gossip round, even without
+// direct links between every pair of nodes.`;
+
+const refCode = `<?php
+// refFor() returns ClusterRef<T> — a full ActorRef<T> implementation.
+// The node auto-selects local delivery or TCP at runtime.
+
+$remoteRef = $node->refFor(
+    new NodeAddress('production', 'eu', 'orders', 'node-2'),
+    $processorRef->path(), // ActorPath agreed by naming convention
+);
+
+// tell() — fire-and-forget; self-node calls go directly to the mailbox
+$remoteRef->tell(new OrderPlaced($orderId));
+
+// ask() — request-response with timeout; returns Future<R>
+/** @var OrderConfirmed $reply */
+$reply = $remoteRef->ask(new PlaceOrder($orderId), Duration::seconds(5))->await();
+
+// Self-node short-circuit: if $remoteRef points to this node, the message
+// goes directly to the local actor mailbox — no TCP frame, no serialiser.
+// The calling code is identical in both cases.`;
+
+const failureCode = `<?php
+// Hayashibara phi-accrual failure detector — the same algorithm used by
+// Hazelcast and Akka. Gossip frames double as heartbeats; inter-arrival
+// times build a statistical window that drives the phi value.
+//
+// phi >= phiThreshold → Suspect. phi >> threshold or silence beyond
+// maxNoHeartbeat → Down. TCP EOF → immediate Suspect(Connection).
+// Graceful shutdown() → immediate Down via Leave frame, no phi wait.
+
+$topology = ClusterTopology::create(/* ... */)->withFailureDetection(
+    sampleSize:     200,                    // history window (inter-arrival samples)
+    minStdDev:      Duration::millis(500),  // noise floor — prevents spikes on idle links
+    maxNoHeartbeat: Duration::seconds(10),  // hard bound: Down if silent for 10 s
+    phiThreshold:   8.0,                    // default — conservative; Hazelcast-parity
+);
+
+// PSR-14 events fired on state transitions:
+//   NodeUp(node, endpoint)
+//   NodeSuspected(node, reason: Connection | Gossip | Phi)
+//   NodeDown(node)`;
+
+const tlsCode = `<?php
+// Optional Swoole SSL — encrypts every peer connection, inbound and outbound.
+// Never expose plaintext cluster ports to untrusted networks.
+
+$tls = new TlsConfig(
+    certFile:   '/certs/node.crt',
+    keyFile:    '/certs/node.key',
+    caFile:     '/certs/ca.crt',  // null -> no CA verification (dev only)
+    verifyPeer: true,              // mutual TLS — recommended for production
+);
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7361')],
+)->withTls($tls);
+
+// Transport selection is automatic. No code changes are needed beyond
+// setting TlsConfig — SwooleMeshTransport applies it to all connections.`;
+
+const obsCode = `<?php
+// Pass any Observability instance to ClusterNode::boot().
+// Omit it (or pass null) for zero-overhead NoopObservability.
+$node = ClusterNode::boot($system, $topology, $registry, observability: $obs);
+
+// W3C traceparent is injected into every tell() / ask() frame.
+// One trace ID follows the call across machines — no manual wiring.
+//
+// Example: HTTP on Node A -> TCP -> actor on Node B (one trace):
+//
+//   POST /orders              [120ms]   (Node A)
+//   L orders.handle           [110ms]
+//      L cluster.send           [3ms]   (TCP to Node B, Producer span)
+//         L order-processor    [95ms]   (Node B — child span, same trace)
+
+// Metrics emitted automatically per ClusterNode:
+// nexus.cluster.messages.sent               — remote tells dispatched
+// nexus.cluster.messages.local_shortcircuit — self-node tells (no wire)
+// nexus.cluster.asks.sent                   — remote asks dispatched
+// nexus.cluster.asks.capacity_rejected      — registry-full rejections
+// nexus.cluster.bytes.sent                  — outbound frame size (histogram)
+// nexus.cluster.frames.sent                 — total frames (all types)
+// nexus.cluster.handshake.rejected          — parse-failure rejections`;
+---
+<Marketing
+  title="Cluster over TCP — Nexus"
+  description="Swoole TCP mesh between Nexus nodes: gossip membership, phi-accrual failure detection, and location-transparent ClusterRef — the same tell()/ask() API whether an actor is local or on another machine."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">
+        Cluster over TCP
+        <span class="ml-2 align-middle inline-block rounded-full border border-amber-400/60 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-xs font-semibold normal-case tracking-normal">Experimental</span>
+      </p>
+      <h1 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight">
+        Actors across machines.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        Swoole TCP mesh between Nexus nodes — gossip membership, phi-accrual
+        failure detection, and location-transparent
+        <code class="font-mono">ClusterRef</code>. The same
+        <code class="font-mono">tell()</code> and <code class="font-mono">ask()</code>
+        you already use, whether the target actor lives in the same process or on
+        another machine. Experimental and pre-1.0: the wire protocol and APIs may
+        change, and it is not yet production-hardened.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/guides/clustering-over-tcp')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          Clustering guide
+        </a>
+        <a
+          href={docsUrl('/packages/cluster-tcp')}
+          class="border border-slate-300 dark:border-slate-700 px-6 py-3 rounded-md font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+        >
+          Package reference
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={heroCode} lang="php" title="bootstrap.php" />
+  </section>
+
+  <!-- TCP mesh + seed join -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Self-joining TCP mesh.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Configure a list of seed endpoints. On boot,
+        <code class="font-mono text-primary">ClusterNode</code> dials each seed,
+        exchanges a <code class="font-mono">Handshake</code> frame, and receives a
+        <code class="font-mono">HandshakeAck</code> containing the full endpoint view
+        of the current cluster. A new node needs to know only one live peer to join —
+        gossip propagates the rest within one interval.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">bindEndpoint</code> — the address the TCP server listens on (e.g. <code class="font-mono">0.0.0.0:7361</code>)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">advertiseEndpoint</code> — what peers connect to (pod IP in Kubernetes, public IP on bare-metal)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Gossip and heartbeat default to 1 s; the full view propagates within one round</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Auto-reconnect with exponential back-off (100 ms → 30 s) on TCP disconnection</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">singleNode: true</code> starts without seeds — useful for single-node dev and integration tests</span></li>
+      </ul>
+    </div>
+    <CodeBlock code={meshCode} lang="php" title="bootstrap.php — topology" />
+  </section>
+
+  <!-- Location-transparent ClusterRef -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={refCode} lang="php" title="src/Actor/OrderActor.php" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Location-transparent actors.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono text-primary">ClusterRef&lt;T&gt;</code> implements
+        <code class="font-mono">ActorRef&lt;T&gt;</code> — the same interface as every
+        local actor reference. Your handler calls <code class="font-mono">tell()</code>
+        or <code class="font-mono">ask()</code> and never knows whether the target lives
+        in the same process or on another machine. Swap a local ref for a cluster ref
+        without touching a single handler.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">tell()</code> is fire-and-forget; self-node calls bypass TCP entirely — direct mailbox delivery</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">ask()</code> stamps a correlation ID and reply path, returns <code class="font-mono">Future&lt;R&gt;</code></span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Messages serialised with MessagePack via <code class="font-mono">nexus-serialization-msgpack</code>; types require <code class="font-mono">#[MessageType]</code></span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">AskTimeoutException</code> on timeout; <code class="font-mono">AskCapacityExceededException</code> when the registry is full (fail-fast)</span></li>
+      </ul>
+      <a
+        href={docsUrl('/packages/cluster-tcp')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        ClusterRef reference →
+      </a>
+    </div>
+  </section>
+
+  <!-- Phi-accrual failure detection -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Phi-accrual failure detection.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Gossip frames double as heartbeats — there is no separate ping/pong.
+        The Hayashibara phi-accrual detector tracks inter-arrival times and
+        computes a continuous suspicion value. When phi exceeds the threshold
+        the node becomes <code class="font-mono">Suspect</code>; when it exceeds
+        it substantially — or gossip silence exceeds
+        <code class="font-mono">maxNoHeartbeat</code> — the node is marked
+        <code class="font-mono">Down</code>.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">phiThreshold: 8.0</code> default — conservative, Hazelcast-parity; lower = more sensitive</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">sampleSize: 200</code> — statistical history window of inter-arrival samples</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">minStdDev: 500 ms</code> — noise floor preventing phi spikes on idle connections</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>TCP EOF → immediate <code class="font-mono">Suspect(Connection)</code> before phi fires</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Graceful <code class="font-mono">shutdown()</code> → immediate <code class="font-mono">Down</code> via Leave frame; no phi wait</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>All four knobs tunable via <code class="font-mono">withFailureDetection()</code></span></li>
+      </ul>
+    </div>
+    <CodeBlock code={failureCode} lang="php" title="bootstrap.php — failure detection" />
+  </section>
+
+  <!-- TLS -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={tlsCode} lang="php" title="bootstrap.php — TLS" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">TLS for encrypted peer traffic.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Pass a <code class="font-mono text-primary">TlsConfig</code> to
+        <code class="font-mono">ClusterTopology::withTls()</code> and every peer
+        connection — inbound and outbound — uses Swoole SSL. Certificate, key, and
+        an optional CA file are the only required fields. Enable mutual TLS with
+        <code class="font-mono">verifyPeer: true</code> (the default).
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><strong>The mesh is open by default</strong> — TLS encrypts the wire, but admission control needs a shared secret: <code class="font-mono">withAuthSecret()</code> enables HMAC handshake authentication so only nodes holding the secret can join. Set one in production</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Applied uniformly: <code class="font-mono">SwooleMeshTransport</code> reads <code class="font-mono">TlsConfig</code> for both server and outbound client sockets</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">caFile: null</code> skips CA verification — acceptable for dev, never for production</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>No code changes beyond topology config; transport selection remains automatic</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Inbound links are capped and unfinished handshakes time out — bounded against trivial resource exhaustion (<code class="font-mono">withInboundLimits()</code>)</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Never expose plaintext cluster ports (default 7361) to untrusted networks</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Observability -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">One trace. Two nodes. One span tree.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        Pass any <code class="font-mono text-primary">Observability</code> instance to
+        <code class="font-mono">ClusterNode::boot()</code>. W3C
+        <code class="font-mono">traceparent</code> is injected into every
+        <code class="font-mono">tell()</code> and <code class="font-mono">ask()</code>
+        frame — the receiving node extracts it and opens a child span automatically.
+        The full call chain across machines appears as a single distributed trace
+        in your collector, with no manual wiring.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.send</code> and <code class="font-mono">cluster.ask</code> Producer spans around every outbound frame</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.receive</code> Consumer span on the receiving node, parented to the sender's trace context</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">cluster.handshake</code> Internal span per peer connection</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Six counters + one bytes-sent histogram — automatically instrumented</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Disabled by default: omit <code class="font-mono">$obs</code> and telemetry costs nothing at runtime</span></li>
+      </ul>
+      <a
+        href={docsUrl('/packages/observability')}
+        class="inline-block mt-6 text-primary hover:underline font-semibold"
+      >
+        Observability wiring →
+      </a>
+    </div>
+    <CodeBlock code={obsCode} lang="php" title="bootstrap.php — observability" />
+  </section>
+
+  <!-- PSR-14 events -->
+  <section class="max-w-6xl mx-auto px-4 py-16">
+    <div class="max-w-2xl mb-10">
+      <h2 class="text-3xl font-bold mb-4">PSR-14 membership events.</h2>
+      <p class="text-slate-600 dark:text-slate-300">
+        Pass any <code class="font-mono">EventDispatcherInterface</code> to the
+        <code class="font-mono">ActorSystem</code> and every membership transition
+        dispatches a typed, immutable event — no polling required. Wire them to your
+        metrics pipeline, alerting rules, or audit log.
+      </p>
+    </div>
+    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Node lifecycle</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">NodeUp(node, endpoint)</code> fires when a peer is
+          confirmed reachable after a Handshake.
+          <code class="font-mono">NodeDown(node)</code> fires when the detector
+          declares the node dead or a Leave frame is received.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Suspicion</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">NodeSuspected(node, reason)</code> fires when phi
+          exceeds the threshold or a TCP EOF is detected before phi fires.
+          <code class="font-mono">reason</code> is one of
+          <code class="font-mono">Connection</code>,
+          <code class="font-mono">Gossip</code>, or
+          <code class="font-mono">Phi</code> — precise enough for differentiated alerting.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Transport lifecycle</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">PeerConnected(peer, endpoint)</code> fires after a
+          successful Handshake. <code class="font-mono">PeerDisconnected(peer)</code>
+          fires on TCP close — before phi, for fast failure propagation.
+        </p>
+      </div>
+      <div class="p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h3 class="font-bold text-lg mb-2">Quorum</h3>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">
+          <code class="font-mono">ClusterDegraded(reachableMembers, requiredMembers)</code>
+          fires while the node is below the <code class="font-mono">withMinimumMembers()</code>
+          floor — the quorum-loss signal to alert on.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- What the cluster is not -->
+  <section class="max-w-4xl mx-auto px-4 py-12 mb-8">
+    <div class="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-8">
+      <h2 class="text-2xl font-bold mb-4">What the cluster is not.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-4">
+        <code class="font-mono">nexus-cluster-tcp</code> is a best-effort AP transport —
+        available under partition, not consistent. It provides gossip-based membership
+        and phi-accrual failure detection, not a consensus layer.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No leader election; split-brain protection is opt-in.</strong> There is no designated coordinator node. By default both halves of a partition keep operating; set <code class="font-mono">withMinimumMembers()</code> for a quorum floor that drops a below-quorum minority into a degraded, Down-suppressing mode instead of letting it evict the majority.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No service registry.</strong> <code class="font-mono">refFor()</code> requires a pre-agreed <code class="font-mono">NodeAddress</code> and <code class="font-mono">ActorPath</code>. A receptionist service-registry is planned for C2.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>No automatic rejoin after Down.</strong> A node marked <code class="font-mono">Down</code> must restart the process to re-join the cluster.</span></li>
+        <li class="flex gap-2"><span class="text-amber-600 dark:text-amber-400 font-bold">×</span><span><strong>Gossip convergence latency.</strong> State changes propagate within ~1 gossip interval (default 1 s); rapid membership churn may produce briefly stale views on individual nodes.</span></li>
+      </ul>
+      <p class="text-slate-600 dark:text-slate-300 mt-4">
+        For workloads that need consensus — distributed locks, exactly-once semantics,
+        coordinated state — pair the cluster transport with a purpose-built consensus
+        library or delegate to your infrastructure (Redis, etcd, Postgres).
+      </p>
+    </div>
+  </section>
+
+  <CtaBlock
+    title="Actors across machines."
+    subtitle="The guide walks through two-node wiring, failure detection tuning, TLS setup, and OTel integration end-to-end."
+    installLine="composer require nexus-actors/cluster-tcp"
+    primary={{ href: docsUrl('/guides/clustering-over-tcp'), label: 'Clustering guide' }}
+    secondary={{ href: docsUrl('/packages/cluster-tcp'), label: 'Package reference' }}
+  />
+</Marketing>

@@ -137,10 +137,10 @@ $observability = ObservabilityFactory::fromConfig(
         as span events, not silent gaps.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> W3C <code class="font-mono">traceparent</code> / <code class="font-mono">tracestate</code> in every envelope</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Spans nest: HTTP → actor → child actors → persistence</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Dead letters and restarts surface as span events, not silent gaps</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Worker pool cross-thread hops visible as linked spans</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>W3C <code class="font-mono">traceparent</code> / <code class="font-mono">tracestate</code> in every envelope</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Spans nest: HTTP → actor → child actors → persistence</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Dead letters and restarts surface as span events, not silent gaps</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Worker pool cross-thread hops visible as linked spans</span></li>
       </ul>
     </div>
     <CodeBlock code={tracingCode} lang="php" title="src/Actor/OrderProcessor.php" />
@@ -252,10 +252,10 @@ $observability = ObservabilityFactory::fromConfig(
         PHP services already depend on. No Nexus-specific exporter or agent.
       </p>
       <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> gRPC and HTTP OTLP exporters both supported</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Batch span processor for low-overhead export</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> Works with OpenTelemetry Collector, Tempo, Jaeger, Honeycomb, Datadog</li>
-        <li class="flex gap-2"><span class="text-primary font-bold">→</span> <code class="font-mono">OTEL_EXPORTER_OTLP_ENDPOINT</code> environment variable controls the endpoint</li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>gRPC and HTTP OTLP exporters both supported</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Batch span processor for low-overhead export</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Works with OpenTelemetry Collector, Tempo, Jaeger, Honeycomb, Datadog</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span><code class="font-mono">OTEL_EXPORTER_OTLP_ENDPOINT</code> environment variable controls the endpoint</span></li>
       </ul>
     </div>
     <CodeBlock code={collectorCode} lang="php" title="bootstrap.php — OTLP setup" />
