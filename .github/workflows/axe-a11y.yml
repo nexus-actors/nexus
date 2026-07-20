@@ -15,6 +15,7 @@ on:
     paths:
       - 'website/**'
       - 'nexus-brand/**'
+      - '.github/workflows/axe-a11y.yml'
   workflow_dispatch:
 
 concurrency:
@@ -44,6 +45,15 @@ jobs:
       - name: Install axe-core CLI + http-server
         run: npm install -g @axe-core/cli http-server
 
+      # The axe CLI bundles the latest ChromeDriver, which can run ahead of the
+      # runner image's preinstalled Chrome. Install a driver matched to the
+      # installed browser and point axe at it explicitly.
+      - name: Install ChromeDriver matching runner Chrome
+        run: |
+          npm install -g chromedriver --detect_chromedriver_version
+          google-chrome --version
+          chromedriver --version
+
       - name: Serve built site
         run: http-server website/build -p 3000 --silent &
 
@@ -63,5 +73,5 @@ jobs:
           )
           for p in "${PAGES[@]}"; do
             echo "=== axe: $p ==="
-            axe "$p" --tags wcag2aa --exit
+            axe "$p" --tags wcag2aa --chromedriver-path "$(command -v chromedriver)" --exit
           done
