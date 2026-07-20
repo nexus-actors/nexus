@@ -3,6 +3,10 @@
 An actor system for PHP 8.5+. Type-safe actors, supervision trees, event sourcing, and multi-worker
 scaling — Akka and OTP patterns in the PHP you already know.
 
+> **Maturity:** Nexus is a pre-1.0 actor-system toolkit under active development. APIs are subject
+> to change, several subsystems are experimental, and the project is not yet production-hardened.
+> Evaluate it accordingly before depending on it for critical workloads.
+
 ## Why Nexus?
 
 PHP has mature tools for HTTP request handling, but nothing serious for building concurrent,
@@ -14,25 +18,33 @@ process managers, and ad-hoc error recovery. There's no structured way to manage
 concurrent units, no supervision hierarchy to handle failures automatically, and no type safety
 for the messages flowing through your system.
 
-**The approach.** Nexus brings battle-tested patterns from Akka and OTP to PHP with zero
-compromises on type safety. Every `ActorRef<T>` is generic — Psalm catches message type
-mismatches at analysis time, not in production. Behaviors are immutable value objects. State is
-explicitly managed, never shared. The entire API is `readonly` and `final` by default.
+**The approach.** Nexus brings battle-tested patterns from Akka and OTP to PHP with
+Psalm-assisted protocol checking. Every `ActorRef<T>` is generic — with the optional Psalm plugin
+and concrete annotations enabled, message type mismatches are caught at analysis time. This is
+static analysis, not a runtime guarantee: at runtime boundaries (deserialization, dynamic
+dispatch) types are not enforced. Behaviors are immutable value objects. State is explicitly
+managed, never shared. The entire API is `readonly` and `final` by default.
 
 **What makes it different:**
 
-- **Two runtimes, one API.** Write actor code once. Run it on PHP Fibers during development and
-  Swoole coroutines in production. Actors have no runtime dependency.
-- **Supervision that actually works.** Actors form a hierarchy. Parents supervise children. When
-  something fails, the supervision strategy decides what happens — restart, stop, escalate, or
-  back off exponentially. No try/catch pyramids.
+- **Two runtimes, one core API.** Write core actor code once. Run it on PHP Fibers during
+  development and Swoole coroutines in production. Some features are runtime-specific — the
+  worker pool and HTTP server are Swoole-only, and mailbox, shutdown, and cancellation semantics
+  can differ between runtimes.
+- **Supervision hierarchy.** Actors form a hierarchy. Parents supervise children. When something
+  fails, the supervision strategy decides what happens. One-for-one restart directives with retry
+  windows are implemented; all-for-one, escalation, and exponential-backoff strategies are
+  currently incomplete.
 - **PHP 8.5+ native.** Nexus uses `readonly class`, typed class constants, and generic templates
   throughout. Built for modern PHP, not retrofitted onto it.
 - **PSR everywhere.** PSR-11 containers, PSR-3 logging, PSR-14 event dispatching, PSR-20 clocks.
   Nexus plugs into your existing stack.
 - **Multi-worker scaling.** Scale actors across all CPU cores on a single machine via Swoole's
   `Thread\Pool`. Each worker runs an independent `ActorSystem`. `WorkerActorRef` delivers messages
-  cross-thread via `Thread\Queue` at 260K msgs/sec — no application-level serializer required.
+  cross-thread via `Thread\Queue` — an indicative local microbenchmark measured ~260K msgs/sec per
+  worker pair, but no published methodology exists yet and the committed performance suite is
+  partially broken, so treat that figure as unverified. No application-level serializer is
+  required (Swoole serializes internally).
 
 ## Quick Example
 
@@ -83,14 +95,14 @@ $system->run();
 
 - **Type-safe actors** — Psalm Level 1 generics across behaviors, refs, and contexts
 - **Multiple runtimes** — Fiber runtime for development; Swoole runtime for production
-- **Supervision trees** — one-for-one and all-for-one strategies with configurable retry limits
+- **Supervision trees** — one-for-one restart strategies with configurable retry limits (all-for-one, escalation, and backoff are incomplete)
 - **Immutable messages** — `readonly class` message protocol enforced by Psalm plugin
 - **Stashing** — buffer messages during transitional states with `$ctx->stash()` / `$ctx->unstashAll()`
 - **Scheduled messages** — one-shot and repeating timers via `$ctx->scheduleOnce()` / `$ctx->scheduleRepeatedly()`
 - **Ask pattern** — request-response with timeout: `$ref->ask($factory, Duration::millis(200))`
 - **Dead letters** — undeliverable messages routed to the dead-letter endpoint
 - **Persistence and event sourcing** — event-sourced actors and durable state actors with pluggable storage (in-memory, DBAL, Doctrine ORM)
-- **Multi-worker scaling** — cross-worker messaging via `Swoole\Thread\Queue` at 260K msgs/sec per worker pair
+- **Multi-worker scaling** — cross-worker messaging via `Swoole\Thread\Queue` (~260K msgs/sec per worker pair in an indicative local microbenchmark; methodology not yet published)
 
 ## Installation
 
@@ -104,7 +116,7 @@ For the Swoole production runtime:
 composer require nexus-actors/runtime-swoole
 ```
 
-For multi-worker scaling (requires ZTS PHP 8.5+ and Swoole 6.0+ with `--enable-swoole-thread`):
+For multi-worker scaling (requires ZTS PHP 8.5+ and Swoole 6.2.1+ with `--enable-swoole-thread`):
 
 ```bash
 composer require nexus-actors/worker-pool nexus-actors/worker-pool-swoole
@@ -152,7 +164,7 @@ Start with the Nexus thesis:
 ## Requirements
 
 - PHP 8.5+
-- Swoole 6.0+ compiled with `--enable-swoole-thread` (for `nexus-worker-pool-swoole` only)
+- Swoole 6.2.1+ compiled with `--enable-swoole-thread` (for `nexus-worker-pool-swoole` only)
 - ZTS PHP (for `nexus-worker-pool-swoole` only)
 
 ## License

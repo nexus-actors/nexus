@@ -9,7 +9,11 @@ related:
 
 # How to implement a saga (process manager)
 
-A saga coordinates a long-running workflow that spans multiple aggregates. When a step succeeds, the saga sends a command to the next aggregate; when a step fails, it issues compensating commands to roll back completed steps. `EventSourcedBehavior` is the right foundation: the saga's progress is durably persisted, so it survives crashes and replays exactly where it left off.
+:::warning Experimental
+The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
+:::
+
+A saga coordinates a long-running workflow that spans multiple aggregates. When a step succeeds, the saga sends a command to the next aggregate; when a step fails, it issues compensating commands to roll back completed steps. `EventSourcedBehavior` gives the saga durable memory: recorded progress survives crashes, and a restarted saga recovers its state from the event log. It does not replay in-flight side-effects — outgoing commands sent from `thenRun()` hooks are not reissued on recovery (see Caveats).
 
 ## Solution
 
@@ -22,7 +26,9 @@ declare(strict_types=1);
 namespace App\Saga;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
+use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\EventSourced\Effect;
 use Monadial\Nexus\Persistence\EventSourced\EventSourcedBehavior;
 use Monadial\Nexus\Persistence\PersistenceId;
@@ -51,11 +57,12 @@ function orderFulfillmentSaga(
     string $orderId,
     ActorRef $paymentActor,
     ActorRef $inventoryActor,
+    EventStore $eventStore,
 ): Behavior {
     return EventSourcedBehavior::create(
         PersistenceId::of('Saga', "fulfillment-{$orderId}"),
         new FulfillmentState(),
-        static function (ActorContext $ctx, object $cmd, FulfillmentState $state): Effect {
+        static function (FulfillmentState $state, ActorContext $ctx, object $cmd) use ($paymentActor, $inventoryActor): Effect {
             return match (true) {
                 $cmd instanceof OrderPlaced => Effect::persist($cmd)
                     ->thenRun(static fn() => $paymentActor->tell(new ChargePayment($cmd->orderId))),
@@ -92,9 +99,9 @@ function orderFulfillmentSaga(
 
 ## How it works
 
-The saga actor receives domain events from other aggregates (passed as commands via `tell()`). Each event is persisted with `Effect::persist()` before any side-effect runs — this is the key property: if the actor crashes between receiving `PaymentCharged` and sending `ReserveStock`, it will replay the persisted event on restart and re-issue the command. The side-effect in `thenRun()` is idempotent from the aggregate's perspective because inventory reservations should check for duplicates.
+The saga actor receives domain events from other aggregates (passed as commands via `tell()`). Each event is persisted with `Effect::persist()` before any side-effect runs, so the event log is a durable record of what the saga has seen. The side-effects themselves are at-most-once: a `thenRun()` hook fires once, immediately after the write, and is never re-executed. If the actor crashes between persisting `PaymentCharged` and sending `ReserveStock`, recovery rebuilds the state from the log but does not re-run the hook or reissue the command — the saga stalls at that step. Nexus provides no durable-saga guarantee out of the box; a stalled saga must be nudged forward externally, for example by a timeout command (see below) or by the upstream aggregate redelivering its event. Because redelivery can also cause duplicates, saga commands to aggregates should be idempotent.
 
-The event handler folds each event onto `FulfillmentState`. The saga can reconstruct its exact progress from the event log on any restart, with no external coordination.
+The event handler folds each event onto `FulfillmentState`. The saga can reconstruct which events it has recorded from the event log on any restart — but not which outgoing commands were actually sent.
 
 ## Variations
 
@@ -125,6 +132,7 @@ Use `tell()`, not `ask()`, when the saga sends commands to aggregates. An `ask()
 
 - **Each domain event source must know the saga's actor ref.** The common pattern is to spawn the saga actor first, then pass its ref as the `replyTo` on initial commands to the source aggregates. The aggregates then `tell()` the saga directly.
 - **Exactly-once delivery is not guaranteed.** If an aggregate restarts between receiving a command and persisting its event, it may process the command twice. Saga commands to aggregates should be idempotent (use `$idempotencyKey` fields).
+- **Side-effects are at-most-once.** `thenRun()` hooks are not re-executed during recovery — a crash between the persist and the hook silently loses the outgoing command. Design for external redelivery (timeouts, upstream retries) rather than assuming the saga resumes by itself.
 - **`Effect::persist()` is synchronous within the handler.** Events are written to the store before `thenRun()` fires. If the event store is unavailable, the command handler throws and the supervisor handles it.
 
 ## Related

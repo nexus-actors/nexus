@@ -34,7 +34,7 @@ Everything in this section is available today.
 - `WorkerPool` / `WorkerPoolApp` / `WorkerPoolBootstrap` (Swoole thread pool, one `ActorSystem` per worker, shared `Thread\Map` directory).
 - `ConsistentHashRing` — placement decided locally, no coordination.
 - `WorkerActorRef` — location-transparent cross-worker messaging.
-- `ThreadQueueTransport` — direct `Envelope` over `Thread\Queue` (~260K msgs/sec/pair).
+- `ThreadQueueTransport` — direct `Envelope` over `Thread\Queue` (~260K msgs/sec/pair in an indicative local microbenchmark; methodology not yet published and the committed performance suite is partially broken).
 
 ### HTTP
 

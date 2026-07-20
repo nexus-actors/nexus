@@ -10,6 +10,10 @@ related:
 
 # nexus-worker-pool
 
+:::caution Experimental
+The worker pool is experimental and not yet production-hardened. APIs and delivery semantics may change before 1.0.
+:::
+
 Core worker pool abstractions for distributing actors across parallel threads — pure PHP, no Swoole dependency.
 
 ## What's in this package

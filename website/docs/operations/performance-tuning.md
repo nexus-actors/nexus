@@ -10,6 +10,10 @@ related:
 
 # Performance tuning
 
+:::caution Indicative numbers only
+Nexus is pre-1.0 and not yet production-hardened. The figures on this page are indicative local measurements — validate on your own hardware before relying on them.
+:::
+
 A field guide to making Nexus HTTP fast. Out of the box you get approximately 110k RPS on a laptop-class container; reaching single-digit-millisecond tail latency requires tuning at four layers — framework, PHP runtime, Swoole event loop, and the Linux kernel.
 
 The numbers on this page come from `wrk -t8 -c100 -d15s` against `examples/thread-server-no-log.php` (Swoole thread mode, 8 workers, no logging) on the project's standard Docker image.

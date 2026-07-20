@@ -9,14 +9,21 @@ under `examples/`. It's self-contained — its own `composer.json`,
 PHPUnit suite, and load tester. You can copy the folder out to its own repo
 and `git init` it without changes.
 
+> **Status: demo / experimental.** This example exists to show Nexus
+> wiring, not to model production-grade money movement. The event-sourced
+> wallet uses a per-worker in-memory event store (see the durability
+> warning below), commands carry no idempotency keys, and there is no
+> deduplication of retried requests. Do not copy it as-is for anything
+> financial.
+
 ## What it demonstrates
 
 | Concern                       | How it shows up                                                                  |
 |-------------------------------|----------------------------------------------------------------------------------|
-| Actors                        | `WalletDirectoryActor`, `WalletActor`, `RequestActor` — three lifetimes          |
-| Authentication                | `AuthenticationMiddleware` + `StaticTokenAuthenticator` + `#[FromPrincipal]`     |
+| Actors                        | `WalletDirectoryActor`, `WalletActor`, `LedgerActor` — three lifetimes           |
+| Authentication                | `AuthenticationMiddleware` + `DemoUsers` token map + `#[FromPrincipal]`          |
 | Database access (event store) | `InMemoryEventStore`; swap to `DbalEventStore` for Postgres                      |
-| Actor-per-request             | `$app->perRequestActor('request', …)` — spawned fresh per HTTP call              |
+| Actor-per-owner               | Directory spawns/caches one `WalletActor` child per owner on `EnsureWallet`      |
 | Persistent state              | `EventSourcedBehavior::create(...)` on `WalletActor` — replay on restart         |
 
 ## Architecture
@@ -35,13 +42,10 @@ and `git init` it without changes.
  │  │   #[FromActor('request')] $request                    │   │
  │  │   #[FromActor('wallets')] $directory                  │   │
  │  └─────────────┬────────────────────────────────────────┘   │
- │                │ ask(HandleRequest{owner, action, …})        │
- │                ▼                                              │
- │           RequestActor ── per-request, fresh each call ──    │
  │                │ ask(EnsureWallet{ownerId})                  │
  │                ▼                                              │
  │     WalletDirectoryActor ── long-lived router ───────────    │
- │                │ spawn child if absent                       │
+ │                │ spawn child if absent, reply WalletRef      │
  │                ▼                                              │
  │           WalletActor("alice") ── event-sourced ─────────    │
  │                │ Effect::persist(MoneyDeposited)             │
@@ -50,15 +54,28 @@ and `git init` it without changes.
  └─────────────────────────────────────────────────────────────┘
 ```
 
-Each thread runs an **independent ActorSystem with its own event store**.
-For shared state across threads, swap `InMemoryEventStore` for
-`DbalEventStore` against a Postgres connection — the actor code does not
-change.
+Handlers hold a `#[FromActor('wallets')]` reference to the directory,
+`ask()` it `EnsureWallet{ownerId}`, receive a `WalletRef` back, then
+`ask()` the per-owner `WalletActor` directly. There is no per-request
+actor in this app.
+
+> **Warning — not durable, not cross-worker consistent.** Each worker
+> thread builds its own `InMemoryEventStore`
+> (`src/Boot/WalletApp.php`, `registerActors()`), so wallet balances
+> live in process memory, are scoped to whichever worker handled the
+> request, and vanish on restart. Two requests from the same user can
+> hit two workers and see two different balances. This is a deliberate
+> demo simplification — it is consistent only with a single worker
+> thread and is **not** a financial-grade setup. For shared, durable
+> state across threads, swap `InMemoryEventStore` for `DbalEventStore`
+> against a Postgres connection — the actor code does not change. (The
+> Doctrine ledger endpoints below already use Postgres and are shared
+> across workers.)
 
 ## Quick start
 
 ```bash
-make build        # build the docker image (PHP 8.5 ZTS + Swoole 6.0 threads)
+make build        # build the docker image (PHP 8.5 ZTS + Swoole 6.2.1 threads)
 make install      # composer install inside the container
 make up           # start the server on :8080
 make logs         # tail server logs
@@ -66,7 +83,7 @@ make logs         # tail server logs
 # Deposit 1000 cents to Alice's wallet
 curl -X POST -H "Authorization: Bearer alice-token" \
      -H "Content-Type: application/json" \
-     -d '{"amount":1000}' \
+     -d '{"amountCents":1000}' \
      http://localhost:8080/wallet/deposit
 
 # Check Alice's balance
@@ -76,7 +93,7 @@ curl -H "Authorization: Bearer alice-token" \
 # Try to withdraw more than she has → 422 with rejection reason
 curl -X POST -H "Authorization: Bearer alice-token" \
      -H "Content-Type: application/json" \
-     -d '{"amount":99999}' \
+     -d '{"amountCents":99999}' \
      http://localhost:8080/wallet/withdraw
 
 # Record a deposit on the Doctrine-backed ledger (single-writer per owner,
@@ -204,9 +221,9 @@ middleware contract is identical.
 
 ```
 examples/nexus-wallet-app/
-├── composer.json                  # depends on monadial/nexus-* packages
-├── Dockerfile                     # PHP 8.5 ZTS + Swoole 6.0 thread-mode
-├── compose.yaml             # app service + optional perf client
+├── composer.json                  # depends on nexus-actors/* packages
+├── Dockerfile                     # PHP 8.5 ZTS + Swoole 6.2.1 thread-mode
+├── compose.yaml                   # app service + optional perf client
 ├── Makefile                       # up/down/test/perf
 ├── .github/workflows/ci.yml       # build → test → smoke deposit→balance
 ├── public/server.php              # Swoole-Threads entry point
@@ -214,29 +231,31 @@ examples/nexus-wallet-app/
 │   ├── Actor/
 │   │   ├── WalletDirectoryActor.php  # long-lived router (1 per thread)
 │   │   ├── WalletActor.php           # event-sourced (1 per owner)
-│   │   ├── RequestActor.php          # per-request orchestrator
-│   │   ├── HandleRequest.php         # message sent by handler → request actor
+│   │   ├── LedgerActor.php           # EntityBehavior actor (1 per owner)
+│   │   ├── WalletRegistry.php        # directory's owner → child-ref state
 │   │   ├── EnsureWallet.php          # message sent to directory
 │   │   └── WalletRef.php             # directory reply
+│   ├── Boot/                         # WalletApp factory, config, Doctrine kit
 │   ├── Domain/
 │   │   ├── Money.php                 # value object (cent-precision)
-│   │   ├── Command/                  # Deposit, Withdraw, GetBalance
+│   │   ├── Command/                  # Deposit, Withdraw, GetBalance, RecordLedger
+│   │   ├── Entity/                   # WalletLedger, LedgerEntry (Doctrine ORM)
 │   │   ├── Event/                    # WalletOpened, MoneyDeposited, MoneyWithdrawn
 │   │   ├── State/WalletState.php     # immutable, folded from events
 │   │   └── Reply/                    # BalanceSnapshot, DepositResult, WithdrawResult
 │   └── Http/
-│       ├── Handler/
-│       │   ├── BalanceHandler.php   # GET  /wallet/balance
-│       │   ├── DepositHandler.php   # POST /wallet/deposit
-│       │   └── WithdrawHandler.php  # POST /wallet/withdraw
-│       └── Auth/DemoUsers.php       # bearer-token map
+│       ├── Handler/                  # Balance/Deposit/Withdraw + ledger + admin
+│       ├── Request/                  # AmountRequest, LedgerRecordRequest DTOs
+│       ├── Response/                 # typed JSON response DTOs
+│       ├── Auth/DemoUsers.php        # bearer-token map
+│       └── WalletRoutes.php          # route table
 ├── tests/Unit/WalletStateTest.php   # state-fold invariants
 └── perf/deposit-load.php            # Swoole-coroutine load tester
 ```
 
 ## Swapping to a real database
 
-In `public/server.php`, replace:
+In `src/Boot/WalletApp.php` (`registerActors()`), replace:
 
 ```php
 $eventStore = new InMemoryEventStore();

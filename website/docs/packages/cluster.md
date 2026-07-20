@@ -10,6 +10,10 @@ related:
 
 # nexus-cluster
 
+:::caution Experimental
+Clustering is experimental and not yet production-hardened. APIs and semantics may change before 1.0.
+:::
+
 Remote contracts for TCP-based multi-machine clustering — interfaces and value objects only. The shipped transport implementation lives in [`nexus-cluster-tcp`](./cluster-tcp.md).
 
 ## What's in this package

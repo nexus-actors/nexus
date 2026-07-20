@@ -10,6 +10,10 @@ related:
 
 # Persistence
 
+:::warning Experimental
+The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
+:::
+
 Actors are stateless across restarts. When an actor stops — due to a failure, a deployment, or a system shutdown — its in-memory state is lost. Persistence solves this by automatically saving and recovering state so that an actor picks up exactly where it left off.
 
 ## Choosing a persistence model
@@ -42,11 +46,11 @@ sequenceDiagram
         Actor->>BH: applyEvent(state, event)
         BH-->>Actor: newState
     end
-    Actor->>Actor: RecoveryCompleted — drain stash
+    Actor->>Actor: recovery complete
     Actor-->>Actor: ready for commands
 ```
 
-_Figure 1: Recovery loads the latest snapshot then replays only events that follow it. Commands arriving during recovery are stashed and processed once `RecoveryCompleted` fires._
+_Figure 1: Recovery loads the latest snapshot then replays only events that follow it. Recovery runs synchronously inside the actor's setup phase and only folds events onto state — side-effect hooks are not re-executed._
 
 ### Command path flowchart
 
@@ -73,7 +77,7 @@ _Figure 2: The command path from handler through `Effect` to `EventStore`, event
 
 ### Writer-conflict sequence
 
-Each `ActorSystem` receives a unique ULID at startup. Every persisted envelope carries that ULID as `writerId`. If a second system writes to the same persistence stream, the store detects the conflict:
+Each persistent behavior (`EventSourcedBehavior` / `DurableStateBehavior`) mints a fresh ULID as its `writerId` — override it with `withWriterId()` when you need a deterministic identity. Every persisted envelope carries that ULID. If a second writer appends to the same persistence stream, the conflict can be detected:
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "primaryBorderColor": "#4338ca", "lineColor": "#6366f1", "secondaryColor": "#f0f0ff", "tertiaryColor": "#fff"}}}%%
@@ -89,8 +93,8 @@ sequenceDiagram
 
     Note over S2: ReplayFilterMode determines recovery
     S2->>ES: loadEvents(persistenceId)
-    alt Fail (default)
-        ES-->>S2: RecoveryException on interleaved writer
+    alt Fail
+        ES-->>S2: WriterConflictException on interleaved writer
     else RepairByDiscardOld
         ES-->>S2: only ULID-2 events returned
     else Warn
@@ -111,7 +115,7 @@ flowchart TD
     D -->|no| C
     D -->|yes| E[load snapshot\n→ starting state]
     E --> F[replay events\nafter snapshot seqNr]
-    C --> G[RecoveryCompleted]
+    C --> G[recovery complete]
     F --> G
     G --> H{N events replayed\n≥ snapshotEveryN?}
     H -->|yes| I[take snapshot\nand prune old]
@@ -322,7 +326,7 @@ All stores implement the same interfaces (`EventStore`, `SnapshotStore`, `Durabl
 
 ## Single-writer guarantee
 
-Each `ActorSystem` instance is assigned a unique ULID at startup, and every persisted envelope is stamped with that writer identity. This makes it possible to detect when two systems accidentally write to the same persistence ID.
+Each persistent behavior mints a fresh ULID as its writer identity (override with `withWriterId()`), and every persisted envelope is stamped with it. The `ActorSystem` also exposes a `writerId()` ULID, but it is not propagated to persistence. The stamped writer identity makes it possible to detect when two writers accidentally target the same persistence ID.
 
 Every `EventEnvelope`, `SnapshotEnvelope`, and `DurableStateEnvelope` carries a `writerId` field. Stores record this value in a `writer_id` column. If a store detects a write from a different writer than expected, it throws `WriterConflictException`.
 
@@ -332,17 +336,17 @@ During recovery, the `ReplayFilter` checks that replayed events come from a cons
 
 | Mode | Behavior |
 |---|---|
-| `ReplayFilterMode::Fail` | Throw `RecoveryException` on writer interleave |
+| `ReplayFilterMode::Fail` | Throw `WriterConflictException` on writer interleave |
 | `ReplayFilterMode::Warn` | Log a warning and continue |
-| `ReplayFilterMode::RepairByDiscardOld` | Keep only events from the latest writer |
-| `ReplayFilterMode::Off` | Skip filtering entirely |
+| `ReplayFilterMode::RepairByDiscardOld` | Keep only events from the latest writer (filters the replayed list in memory; nothing is deleted from the store) |
+| `ReplayFilterMode::Off` | Skip filtering entirely (the default) |
 
 ```php title="src/Actors/OrderActor.php"
-use Monadial\Nexus\Persistence\Recovery\ReplayFilterMode;
+use Monadial\Nexus\Persistence\Recovery\ReplayFilter;
 
 $behavior = EventSourcedBehavior::create(/* ... */)
     ->withEventStore($eventStore)
-    ->withReplayFilter(ReplayFilterMode::Fail)
+    ->withReplayFilter(ReplayFilter::fail())
     ->toBehavior();
 ```
 

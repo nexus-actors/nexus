@@ -12,7 +12,7 @@ related:
 # Introduction
 
 :::caution Under active development
-Nexus is under active development. The core actor model, supervision, and persistence APIs are considered stable. Worker-pool and cluster APIs may still evolve.
+Nexus is a pre-1.0 toolkit under active development and not yet production-hardened. The core actor model API is the most settled surface; supervision, persistence, worker-pool, cluster, and WebSocket subsystems are still evolving and APIs may change.
 :::
 
 Nexus is an actor system for PHP 8.5+, bringing the actor model — lightweight concurrent entities communicating through asynchronous message passing — to the PHP ecosystem as a fully typed, composable library.

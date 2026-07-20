@@ -10,7 +10,7 @@ related:
 
 # Swoole Runtime
 
-`SwooleRuntime` implements the `Runtime` interface using Swoole 5.0+ coroutines, providing true async I/O, native channel-backed mailboxes, and the concurrency headroom needed for production workloads.
+`SwooleRuntime` implements the `Runtime` interface using Swoole 6.2.1+ coroutines, providing true async I/O, native channel-backed mailboxes, and the concurrency headroom needed for production workloads.
 
 ## The design
 

@@ -17,7 +17,7 @@ Nexus ships three Dockerfile targets: `php-fiber` (development / Fiber tests), `
 | Target | Base | Extensions | Use case |
 |---|---|---|---|
 | `php-fiber` | PHP 8.5 non-ZTS + Xdebug | Xdebug only | Unit tests, Fiber integration, local development |
-| `php-swoole` | PHP 8.5 ZTS + Swoole 6.0 | Swoole (thread mode) + OPcache + JIT | Production HTTP, worker pool |
+| `php-swoole` | PHP 8.5 ZTS + Swoole 6.2.1 | Swoole (thread mode) + OPcache + JIT | Production HTTP, worker pool |
 | `php-full` | PHP 8.5 ZTS + Xdebug + Swoole | Both | Full local development with Swoole |
 
 Build the production image:

@@ -19,16 +19,16 @@ const PACKAGES: Package[] = [
   { name: 'nexus-actors/runtime-step', stability: 'Stable', ztsRequired: false, description: 'Deterministic step runtime for unit testing' },
   { name: 'nexus-actors/app', stability: 'Stable', ztsRequired: false, description: 'PSR-11 application bootstrap (NexusApp builder)' },
   { name: 'nexus-actors/serialization', stability: 'Stable', ztsRequired: false, description: 'Message and envelope serialization (PHP native, Valinor)' },
-  { name: 'nexus-actors/persistence', stability: 'Stable', ztsRequired: false, description: 'Event sourcing and durable state core — EventSourcedBehavior, DurableStateBehavior' },
-  { name: 'nexus-actors/persistence-dbal', stability: 'Stable', ztsRequired: false, description: 'DBAL-backed event store, snapshot store, and durable state store' },
-  { name: 'nexus-actors/persistence-doctrine', stability: 'Stable', ztsRequired: false, description: 'Doctrine ORM-backed event store, snapshot store, and durable state store' },
-  { name: 'nexus-actors/worker-pool', stability: 'Stable', ztsRequired: false, description: 'Multi-worker pool — WorkerNode, ConsistentHashRing, WorkerActorRef' },
-  { name: 'nexus-actors/worker-pool-swoole', stability: 'Stable', ztsRequired: true, description: 'Swoole thread-based worker pool transport (WorkerPoolApp, ThreadQueueTransport)' },
+  { name: 'nexus-actors/persistence', stability: 'Experimental', ztsRequired: false, description: 'Event sourcing and durable state core — EventSourcedBehavior, DurableStateBehavior' },
+  { name: 'nexus-actors/persistence-dbal', stability: 'Experimental', ztsRequired: false, description: 'DBAL-backed event store, snapshot store, and durable state store' },
+  { name: 'nexus-actors/persistence-doctrine', stability: 'Experimental', ztsRequired: false, description: 'Doctrine ORM-backed event store, snapshot store, and durable state store' },
+  { name: 'nexus-actors/worker-pool', stability: 'Experimental', ztsRequired: false, description: 'Multi-worker pool — WorkerNode, ConsistentHashRing, WorkerActorRef' },
+  { name: 'nexus-actors/worker-pool-swoole', stability: 'Experimental', ztsRequired: true, description: 'Swoole thread-based worker pool transport (WorkerPoolApp, ThreadQueueTransport)' },
   { name: 'nexus-actors/http', stability: 'Stable', ztsRequired: false, description: 'HTTP routing core — HttpApp DSL, handler/param resolution, middleware pipeline' },
   { name: 'nexus-actors/http-server-swoole', stability: 'Stable', ztsRequired: false, description: 'Swoole worker-mode HTTP server adapter (SwooleHttpServerAdapter)' },
   { name: 'nexus-actors/http-server-swoole-threads', stability: 'Stable', ztsRequired: true, description: 'Swoole thread-mode HTTP server with graceful-shutdown hooks (multi-core)' },
   { name: 'nexus-actors/http-auth', stability: 'Stable', ztsRequired: false, description: 'HTTP authentication middleware — bearer token, Principal, #[FromPrincipal]' },
-  { name: 'nexus-actors/http-ws', stability: 'Stable', ztsRequired: false, description: 'WebSocket DSL — WsApplication, WebSocket handler, actor-backed connections' },
+  { name: 'nexus-actors/http-ws', stability: 'Experimental', ztsRequired: false, description: 'WebSocket DSL — WsApplication, WebSocket handler, actor-backed connections' },
   { name: 'nexus-actors/http-toolkit', stability: 'Stable', ztsRequired: false, description: 'Reusable HTTP middlewares — CORS, rate limit, body size limit, helper resolvers' },
   { name: 'nexus-actors/doctrine-dbal', stability: 'Stable', ztsRequired: false, description: 'Coroutine-aware DBAL connection pool + HTTP middleware + #[Transactional]' },
   { name: 'nexus-actors/doctrine-orm', stability: 'Stable', ztsRequired: false, description: 'Pooled EntityManager injection + EntityBehavior DSL for aggregate actors' },
@@ -40,6 +40,11 @@ const PACKAGES: Package[] = [
 ];
 ---
 
+<p class="mb-3 text-sm text-slate-600 dark:text-slate-400">
+  Nexus is pre-1.0. "Stable" means the package's API is settled within the current
+  development line — it is not a production-hardening claim. All packages may change
+  before 1.0.
+</p>
 <div class="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
   <table class="min-w-full text-sm">
     <thead>

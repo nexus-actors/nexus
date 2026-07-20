@@ -16,9 +16,9 @@ The return type from a command handler in an event-sourced actor — encodes wha
 
 `Effect` is an immutable value that a command handler returns to the `PersistenceEngine` instead of mutating state directly. It separates *intent* from *execution*: the handler declares which events to persist, whether to stash or stop, or whether to reply to the sender — and the engine carries out those intentions in the correct order (persist → apply event handler → run side effects).
 
-The most common variant is `Effect::persist(...$events)`, which queues one or more domain events for storage and then feeds them through the event handler to derive the next state. Additional intents are chained as side-effect callbacks via `->thenRun()` and `->thenReply()`, which receive the *post-persist* state, ensuring replies carry fresh data.
+The most common variant is `Effect::persist(...$events)`, which queues one or more domain events for storage and then feeds them through the event handler to derive the next state. Additional intents are chained as side-effect callbacks via `->thenRun()` and `->thenReply()`, which receive the *post-persist* state, ensuring replies carry fresh data. These hooks execute only on the persist path — chained on any other effect (including `Effect::none()`) they are silently dropped.
 
-When no state change is needed — for example, a read query — return `Effect::none()`. To forward a message to the stash buffer during recovery, return `Effect::stash()`. To terminate the actor cleanly after persisting, chain `Effect::persist(...)->thenRun(fn() => ...)` or simply return `Effect::stop()`.
+When no state change is needed — for example, a read query — reply with `Effect::reply($to, $message)`; a bare `Effect::none()` acknowledges the command without persisting, but drops any chained side-effects. To forward a message to the stash buffer during recovery, return `Effect::stash()`. To terminate the actor cleanly, return `Effect::stop()`.
 
 ## Example
 
@@ -26,7 +26,7 @@ When no state change is needed — for example, a read query — return `Effect:
 use Monadial\Nexus\Persistence\EventSourced\Effect;
 
 // Inside an EventSourcedBehavior command handler:
-static fn (ActorContext $ctx, object $cmd, LedgerState $state): Effect => match (true) {
+static fn (LedgerState $state, ActorContext $ctx, object $cmd): Effect => match (true) {
     $cmd instanceof Credit => Effect::persist(new Credited($cmd->amount, $cmd->currency)),
 
     $cmd instanceof Debit  => $state->balance >= $cmd->amount
@@ -34,8 +34,7 @@ static fn (ActorContext $ctx, object $cmd, LedgerState $state): Effect => match 
             ->thenReply($cmd->replyTo, fn (LedgerState $s) => new DebitAccepted($s->balance))
         : Effect::reply($cmd->replyTo, new InsufficientFunds($state->balance)),
 
-    $cmd instanceof GetBalance => Effect::none()
-        ->thenReply($cmd->replyTo, fn (LedgerState $s) => new BalanceResponse($s->balance)),
+    $cmd instanceof GetBalance => Effect::reply($cmd->replyTo, new BalanceResponse($state->balance)),
 
     $cmd instanceof Close => Effect::persist(new AccountClosed())
         ->thenRun(fn (LedgerState $s) => $ctx->log()->info('Ledger closed', ['id' => (string) $s->id])),
@@ -47,13 +46,13 @@ static fn (ActorContext $ctx, object $cmd, LedgerState $state): Effect => match 
 ## Key methods
 
 - `Effect::persist(object ...$events): self` — persist one or more domain events; the event handler is called for each before side effects run.
-- `Effect::none(): self` — no events, no state change; side effects may still be attached.
+- `Effect::none(): self` — no events, no state change; chained side effects are silently dropped.
 - `Effect::reply(ActorRef<object> $to, object $message): self` — send an immediate reply without persisting (useful for read queries).
 - `Effect::stash(): self` — defer the current command until the actor is ready (used during recovery or initialization).
 - `Effect::stop(): self` — stop the actor cleanly after any chained side effects complete.
 - `Effect::unhandled(): self` — signal that the command was not recognised; routes to dead letters.
-- `->thenReply(ActorRef<object> $to, Closure $fn): self` — send a reply after events are persisted; `$fn` receives the post-persist state.
-- `->thenRun(Closure $fn): self` — execute an arbitrary side effect after events are persisted; `$fn` receives the post-persist state.
+- `->thenReply(ActorRef<object> $to, Closure $fn): self` — send a reply after events are persisted; `$fn` receives the post-persist state. Runs only on the persist path; dropped on any other effect.
+- `->thenRun(Closure $fn): self` — execute an arbitrary side effect after events are persisted; `$fn` receives the post-persist state. Runs only on the persist path; dropped on any other effect, and never re-executed during recovery.
 
 ## Full API reference
 

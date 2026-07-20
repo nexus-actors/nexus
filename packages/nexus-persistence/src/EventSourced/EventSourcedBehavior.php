@@ -31,7 +31,7 @@ use Symfony\Component\Uid\Ulid;
  * $behavior = EventSourcedBehavior::create(
  *     PersistenceId::of('Order', $orderId),
  *     new OrderState(),
- *     static fn (ActorContext $ctx, object $cmd, OrderState $state): Effect => match (true) {
+ *     static fn (OrderState $state, ActorContext $ctx, object $cmd): Effect => match (true) {
  *         $cmd instanceof PlaceOrder => Effect::persist(new OrderPlaced($cmd->items)),
  *         $cmd instanceof CancelOrder => Effect::persist(new OrderCancelled()),
  *         default => Effect::none(),
@@ -140,8 +140,9 @@ final readonly class EventSourcedBehavior
     /**
      * Set the replay filter applied when loading events on startup.
      *
-     * Use `ReplayFilter::fail()` (the default) to throw on writer conflicts,
-     * or one of the repair modes to handle multi-writer scenarios gracefully.
+     * Defaults to `ReplayFilter::off()` (no conflict detection). Use
+     * `ReplayFilter::fail()` to throw on writer conflicts, or one of the
+     * repair modes to handle multi-writer scenarios gracefully.
      */
     public function withReplayFilter(ReplayFilter $filter): self
     {

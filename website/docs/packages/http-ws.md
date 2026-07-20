@@ -10,6 +10,10 @@ related:
 
 # nexus-http-ws
 
+:::caution Experimental
+WebSocket support is experimental and not yet production-hardened. In particular, the WebSocket upgrade currently bypasses the HTTP auth middleware pipeline — enforce authentication outside Nexus (e.g. at a reverse proxy) until this is fixed.
+:::
+
 WebSocket DSL and fluent HTTP application builder for Nexus, adding `ws()` and `channel()` routes on top of the `nexus-http` primitives.
 
 ## What's in this package

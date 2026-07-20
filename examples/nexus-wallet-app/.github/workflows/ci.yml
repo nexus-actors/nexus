@@ -43,7 +43,7 @@ jobs:
       - name: Smoke test deposit + balance round-trip
         run: |
           curl -fsS -X POST -H "Authorization: Bearer alice-token" \
-               -H "Content-Type: application/json" -d '{"amount":1000}' \
+               -H "Content-Type: application/json" -d '{"amountCents":1000}' \
                http://localhost:8080/wallet/deposit
           curl -fsS -H "Authorization: Bearer alice-token" \
                http://localhost:8080/wallet/balance | tee /tmp/balance.json

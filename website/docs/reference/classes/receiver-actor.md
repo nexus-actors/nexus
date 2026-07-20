@@ -8,13 +8,13 @@ related:
 
 # ReceiverActor
 
-Supervised poll → route → ack loop over one Symfony Messenger `ReceiverInterface`; delivers broker messages to Nexus actor mailboxes with at-least-once semantics.
+Supervised poll → route → ack loop over one Symfony Messenger `ReceiverInterface`; delivers broker messages to Nexus actor mailboxes with at-least-once delivery to the mailbox (acks confirm enqueue, not processing completion).
 
 ## What it does
 
 `ReceiverActor` is a behavior factory — it returns a `Behavior<object>` ready to pass to `Props::fromBehavior()` or `MessengerBridge::receiverProps()`. Spawn one actor per Messenger receiver (transport). The actor self-schedules `Poll` ticks and drives the receive loop independently of `symfony/console`.
 
-**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. An accepted envelope is acked immediately; a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms). Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally.
+**Poll semantics:** each tick calls `ReceiverInterface::get()` and routes every envelope through the configured `MessageRouter`. An accepted envelope is acked immediately (the ack confirms mailbox acceptance — a crash before the actor processes the message can still lose it); a `Backpressured` or `Dropped` mailbox result stops the tick without acking so the broker redelivers (at-least-once delivery to the mailbox). After a busy tick the next poll fires immediately; after an idle or backpressured tick the next poll is scheduled after `pollInterval` (default 100 ms). Targets that do not implement `BackpressureCapable` receive the message via `tell()` and are acked unconditionally.
 
 **Unroutable messages:** when `route()` returns `null`, the policy in `ReceiverActorConfig` decides the outcome — `Reject` (default) rejects the envelope back to the transport; `DeadLetters` forwards the inner message to the configured `$deadLetters` ref and acks.
 

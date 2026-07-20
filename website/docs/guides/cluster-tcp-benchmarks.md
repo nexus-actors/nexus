@@ -5,6 +5,10 @@ description: Throughput, latency, and scaling of the nexus-cluster-tcp mesh — 
 
 # Cluster TCP benchmarks
 
+:::caution Experimental
+Clustering is experimental and not yet production-hardened. The numbers below describe the current implementation and may shift as it changes.
+:::
+
 This page reports measured throughput, round-trip latency, and multi-core scaling for
 `nexus-cluster-tcp`, together with the methodology and a candid comparison to other
 actor systems and the alternatives a PHP team would otherwise reach for.

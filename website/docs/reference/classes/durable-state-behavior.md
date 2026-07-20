@@ -26,13 +26,11 @@ use Monadial\Nexus\Persistence\State\DurableEffect;
 $behavior = DurableStateBehavior::create(
     PersistenceId::of('UserProfile', $userId),
     new UserProfile(),
-    static fn (ActorContext $ctx, object $cmd, UserProfile $state): DurableEffect => match (true) {
+    static fn (UserProfile $state, ActorContext $ctx, object $cmd): DurableEffect => match (true) {
         $cmd instanceof UpdateEmail   => DurableEffect::persist($state->withEmail($cmd->email)),
         $cmd instanceof UpdateName    => DurableEffect::persist($state->withName($cmd->name)),
-        $cmd instanceof GetProfile    => DurableEffect::none()
-            ->thenReply($ctx->sender(), fn (UserProfile $s) => $s),
-        $cmd instanceof DeleteProfile => DurableEffect::persist(UserProfile::deleted())
-            ->thenStop(),
+        $cmd instanceof GetProfile    => DurableEffect::reply($ctx->sender(), $state),
+        $cmd instanceof DeleteProfile => DurableEffect::persist(UserProfile::deleted()),
         default => DurableEffect::none(),
     },
 )

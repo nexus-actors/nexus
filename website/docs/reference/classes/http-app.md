@@ -51,9 +51,10 @@ $app->delete('/users/{id}', UserHandler::class)
 // Global middleware (applied to every request, in registration order)
 $app->middleware(RateLimitMiddleware::class);
 
-// Actor-backed route: spawn a long-lived actor and reference it with '#'
+// Actor-backed route: register a long-lived actor, then inject it into a
+// handler with the #[FromActor('orders')] parameter attribute.
 $app->actor('orders', Props::fromBehavior($orderBehavior));
-$app->post('/orders', '#orders');
+$app->post('/orders', OrderHandler::class); // handler declares #[FromActor('orders')] ActorRef $orders
 
 // Override error verbosity in development
 $app->errorMode(ErrorMode::Development);
@@ -83,8 +84,8 @@ Path segments may contain `{param}` placeholders.
 ### Actor integration
 
 - `actor(string $name, Props $props): ActorRegistration` — registers a long-lived actor
-  shared across all requests on this worker. Reference it as `'#name'` in a handler
-  string.
+  shared across all requests on this worker. Inject it into a handler with the
+  `#[FromActor('name')]` parameter attribute.
 - `perRequestActor(string $name, Props $props): ActorRegistration` — spawns a fresh
   actor for each request and stops it after the handler returns.
 

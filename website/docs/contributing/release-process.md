@@ -8,7 +8,7 @@ related:
 
 # Release Process
 
-Nexus is a monorepo with 14 packages under `packages/`. Each package is mirrored to its own GitHub repository and published to Packagist independently. The split-and-publish pipeline is implemented in `.github/workflows/split.yml`.
+Nexus is a monorepo with 40 package directories under `packages/`. Split packages are mirrored to their own GitHub repositories and published to Packagist independently. The split-and-publish pipeline is implemented in `.github/workflows/split.yml`, whose matrix currently lists 37 packages (the `nexus` meta-package, `nexus-observability-serialization`, and `nexus-skeleton` are not split).
 
 ## How splits work
 
@@ -21,22 +21,7 @@ The split runs in a matrix job, one job per package, with `fail-fast: false` so 
 
 ## Package mapping
 
-| Monorepo directory | Split target repository |
-|---|---|
-| `packages/nexus-core` | `nexus-actors/core` |
-| `packages/nexus-serialization` | `nexus-actors/serialization` |
-| `packages/nexus-runtime` | `nexus-actors/runtime` |
-| `packages/nexus-runtime-fiber` | `nexus-actors/runtime-fiber` |
-| `packages/nexus-runtime-swoole` | `nexus-actors/runtime-swoole` |
-| `packages/nexus-runtime-step` | `nexus-actors/runtime-step` |
-| `packages/nexus-psalm` | `nexus-actors/psalm` |
-| `packages/nexus-persistence` | `nexus-actors/persistence` |
-| `packages/nexus-persistence-dbal` | `nexus-actors/persistence-dbal` |
-| `packages/nexus-persistence-doctrine` | `nexus-actors/persistence-doctrine` |
-| `packages/nexus-app` | `nexus-actors/app` |
-| `packages/nexus-cluster` | `nexus-actors/cluster` |
-| `packages/nexus-worker-pool` | `nexus-actors/worker-pool` |
-| `packages/nexus-worker-pool-swoole` | `nexus-actors/worker-pool-swoole` |
+Every matrix entry follows the same rule: `packages/nexus-<name>` splits to the `nexus-actors/<name>` repository (e.g., `packages/nexus-core` to `nexus-actors/core`, `packages/nexus-worker-pool-swoole` to `nexus-actors/worker-pool-swoole`). The authoritative list is the `matrix.package` block in `.github/workflows/split.yml` — 37 entries at the time of writing. When you add a package, add its matrix entry there (see [Adding a package](adding-a-package.md)).
 
 ## When the split runs
 
@@ -48,13 +33,19 @@ The workflow triggers on three events:
 | Tag push (`v*`) | Splits and pushes the same tag to each split repo |
 | `workflow_dispatch` | Manual re-run (useful after fixing a split failure) |
 
-The tag-push path is what Packagist uses: when you push `v1.0.0` to the monorepo, the workflow pushes that tag to all 14 split repos, and Packagist picks up the new version within minutes.
+The tag-push path is what Packagist uses: when you push `v1.0.0` to the monorepo, the workflow pushes that tag to all 37 split repos, and Packagist picks up the new version within minutes.
 
 ## Versioning convention
 
-Nexus follows [Semantic Versioning](https://semver.org/). All packages share the same version number — a `v1.2.0` tag in the monorepo becomes `v1.2.0` in every split repo simultaneously. Cross-package constraints use `^1.0` (allow minor and patch upgrades). Never release packages at different version numbers.
+Nexus follows [Semantic Versioning](https://semver.org/). All packages share the same version number — a `v1.2.0` tag in the monorepo becomes `v1.2.0` in every split repo simultaneously. Never release packages at different version numbers.
 
-To cut a release:
+:::danger Release gate — internal constraints are not yet versioned
+Cross-package constraints in the package manifests currently use `dev-main`, not versioned constraints (for example, `packages/nexus-app/composer.json` requires `nexus-actors/core: dev-main`). The split workflow copies manifests verbatim — it does not rewrite constraints when tagging. A tagged split package would therefore still depend on the moving `dev-main` branch heads of its siblings, and stable consumers (default `minimum-stability: stable`) cannot resolve it.
+
+**No stable release should be cut from the current manifests.** Before tagging any `v*` release, the internal `dev-main` constraints must be replaced with release-compatible versioned constraints (e.g., `self.version` or `^1.0`), and every split package should be installed from a clean fixture at stable stability to prove it resolves.
+:::
+
+To cut a release (once the constraints above are versioned):
 
 ```bash title="terminal"
 git tag v1.2.0

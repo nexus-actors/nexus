@@ -9,7 +9,7 @@ related:
 
 # nexus-runtime-swoole
 
-Swoole 5.0+ coroutine runtime for Nexus — true async I/O, native channels, and multi-process scaling.
+Swoole 6.2.1+ coroutine runtime for Nexus — true async I/O, native channels, and multi-process scaling.
 
 ## What's in this package
 

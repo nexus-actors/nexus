@@ -9,23 +9,15 @@ related:
 
 # Single-writer guarantee
 
-Persistent actors enforce the single-writer principle: exactly one `ActorSystem` writes to a given event stream at any time. This prevents split-brain data corruption when multiple processes share the same event store.
+:::warning Experimental
+The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
+:::
+
+Persistent actors follow the single-writer principle: exactly one writer appends to a given event stream at any time. This prevents split-brain data corruption when multiple processes share the same event store.
 
 ## The design
 
-Every `ActorSystem` generates a ULID as its `writerId` at boot time. The engine stamps this ULID on every `EventEnvelope` and `SnapshotEnvelope` it persists. When an actor recovers, the `ReplayFilter` checks whether the event stream was written by exactly one writer. If it detects events from more than one writer, it applies the configured conflict mode.
-
-```php title="src/Bootstrap/ActorSystemSetup.php"
-<?php
-
-declare(strict_types=1);
-
-use Monadial\Nexus\Core\Actor\ActorSystem;
-use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
-
-$system = ActorSystem::create('orders', new FiberRuntime());
-// $system->writerId() returns a unique ULID, e.g. "01J4XGVT..."
-```
+Every `EventSourcedBehavior` (and `DurableStateBehavior`) mints a fresh ULID as its `writerId` when the behavior is built. The engine stamps this ULID on every `EventEnvelope` and `SnapshotEnvelope` it persists. Note that `ActorSystem::writerId()` also exists, but it is not propagated to persistence — the behavior's own writer ID is what gets stamped. When an actor recovers with a `ReplayFilter` enabled, the filter checks whether the event stream was written by exactly one writer. If it detects events from more than one writer, it applies the configured conflict mode.
 
 Override the writer ID on `EventSourcedBehavior` when migrating data or writing deterministic tests:
 
@@ -65,13 +57,13 @@ The four modes:
 
 | Mode | Factory | Behaviour on conflict |
 |---|---|---|
-| `Fail` | `ReplayFilter::fail()` | Throw `WriterConflictException` immediately — default; safest for production |
+| `Fail` | `ReplayFilter::fail()` | Throw `WriterConflictException` immediately — safest for production |
 | `Warn` | `ReplayFilter::warn()` | Log a PSR-3 warning and continue replaying all events |
 | `RepairByDiscardOld` | `ReplayFilter::repairByDiscardOld()` | Discard events from all writers except the latest; continue recovery with only the most recent writer's events |
-| `Off` | `ReplayFilter::off()` | Skip conflict detection entirely — for testing or trusted single-node deploys |
+| `Off` | `ReplayFilter::off()` | Skip conflict detection entirely — the default when `withReplayFilter()` is not called |
 
-:::caution RepairByDiscardOld discards data
-`RepairByDiscardOld` permanently drops events from earlier writers. Use it only in migration scenarios where you have already confirmed the earlier writer is gone.
+:::caution RepairByDiscardOld skips events during replay
+`RepairByDiscardOld` filters the in-memory replay list only: events from earlier writers are excluded from recovery but remain in the store — nothing is deleted. The recovered state simply no longer reflects them. Use it only in migration scenarios where you have already confirmed the earlier writer is gone.
 :::
 
 ## `WriterConflictException`
