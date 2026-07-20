@@ -430,7 +430,9 @@ Commands were run against the DIRTY working tree in the repository's existing Do
 
 ## Prioritized Remediation Roadmap
 
-### Phase 0: Stop misleading adopters
+### Release containment (parallel, not remediation)
+
+Run these containment actions immediately and in parallel with implementation work. They reduce adopter exposure but do not close technical findings. A technical finding closes only when implementation, tests, and documentation land together, or when the affected feature is deliberately removed; documentation-only wording changes are not remediation.
 
 1. Remove or qualify production-grade, durable saga, automatic single-writer, lossless unbounded mailbox, advanced supervision, WebSocket auth, and at-least-once processing claims.
 2. Put explicit experimental warnings on worker-pool, cluster, persistence, wallet, WebSocket, and benchmark pages.
