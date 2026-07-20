@@ -33,21 +33,21 @@ When a persistent actor starts, it recovers before accepting commands:
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"primaryColor": "#4f46e5", "primaryTextColor": "#fff", "primaryBorderColor": "#4338ca", "lineColor": "#6366f1", "secondaryColor": "#f0f0ff", "tertiaryColor": "#fff"}}}%%
 sequenceDiagram
-    participant Actor as ActorCell
+    participant AC as ActorCell
     participant SS as SnapshotStore
     participant ES as EventStore
     participant BH as Behavior
 
-    Actor->>SS: loadLatestSnapshot(persistenceId)
-    SS-->>Actor: Snapshot(state, seqNr) or None
-    Actor->>ES: loadEvents(persistenceId, fromSeqNr)
-    ES-->>Actor: stream of EventEnvelope
+    AC->>SS: loadLatestSnapshot(persistenceId)
+    SS-->>AC: Snapshot(state, seqNr) or None
+    AC->>ES: loadEvents(persistenceId, fromSeqNr)
+    ES-->>AC: stream of EventEnvelope
     loop replay each event
-        Actor->>BH: applyEvent(state, event)
-        BH-->>Actor: newState
+        AC->>BH: applyEvent(state, event)
+        BH-->>AC: newState
     end
-    Actor->>Actor: recovery complete
-    Actor-->>Actor: ready for commands
+    AC->>AC: recovery complete
+    AC-->>AC: ready for commands
 ```
 
 _Figure 1: Recovery loads the latest snapshot then replays only events that follow it. Recovery runs synchronously inside the actor's setup phase and only folds events onto state — side-effect hooks are not re-executed._
