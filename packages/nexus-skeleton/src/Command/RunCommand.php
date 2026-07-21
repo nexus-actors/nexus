@@ -16,7 +16,7 @@ use function getenv;
 /**
  * @psalm-api registered in bin/console
  */
-#[AsCommand('nexus:run', 'Boot the actor system and run until shutdown')]
+#[AsCommand('nexus:run', 'Boot the actor system and run until shutdown', aliases: ['run'])]
 final class RunCommand extends Command
 {
     #[Override]

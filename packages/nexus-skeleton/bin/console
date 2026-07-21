@@ -4,6 +4,7 @@
 declare(strict_types=1);
 
 use App\Command\RunCommand;
+use App\Command\SetupCommand;
 use Nexus\Maker\MakerCommands;
 use Symfony\Component\Console\Application;
 
@@ -11,6 +12,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 $app = new Application('Nexus');
 $app->add(new RunCommand());
+$app->add(new SetupCommand());
 
 // Dev-only: register the maker commands when the dev package is installed (Plan 2 adds them).
 if (class_exists(MakerCommands::class)) {
