@@ -44,8 +44,7 @@ const makeCode = `$ bin/console make:actor Payment --with-message
 
 const runCode = `$ bin/console run
 
-Booting Nexus actor system…
-[payment] spawned via #[AsActor('payment')]`;
+Booting Nexus actor system… (app: my-app)`;
 
 const treeCode = `my-app/
 ├── bin/console            command-line entry point
@@ -89,7 +88,7 @@ const treeCode = `my-app/
   <!-- Wizard -->
   <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
     <div>
-      <h2 class="text-3xl font-bold mb-4">Answer six questions.</h2>
+      <h2 class="text-3xl font-bold mb-4">Answer a handful of questions.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
         The wizard runs automatically after <code class="font-mono">create-project</code>
         (and any time later via <code class="font-mono">bin/console nexus:setup</code>).
