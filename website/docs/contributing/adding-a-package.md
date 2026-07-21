@@ -32,7 +32,7 @@ Create the minimum required files:
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main"
+        "nexus-actors/core": "^0.1"
     },
     "require-dev": {
         "phpunit/phpunit": "^12.1"
@@ -64,7 +64,7 @@ Add a path repository entry and a `require` (or `require-dev`) entry:
 ```
 
 ```json title="composer.json (root) — add to require or require-dev"
-"nexus-actors/my-package": "dev-main"
+"nexus-actors/my-package": "^0.1"
 ```
 
 Run `make install` after editing to regenerate `composer.lock`.

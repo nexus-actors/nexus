@@ -6,7 +6,7 @@
     "require": {
         "php": ">=8.5.7",
         "cuyz/valinor": "^2.3",
-        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/serialization": "^0.1",
         "rybakit/msgpack": "^0.9"
     },
     "require-dev": {

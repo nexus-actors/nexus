@@ -5,10 +5,10 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/observability": "dev-main",
-        "nexus-actors/runtime": "dev-main",
-        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/core": "^0.1",
+        "nexus-actors/observability": "^0.1",
+        "nexus-actors/runtime": "^0.1",
+        "nexus-actors/serialization": "^0.1",
         "psr/event-dispatcher": "^1.0",
         "symfony/messenger": "^7.4 || ^8.0"
     },

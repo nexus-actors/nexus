@@ -5,9 +5,9 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/http": "dev-main",
-        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/core": "^0.1",
+        "nexus-actors/http": "^0.1",
+        "nexus-actors/serialization": "^0.1",
         "nikic/fast-route": "^1.3",
         "psr/container": "^2.0",
         "psr/http-message": "^2.0",
