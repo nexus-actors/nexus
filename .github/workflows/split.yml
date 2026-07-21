@@ -20,6 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         package:
+          - { local: 'nexus', remote: 'meta' }
           - { local: 'nexus-app', remote: 'app' }
           - { local: 'nexus-cluster-tcp', remote: 'cluster-tcp' }
           - { local: 'nexus-cluster', remote: 'cluster' }
