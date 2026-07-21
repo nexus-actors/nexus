@@ -17,7 +17,7 @@ const PACKAGES: Package[] = [
   { name: 'nexus-actors/runtime-fiber', stability: 'Stable', ztsRequired: false, description: 'PHP Fiber runtime — cooperative multitasking, no Swoole required' },
   { name: 'nexus-actors/runtime-swoole', stability: 'Stable', ztsRequired: false, description: 'Swoole coroutine runtime for production async I/O' },
   { name: 'nexus-actors/runtime-step', stability: 'Stable', ztsRequired: false, description: 'Deterministic step runtime for unit testing' },
-  { name: 'nexus-actors/app', stability: 'Stable', ztsRequired: false, description: 'PSR-11 application bootstrap (NexusApp builder)' },
+  { name: 'nexus-actors/app', stability: 'Stable', ztsRequired: false, description: 'PSR-11 application startup (NexusApp builder)' },
   { name: 'nexus-actors/serialization', stability: 'Stable', ztsRequired: false, description: 'Message and envelope serialization (PHP native, Valinor)' },
   { name: 'nexus-actors/persistence', stability: 'Experimental', ztsRequired: false, description: 'Event sourcing and durable state core — EventSourcedBehavior, DurableStateBehavior' },
   { name: 'nexus-actors/persistence-dbal', stability: 'Experimental', ztsRequired: false, description: 'DBAL-backed event store, snapshot store, and durable state store' },
@@ -36,7 +36,7 @@ const PACKAGES: Package[] = [
   { name: 'nexus-actors/cluster', stability: 'Experimental', ztsRequired: false, description: 'Remote actor contracts — NodeAddress, ClusterTransport, NodeDirectory (API preview; not production-ready)' },
   { name: 'nexus-actors/cluster-tcp', stability: 'Experimental', ztsRequired: false, description: 'Swoole TCP cluster mesh — gossip membership, phi-accrual failure detection, ClusterRef (not production-ready)' },
   { name: 'nexus-actors/psalm', stability: 'Stable', ztsRequired: false, description: 'Psalm plugin — ReadonlyMessage, MutableState, BlockingCall, and PropsReturnType rules' },
-  { name: 'nexus-actors/skeleton', stability: 'Stable', ztsRequired: false, description: 'Project skeleton — composer create-project starter with interactive bootstrap wizard' },
+  { name: 'nexus-actors/skeleton', stability: 'Stable', ztsRequired: false, description: 'Project skeleton — composer create-project starter with interactive setup wizard' },
   { name: 'nexus-actors/nexus', stability: 'Stable', ztsRequired: false, description: 'Meta-package — installs nexus-actors/core, runtime, runtime-fiber, and serialization in one step' },
 ];
 ---

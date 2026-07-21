@@ -228,7 +228,7 @@
     overflow-x: auto;
   }
 
-  /* Bootstrap wizard runtime-choice cards */
+  /* Wizard runtime-choice cards */
   .nx-wizard-cards {
     flex-direction: column;
   }
