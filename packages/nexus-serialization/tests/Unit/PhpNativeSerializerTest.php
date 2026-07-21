@@ -19,7 +19,7 @@ final class PhpNativeSerializerTest extends TestCase
     #[Test]
     public function serializesReadonlyMessage(): void
     {
-        $serializer = new PhpNativeSerializer();
+        $serializer = PhpNativeSerializer::forTrustedData();
         $message = new SimpleMessage('hello', 42);
 
         $data = $serializer->serialize($message);
@@ -31,7 +31,7 @@ final class PhpNativeSerializerTest extends TestCase
     #[Test]
     public function deserializesBackToEqualObject(): void
     {
-        $serializer = new PhpNativeSerializer();
+        $serializer = PhpNativeSerializer::forTrustedData();
         $message = new SimpleMessage('hello', 42);
 
         $data = $serializer->serialize($message);
@@ -45,7 +45,7 @@ final class PhpNativeSerializerTest extends TestCase
     #[Test]
     public function serializeNonSerializableThrows(): void
     {
-        $serializer = new PhpNativeSerializer();
+        $serializer = PhpNativeSerializer::forTrustedData();
         $message = new NonSerializableMessage(fopen('php://memory', 'r'));
 
         $this->expectException(MessageSerializationException::class);
@@ -56,7 +56,7 @@ final class PhpNativeSerializerTest extends TestCase
     #[Test]
     public function deserializeInvalidDataThrows(): void
     {
-        $serializer = new PhpNativeSerializer();
+        $serializer = PhpNativeSerializer::forTrustedData();
 
         $this->expectException(MessageDeserializationException::class);
 
@@ -66,7 +66,7 @@ final class PhpNativeSerializerTest extends TestCase
     #[Test]
     public function deserializeWrongTypeThrows(): void
     {
-        $serializer = new PhpNativeSerializer();
+        $serializer = PhpNativeSerializer::forTrustedData();
         $message = new SimpleMessage('hello', 42);
         $data = $serializer->serialize($message);
 
@@ -81,7 +81,7 @@ final class PhpNativeSerializerTest extends TestCase
         // Restricted serializer: only SimpleMessage may be instantiated.
         $serializer = new PhpNativeSerializer(allowedClasses: [SimpleMessage::class]);
         GadgetMessage::$awakened = false;
-        $data = (new PhpNativeSerializer())->serialize(new GadgetMessage());
+        $data = PhpNativeSerializer::forTrustedData()->serialize(new GadgetMessage());
 
         try {
             (void) $serializer->deserialize($data, SimpleMessage::class);
@@ -92,10 +92,10 @@ final class PhpNativeSerializerTest extends TestCase
     }
 
     #[Test]
-    public function defaultPreservesNestedObjectGraph(): void
+    public function trustedDataPreservesNestedObjectGraph(): void
     {
-        // Default (no allow-list) must round-trip rich graphs with nested objects.
-        $serializer = new PhpNativeSerializer();
+        // forTrustedData (allow-any) must round-trip rich graphs with nested objects.
+        $serializer = PhpNativeSerializer::forTrustedData();
         $data = $serializer->serialize(new NestedMessage(new SimpleMessage('inner', 7)));
 
         $result = $serializer->deserialize($data, NestedMessage::class);
@@ -103,6 +103,73 @@ final class PhpNativeSerializerTest extends TestCase
         self::assertInstanceOf(NestedMessage::class, $result);
         self::assertInstanceOf(SimpleMessage::class, $result->inner);
         self::assertSame('inner', $result->inner->text);
+    }
+
+    #[Test]
+    public function allowListPermitsRegisteredNestedGraph(): void
+    {
+        // The allow-list must include EVERY nested class, not just the top type.
+        $serializer = new PhpNativeSerializer([NestedMessage::class, SimpleMessage::class]);
+        $data = PhpNativeSerializer::forTrustedData()->serialize(new NestedMessage(new SimpleMessage('x', 1)));
+
+        $result = $serializer->deserialize($data, NestedMessage::class);
+
+        self::assertInstanceOf(NestedMessage::class, $result);
+        self::assertSame('x', $result->inner->text);
+    }
+
+    #[Test]
+    public function allowListRejectsGadgetNestedInsideAllowedTopType(): void
+    {
+        // The top type (Envelopeish) is allowed, but the nested gadget is NOT —
+        // PHP would materialize the top object with an __PHP_Incomplete_Class
+        // child; the deep scan must reject the whole graph and no gadget runs.
+        GadgetMessage::$awakened = false;
+        $serializer = new PhpNativeSerializer([WrapperMessage::class]);
+        $data = PhpNativeSerializer::forTrustedData()->serialize(new WrapperMessage(new GadgetMessage()));
+
+        try {
+            (void) $serializer->deserialize($data, WrapperMessage::class);
+            self::fail('Expected MessageDeserializationException for nested disallowed class');
+        } catch (MessageDeserializationException) {
+            self::assertFalse(GadgetMessage::$awakened, 'Nested gadget __wakeup must not run');
+        }
+    }
+
+    #[Test]
+    public function disallowedTopTypeConstructorNeverRuns(): void
+    {
+        ConstructorSpy::$constructed = 0;
+        $serializer = new PhpNativeSerializer([SimpleMessage::class]);
+        $data = PhpNativeSerializer::forTrustedData()->serialize(new ConstructorSpy());
+
+        // Baseline: constructing directly bumps the counter.
+        new ConstructorSpy();
+        $before = ConstructorSpy::$constructed;
+
+        try {
+            (void) $serializer->deserialize($data, SimpleMessage::class);
+            self::fail('Expected MessageDeserializationException');
+        } catch (MessageDeserializationException) {
+            // unserialize never calls the constructor, and the disallowed class
+            // is refused entirely — the counter is unchanged by deserialization.
+            self::assertSame($before, ConstructorSpy::$constructed);
+        }
+    }
+}
+
+final readonly class WrapperMessage
+{
+    public function __construct(public object $inner) {}
+}
+
+final class ConstructorSpy
+{
+    public static int $constructed = 0;
+
+    public function __construct()
+    {
+        self::$constructed++;
     }
 }
 

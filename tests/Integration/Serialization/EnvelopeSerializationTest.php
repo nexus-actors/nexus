@@ -25,7 +25,7 @@ final class EnvelopeSerializationTest extends TestCase
     #[Test]
     public function roundtripWithPhpNativeSerializer(): void
     {
-        $serializer = new DefaultEnvelopeSerializer(new PhpNativeSerializer());
+        $serializer = new DefaultEnvelopeSerializer(PhpNativeSerializer::forTrustedData());
 
         $message = new OrderPlaced('ORD-ENV-1', 99.95);
         $sender = ActorPath::fromString('/user/checkout');
@@ -64,7 +64,7 @@ final class EnvelopeSerializationTest extends TestCase
     #[Test]
     public function senderAndTargetPathsSurviveRoundtrip(): void
     {
-        $serializer = new DefaultEnvelopeSerializer(new PhpNativeSerializer());
+        $serializer = new DefaultEnvelopeSerializer(PhpNativeSerializer::forTrustedData());
 
         $sender = ActorPath::fromString('/system/guardian');
         $target = ActorPath::fromString('/user/orders/order-123/items');
@@ -82,7 +82,7 @@ final class EnvelopeSerializationTest extends TestCase
     #[Test]
     public function rootPathsSurviveRoundtrip(): void
     {
-        $serializer = new DefaultEnvelopeSerializer(new PhpNativeSerializer());
+        $serializer = new DefaultEnvelopeSerializer(PhpNativeSerializer::forTrustedData());
 
         $envelope = Envelope::of(
             new OrderPlaced('X', 1.0),
@@ -100,7 +100,7 @@ final class EnvelopeSerializationTest extends TestCase
     #[Test]
     public function metadataSurvivesRoundtrip(): void
     {
-        $serializer = new DefaultEnvelopeSerializer(new PhpNativeSerializer());
+        $serializer = new DefaultEnvelopeSerializer(PhpNativeSerializer::forTrustedData());
 
         $sender = ActorPath::fromString('/sender');
         $target = ActorPath::fromString('/target');
@@ -132,7 +132,7 @@ final class EnvelopeSerializationTest extends TestCase
     #[Test]
     public function emptyMetadataSurvivesRoundtrip(): void
     {
-        $serializer = new DefaultEnvelopeSerializer(new PhpNativeSerializer());
+        $serializer = new DefaultEnvelopeSerializer(PhpNativeSerializer::forTrustedData());
 
         $envelope = Envelope::of(
             new OrderPlaced('ORD-EMPTY-META', 10.0),

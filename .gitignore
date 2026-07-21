@@ -35,3 +35,6 @@ tests/Performance/HttpSwoole/.results/
 landing/node_modules/
 landing/dist/
 landing/.astro/
+
+.codegraph/
+.whet/

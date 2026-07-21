@@ -16,7 +16,7 @@ Message serialization and deserialization for Nexus: two serializer implementati
 
 - `MessageSerializer` interface — `serialize(object): string` / `deserialize(string, string $type): object`
 - `EnvelopeSerializer` interface — serializes/deserializes complete `Envelope` instances including sender path, target path, and metadata
-- `PhpNativeSerializer` — fastest option; uses PHP `serialize`/`unserialize`; not interoperable across different deployments
+- `PhpNativeSerializer` — fastest option; uses PHP `serialize`/`unserialize`; requires an explicit class allow-list (or the explicit `forTrustedData()` opt-in), rejecting disallowed classes at any graph depth; not interoperable across different deployments
 - `ValinorMessageSerializer` — JSON encoding with Valinor type-safe deserialization; interoperable; requires a `TypeRegistry`
 - `DefaultEnvelopeSerializer` — wraps any `MessageSerializer`; envelope structure is JSON, inner message delegates to the wrapped serializer
 - `TypeRegistry` — bidirectional mapping between class names and stable wire-format type identifiers; populated manually or via `#[MessageType]`

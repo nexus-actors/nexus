@@ -44,7 +44,7 @@ $eventStore    = new DoctrineEventStore($em);
 $snapshotStore = new DoctrineSnapshotStore($em);
 ```
 
-Pass a custom `MessageSerializer` as the second constructor argument to override the default `PhpNativeSerializer`. The schema is identical to `nexus-persistence-dbal`; use `PersistenceSchemaManager` from that package to create the tables.
+A `MessageSerializer` is a required second constructor argument (no default): use `PhpNativeSerializer::forTrustedData()` for self-produced trusted rows, `new PhpNativeSerializer(allowedClasses: [...])` to restrict native deserialization, or the Valinor mapper for untrusted data. The schema is identical to `nexus-persistence-dbal`; use `PersistenceSchemaManager` from that package to create the tables.
 
 ## See also
 

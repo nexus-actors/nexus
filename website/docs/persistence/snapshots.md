@@ -61,7 +61,7 @@ The engine wraps the projected state in a `SnapshotEnvelope`:
 | `timestamp` | `DateTimeImmutable` | Wall-clock time of the snapshot |
 | `writerId` | `Ulid` | Identity of the `ActorSystem` that wrote it |
 
-The state object is serialized by the store's configured `MessageSerializer` (default: `PhpNativeSerializer`).
+The state object is serialized by the store's configured `MessageSerializer` (required — no default; see [stores](./stores.md) for the trusted-data vs allow-list choice).
 
 ## `RetentionPolicy`
 

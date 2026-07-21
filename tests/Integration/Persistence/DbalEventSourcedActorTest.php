@@ -19,6 +19,7 @@ use Monadial\Nexus\Persistence\EventSourced\SnapshotStrategy;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Fiber\FiberRuntime;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Tests\Integration\Persistence\Messages\AddItem;
 use Monadial\Nexus\Tests\Integration\Persistence\Messages\GetItems;
 use Monadial\Nexus\Tests\Integration\Persistence\Messages\ItemAdded;
@@ -37,7 +38,7 @@ final class DbalEventSourcedActorTest extends TestCase
     public function fullLifecycleWithDbalEventStore(): void
     {
         $persistenceId = PersistenceId::of('ShoppingCart', 'dbal-test-1');
-        $eventStore = new DbalEventStore($this->connection);
+        $eventStore = new DbalEventStore($this->connection, PhpNativeSerializer::forTrustedData());
 
         // Phase 1: Spawn actor, send commands, verify events in DB
         $captured = [];
@@ -79,8 +80,8 @@ final class DbalEventSourcedActorTest extends TestCase
     public function fullLifecycleWithSnapshotRecovery(): void
     {
         $persistenceId = PersistenceId::of('ShoppingCart', 'dbal-snap-test');
-        $eventStore = new DbalEventStore($this->connection);
-        $snapshotStore = new DbalSnapshotStore($this->connection);
+        $eventStore = new DbalEventStore($this->connection, PhpNativeSerializer::forTrustedData());
+        $snapshotStore = new DbalSnapshotStore($this->connection, PhpNativeSerializer::forTrustedData());
 
         // Phase 1: Add 3 items with snapshot every 2 events
         $captured = [];
@@ -134,7 +135,7 @@ final class DbalEventSourcedActorTest extends TestCase
     public function recoveryAfterAdditionalCommandsPostRestart(): void
     {
         $persistenceId = PersistenceId::of('ShoppingCart', 'dbal-restart-test');
-        $eventStore = new DbalEventStore($this->connection);
+        $eventStore = new DbalEventStore($this->connection, PhpNativeSerializer::forTrustedData());
 
         // Phase 1: Add initial items
         $captured = [];

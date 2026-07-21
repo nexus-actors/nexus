@@ -32,7 +32,7 @@ use function substr;
  * Example:
  * ```php
  * $serializer = new TracingMessageSerializer(
- *     new PhpNativeSerializer(),
+ *     PhpNativeSerializer::forTrustedData(),
  *     $observability,
  *     $logger,
  * );

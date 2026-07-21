@@ -40,7 +40,7 @@ $eventStore    = new DbalEventStore($conn);
 $snapshotStore = new DbalSnapshotStore($conn);
 ```
 
-All three stores stamp each persisted envelope with the actor system's `writer_id` (ULID) for writer-conflict detection. Pass a custom `MessageSerializer` as the second constructor argument to override the default `PhpNativeSerializer`.
+All three stores stamp each persisted envelope with the actor system's `writer_id` (ULID) for writer-conflict detection. A `MessageSerializer` is a required second constructor argument (no default): use `PhpNativeSerializer::forTrustedData()` for self-produced trusted rows, `new PhpNativeSerializer(allowedClasses: [...])` to restrict native deserialization, or the Valinor mapper for untrusted data.
 
 ## See also
 

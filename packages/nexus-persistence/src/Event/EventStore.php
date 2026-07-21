@@ -21,7 +21,7 @@ use Monadial\Nexus\Persistence\PersistenceId;
  *
  * Example (wiring a DBAL store):
  * ```php
- * $store = new DbalEventStore($connection, 'nexus_events');
+ * $store = new DbalEventStore($connection, PhpNativeSerializer::forTrustedData());
  *
  * EventSourcedBehavior::create($persistenceId, $emptyState, $commandHandler, $eventHandler)
  *     ->withEventStore($store)

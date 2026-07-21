@@ -14,6 +14,7 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineEventStore;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -223,7 +224,7 @@ final class DoctrineEventStoreTest extends TestCase
         $schemaTool = new SchemaTool($this->em);
         $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
 
-        $this->store = new DoctrineEventStore($this->em);
+        $this->store = new DoctrineEventStore($this->em, PhpNativeSerializer::forTrustedData());
         $this->id = PersistenceId::of('order', 'order-1');
         $this->testWriterId = new Ulid();
     }

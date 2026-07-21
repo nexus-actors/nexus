@@ -11,6 +11,7 @@ use Monadial\Nexus\Persistence\Dbal\DbalSnapshotStore;
 use Monadial\Nexus\Persistence\Dbal\Schema\PersistenceSchemaManager;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -120,7 +121,7 @@ final class DbalSnapshotStoreTest extends TestCase
     {
         $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
         (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->store = new DbalSnapshotStore($this->connection);
+        $this->store = new DbalSnapshotStore($this->connection, PhpNativeSerializer::forTrustedData());
         $this->id = PersistenceId::of('order', 'order-1');
         $this->testWriterId = new Ulid();
     }

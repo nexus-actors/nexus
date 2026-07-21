@@ -12,17 +12,13 @@ use Monadial\Nexus\Persistence\Event\EventStore;
 use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Serialization\MessageSerializer;
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final readonly class DbalEventStore implements EventStore
 {
-    public function __construct(
-        private Connection $connection,
-        private MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {}
+    public function __construct(private Connection $connection, private MessageSerializer $serializer) {}
 
     #[Override]
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
