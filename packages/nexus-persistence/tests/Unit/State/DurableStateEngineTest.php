@@ -815,6 +815,64 @@ final class DurableStateEngineTest extends TestCase
         self::assertSame(['first', 'second'], $sideEffectLog);
     }
 
+    // ========================================================================
+    // DurableEffect::unhandled() routes to dead letters; handler order (DSL-001/004)
+    // ========================================================================
+
+    #[Test]
+    public function unhandled_command_is_routed_to_dead_letters(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg): DurableEffect {
+                return DurableEffect::unhandled();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $command = new DurableDoNothing();
+        $cell->processMessage($this->envelope($command));
+
+        self::assertSame([$command], $this->deadLetters->captured());
+        self::assertNull($stateStore->get($this->persistenceId));
+    }
+
+    #[Test]
+    public function command_handler_is_invoked_with_state_ctx_command_order(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $order = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(7),
+            static function (object $arg1, object $arg2, object $arg3) use (&$order): DurableEffect {
+                $order = [
+                    'arg1' => $arg1::class,
+                    'arg2' => $arg2 instanceof ActorContext,
+                    'arg3' => $arg3::class,
+                ];
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+        $cell->processMessage($this->envelope(new SetBalance(1)));
+
+        self::assertSame(AccountState::class, $order['arg1']);
+        self::assertTrue($order['arg2'], 'second argument must be the ActorContext');
+        self::assertSame(SetBalance::class, $order['arg3']);
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();

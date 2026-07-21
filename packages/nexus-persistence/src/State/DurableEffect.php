@@ -31,6 +31,13 @@ final readonly class DurableEffect
         return new self(type: DurableEffectType::None);
     }
 
+    /**
+     * Signal that the command was not handled by the current behavior.
+     *
+     * The command is routed to dead letters, matching the semantics of
+     * `Behavior::unhandled()` in the stateless actor model, and the state is
+     * left unchanged.
+     */
     public static function unhandled(): self
     {
         return new self(type: DurableEffectType::Unhandled);

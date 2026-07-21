@@ -175,7 +175,7 @@ final class PersistenceEngine
                                 $writerId,
                             ),
                             EffectType::None => self::sameState(),
-                            EffectType::Unhandled => self::sameState(),
+                            EffectType::Unhandled => self::handleUnhandled($ctx, $msg),
                             EffectType::Stash => self::handleStash($ctx),
                             EffectType::Stop => self::stoppedState(),
                             EffectType::Reply => self::handleReply($effect),
@@ -298,6 +298,20 @@ final class PersistenceEngine
         foreach ($effect->sideEffects as $sideEffect) {
             $sideEffect($state);
         }
+    }
+
+    /**
+     * Handle an Unhandled effect: route the command to dead letters so
+     * protocol drift is observable, matching Behavior::unhandled() in the
+     * stateless actor model, then keep the current state.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function handleUnhandled(ActorContext $ctx, object $command): BehaviorWithState
+    {
+        $ctx->toDeadLetters($command);
+
+        return self::sameState();
     }
 
     /**

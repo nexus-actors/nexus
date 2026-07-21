@@ -161,6 +161,7 @@ Enforced by Deptrac (`deptrac.yaml`). Core must never depend on anything else.
 - `watch(ActorRef)` / `unwatch(ActorRef)` — Death watch
 - `scheduleOnce(Duration, object): Cancellable` / `scheduleRepeatedly(Duration, Duration, object): Cancellable`
 - `stash(): void` / `unstashAll(): void` — Message buffering
+- `toDeadLetters(object $message): void` — Route a message to the system dead letters (used by the persistence engines' unhandled path)
 - `log(): LoggerInterface` — PSR-3 logger
 - `tracer(): TracerInterface` / `meter(): MeterInterface` / `currentSpan(): SpanInterface` — Custom telemetry (no-op when observability is disabled; provided by `nexus-observability`)
 

@@ -212,6 +212,20 @@ interface ActorContext
     public function reply(object $message): void;
 
     /**
+     * Route a message to the actor system's dead letters.
+     *
+     * The message is wrapped like any undeliverable message and delivered to
+     * the dead-letter ref, preserving this actor's path as the intended target
+     * so observers can see where it was headed. Use this to make an unhandled
+     * or protocol-drift command observable instead of silently dropping it —
+     * mirrors `Behavior::unhandled()` for handlers that interpret their own
+     * messages (e.g. the persistence command engines).
+     *
+     * @param object $message The message to route to dead letters.
+     */
+    public function toDeadLetters(object $message): void;
+
+    /**
      * Configure a receive-timeout for this actor.
      *
      * If no user message arrives within `$timeout` after the last user-message
