@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
+use Monadial\Nexus\Core\Exception\InvalidPropsFactoryException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
@@ -88,8 +89,18 @@ final readonly class Props
     {
         $behavior = Behavior::setup(/** @return Behavior<U> */
             static function (ActorContext $ctx) use ($factory): Behavior {
+                /** @var object $actor Runtime contract check: callable return types are not enforced by PHP */
                 $actor = $factory();
-                assert($actor instanceof ActorHandler, 'Factory must return an ActorHandler');
+
+                if (!$actor instanceof ActorHandler) {
+                    throw new InvalidPropsFactoryException(
+                        'Props::fromFactory() factory',
+                        ActorHandler::class,
+                        $actor,
+                    );
+                }
+
+                /** @var ActorHandler<U> $actor Restore the template param verified by the guard */
 
                 $receive = Behavior::receive(
                     /** @param ActorContext<U> $c @param U $msg @return Behavior<U> */
@@ -140,7 +151,14 @@ final readonly class Props
         /** @var Props<U> */
         return self::fromFactory(static function () use ($container, $actorClass): ActorHandler {
             $handler = $container->get($actorClass);
-            assert($handler instanceof ActorHandler);
+
+            if (!$handler instanceof ActorHandler) {
+                throw new InvalidPropsFactoryException(
+                    "Props::fromContainer() container entry '{$actorClass}'",
+                    ActorHandler::class,
+                    $handler,
+                );
+            }
 
             return $handler;
         });
@@ -159,8 +177,18 @@ final readonly class Props
     public static function fromStatefulFactory(callable $factory): self
     {
         $behavior = Behavior::setup(static function (ActorContext $_ctx) use ($factory): Behavior {
+            /** @var object $actor Runtime contract check: callable return types are not enforced by PHP */
             $actor = $factory();
-            assert($actor instanceof StatefulActorHandler, 'Factory must return a StatefulActorHandler');
+
+            if (!$actor instanceof StatefulActorHandler) {
+                throw new InvalidPropsFactoryException(
+                    'Props::fromStatefulFactory() factory',
+                    StatefulActorHandler::class,
+                    $actor,
+                );
+            }
+
+            /** @var StatefulActorHandler<U, S> $actor Restore the template params verified by the guard */
 
             return Behavior::withState(
                 $actor->initialState(),

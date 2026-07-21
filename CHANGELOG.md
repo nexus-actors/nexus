@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- `Props::fromFactory()`, `Props::fromStatefulFactory()`, and `Props::fromContainer()` now enforce their handler contracts with an explicit `InvalidPropsFactoryException` (wrapped in `ActorInitializationException` at spawn) instead of `assert()` (audit DSL-008). Production deployments running `zend.assertions=-1` previously deferred wrong factory results into obscure downstream failures such as `Call to undefined method stdClass::initialState()`; they now fail at actor start with the factory and actual type named.
 - Persistence side-effect hooks (`thenRun()`/`thenReply()`) now execute on every effect instead of being silently dropped off the persist path (audit DDD-001). On `Effect::persist(...)`/`DurableEffect::persist(...)` they keep running after the durable write with the new state; on `none()`, `unhandled()`, `reply()`, `stash()`, and `stop()` they now run after the effect's primary action with the unchanged current state, making `Effect::none()->thenReply(...)` the canonical read-only query. Code that relied on hooks being dropped on non-persist effects must remove those hooks.
 
 ## [0.1.0] - 2026-07-21

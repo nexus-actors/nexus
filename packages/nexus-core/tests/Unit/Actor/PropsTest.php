@@ -27,6 +27,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
+use stdClass;
 
 #[CoversClass(Props::class)]
 final class PropsTest extends TestCase
@@ -214,5 +215,79 @@ final class PropsTest extends TestCase
         $this->expectException(ActorInitializationException::class);
         $this->expectExceptionMessage('container exploded');
         $cell->start();
+    }
+
+    // ========================================================================
+    // Factory contract violations throw explicit exceptions independent of
+    // zend.assertions (DSL-008)
+    // ========================================================================
+
+    #[Test]
+    public function fromFactoryWithNonHandlerResultThrowsContractException(): void
+    {
+        /** @psalm-suppress InvalidArgument deliberately violates the factory contract */
+        $props = Props::fromFactory(static fn(): object => new stdClass());
+
+        $cell = $this->cellFor($props);
+
+        $this->expectException(ActorInitializationException::class);
+        $this->expectExceptionMessage('must produce an instance of ' . ActorHandler::class . ', got stdClass');
+        $cell->start();
+    }
+
+    #[Test]
+    public function fromContainerWithNonHandlerServiceThrowsContractException(): void
+    {
+        $container = new class implements ContainerInterface {
+            public function get(string $id): object
+            {
+                return new stdClass();
+            }
+
+            public function has(string $id): bool
+            {
+                return true;
+            }
+        };
+
+        /** @psalm-suppress ArgumentTypeCoercion deliberately violates the container contract */
+        $props = Props::fromContainer($container, stdClass::class);
+
+        $cell = $this->cellFor($props);
+
+        $this->expectException(ActorInitializationException::class);
+        $this->expectExceptionMessage('must produce an instance of ' . ActorHandler::class . ', got stdClass');
+        $cell->start();
+    }
+
+    #[Test]
+    public function fromStatefulFactoryWithNonHandlerResultThrowsContractException(): void
+    {
+        /** @psalm-suppress InvalidArgument deliberately violates the factory contract */
+        $props = Props::fromStatefulFactory(static fn(): object => new stdClass());
+
+        $cell = $this->cellFor($props);
+
+        $this->expectException(ActorInitializationException::class);
+        $this->expectExceptionMessage('must produce an instance of ' . StatefulActorHandler::class . ', got stdClass');
+        $cell->start();
+    }
+
+    private function cellFor(Props $props): ActorCell
+    {
+        $runtime = new TestRuntime();
+
+        return new ActorCell(
+            $props->behavior,
+            ActorPath::fromString('/user/test'),
+            $runtime->createMailbox($props->mailbox),
+            $runtime,
+            null,
+            SupervisionStrategy::oneForOne(),
+            new TestClock(),
+            new NullLogger(),
+            new DeadLetterRef(),
+            new NoopObservability(),
+        );
     }
 }

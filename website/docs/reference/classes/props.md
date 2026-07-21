@@ -57,6 +57,8 @@ $ref = $system->spawn($props, 'worker');
 - `Props::fromFactory(Closure $factory): Props<T>` — factory that returns an `ActorHandler<T>` (or `AbstractActor`); called once per spawn.
 - `Props::fromStatefulFactory(Closure $factory): Props<T>` — factory that returns a `StatefulActorHandler<T, S>`; state is managed by the runtime.
 - `Props::fromContainer(ContainerInterface $c, string $class): Props<T>` — resolves the actor class from a PSR-11 container.
+
+A factory (or container entry) that produces anything other than the required handler interface fails at actor start with `ActorInitializationException`, whose cause is an `InvalidPropsFactoryException` naming the factory and the actual type. This check is independent of the `zend.assertions` setting, so misconfigured production deployments fail at spawn with a clear message rather than on the first message delivery.
 - `->withMailbox(MailboxConfig $config): self` — override the mailbox (default: unbounded).
 - `->withSupervision(SupervisionStrategy $strategy): self` — override the supervision strategy (default: inherited from parent).
 
