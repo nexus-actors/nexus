@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         bootstrap="tests/bootstrap.php"
+         colors="true"
+         failOnWarning="true"
+         failOnNotice="true">
+    <php>
+        <!-- Docker exec has no tty, so Symfony\Console\Terminal falls back to an 80-column
+             width; SymfonyStyle::error() then word-wraps generated file paths mid-phrase.
+             Force a wide terminal so CommandTester output assertions see unwrapped text. -->
+        <env name="COLUMNS" value="400" force="true"/>
+    </php>
+    <testsuites>
+        <testsuite name="maker">
+            <directory>tests</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+</phpunit>

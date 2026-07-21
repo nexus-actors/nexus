@@ -21,6 +21,7 @@
         <directory name="packages/nexus-http-toolkit/src" />
         <directory name="packages/nexus-http-ws/src" />
         <directory name="packages/nexus-logger/src" />
+        <directory name="packages/nexus-maker/src" />
         <directory name="packages/nexus-messenger/src" />
         <directory name="packages/nexus-messenger-console/src" />
         <directory name="packages/nexus-messenger-console-swoole/src" />

@@ -1,0 +1,24 @@
+{
+    "name": "nexus-actors/maker",
+    "description": "Code generators (make:actor, make:message) for Nexus skeleton projects.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "symfony/console": "^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": { "Nexus\\Maker\\": "src/" }
+    },
+    "autoload-dev": {
+        "psr-4": { "Nexus\\Maker\\Tests\\": "tests/" }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

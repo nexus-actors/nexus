@@ -26,6 +26,8 @@ grumphp:
                 - '/stubs/'
                 # skeleton's App\ namespace only autoloads in full-project runs (CI)
                 - '/nexus-skeleton/'
+                # maker's Nexus\Maker\ namespace only autoloads in full-project runs (CI)
+                - '/nexus-maker/'
         phpunit:
             testsuite: unit
             always_execute: true
