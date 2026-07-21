@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Tests\Unit\Dsl;
 
+use Attribute;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -13,10 +14,14 @@ use Monadial\Nexus\Http\Actor\PoolSingletonSpawner;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
+use Monadial\Nexus\Http\Exception\GlobalAuthorizationMiddlewareException;
 use Monadial\Nexus\Http\Exception\HttpAppAlreadyCompiledException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
+use Monadial\Nexus\Http\Exception\UnprotectedRouteException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 use Monadial\Nexus\Http\Response\Response;
+use Monadial\Nexus\Http\Security\AuthorizationEnforcer;
+use Monadial\Nexus\Http\Security\AuthorizationRequirement;
 use Nyholm\Psr7\ServerRequest;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -271,6 +276,70 @@ final class HttpAppTest extends TestCase
         $app->middleware(_GroupSpyMiddleware::class);
     }
 
+    // ========================================================================
+    // Annotated routes fail closed at compile time (SEC-003)
+    // ========================================================================
+
+    #[Test]
+    public function annotated_route_without_enforcer_fails_compilation(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->get('/protected', _ProtectedHandler::class);
+
+        $this->expectException(UnprotectedRouteException::class);
+        $this->expectExceptionMessage(_ProtectedHandler::class);
+        $app->compile();
+    }
+
+    #[Test]
+    public function annotated_route_with_route_enforcer_class_compiles(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->get('/protected', _ProtectedHandler::class)
+            ->middleware(_EnforcerMiddleware::class);
+
+        $response = $app->compile()->handle(new ServerRequest('GET', '/protected'));
+
+        self::assertSame(200, $response->getStatusCode());
+    }
+
+    #[Test]
+    public function annotated_class_method_route_without_enforcer_fails_compilation(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->get('/protected', _ProtectedHandler::class . '::__invoke');
+
+        $this->expectException(UnprotectedRouteException::class);
+        $app->compile();
+    }
+
+    #[Test]
+    public function unannotated_route_without_enforcer_compiles(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->get('/open', static fn(): ResponseInterface => Response::ok());
+
+        $response = $app->compile()->handle(new ServerRequest('GET', '/open'));
+
+        self::assertSame(200, $response->getStatusCode());
+    }
+
+    #[Test]
+    public function enforcer_in_global_middleware_fails_compilation(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->middleware(new _EnforcerMiddleware());
+        $app->get('/open', static fn(): ResponseInterface => Response::ok());
+
+        $this->expectException(GlobalAuthorizationMiddlewareException::class);
+        $app->compile();
+    }
+
     #[Test]
     public function group_registered_after_compile_throws(): void
     {
@@ -292,6 +361,30 @@ final class _HandlerWithUnknownActor
     public function __invoke(ServerRequestInterface $r): ResponseInterface
     {
         return Response::ok();
+    }
+}
+
+/** Test attribute implementing the authorization-requirement marker. */
+#[Attribute(Attribute::TARGET_CLASS)]
+final readonly class _RequiresThing implements AuthorizationRequirement {}
+
+/** Handler protected by the test requirement attribute. */
+#[_RequiresThing]
+final class _ProtectedHandler
+{
+    public function __invoke(ServerRequestInterface $r): ResponseInterface
+    {
+        return Response::ok();
+    }
+}
+
+/** Middleware implementing the authorization-enforcer marker. */
+final class _EnforcerMiddleware implements MiddlewareInterface, AuthorizationEnforcer
+{
+    #[Override]
+    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+    {
+        return $handler->handle($request);
     }
 }
 

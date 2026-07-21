@@ -18,7 +18,9 @@ use Monadial\Nexus\Http\Cache\RouteCachePersister;
 use Monadial\Nexus\Http\Discovery\RouteDiscoverer;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
+use Monadial\Nexus\Http\Exception\GlobalAuthorizationMiddlewareException;
 use Monadial\Nexus\Http\Exception\HttpAppAlreadyCompiledException;
+use Monadial\Nexus\Http\Exception\UnprotectedRouteException;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
@@ -37,6 +39,7 @@ use Monadial\Nexus\Http\Middleware\RouterMiddleware;
 use Monadial\Nexus\Http\Routing\Dispatcher;
 use Monadial\Nexus\Http\Routing\RouteCollection;
 use Monadial\Nexus\Http\Routing\RouteSummary;
+use Monadial\Nexus\Http\Security\RouteProtection;
 use Monadial\Nexus\Serialization\MessageSerializer;
 use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -264,6 +267,36 @@ final class HttpApp
             $this->system,
             $this->poolSingletonSpawner,
         );
+
+        // 2c. Fail closed on authorization (SEC-003): an enforcer in the global
+        // stack would run before routing and never see a handler class, and an
+        // annotated handler without a route-level enforcer would serve
+        // unprotected. Both are compile-time errors, not silent behavior.
+
+        foreach ($this->globalMiddleware as $globalMw) {
+            if (RouteProtection::hasEnforcer([$globalMw])) {
+                throw new GlobalAuthorizationMiddlewareException(
+                    is_string($globalMw)
+                        ? $globalMw
+                        : $globalMw::class,
+                );
+            }
+        }
+
+        foreach ($routeList as $route) {
+            $requirement = RouteProtection::requirementOf($route->handler);
+
+            if ($requirement !== null && !RouteProtection::hasEnforcer($route->middleware)) {
+                throw new UnprotectedRouteException(
+                    $route->method,
+                    $route->path,
+                    is_string($route->handler)
+                        ? $route->handler
+                        : 'closure',
+                    $requirement,
+                );
+            }
+        }
 
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.

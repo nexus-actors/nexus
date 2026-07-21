@@ -14,6 +14,8 @@ use Monadial\Nexus\Http\Auth\Principal;
 use Monadial\Nexus\Http\Auth\Principal\SimplePrincipal;
 use Monadial\Nexus\Http\Auth\Resolver\FromPrincipalResolver;
 use Monadial\Nexus\Http\Auth\Tests\Support\InMemoryAuthenticator;
+use Monadial\Nexus\Http\Exception\GlobalAuthorizationMiddlewareException;
+use Monadial\Nexus\Http\Exception\UnprotectedRouteException;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Toolkit\Test\HttpTestClient;
@@ -73,6 +75,34 @@ final class HttpAuthIntegrationTest extends TestCase
             ->withBearerToken('k_bob')
             ->post('/orders', ['sku' => 'X'])
             ->assertCreated();
+    }
+
+    // ========================================================================
+    // Annotated routes fail closed at compile time (SEC-003)
+    // ========================================================================
+
+    #[Test]
+    public function annotatedRouteWithoutAuthorizationMiddlewareFailsCompilation(): void
+    {
+        $system = ActorSystem::create('http-auth-test', new StepRuntime());
+        $app = HttpApplication::create($system);
+        $app->get('/me', MeHandler::class); // #[RequiresAuth] — but no enforcer on the route
+
+        $this->expectException(UnprotectedRouteException::class);
+        $this->expectExceptionMessage(RequiresAuth::class);
+        $app->compile();
+    }
+
+    #[Test]
+    public function authorizationMiddlewareInGlobalStackFailsCompilation(): void
+    {
+        $system = ActorSystem::create('http-auth-test', new StepRuntime());
+        $app = HttpApplication::create($system)
+            ->middleware(new AuthorizationMiddleware());
+        $app->get('/health', static fn(): ResponseInterface => Response::ok());
+
+        $this->expectException(GlobalAuthorizationMiddlewareException::class);
+        $app->compile();
     }
 
     private function buildApp(): CompiledApplication

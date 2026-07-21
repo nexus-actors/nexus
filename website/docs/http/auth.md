@@ -254,6 +254,12 @@ $app->post('/orders', CreateOrderHandler::class)->middleware(AuthorizationMiddle
 
 If you find yourself repeating `->middleware(AuthorizationMiddleware::class)` on every route, factor it into a builder helper.
 
+## Compilation fails closed
+
+Forgetting the route-level `AuthorizationMiddleware` is no longer a silent hole. `compile()` verifies every route whose handler class declares an auth attribute (`#[RequiresAuth]`, `#[RequiresScope]`, `#[RequiresRole]`, `#[RequiresAnyScope]`, `#[RequiresAnyRole]`, `#[Authorize]`) actually has an authorization enforcer in its middleware — and throws `UnprotectedRouteException` at startup otherwise. Registering `AuthorizationMiddleware` globally fails compilation too (`GlobalAuthorizationMiddlewareException`), since global middleware runs before routing.
+
+The check is marker-driven: the attributes implement `Monadial\Nexus\Http\Security\AuthorizationRequirement` and `AuthorizationMiddleware` implements `Monadial\Nexus\Http\Security\AuthorizationEnforcer`. Custom authorization middleware should implement the enforcer marker to satisfy the check; custom requirement attributes get the same fail-closed protection by implementing the requirement marker. WebSocket routes are checked the same way against their `wsMiddleware()`/per-route pipeline.
+
 ## See also
 
 - [Handlers](./handlers.md) — `#[FromPrincipal]` and the resolver pipeline.

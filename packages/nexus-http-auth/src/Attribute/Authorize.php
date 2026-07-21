@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Http\Auth\Attribute;
 
 use Attribute;
 use Monadial\Nexus\Http\Auth\Authorizer;
+use Monadial\Nexus\Http\Security\AuthorizationRequirement;
 
 /**
  * @psalm-api
@@ -21,7 +22,7 @@ use Monadial\Nexus\Http\Auth\Authorizer;
  *   final class ShowOrderHandler { … }
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class Authorize
+final readonly class Authorize implements AuthorizationRequirement
 {
     /** @param class-string<Authorizer> $authorizer */
     public function __construct(public string $authorizer) {}

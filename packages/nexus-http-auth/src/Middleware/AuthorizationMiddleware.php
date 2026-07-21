@@ -15,6 +15,7 @@ use Monadial\Nexus\Http\Auth\Authorizer;
 use Monadial\Nexus\Http\Auth\Exception\AuthorizationMisconfiguredException;
 use Monadial\Nexus\Http\Auth\Exception\InvalidAuthorizerException;
 use Monadial\Nexus\Http\Auth\Principal;
+use Monadial\Nexus\Http\Security\AuthorizationEnforcer;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use Psr\Http\Message\ResponseFactoryInterface;
@@ -59,7 +60,7 @@ use function str_contains;
  *   $app->middleware(new AuthenticationMiddleware($authenticator));
  *   $app->get('/me', MeHandler::class)->middleware(AuthorizationMiddleware::class);
  */
-final class AuthorizationMiddleware implements MiddlewareInterface
+final class AuthorizationMiddleware implements AuthorizationEnforcer, MiddlewareInterface
 {
     /** @var array<class-string, AuthMetadata> */
     private array $metaCache = [];
