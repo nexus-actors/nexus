@@ -14,9 +14,11 @@ use Monadial\Nexus\Http\App\ErrorMode;
 use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
+use Monadial\Nexus\Http\Exception\UnprotectedRouteException;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
 use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Routing\RouteSummary;
+use Monadial\Nexus\Http\Security\RouteProtection;
 use Monadial\Nexus\Http\Ws\WebSocket\ChannelActorRegistry;
 use Monadial\Nexus\Http\Ws\WebSocket\Exception\DuplicateRouteException;
 use Monadial\Nexus\Http\Ws\WebSocket\HandlerInstantiator;
@@ -240,6 +242,21 @@ final class WsApplication implements Application
     #[Override]
     public function compile(): CompiledWsApplication
     {
+        // Fail closed on authorization (SEC-003): a WS handler class declaring
+        // an AuthorizationRequirement attribute must have an enforcer in the
+        // pipeline the HandshakeGate runs (global wsMiddleware or per-route).
+
+        foreach ($this->wsRoutes as $wsRoute) {
+            $requirement = RouteProtection::requirementOf($wsRoute->targetClass);
+
+            if (
+                $requirement !== null
+                && !RouteProtection::hasEnforcer([...$this->wsMiddleware, ...$wsRoute->middleware])
+            ) {
+                throw new UnprotectedRouteException('WS', $wsRoute->path, $wsRoute->targetClass, $requirement);
+            }
+        }
+
         $compiledHttp = $this->compileInner();
         $router = WebSocketRouter::build($this->wsRoutes);
         $container = $this->container ?? new EmptyContainer();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Auth\Attribute;
 
 use Attribute;
+use Monadial\Nexus\Http\Security\AuthorizationRequirement;
 
 /**
  * PHP attribute that enforces authentication on a route handler class.
@@ -40,4 +41,4 @@ use Attribute;
  * @psalm-api
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class RequiresAuth {}
+final readonly class RequiresAuth implements AuthorizationRequirement {}

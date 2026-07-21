@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Auth\Attribute;
 
 use Attribute;
+use Monadial\Nexus\Http\Security\AuthorizationRequirement;
 
 use function array_values;
 
@@ -17,7 +18,7 @@ use function array_values;
  *   final class CreateOrderHandler { … }
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class RequiresScope
+final readonly class RequiresScope implements AuthorizationRequirement
 {
     /** @var list<string> */
     public array $scopes;

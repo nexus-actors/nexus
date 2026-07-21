@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Auth\Attribute;
 
 use Attribute;
+use Monadial\Nexus\Http\Security\AuthorizationRequirement;
 
 use function array_values;
 
@@ -14,7 +15,7 @@ use function array_values;
  * All-of role check. 403 if the Principal lacks ANY of the listed roles.
  */
 #[Attribute(Attribute::TARGET_CLASS)]
-final readonly class RequiresRole
+final readonly class RequiresRole implements AuthorizationRequirement
 {
     /** @var list<string> */
     public array $roles;
