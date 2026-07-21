@@ -196,7 +196,7 @@ public function __invoke(#[FromPrincipal] User $me): JsonResponse
 
 ## WebSocket auth
 
-A WebSocket upgrade is an HTTP request, so `AuthenticationMiddleware` protects the upgrade automatically. Decorate the handler with `#[RequiresAuth]` and add `AuthorizationMiddleware` per-route:
+A WebSocket upgrade is an HTTP request, and it is authorized **before** the 101 protocol switch: the pre-upgrade handshake gate runs the WebSocket middleware pipeline against the upgrade request and rejects unauthorized connections with plain HTTP responses (401/403) — the connection is never upgraded. Register auth middleware with `wsMiddleware()`, share `FromPrincipalResolver` via `paramResolver()`, and decorate the handler with `#[RequiresAuth]` (or `#[RequiresScope]`/`#[RequiresRole]`):
 
 ```php title="src/Http/Handler/PrivateChatHandler.php"
 use Monadial\Nexus\Http\Auth\Attribute\{FromPrincipal, RequiresAuth};
@@ -227,11 +227,16 @@ final class PrivateChatHandler extends WebSocketHandler
 ```
 
 ```php title="server.php"
-$app->ws('/ws/private', PrivateChatHandler::class)
-    ->middleware(AuthorizationMiddleware::class);
+$app = WsApplication::create($system)
+    ->paramResolver(new FromPrincipalResolver())              // shared with WS handlers
+    ->wsMiddleware(new AuthenticationMiddleware($auth))       // every WS upgrade
+    ->wsMiddleware(new AuthorizationMiddleware())             // enforces handler attributes
+    ->ws('/ws/private', PrivateChatHandler::class);
 ```
 
-The `Principal` is captured at upgrade time and lives for the duration of the connection. For revocation semantics, track session IDs at the application layer and close the connection when revoked.
+Unlike HTTP routes, `AuthorizationMiddleware` **may** be registered as global WebSocket middleware: the handshake gate resolves the route and stamps `_resolvedHandlerClass` before the pipeline runs, so the middleware always sees the matched handler class. Per-route middleware is also supported as the third argument of `ws()` (fifth of `channel()`) and runs after the global WS middleware.
+
+The `Principal` is captured at upgrade time — the gate hands the authenticated request to the open dispatch, so `#[FromPrincipal]` constructor parameters resolve to the same principal that authorized the handshake. It lives for the duration of the connection; for revocation semantics, track session IDs at the application layer and close the connection when revoked.
 
 ## Why per-route `AuthorizationMiddleware`?
 

@@ -12,6 +12,7 @@ use Monadial\Nexus\Http\Handler\Resolver\Builtin\PathParamResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ServerRequestResolver;
 use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
 use Monadial\Nexus\Http\Handler\Resolver\ParamMetadata;
+use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
 use Monadial\Nexus\Http\Handler\Resolver\ResolverServices;
 use Monadial\Nexus\Http\Handler\Resolver\Scope;
@@ -40,12 +41,19 @@ final readonly class HandlerInstantiator
 {
     private LoggerInterface $logger;
 
+    /**
+     * @param list<ParamResolver> $userResolvers Application-registered param
+     *        resolvers (e.g. FromPrincipalResolver) shared with the HTTP side
+     *        via WsApplication::paramResolver(). Consulted before the
+     *        container fallback.
+     */
     public function __construct(
         private ContainerInterface $container,
         ?LoggerInterface $logger = null,
         private ?ParamResolverRegistry $registry = null,
         private ?ResolvedActorTable $actors = null,
         private ?MessageSerializer $serializer = null,
+        private array $userResolvers = [],
     ) {
         $this->logger = $logger ?? new NullLogger();
     }
@@ -129,8 +137,16 @@ final readonly class HandlerInstantiator
             ->with(new FromContextResolver())
             ->with(new FromServiceResolver())
             ->with(new ServerRequestResolver())
-            ->with(new PathParamResolver())
-            ->with(new ContainerFallbackResolver());
+            ->with(new PathParamResolver());
+
+        // User resolvers run before the container fallback so attribute-driven
+        // resolution (e.g. #[FromPrincipal]) is not shadowed by type lookups.
+
+        foreach ($this->userResolvers as $resolver) {
+            $registry = $registry->with($resolver);
+        }
+
+        $registry = $registry->with(new ContainerFallbackResolver());
 
         if ($this->actors !== null) {
             $registry = $registry->withOverride(new FromActorResolver());
