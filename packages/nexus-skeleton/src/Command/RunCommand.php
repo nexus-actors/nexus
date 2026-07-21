@@ -12,6 +12,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 use function getenv;
+use function sprintf;
 
 /**
  * @psalm-api registered in bin/console
@@ -22,8 +23,9 @@ final class RunCommand extends Command
     #[Override]
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $output->writeln('<info>Booting Nexus actor system…</info>');
+        // bin/console loads .env via Symfony Dotenv with usePutenv(), so getenv() sees it.
         $appName = (string) (getenv('APP_NAME') !== false ? getenv('APP_NAME') : 'my-app');
+        $output->writeln(sprintf('<info>Booting Nexus actor system… (app: %s)</info>', $appName));
         new Kernel($appName)->run();
 
         return Command::SUCCESS;

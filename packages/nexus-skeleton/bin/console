@@ -7,8 +7,13 @@ use App\Command\RunCommand;
 use App\Command\SetupCommand;
 use Nexus\Maker\MakerCommands;
 use Symfony\Component\Console\Application;
+use Symfony\Component\Dotenv\Dotenv;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
+
+if (is_file(dirname(__DIR__) . '/.env')) {
+    new Dotenv()->usePutenv()->loadEnv(dirname(__DIR__) . '/.env');
+}
 
 $app = new Application('Nexus');
 $app->add(new RunCommand());
