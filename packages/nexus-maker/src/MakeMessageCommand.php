@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nexus\Maker;
 
+use Nette\PhpGenerator\PhpFile;
+use Nette\PhpGenerator\PsrPrinter;
 use Override;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -26,22 +28,6 @@ use function ucfirst;
 #[AsCommand('make:message', 'Generate a readonly message class in src/Message')]
 final class MakeMessageCommand extends Command
 {
-    private const string TEMPLATE = <<<'PHP'
-        <?php
-
-        declare(strict_types=1);
-
-        namespace App\Message;
-
-        final readonly class %s
-        {
-            public function __construct()
-            {
-            }
-        }
-
-        PHP;
-
     public function __construct(private readonly string $projectDir)
     {
         parent::__construct();
@@ -72,9 +58,22 @@ final class MakeMessageCommand extends Command
             mkdir(dirname($file), 0o755, true);
         }
 
-        file_put_contents($file, sprintf(self::TEMPLATE, $name));
+        file_put_contents($file, (new PsrPrinter())->printFile(self::build($name)));
         $io->success(sprintf('Created src/Message/%s.php', $name));
 
         return Command::SUCCESS;
+    }
+
+    private static function build(string $name): PhpFile
+    {
+        $file = new PhpFile();
+        $file->setStrictTypes();
+
+        $namespace = $file->addNamespace('App\\Message');
+        $class = $namespace->addClass($name);
+        $class->setFinal()->setReadOnly();
+        $class->addMethod('__construct');
+
+        return $file;
     }
 }

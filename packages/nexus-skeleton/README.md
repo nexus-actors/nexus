@@ -19,6 +19,7 @@ pre-1.0, not production-ready, APIs may change.
 ```bash
 bin/console make:actor Payment --with-message   # generate src/Actor/PaymentActor.php + message
 bin/console make:actor Ticker --functional      # closure-based actor (Behavior::receive factory)
+bin/console make:actor Order --type=event-sourced   # persistent actor factory (also: stateful, durable-state)
 bin/console make:message OrderPlaced            # generate src/Message/OrderPlaced.php
 bin/console run                                 # boot the actor system (alias of nexus:run)
 bin/console nexus:setup                         # re-run the wizard to add modules later
