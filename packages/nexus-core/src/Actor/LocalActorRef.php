@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Core\Actor;
 
 use Closure;
 use Monadial\Nexus\Core\Exception\AskTimeoutException;
+use Monadial\Nexus\Core\Exception\AskUndeliverableException;
 use Monadial\Nexus\Core\Mailbox\Envelope;
 use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Observability\Observability;
@@ -122,7 +123,14 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
         $envelope = $this->envelopeFor($message, $futureRefPath)->withSenderRef($futureRef);
 
         try {
-            $_ = $this->mailbox->enqueue($envelope);
+            $result = $this->mailbox->enqueue($envelope);
+
+            // The message never entered the mailbox: fail now instead of
+            // making the caller wait out the full ask timeout.
+
+            if ($result !== EnqueueResult::Accepted) {
+                $slot->fail(new AskUndeliverableException($this->path, $result));
+            }
         } catch (MailboxClosedException) {
             $slot->fail(new AskTimeoutException($this->path, $timeout));
         }

@@ -205,6 +205,132 @@ final class SwooleMailboxTest extends TestCase
         });
     }
 
+    // ========================================================================
+    // Admission is truthful at and beyond capacity (REL-001)
+    // ========================================================================
+
+    #[Test]
+    public function unbounded_mailbox_overflows_truthfully_at_physical_capacity(): void
+    {
+        $thrown = null;
+        $accepted = 0;
+        $count = 0;
+        $full = false;
+
+        run(function () use (&$thrown, &$accepted, &$count, &$full): void {
+            $mailbox = new SwooleMailbox(MailboxConfig::unbounded());
+
+            for ($i = 0; $i < 65536; $i++) {
+                if ($mailbox->enqueue($this->createMessage()) === EnqueueResult::Accepted) {
+                    $accepted++;
+                }
+            }
+
+            $count = $mailbox->count();
+            $full = $mailbox->isFull();
+
+            try {
+                (void) $mailbox->enqueue($this->createMessage());
+            } catch (Throwable $e) {
+                $thrown = $e;
+            }
+        });
+
+        self::assertSame(65536, $accepted);
+        self::assertSame(65536, $count);
+        self::assertTrue($full);
+        // Unbounded configs carry the ThrowException strategy; the physical
+        // 65,536-slot channel cap must surface it instead of claiming Accepted.
+        self::assertInstanceOf(MailboxOverflowException::class, $thrown);
+    }
+
+    #[Test]
+    public function drop_newest_saturation_admissions_match_actual_pushes(): void
+    {
+        run(function (): void {
+            $capacity = 8;
+            $mailbox = new SwooleMailbox(MailboxConfig::bounded($capacity, OverflowStrategy::DropNewest));
+            $accepted = 0;
+            $dropped = 0;
+
+            for ($i = 0; $i < 12; $i++) {
+                match ($mailbox->enqueue($this->createMessage())) {
+                    EnqueueResult::Accepted => $accepted++,
+                    EnqueueResult::Dropped => $dropped++,
+                    EnqueueResult::Backpressured => self::fail('unexpected backpressure'),
+                };
+            }
+
+            self::assertSame($capacity, $accepted);
+            self::assertSame(4, $dropped);
+
+            $delivered = 0;
+
+            while ($mailbox->dequeue() !== null) {
+                $delivered++;
+            }
+
+            // Every Accepted must be deliverable; every Dropped must not be.
+            self::assertSame($accepted, $delivered);
+        });
+    }
+
+    #[Test]
+    public function backpressure_saturation_admissions_match_actual_pushes(): void
+    {
+        run(function (): void {
+            $capacity = 8;
+            $mailbox = new SwooleMailbox(MailboxConfig::bounded($capacity, OverflowStrategy::Backpressure));
+            $accepted = 0;
+            $backpressured = 0;
+
+            for ($i = 0; $i < 12; $i++) {
+                match ($mailbox->enqueue($this->createMessage())) {
+                    EnqueueResult::Accepted => $accepted++,
+                    EnqueueResult::Backpressured => $backpressured++,
+                    EnqueueResult::Dropped => self::fail('unexpected drop'),
+                };
+            }
+
+            self::assertSame($capacity, $accepted);
+            self::assertSame(4, $backpressured);
+
+            $delivered = 0;
+
+            while ($mailbox->dequeue() !== null) {
+                $delivered++;
+            }
+
+            self::assertSame($accepted, $delivered);
+        });
+    }
+
+    #[Test]
+    public function drop_oldest_saturation_keeps_newest_and_reports_accepted(): void
+    {
+        run(function (): void {
+            $capacity = 4;
+            $mailbox = new SwooleMailbox(MailboxConfig::bounded($capacity, OverflowStrategy::DropOldest));
+            $messages = [];
+
+            for ($i = 0; $i < 7; $i++) {
+                $messages[$i] = $this->createMessage();
+                self::assertSame(EnqueueResult::Accepted, $mailbox->enqueue($messages[$i]));
+            }
+
+            // The channel holds exactly capacity messages: the newest ones.
+            self::assertSame($capacity, $mailbox->count());
+
+            $delivered = [];
+
+            while (($m = $mailbox->dequeue()) !== null) {
+                $delivered[] = $m;
+            }
+
+            self::assertSame([$messages[3], $messages[4], $messages[5], $messages[6]], $delivered);
+        });
+    }
+
     #[Test]
     public function close_prevents_enqueue(): void
     {
