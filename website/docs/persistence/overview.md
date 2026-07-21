@@ -10,10 +10,6 @@ related:
 
 # Persistence
 
-:::warning Experimental
-The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
-:::
-
 Actors are stateless across restarts. When an actor stops — due to a failure, a deployment, or a system shutdown — its in-memory state is lost. Persistence solves this by automatically saving and recovering state so that an actor picks up exactly where it left off.
 
 ## Choosing a persistence model

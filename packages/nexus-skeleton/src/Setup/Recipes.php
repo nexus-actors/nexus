@@ -101,7 +101,7 @@ final class Recipes
             'persistence-dbal' => new Recipe(
                 key: 'persistence-dbal',
                 label: 'Persistence (Doctrine DBAL store)',
-                experimental: true,
+                experimental: false,
                 packages: ['nexus-actors/persistence', 'nexus-actors/persistence-dbal'],
                 configFile: 'persistence.php',
                 configTemplate: self::options(
@@ -114,7 +114,7 @@ final class Recipes
             'persistence-doctrine' => new Recipe(
                 key: 'persistence-doctrine',
                 label: 'Persistence (Doctrine ORM store)',
-                experimental: true,
+                experimental: false,
                 packages: ['nexus-actors/persistence', 'nexus-actors/persistence-doctrine'],
                 configFile: 'persistence.php',
                 configTemplate: self::options(
@@ -127,7 +127,7 @@ final class Recipes
             'persistence-memory' => new Recipe(
                 key: 'persistence-memory',
                 label: 'Persistence (in-memory store)',
-                experimental: true,
+                experimental: false,
                 packages: ['nexus-actors/persistence'],
                 configFile: 'persistence.php',
                 configTemplate: self::options(

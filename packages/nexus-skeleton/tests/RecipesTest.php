@@ -27,7 +27,9 @@ final class RecipesTest extends TestCase
     {
         self::assertTrue(Recipes::get('cluster')->experimental);
         self::assertTrue(Recipes::get('messenger')->experimental);
-        self::assertTrue(Recipes::get('persistence-memory')->experimental);
+        self::assertFalse(Recipes::get('persistence-dbal')->experimental);
+        self::assertFalse(Recipes::get('persistence-doctrine')->experimental);
+        self::assertFalse(Recipes::get('persistence-memory')->experimental);
         self::assertFalse(Recipes::get('swoole')->experimental);
         self::assertFalse(Recipes::get('otel')->experimental);
     }

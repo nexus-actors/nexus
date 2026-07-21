@@ -9,10 +9,6 @@ related:
 
 # Event sourcing
 
-:::warning Experimental
-The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
-:::
-
 Event sourcing records every state change as an immutable domain event rather than overwriting the current state. On restart, the actor replays its event history to reconstruct the exact state it had when it stopped.
 
 ## The design

@@ -9,10 +9,6 @@ related:
 
 # Durable state
 
-:::warning Experimental
-The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
-:::
-
 `DurableStateBehavior` persists the actor's full current state as a single snapshot on every write, with no event history retained. Recovery loads the latest snapshot and the actor is immediately ready — no replay loop.
 
 ## The design

@@ -11,7 +11,8 @@ bin/console run
 `create-project` launches an interactive setup wizard (`nexus:setup`) that picks your
 runtime (Fiber for development, Swoole for production) and optional modules —
 persistence, OpenTelemetry observability, TCP clustering, and the Symfony Messenger
-bridge. Modules marked *experimental* are pre-1.0: not production-ready, APIs may change.
+bridge. TCP clustering and the Symfony Messenger bridge are marked *experimental*:
+pre-1.0, not production-ready, APIs may change.
 
 ## Everyday commands
 

@@ -9,10 +9,6 @@ related:
 
 # Single-writer guarantee
 
-:::warning Experimental
-The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
-:::
-
 Persistent actors follow the single-writer principle: exactly one writer appends to a given event stream at any time. This prevents split-brain data corruption when multiple processes share the same event store.
 
 ## The design

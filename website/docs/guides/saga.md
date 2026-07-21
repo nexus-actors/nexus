@@ -9,10 +9,6 @@ related:
 
 # How to implement a saga (process manager)
 
-:::warning Experimental
-The persistence layer is experimental and pre-1.0. APIs and storage formats may change in breaking ways between releases.
-:::
-
 A saga coordinates a long-running workflow that spans multiple aggregates. When a step succeeds, the saga sends a command to the next aggregate; when a step fails, it issues compensating commands to roll back completed steps. `EventSourcedBehavior` gives the saga durable memory: recorded progress survives crashes, and a restarted saga recovers its state from the event log. It does not replay in-flight side-effects — outgoing commands sent from `thenRun()` hooks are not reissued on recovery (see Caveats).
 
 ## Solution
