@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Http\Tests\Unit\Handler\Resolver\Builtin;
 
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
@@ -12,6 +13,7 @@ use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistrationEntry;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
+use Monadial\Nexus\Http\Exception\InvalidFromActorParameterException;
 use Monadial\Nexus\Http\Exception\PerRequestActorInConstructorException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
@@ -26,6 +28,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
 use ReflectionParameter;
+use stdClass;
 
 #[CoversClass(FromActorResolver::class)]
 final class FromActorResolverTest extends TestCase
@@ -126,6 +129,103 @@ final class FromActorResolverTest extends TestCase
         self::assertNotNull($metadata);
         self::assertTrue($metadata->needsScope);
         self::assertSame('session', $metadata->payload['actorName']);
+    }
+
+    // ========================================================================
+    // Parameter type is validated at compile time (DSL-009)
+    // ========================================================================
+
+    #[Test]
+    public function compiles_actor_ref_typed_parameter(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] ActorRef $greeter): void {},
+        );
+
+        $metadata = $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+
+        self::assertNotNull($metadata);
+    }
+
+    #[Test]
+    public function compiles_nullable_actor_ref_parameter(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] ?ActorRef $greeter): void {},
+        );
+
+        $metadata = $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+
+        self::assertNotNull($metadata);
+    }
+
+    #[Test]
+    public function compiles_union_parameter_containing_actor_ref(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] ActorRef|string $greeter): void {},
+        );
+
+        $metadata = $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+
+        self::assertNotNull($metadata);
+    }
+
+    #[Test]
+    public function compiles_untyped_parameter(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] $greeter): void {},
+        );
+
+        $metadata = $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+
+        self::assertNotNull($metadata);
+    }
+
+    #[Test]
+    public function throws_for_scalar_parameter_at_compile_time(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] string $greeter): void {},
+        );
+
+        $this->expectException(InvalidFromActorParameterException::class);
+        $this->expectExceptionMessage('$greeter');
+
+        $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+    }
+
+    #[Test]
+    public function throws_for_incompatible_object_parameter_at_compile_time(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] stdClass $greeter): void {},
+        );
+
+        $this->expectException(InvalidFromActorParameterException::class);
+        $this->expectExceptionMessage(ActorRef::class);
+
+        $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
+    }
+
+    #[Test]
+    public function throws_for_union_without_actor_ref_at_compile_time(): void
+    {
+        $resolver = new FromActorResolver();
+        $param = $this->refOf(
+            static function (#[FromActor('greeter')] int|string $greeter): void {},
+        );
+
+        $this->expectException(InvalidFromActorParameterException::class);
+
+        $resolver->compile($param, $this->bootCtx([$this->workerLocalEntry('greeter')]));
     }
 
     /**

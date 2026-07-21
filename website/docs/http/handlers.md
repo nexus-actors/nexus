@@ -107,6 +107,8 @@ final class CreateOrderHandler
 
 The actor is spawned once per worker (or thread) at boot. All requests in that worker share the same `ActorRef`.
 
+The parameter type is validated at compile time: it must be able to hold an `ActorRef` — `ActorRef` itself (optionally nullable or in a union), `object`, `mixed`, or untyped. A `#[FromActor]` parameter typed as a scalar or an incompatible class is rejected during `compile()` with `InvalidFromActorParameterException`, instead of compiling and failing with a `TypeError` on the first request.
+
 ### `#[FromService(Id::class)]`
 
 Resolves from the PSR-11 container:
