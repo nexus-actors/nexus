@@ -202,6 +202,129 @@ final class SwooleRuntimeTest extends TestCase
         self::assertGreaterThan(0, $count);
     }
 
+    // ========================================================================
+    // Repeating-timer cancellation is linked to the live tick (REL-005)
+    // ========================================================================
+
+    #[Test]
+    public function cancel_before_first_fire_prevents_all_invocations(): void
+    {
+        $runtime = new SwooleRuntime();
+        $count = 0;
+
+        $cancellable = $runtime->scheduleRepeatedly(
+            Duration::millis(20),
+            Duration::millis(10),
+            static function () use (&$count): void {
+                $count++;
+            },
+        );
+
+        $cancellable->cancel();
+
+        $runtime->scheduleOnce(Duration::millis(80), static function () use ($runtime): void {
+            $runtime->shutdown(Duration::millis(100));
+        });
+
+        $runtime->run();
+
+        self::assertSame(0, $count);
+    }
+
+    #[Test]
+    public function cancel_after_first_fire_stops_the_repeating_tick(): void
+    {
+        $runtime = new SwooleRuntime();
+        $count = 0;
+        $countAtCancel = -1;
+        $countAfterGrace = -1;
+
+        $cancellable = $runtime->scheduleRepeatedly(
+            Duration::millis(1),
+            Duration::millis(10),
+            static function () use (&$count): void {
+                $count++;
+            },
+        );
+
+        // Cancel well after the first fire, while the runtime keeps running.
+        $runtime->scheduleOnce(
+            Duration::millis(35),
+            static function () use ($cancellable, &$count, &$countAtCancel): void {
+                $countAtCancel = $count;
+                $cancellable->cancel();
+            },
+        );
+
+        // Give a cancelled-but-leaked tick ample time to expose itself
+        // before stopping the runtime (cancellation must not depend on
+        // the shutdown timer sweep).
+        $runtime->scheduleOnce(
+            Duration::millis(150),
+            static function () use ($runtime, &$count, &$countAfterGrace): void {
+                $countAfterGrace = $count;
+                $runtime->shutdown(Duration::millis(100));
+            },
+        );
+
+        $runtime->run();
+
+        self::assertGreaterThan(0, $countAtCancel);
+        self::assertSame($countAtCancel, $countAfterGrace);
+    }
+
+    #[Test]
+    public function restarted_owner_schedule_replaces_cancelled_tick(): void
+    {
+        $runtime = new SwooleRuntime();
+        $oldTicks = 0;
+        $newTicks = 0;
+        $oldTicksAtCancel = -1;
+        $oldTicksAtEnd = -1;
+
+        $old = $runtime->scheduleRepeatedly(
+            Duration::millis(1),
+            Duration::millis(10),
+            static function () use (&$oldTicks): void {
+                $oldTicks++;
+            },
+        );
+
+        // Simulate an owner restart: cancel the old incarnation's timer
+        // after it started ticking, then schedule the replacement.
+        $runtime->scheduleOnce(
+            Duration::millis(35),
+            static function () use ($runtime, $old, &$oldTicks, &$oldTicksAtCancel, &$newTicks): void {
+                $oldTicksAtCancel = $oldTicks;
+                $old->cancel();
+
+                $_ = $runtime->scheduleRepeatedly(
+                    Duration::millis(1),
+                    Duration::millis(10),
+                    static function () use (&$newTicks): void {
+                        $newTicks++;
+                    },
+                );
+            },
+        );
+
+        $runtime->scheduleOnce(
+            Duration::millis(150),
+            static function () use ($runtime, &$oldTicks, &$oldTicksAtEnd): void {
+                $oldTicksAtEnd = $oldTicks;
+                $runtime->shutdown(Duration::millis(100));
+            },
+        );
+
+        $runtime->run();
+
+        self::assertGreaterThan(0, $oldTicksAtCancel);
+        // The old incarnation's tick must not fire after cancel...
+        self::assertSame($oldTicksAtCancel, $oldTicksAtEnd);
+        // ...while the replacement ticks freely.
+        self::assertGreaterThan(0, $newTicks);
+    }
+
     #[Test]
     public function multiple_coroutines_execute(): void
     {
