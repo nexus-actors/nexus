@@ -32,7 +32,8 @@ composer require nexus-actors/http-toolkit
 |---|---|
 | `HealthCheck` | Interface — implement `name(): string` and `check(): HealthStatus` |
 | `HealthCheckRegistry` | Aggregates `HealthCheck` implementations; iterable at request time |
-| `HealthCheckHandler` | Invokable handler — mount on a route to serve `/health` |
+| `LivenessHandler` | Opaque public probe — `{status: up|down}` only, no details; safe to expose |
+| `HealthCheckHandler` | Detailed readiness handler — per-check states; mount on an INTERNAL/authenticated route |
 | `HealthStatus` | Value object: `up(array $detail)`, `degraded(array $detail)`, `down(array $detail)` |
 | `State` | Enum: `Up`, `Degraded`, `Down` |
 
@@ -62,23 +63,31 @@ $app = HttpApplication::create($system)
 
 `TraceContextMiddleware` sets `trace.id`, `trace.parentSpanId`, and `trace.spanId` as request attributes and writes the corresponding `traceparent` response header. If `nexus-actors/logger` is installed the IDs are also pushed into MDC so every log line inside the request carries them automatically.
 
-## Health check endpoint
+## Health check endpoints
+
+Split the **public** liveness probe from the **internal** readiness detail. `LivenessHandler` is opaque — it returns only the aggregate `up`/`down` state, never check names, details, or exception messages — so it is safe to expose to load balancers and Kubernetes `livenessProbe`. `HealthCheckHandler` returns the full per-check breakdown and must be mounted on an internal or authenticated route only, because those details can reveal internal topology and component information.
 
 ```php title="src/Http/Bootstrap.php"
 use Monadial\Nexus\Http\Toolkit\Health\HealthCheckHandler;
 use Monadial\Nexus\Http\Toolkit\Health\HealthCheckRegistry;
+use Monadial\Nexus\Http\Toolkit\Health\LivenessHandler;
 
 $registry = (new HealthCheckRegistry())
     ->add(new DatabaseHealthCheck($pdo))
     ->add(new RedisHealthCheck($redis));
 
 $app = HttpApplication::create($system)
-    ->get('/health', new HealthCheckHandler($registry));
+    ->get('/livez', new LivenessHandler($registry));            // public, opaque
+
+$app->get('/readyz', new HealthCheckHandler($registry))         // internal only
+    ->middleware(AuthorizationMiddleware::class);
 ```
 
-The handler returns `200` when all checks are `Up` or `Degraded`, and `503` when any check is `Down`. The response body follows an RFC Health JSON-inspired shape:
+`LivenessHandler` returns `200 {"status":"up"}` or `503 {"status":"down"}` — nothing else.
 
-```json title="GET /health — example response"
+`HealthCheckHandler` returns `200` when all checks are `Up` or `Degraded`, and `503` when any check is `Down`. A check that throws is treated as down; the raw exception class and message are **redacted by default** (they can carry DSNs, hostnames, or credentials) — pass `new HealthCheckHandler($registry, includeErrorDetail: true)` only on a trusted internal route to surface them. The response body follows an RFC Health JSON-inspired shape:
+
+```json title="GET /readyz — example response (internal)"
 {
   "status": "degraded",
   "checks": {
@@ -88,7 +97,7 @@ The handler returns `200` when all checks are `Up` or `Degraded`, and `503` when
 }
 ```
 
-A check that throws is treated as `Down`; the exception class becomes the `error` detail. `HealthCheckHandler` itself never throws.
+A check that throws is treated as `Down` with an empty `detail` by default (the exception is redacted). `HealthCheckHandler` itself never throws.
 
 ## In-process testing
 

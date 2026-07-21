@@ -11,14 +11,20 @@ use Throwable;
 /**
  * @psalm-api
  *
- * Invokable handler — register against a route to serve the aggregate
- * health endpoint:
+ * Detailed readiness handler — register against an INTERNAL or authenticated
+ * route (e.g. a `readyz` endpoint reachable only from the cluster network or
+ * behind auth). It exposes per-check states and details, which can reveal
+ * internal topology and component information, so it must NOT be public. For
+ * the public probe use {@see LivenessHandler}, which reports only the opaque
+ * aggregate state.
  *
  *   $registry = (new HealthCheckRegistry())
  *       ->add(new DatabaseHealthCheck($pdo))
  *       ->add(new RedisHealthCheck($redis));
  *
- *   $app->get('/health', new HealthCheckHandler($registry));
+ *   $app->get('/livez', new LivenessHandler($registry));                 // public
+ *   $app->get('/readyz', new HealthCheckHandler($registry))             // internal
+ *       ->middleware(AuthorizationMiddleware::class);
  *
  * Response shape (RFC-health-json-inspired):
  *
@@ -29,16 +35,19 @@ use Throwable;
  *     "status": "up" | "degraded" | "down",
  *     "checks": {
  *       "database": {"state": "up",   "detail": {"latencyMs": 1.2}},
- *       "redis":    {"state": "down", "detail": {"error": "connection refused"}}
+ *       "redis":    {"state": "down", "detail": {}}
  *     }
  *   }
  *
- * A check that THROWS is treated as down; the exception class becomes
- * the `error` detail. The handler itself never throws.
+ * A check that THROWS is treated as down. By default the raw exception class
+ * and message are REDACTED from the response (they can carry DSNs, hostnames,
+ * or credentials); pass `includeErrorDetail: true` only for a trusted internal
+ * readiness route to surface the exception class and message. The handler
+ * itself never throws.
  */
 final readonly class HealthCheckHandler
 {
-    public function __construct(private HealthCheckRegistry $registry) {}
+    public function __construct(private HealthCheckRegistry $registry, private bool $includeErrorDetail = false) {}
 
     public function __invoke(): ResponseInterface
     {
@@ -50,7 +59,11 @@ final readonly class HealthCheckHandler
             try {
                 $status = $check->check();
             } catch (Throwable $e) {
-                $status = HealthStatus::down(['error' => $e::class, 'message' => $e->getMessage()]);
+                $status = HealthStatus::down(
+                    $this->includeErrorDetail
+                        ? ['error' => $e::class, 'message' => $e->getMessage()]
+                        : [],
+                );
             }
 
             $results[$check->name()] = [
