@@ -34,14 +34,23 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
+          # nexus-actors/app hard-requires ext-pcntl; be explicit rather than
+          # relying on the runner image's defaults.
+          extensions: pcntl
           tools: composer
+
+      - name: Toolchain versions
+        run: |
+          php -v
+          php -m | grep -i pcntl
+          composer --version
 
       - name: Package unit tests (skeleton + maker)
         run: |
           php packages/nexus-skeleton/bin/link-monorepo
-          composer update -d packages/nexus-skeleton --quiet
+          composer update -d packages/nexus-skeleton --no-progress
           packages/nexus-skeleton/vendor/bin/phpunit -c packages/nexus-skeleton
-          composer update -d packages/nexus-maker --quiet
+          composer update -d packages/nexus-maker --no-progress
           packages/nexus-maker/vendor/bin/phpunit -c packages/nexus-maker
 
       - name: create-project from local path
