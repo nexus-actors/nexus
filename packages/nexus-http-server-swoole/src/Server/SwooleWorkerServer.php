@@ -54,6 +54,10 @@ final class SwooleWorkerServer
         $settings['dispatch_mode'] = $config->dispatchMode;
         $settings['max_conn'] = $config->maxConn;
         $settings['max_request'] = $config->maxRequest;
+        // Reject oversized requests at the protocol parser (SEC-009), before
+        // PHP materializes the body. Applies to every method and to both
+        // known-length and chunked bodies, bounding per-request memory.
+        $settings['package_max_length'] = $config->maxRequestBodyBytes;
         $settings['reactor_num'] = $config->reactorThreads;
         $settings['worker_num'] = $config->workers;
 

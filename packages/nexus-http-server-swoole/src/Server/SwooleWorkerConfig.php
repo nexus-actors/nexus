@@ -17,6 +17,9 @@ use Psr\Log\NullLogger;
  */
 final readonly class SwooleWorkerConfig
 {
+    /** Default maximum HTTP request package size: 8 MiB. */
+    public const int DEFAULT_MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
+
     /**
      * @param array<string, mixed> $swooleSettings Extra keys merged into
      *        `$server->set()`. Applied BEFORE the framework's own defaults so
@@ -37,6 +40,7 @@ final readonly class SwooleWorkerConfig
         public LoggerInterface $logger,
         public string $logFile,
         public bool $enableWebSocket,
+        public int $maxRequestBodyBytes = self::DEFAULT_MAX_REQUEST_BODY_BYTES,
         public array $swooleSettings = [],
     ) {}
 
@@ -55,6 +59,7 @@ final readonly class SwooleWorkerConfig
             logger: new NullLogger(),
             logFile: '',
             enableWebSocket: false,
+            maxRequestBodyBytes: self::DEFAULT_MAX_REQUEST_BODY_BYTES,
             swooleSettings: [],
         );
     }
@@ -98,6 +103,20 @@ final readonly class SwooleWorkerConfig
     public function maxConn(int $n): self
     {
         return clone($this, ['maxConn' => $n]);
+    }
+
+    /**
+     * Cap the maximum HTTP request package size (bytes). Swoole rejects a
+     * larger request at the protocol parser — before PHP materializes the body
+     * via rawContent() — for every method and for both known-length and
+     * chunked/streaming bodies, bounding per-request memory. Wired to Swoole's
+     * native `package_max_length`. Raise it above your largest legitimate
+     * upload; keep it as low as your API allows to tighten the memory-DoS
+     * surface.
+     */
+    public function maxRequestBodyBytes(int $bytes): self
+    {
+        return clone($this, ['maxRequestBodyBytes' => $bytes]);
     }
 
     public function maxRequest(int $n): self
