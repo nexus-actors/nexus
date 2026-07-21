@@ -3,13 +3,12 @@
     "description": "Minimal skeleton for building applications on the Nexus actor system (PHP 8.5+).",
     "type": "project",
     "license": "MIT",
-    "repositories": [
-        { "type": "path", "url": "../../packages/nexus-core" },
-        { "type": "path", "url": "../../packages/nexus-app" },
-        { "type": "path", "url": "../../packages/nexus-runtime" },
-        { "type": "path", "url": "../../packages/nexus-runtime-fiber" },
-        { "type": "path", "url": "../../packages/nexus-observability" }
-    ],
+    "scripts": {
+        "post-create-project-cmd": [
+            "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
+            "@php bin/console nexus:setup"
+        ]
+    },
     "require": {
         "php": ">=8.5.7",
         "nexus-actors/app": "dev-main",
