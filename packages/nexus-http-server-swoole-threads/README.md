@@ -59,3 +59,9 @@ SwooleThreadConfig::bind('0.0.0.0', 8080)
 ## Status
 
 Thread-mode HTTP + handler-mode WebSocket — stable. Channel-mode WebSocket — rejected at boot in v1 (see above).
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.

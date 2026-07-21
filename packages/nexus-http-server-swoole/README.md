@@ -59,3 +59,9 @@ SwooleWorkerConfig::bind('0.0.0.0', 8080)
 ## Status
 
 Stable.
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.

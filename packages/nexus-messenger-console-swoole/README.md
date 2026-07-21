@@ -73,3 +73,9 @@ bin/console nexus:messenger:consume-threads --threads=4 --limit=10000 --memory-l
 - [nexus-messenger-console](../nexus-messenger-console) — single-threaded `FiberRuntime` runner
 - [nexus-worker-pool-swoole](../nexus-worker-pool-swoole) — underlying thread pool
 - [nexus-messenger](../nexus-messenger) — transport bridge and `MessengerBridge` facade
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.
