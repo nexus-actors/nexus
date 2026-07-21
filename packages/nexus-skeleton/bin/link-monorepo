@@ -33,6 +33,16 @@ foreach (glob($packagesDir . '/nexus-*') ?: [] as $dir) {
 
 $composer['repositories'] = $repositories;
 
+// A leftover composer.lock in this directory leaks into path-repo
+// create-project copies (composer mirrors the raw dir) and pins created
+// projects to stale dependencies. Drop it; CI regenerates it right after.
+$staleLock = dirname(__DIR__) . '/composer.lock';
+
+if (is_file($staleLock)) {
+    unlink($staleLock);
+    echo "Removed stale composer.lock\n";
+}
+
 file_put_contents(
     $composerFile,
     json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
