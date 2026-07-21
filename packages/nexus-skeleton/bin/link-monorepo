@@ -1,0 +1,30 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Injects monorepo path repositories into this composer.json so the skeleton
+// can be installed/tested against the local packages instead of Packagist.
+// Used by monorepo CI only — never ship this to created projects' docs.
+
+$composerFile = dirname(__DIR__) . '/composer.json';
+/** @var array<string, mixed> $composer */
+$composer = json_decode((string) file_get_contents($composerFile), true, 512, JSON_THROW_ON_ERROR);
+
+$packagesDir = dirname(__DIR__, 2);
+$repositories = [];
+
+foreach (glob($packagesDir . '/nexus-*') ?: [] as $dir) {
+    if (is_file($dir . '/composer.json')) {
+        $repositories[] = ['type' => 'path', 'url' => $dir];
+    }
+}
+
+$composer['repositories'] = $repositories;
+
+file_put_contents(
+    $composerFile,
+    json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n",
+);
+
+echo 'Linked ' . count($repositories) . " monorepo packages into composer.json\n";
