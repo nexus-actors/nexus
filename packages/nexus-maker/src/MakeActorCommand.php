@@ -62,6 +62,31 @@ final class MakeActorCommand extends Command
 
         PHP;
 
+    private const string FUNCTIONAL_TEMPLATE = <<<'PHP'
+        <?php
+
+        declare(strict_types=1);
+
+        namespace App\Actor;
+
+        use Monadial\Nexus\Core\Actor\ActorContext;
+        use Monadial\Nexus\Core\Actor\Behavior;
+
+        final class %sActor
+        {
+            public static function behavior(): Behavior
+            {
+                return Behavior::receive(static function (ActorContext $ctx, object $message): Behavior {
+                    return match (true) {
+                        // $message instanceof %sMessage => Behavior::same(),
+                        default => Behavior::unhandled(),
+                    };
+                });
+            }
+        }
+
+        PHP;
+
     public function __construct(private readonly string $projectDir)
     {
         parent::__construct();
@@ -72,6 +97,12 @@ final class MakeActorCommand extends Command
     {
         $this->addArgument('name', InputArgument::REQUIRED, 'Actor name, e.g. Payment');
         $this->addOption('with-message', null, InputOption::VALUE_NONE, 'Also generate src/Message/<Name>Message.php');
+        $this->addOption(
+            'functional',
+            null,
+            InputOption::VALUE_NONE,
+            'Generate a closure-based actor instead of an #[AsActor] handler',
+        );
     }
 
     #[Override]
@@ -93,8 +124,20 @@ final class MakeActorCommand extends Command
             mkdir(dirname($file), 0o755, true);
         }
 
-        file_put_contents($file, sprintf(self::TEMPLATE, strtolower(lcfirst($name)), $name, $name, $name));
-        $io->success(sprintf('Created src/Actor/%sActor.php', $name));
+        $slug = strtolower(lcfirst($name));
+
+        if ($input->getOption('functional') === true) {
+            file_put_contents($file, sprintf(self::FUNCTIONAL_TEMPLATE, $name, $name));
+            $io->success(sprintf('Created src/Actor/%sActor.php', $name));
+            $io->writeln(sprintf(
+                "Spawn it: \$system->spawn(Props::fromBehavior(%sActor::behavior()), '%s');",
+                $name,
+                $slug,
+            ));
+        } else {
+            file_put_contents($file, sprintf(self::TEMPLATE, $slug, $name, $name, $name));
+            $io->success(sprintf('Created src/Actor/%sActor.php', $name));
+        }
 
         if ($input->getOption('with-message') === true) {
             $message = new MakeMessageCommand($this->projectDir);

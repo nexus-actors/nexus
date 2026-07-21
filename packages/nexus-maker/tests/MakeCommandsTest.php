@@ -52,6 +52,45 @@ final class MakeCommandsTest extends TestCase
     }
 
     #[Test]
+    public function make_actor_functional_generates_closure_based_actor(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Payment', '--functional' => true]);
+
+        $tester->assertCommandIsSuccessful();
+        $file = $this->dir . '/src/Actor/PaymentActor.php';
+        self::assertFileExists($file);
+
+        $code = (string) file_get_contents($file);
+        self::assertStringContainsString('Behavior::receive', $code);
+        self::assertStringContainsString('public static function behavior(): Behavior', $code);
+        self::assertStringNotContainsString('AsActor', $code);
+        self::assertStringNotContainsString('ActorHandler', $code);
+
+        exec('php -l ' . escapeshellarg($file), $out, $exit);
+        self::assertSame(0, $exit, implode("\n", $out));
+    }
+
+    #[Test]
+    public function make_actor_functional_displays_spawn_hint(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Payment', '--functional' => true]);
+
+        self::assertStringContainsString(
+            "Spawn it: \$system->spawn(Props::fromBehavior(PaymentActor::behavior()), 'payment');",
+            $tester->getDisplay(),
+        );
+    }
+
+    #[Test]
+    public function make_actor_functional_with_message_generates_both(): void
+    {
+        $this->runCommand('make:actor', ['name' => 'Payment', '--functional' => true, '--with-message' => true]);
+
+        self::assertFileExists($this->dir . '/src/Actor/PaymentActor.php');
+        self::assertFileExists($this->dir . '/src/Message/PaymentMessage.php');
+    }
+
+    #[Test]
     public function make_message_generates_readonly_class(): void
     {
         $tester = $this->runCommand('make:message', ['name' => 'OrderPlaced']);
