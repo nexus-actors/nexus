@@ -5,7 +5,7 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
+        "nexus-actors/core": "^0.1",
         "cuyz/valinor": "^2.3"
     },
     "require-dev": {

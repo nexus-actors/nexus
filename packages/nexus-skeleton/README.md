@@ -3,7 +3,7 @@
 Start a [Nexus](https://nexusactors.com) actor-system project in three commands:
 
 ```bash
-composer create-project nexus-actors/skeleton my-app --stability=dev
+composer create-project nexus-actors/skeleton my-app
 cd my-app
 bin/console run
 ```

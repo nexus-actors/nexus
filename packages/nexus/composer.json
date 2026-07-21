@@ -5,9 +5,9 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/runtime": "dev-main",
-        "nexus-actors/runtime-fiber": "dev-main",
-        "nexus-actors/serialization": "dev-main"
+        "nexus-actors/core": "^0.1",
+        "nexus-actors/runtime": "^0.1",
+        "nexus-actors/runtime-fiber": "^0.1",
+        "nexus-actors/serialization": "^0.1"
     }
 }

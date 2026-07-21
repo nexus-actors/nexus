@@ -5,12 +5,12 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/core": "dev-main",
-        "nexus-actors/observability": "dev-main"
+        "nexus-actors/core": "^0.1",
+        "nexus-actors/observability": "^0.1"
     },
     "require-dev": {
-        "nexus-actors/observability-otel": "dev-main",
-        "nexus-actors/runtime-fiber": "dev-main",
+        "nexus-actors/observability-otel": "^0.1",
+        "nexus-actors/runtime-fiber": "^0.1",
         "open-telemetry/sdk": "^1.14",
         "phpunit/phpunit": "^13.0"
     },

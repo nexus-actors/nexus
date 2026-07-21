@@ -12,12 +12,12 @@
         "psr/event-dispatcher": "^1.0",
         "brick/math": "^0.12",
         "symfony/uid": "^8.0",
-        "nexus-actors/observability": "dev-main",
-        "nexus-actors/runtime": "dev-main"
+        "nexus-actors/observability": "^0.1",
+        "nexus-actors/runtime": "^0.1"
     },
     "require-dev": {
-        "nexus-actors/observability-otel": "dev-main",
-        "nexus-actors/runtime-fiber": "dev-main",
+        "nexus-actors/observability-otel": "^0.1",
+        "nexus-actors/runtime-fiber": "^0.1",
         "open-telemetry/sdk": "^1.14",
         "phpunit/phpunit": "^13.0"
     },

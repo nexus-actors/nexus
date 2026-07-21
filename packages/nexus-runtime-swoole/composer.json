@@ -6,7 +6,7 @@
     "require": {
         "php": ">=8.5.7",
         "ext-swoole": ">=6.2.1",
-        "nexus-actors/runtime": "dev-main"
+        "nexus-actors/runtime": "^0.1"
     },
     "require-dev": {
         "phpunit/phpunit": "^13.0"

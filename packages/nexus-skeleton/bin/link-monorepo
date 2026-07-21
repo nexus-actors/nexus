@@ -24,7 +24,7 @@ foreach (glob($packagesDir . '/nexus-*') ?: [] as $dir) {
         // Pin the advertised version: on CI the checkout is a detached HEAD, so
         // composer would infer dev-<sha> and fail the dev-main constraints.
         if (isset($package['name'])) {
-            $repository['options'] = ['versions' => [$package['name'] => 'dev-main']];
+            $repository['options'] = ['versions' => [$package['name'] => '0.1.x-dev']];
         }
 
         $repositories[] = $repository;

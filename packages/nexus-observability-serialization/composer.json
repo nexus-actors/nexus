@@ -5,8 +5,8 @@
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
-        "nexus-actors/observability": "dev-main",
-        "nexus-actors/serialization": "dev-main",
+        "nexus-actors/observability": "^0.1",
+        "nexus-actors/serialization": "^0.1",
         "psr/log": "^3.0"
     },
     "require-dev": {

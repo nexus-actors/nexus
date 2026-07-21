@@ -40,9 +40,9 @@ The tag-push path is what Packagist uses: when you push `v1.0.0` to the monorepo
 Nexus follows [Semantic Versioning](https://semver.org/). All packages share the same version number — a `v1.2.0` tag in the monorepo becomes `v1.2.0` in every split repo simultaneously. Never release packages at different version numbers.
 
 :::danger Release gate — internal constraints are not yet versioned
-Cross-package constraints in the package manifests currently use `dev-main`, not versioned constraints (for example, `packages/nexus-app/composer.json` requires `nexus-actors/core: dev-main`). The split workflow copies manifests verbatim — it does not rewrite constraints when tagging. A tagged split package would therefore still depend on the moving `dev-main` branch heads of its siblings, and stable consumers (default `minimum-stability: stable`) cannot resolve it.
+Cross-package constraints in the package manifests use versioned `^0.1` constraints (since v0.1.0). The split workflow copies manifests verbatim — it does not rewrite constraints when tagging — so keep sibling constraints aligned with the release line when bumping versions.
 
-**No stable release should be cut from the current manifests.** Before tagging any `v*` release, the internal `dev-main` constraints must be replaced with release-compatible versioned constraints (e.g., `self.version` or `^1.0`), and every split package should be installed from a clean fixture at stable stability to prove it resolves.
+**Before tagging any `v*` release**, confirm the internal constraints match the release line (e.g., `^0.1` for 0.1.x tags), and install at least one leaf package from a clean fixture to prove the tagged set resolves.
 :::
 
 To cut a release (once the constraints above are versioned):
