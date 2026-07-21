@@ -586,6 +586,235 @@ final class DurableStateEngineTest extends TestCase
         self::assertSame(300, $recoveredState->balance);
     }
 
+    // ========================================================================
+    // Side-effect hooks execute on every base effect (DDD-001)
+    // ========================================================================
+
+    #[Test]
+    public function then_reply_on_none_replies_with_current_state(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $replyCapture = new DeadLetterRef();
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg): DurableEffect {
+                if ($msg instanceof SetBalance) {
+                    return DurableEffect::persist(new AccountState($msg->amount));
+                }
+
+                if ($msg instanceof GetBalance) {
+                    return DurableEffect::none()
+                        ->thenReply($msg->replyTo, static function (object $state): object {
+                            return new BalanceReply($state->balance);
+                        });
+                }
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new SetBalance(100)));
+        $cell->processMessage($this->envelope(new GetBalance($replyCapture)));
+
+        $captured = $replyCapture->captured();
+        self::assertCount(1, $captured);
+        self::assertInstanceOf(BalanceReply::class, $captured[0]);
+        self::assertSame(100, $captured[0]->balance);
+
+        // The read query must not write a new version
+        $stored = $stateStore->get($this->persistenceId);
+        self::assertNotNull($stored);
+        self::assertSame(1, $stored->version);
+    }
+
+    #[Test]
+    public function then_run_on_none_executes_with_current_state(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $sideEffectLog = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): DurableEffect {
+                if ($msg instanceof SetBalance) {
+                    return DurableEffect::persist(new AccountState($msg->amount));
+                }
+
+                return DurableEffect::none()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'on-none: ' . $state->balance;
+                    });
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new SetBalance(100)));
+        $cell->processMessage($this->envelope(new DurableDoNothing()));
+
+        self::assertSame(['on-none: 100'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_unhandled_execute_with_current_state(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $sideEffectLog = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): DurableEffect {
+                return DurableEffect::unhandled()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'on-unhandled';
+                    });
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DurableDoNothing()));
+
+        self::assertSame(['on-unhandled'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_reply_execute_after_primary_reply(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $replyCapture = new DeadLetterRef();
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg): DurableEffect {
+                if ($msg instanceof GetBalance) {
+                    return DurableEffect::reply($msg->replyTo, new BalanceReply(-1))
+                        ->thenReply($msg->replyTo, static function (object $state): object {
+                            return new BalanceReply($state->balance);
+                        });
+                }
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new GetBalance($replyCapture)));
+
+        $captured = $replyCapture->captured();
+        self::assertCount(2, $captured);
+        self::assertInstanceOf(BalanceReply::class, $captured[0]);
+        self::assertSame(-1, $captured[0]->balance);
+        self::assertInstanceOf(BalanceReply::class, $captured[1]);
+        self::assertSame(0, $captured[1]->balance);
+    }
+
+    #[Test]
+    public function hooks_on_stash_execute_with_current_state(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $sideEffectLog = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): DurableEffect {
+                if ($msg instanceof DurableDoNothing) {
+                    return DurableEffect::stash()
+                        ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                            $sideEffectLog[] = 'on-stash';
+                        });
+                }
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DurableDoNothing()));
+
+        self::assertSame(['on-stash'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_stop_execute_before_actor_stops(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $sideEffectLog = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): DurableEffect {
+                if ($msg instanceof DurableStopCommand) {
+                    return DurableEffect::stop()
+                        ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                            $sideEffectLog[] = 'on-stop';
+                        });
+                }
+
+                return DurableEffect::none();
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DurableStopCommand()));
+
+        self::assertSame(['on-stop'], $sideEffectLog);
+        self::assertFalse($cell->isAlive());
+    }
+
+    #[Test]
+    public function multiple_hooks_on_none_execute_in_registration_order(): void
+    {
+        $stateStore = new InMemoryDurableStateStore();
+        $sideEffectLog = [];
+
+        $behavior = DurableStateEngine::create(
+            $this->persistenceId,
+            new AccountState(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): DurableEffect {
+                return DurableEffect::none()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'first';
+                    })
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'second';
+                    });
+            },
+            $stateStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DurableDoNothing()));
+
+        self::assertSame(['first', 'second'], $sideEffectLog);
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();

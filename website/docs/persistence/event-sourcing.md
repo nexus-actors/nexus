@@ -60,7 +60,7 @@ The command handler receives the current projected state, the `ActorContext`, an
 - `Effect::stop()` — stop the actor after the effect completes.
 - `Effect::unhandled()` — route to dead letters.
 
-Chain side-effects after persistence using `->thenRun(fn($state) => ...)` and `->thenReply($to, fn($state) => $msg)`. These closures execute only after events are durably written, and only on the persist path — chained on any other effect (including `Effect::none()`) they are silently dropped. They run at most once: recovery replay folds events onto state and never re-executes them.
+Chain side-effects using `->thenRun(fn($state) => ...)` and `->thenReply($to, fn($state) => $msg)`. On the persist path these closures execute only after events are durably written and receive the post-persist state; on any other effect (including `Effect::none()`) they run after the effect's primary action and receive the unchanged current state — `Effect::none()->thenReply(...)` is the canonical read-only query. They run at most once: recovery replay folds events onto state and never re-executes them.
 
 ### Event handler
 
