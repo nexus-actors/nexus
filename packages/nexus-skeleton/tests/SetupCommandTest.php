@@ -90,6 +90,21 @@ final class SetupCommandTest extends TestCase
         self::assertStringContainsString('already exists', $tester->getDisplay());
     }
 
+    #[Test]
+    public function fiber_default_warns_before_replacing_existing_swoole_runtime_config(): void
+    {
+        file_put_contents(
+            $this->dir . '/config/packages/runtime.php',
+            "<?php\n\nuse Monadial\\Nexus\\Runtime\\Swoole\\SwooleRuntime;\n\nreturn static fn(): SwooleRuntime => new SwooleRuntime();\n",
+        );
+
+        $tester = $this->tester();
+        $tester->execute([], ['interactive' => false]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('Replacing existing config/packages/runtime.php', $tester->getDisplay());
+    }
+
     protected function setUp(): void
     {
         $this->dir = sys_get_temp_dir() . '/nexus-setup-' . uniqid();

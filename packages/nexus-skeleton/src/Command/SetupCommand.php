@@ -15,10 +15,10 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
 use function array_merge;
-use function array_values;
 use function dirname;
 use function extension_loaded;
 use function file_exists;
+use function file_get_contents;
 use function file_put_contents;
 use function implode;
 use function sprintf;
@@ -56,12 +56,7 @@ final class SetupCommand extends Command
 
         $this->composerRunner = $composerRunner !== null
             ? $composerRunner(...)
-            : static function (array $packages): int {
-                $exit = 1;
-                passthru('composer require --with-all-dependencies ' . implode(' ', $packages), $exit);
-
-                return $exit;
-            };
+            : self::defaultComposerRunner();
         $this->projectDir = $projectDir ?? dirname(__DIR__, 2);
     }
 
@@ -76,7 +71,7 @@ final class SetupCommand extends Command
             : [];
 
         if (!$this->includesSwoole($chosen)) {
-            file_put_contents($this->projectDir . '/config/packages/runtime.php', self::FIBER_RUNTIME_TEMPLATE);
+            $this->writeRuntimeConfig($io, self::FIBER_RUNTIME_TEMPLATE);
         }
 
         $packages = [];
@@ -90,7 +85,7 @@ final class SetupCommand extends Command
             $packages[] = $recipe->packages;
         }
 
-        $packages = array_merge(...array_values($packages !== [] ? $packages : [[]]));
+        $packages = array_merge(...($packages !== [] ? $packages : [[]]));
 
         if ($packages !== []) {
             $io->section('Installing packages');
@@ -123,7 +118,7 @@ final class SetupCommand extends Command
     {
         $chosen = [];
 
-        $runtime = $io->choice('Runtime', ['fiber', 'swoole'], 'fiber');
+        $runtime = (string) $io->choice('Runtime', ['fiber', 'swoole'], 'fiber');
 
         if ($runtime === 'swoole') {
             if (!extension_loaded('swoole')) {
@@ -137,7 +132,7 @@ final class SetupCommand extends Command
             }
         }
 
-        $persistence = $io->choice(
+        $persistence = (string) $io->choice(
             'Persistence store (experimental)',
             ['none', 'memory', 'dbal', 'doctrine'],
             'none',
@@ -182,10 +177,16 @@ final class SetupCommand extends Command
             return;
         }
 
+        // runtime.php ships with the skeleton; the Swoole recipe intentionally replaces it.
+        if ($recipe->configFile === 'runtime.php') {
+            $this->writeRuntimeConfig($io, $recipe->configTemplate);
+
+            return;
+        }
+
         $path = $this->projectDir . '/config/packages/' . $recipe->configFile;
 
-        // runtime.php ships with the skeleton; the Swoole recipe intentionally replaces it.
-        if ($recipe->configFile !== 'runtime.php' && file_exists($path)) {
+        if (file_exists($path)) {
             $io->text(sprintf('config/packages/%s already exists — left untouched.', $recipe->configFile));
 
             return;
@@ -193,5 +194,42 @@ final class SetupCommand extends Command
 
         file_put_contents($path, $recipe->configTemplate);
         $io->text(sprintf('Wrote config/packages/%s', $recipe->configFile));
+    }
+
+    private function writeRuntimeConfig(SymfonyStyle $io, string $template): void
+    {
+        $path = $this->projectDir . '/config/packages/runtime.php';
+        $existing = file_exists($path)
+            ? file_get_contents($path)
+            : null;
+
+        if ($existing === $template) {
+            return;
+        }
+
+        if ($existing !== null) {
+            $io->warning(
+                'Replacing existing config/packages/runtime.php — previous runtime configuration was overwritten.',
+            );
+        }
+
+        file_put_contents($path, $template);
+        $io->text('Wrote config/packages/runtime.php');
+    }
+
+    /**
+     * @return Closure(list<string>): int
+     */
+    private static function defaultComposerRunner(): Closure
+    {
+        /**
+         * @param list<string> $packages
+         */
+        return static function (array $packages): int {
+            $exit = 1;
+            passthru('composer require --with-all-dependencies ' . implode(' ', $packages), $exit);
+
+            return $exit;
+        };
     }
 }
