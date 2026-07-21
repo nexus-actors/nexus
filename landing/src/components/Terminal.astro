@@ -1,0 +1,58 @@
+---
+// landing/src/components/Terminal.astro
+// macOS-style terminal window for CLI transcripts. Takes pre-built HTML so
+// lines can carry colored spans (t-p prompt, t-ok, t-accent, t-warn, t-dim).
+interface Props {
+  html: string;
+  class?: string;
+}
+const { html, class: className = '' } = Astro.props;
+---
+<div class={`nx-terminal ${className}`}>
+  <div class="nx-terminal-bar" aria-hidden="true">
+    <span class="nx-terminal-dot nx-terminal-dot-red"></span>
+    <span class="nx-terminal-dot nx-terminal-dot-amber"></span>
+    <span class="nx-terminal-dot nx-terminal-dot-green"></span>
+  </div>
+  <pre class="nx-terminal-body" set:html={html} />
+</div>
+
+<style>
+  .nx-terminal {
+    background: #2b2d31;
+    border-radius: 0.9rem;
+    box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.55), 0 6px 16px -8px rgb(0 0 0 / 0.35);
+    overflow: hidden;
+  }
+  :global(.dark) .nx-terminal {
+    box-shadow: 0 24px 48px -20px rgb(0 0 0 / 0.8), 0 0 0 1px rgb(255 255 255 / 0.06);
+  }
+  .nx-terminal-bar {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1.05rem 1.4rem 0.35rem;
+  }
+  .nx-terminal-dot {
+    width: 0.78rem;
+    height: 0.78rem;
+    border-radius: 9999px;
+  }
+  .nx-terminal-dot-red { background: #ff5f57; }
+  .nx-terminal-dot-amber { background: #febc2e; }
+  .nx-terminal-dot-green { background: #28c840; }
+  .nx-terminal-body {
+    margin: 0;
+    padding: 1.1rem 1.5rem 1.6rem;
+    font-family: var(--nx-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    font-size: 0.85rem;
+    line-height: 1.95;
+    color: #d7dade;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .nx-terminal-body :global(.t-p) { color: #34d399; font-weight: 700; }
+  .nx-terminal-body :global(.t-ok) { color: #a9c76f; }
+  .nx-terminal-body :global(.t-accent) { color: #d9a45f; }
+  .nx-terminal-body :global(.t-warn) { color: #e5c07b; }
+  .nx-terminal-body :global(.t-dim) { color: #8b919a; }
+</style>

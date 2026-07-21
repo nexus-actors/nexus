@@ -2,49 +2,52 @@
 import Marketing from '../layouts/Marketing.astro';
 import CodeBlock from '../components/CodeBlock.astro';
 import CtaBlock from '../components/CtaBlock.astro';
+import Terminal from '../components/Terminal.astro';
 import { docsUrl } from '../lib/urls';
 
-const createCode = `composer create-project nexus-actors/skeleton my-app --stability=dev
-cd my-app`;
+const createHtml = `<span class="t-p">❯</span> composer create-project <span class="t-ok">nexus-actors/skeleton</span> my-app <span class="t-dim">\\</span>
+      <span class="t-dim">--stability=dev</span>
+<span class="t-p">❯</span> cd my-app`;
 
-const wizardCode = `  Nexus project setup
-  ===================
+const wizardHtml = `<span class="t-dim">Nexus project setup</span>
+<span class="t-dim">===================</span>
 
- Runtime [fiber]:
-  [0] fiber
-  [1] swoole
- > swoole
+Runtime <span class="t-dim">[fiber]</span>:
+ <span class="t-dim">[0]</span> fiber
+ <span class="t-dim">[1]</span> swoole
+<span class="t-p">&gt;</span> <span class="t-ok">swoole</span>
 
- Add the HTTP server (Swoole)? (yes/no) [no]:
- > yes
+Add the HTTP server (Swoole)? <span class="t-dim">(yes/no) [no]:</span>
+<span class="t-p">&gt;</span> <span class="t-ok">yes</span>
 
- Persistence store [none]:
-  [0] none  [1] memory  [2] dbal  [3] doctrine
- > none
+Persistence store <span class="t-dim">[none]:</span>
+ <span class="t-dim">[0]</span> none  <span class="t-dim">[1]</span> memory  <span class="t-dim">[2]</span> dbal  <span class="t-dim">[3]</span> doctrine
+<span class="t-p">&gt;</span> <span class="t-ok">none</span>
 
- Observability [none]:
-  [0] none  [1] otel
- > otel
+Observability <span class="t-dim">[none]:</span>
+ <span class="t-dim">[0]</span> none  <span class="t-dim">[1]</span> otel
+<span class="t-p">&gt;</span> <span class="t-ok">otel</span>
 
- Add TCP clustering (experimental)? (yes/no) [no]:
- > no
+Add TCP clustering <span class="t-warn">(experimental)</span>? <span class="t-dim">(yes/no) [no]:</span>
+<span class="t-p">&gt;</span> <span class="t-ok">no</span>
 
- Add the Symfony Messenger bridge (experimental)? (yes/no) [no]:
- > no
+Add the Symfony Messenger bridge <span class="t-warn">(experimental)</span>?
+<span class="t-dim">(yes/no) [no]:</span>
+<span class="t-p">&gt;</span> <span class="t-ok">no</span>
 
- [OK] Project configured.
+<span class="t-ok">[OK] Project configured.</span>
 
- * Create your first actor:  bin/console make:actor Greeter
- * Run the actor system:     bin/console run`;
+ <span class="t-dim">*</span> Create your first actor:  <span class="t-accent">bin/console make:actor Greeter</span>
+ <span class="t-dim">*</span> Run the actor system:     <span class="t-accent">bin/console run</span>`;
 
-const makeCode = `$ bin/console make:actor Payment --with-message
+const makeHtml = `<span class="t-p">❯</span> bin/console make:actor <span class="t-ok">Payment</span> <span class="t-dim">--with-message</span>
 
- [OK] Created src/Actor/PaymentActor.php
- [OK] Created src/Message/PaymentMessage.php`;
+<span class="t-ok">[OK]</span> Created src/Actor/<span class="t-accent">PaymentActor.php</span>
+<span class="t-ok">[OK]</span> Created src/Message/<span class="t-accent">PaymentMessage.php</span>`;
 
-const runCode = `$ bin/console run
+const runHtml = `<span class="t-p">❯</span> bin/console run
 
-Booting Nexus actor system… (app: my-app)`;
+Booting Nexus actor system… <span class="t-dim">(app:</span> <span class="t-ok">my-app</span><span class="t-dim">)</span>`;
 
 const treeCode = `my-app/
 ├── bin/console            command-line entry point
@@ -82,7 +85,7 @@ const treeCode = `my-app/
         </a>
       </div>
     </div>
-    <CodeBlock code={createCode} lang="bash" title="terminal" />
+    <Terminal html={createHtml} />
   </section>
 
   <!-- Wizard -->
@@ -100,12 +103,12 @@ const treeCode = `my-app/
         <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Experimental modules print an explicit warning — no surprises in production</span></li>
       </ul>
     </div>
-    <CodeBlock code={wizardCode} lang="text" title="bin/console nexus:setup" />
+    <Terminal html={wizardHtml} />
   </section>
 
   <!-- Generators -->
   <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
-    <CodeBlock code={makeCode} lang="text" title="terminal" />
+    <Terminal html={makeHtml} />
     <div>
       <h2 class="text-3xl font-bold mb-4">Generate, don't copy-paste.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
@@ -130,7 +133,7 @@ const treeCode = `my-app/
       </p>
       <CodeBlock code={treeCode} lang="text" title="project layout" />
     </div>
-    <CodeBlock code={runCode} lang="text" title="terminal" />
+    <Terminal html={runHtml} />
   </section>
 
   <CtaBlock
