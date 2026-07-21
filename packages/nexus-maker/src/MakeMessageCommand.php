@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nexus\Maker;
 
+use InvalidArgumentException;
 use Nette\PhpGenerator\PhpFile;
 use Nette\PhpGenerator\PsrPrinter;
 use Override;
@@ -43,6 +44,15 @@ final class MakeMessageCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+
+        try {
+            ProjectArchitecture::resolve($this->projectDir);
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
+            return Command::FAILURE;
+        }
+
         /** @var string $raw */
         $raw = $input->getArgument('name');
         $name = ucfirst($raw);

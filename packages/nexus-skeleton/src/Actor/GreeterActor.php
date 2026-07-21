@@ -27,6 +27,10 @@ final readonly class GreeterActor implements ActorHandler
     {
         if ($message instanceof Greet) {
             $this->recorder->greeted[] = $message->name;
+            $ctx->log()->info(
+                'Hello, {name}! The greeter actor received its first message.',
+                ['name' => $message->name],
+            );
         }
 
         return Behavior::same();

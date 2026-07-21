@@ -13,6 +13,7 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -33,7 +34,13 @@ final class Kernel
     /** @var array<string, ActorRef<object>> heterogeneous registry of every spawned actor */
     private array $refs = [];
 
-    public function __construct(private readonly string $appName = 'my-app') {}
+    /** @var array<string, class-string> actor name to handler class, filled during boot() */
+    private array $spawned = [];
+
+    public function __construct(
+        private readonly string $appName = 'my-app',
+        private readonly ?LoggerInterface $logger = null,
+    ) {}
 
     public function container(): ContainerInterface
     {
@@ -52,7 +59,7 @@ final class Kernel
         /** @var Runtime $runtime */
         $runtime = $container->get('nexus.runtime');
 
-        $system = ActorSystem::create($this->appName, $runtime);
+        $system = ActorSystem::create($this->appName, $runtime, null, $this->logger);
 
         foreach ($registry->all() as $name => $class) {
             // #[AsActor] autoconfiguration only tags ActorHandler implementations;
@@ -67,9 +74,20 @@ final class Kernel
             }
 
             $this->refs[$name] = $system->spawn(Props::fromContainer($container, $class), $name);
+            $this->spawned[$name] = $class;
         }
 
         return $system;
+    }
+
+    /**
+     * Actor name to handler class for every actor spawned by boot().
+     *
+     * @return array<string, class-string>
+     */
+    public function spawnedActors(): array
+    {
+        return $this->spawned;
     }
 
     public function run(): void

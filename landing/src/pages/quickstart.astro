@@ -12,6 +12,10 @@ const createHtml = `<span class="t-p">❯</span> composer create-project <span c
 const wizardHtml = `<span class="t-dim">Nexus project setup</span>
 <span class="t-dim">===================</span>
 
+Application architecture <span class="t-dim">[minimal]</span>:
+ <span class="t-dim">[0]</span> minimal
+<span class="t-p">&gt;</span> <span class="t-ok">minimal</span>
+
 Runtime <span class="t-dim">[fiber]</span>:
  <span class="t-dim">[0]</span> fiber
  <span class="t-dim">[1]</span> swoole
@@ -47,7 +51,9 @@ const makeHtml = `<span class="t-p">❯</span> bin/console make:actor <span clas
 
 const runHtml = `<span class="t-p">❯</span> bin/console run
 
-Booting Nexus actor system… <span class="t-dim">(app:</span> <span class="t-ok">my-app</span><span class="t-dim">)</span>`;
+Booting Nexus actor system… <span class="t-dim">(app:</span> <span class="t-ok">my-app</span><span class="t-dim">)</span>
+ <span class="t-ok">✓</span> greeter <span class="t-dim">—</span> App\\Actor\\GreeterActor
+<span class="t-dim">[info]</span> Hello, <span class="t-ok">Nexus</span>! The greeter actor received its first message.`;
 
 const treeCode = `my-app/
 ├── bin/console            command-line entry point
@@ -128,8 +134,9 @@ const treeCode = `my-app/
       <h2 class="text-3xl font-bold mb-4">Run it.</h2>
       <p class="text-slate-600 dark:text-slate-300 mb-6">
         <code class="font-mono">bin/console run</code> boots the container, spawns every
-        <code class="font-mono">#[AsActor]</code> handler, and blocks until shutdown.
-        What you get is a small, comprehensible tree:
+        <code class="font-mono">#[AsActor]</code> handler, greets the bundled actor so you
+        see a message flow on first boot, and blocks until shutdown. What you get is
+        a small, comprehensible tree:
       </p>
       <CodeBlock code={treeCode} lang="text" title="project layout" />
     </div>
