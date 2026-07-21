@@ -1303,6 +1303,73 @@ final class PersistenceEngineTest extends TestCase
         self::assertSame(['first', 'second'], $sideEffectLog);
     }
 
+    // ========================================================================
+    // Effect::unhandled() routes the command to dead letters (DSL-001)
+    // ========================================================================
+
+    #[Test]
+    public function unhandled_command_is_routed_to_dead_letters(): void
+    {
+        $eventStore = new InMemoryEventStore();
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg): Effect {
+                return Effect::unhandled();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $command = new DoNothing();
+        $cell->processMessage($this->envelope($command));
+
+        // The unsupported command reaches dead letters instead of vanishing.
+        self::assertSame([$command], $this->deadLetters->captured());
+        // No events persisted; state unchanged.
+        self::assertCount(0, iterator_to_array($eventStore->load($this->persistenceId)));
+    }
+
+    // ========================================================================
+    // The command handler is invoked as (state, ctx, command) (DSL-004)
+    // ========================================================================
+
+    #[Test]
+    public function command_handler_is_invoked_with_state_ctx_command_order(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $order = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(['seed']),
+            static function (object $arg1, object $arg2, object $arg3) use (&$order): Effect {
+                // The documented order is ($state, $ctx, $command).
+                $order = [
+                    'arg1' => $arg1::class,
+                    'arg2' => $arg2 instanceof ActorContext,
+                    'arg3' => $arg3::class,
+                ];
+
+                return Effect::none();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+        $cell->processMessage($this->envelope(new AddItem('x')));
+
+        self::assertSame(ShoppingCart::class, $order['arg1']);
+        self::assertTrue($order['arg2'], 'second argument must be the ActorContext');
+        self::assertSame(AddItem::class, $order['arg3']);
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();

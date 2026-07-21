@@ -554,6 +554,12 @@ final class ActorCell implements ActorContext
     }
 
     #[Override]
+    public function toDeadLetters(object $message): void
+    {
+        $this->deadLetters->tell($message);
+    }
+
+    #[Override]
     public function setReceiveTimeout(?Duration $timeout): void
     {
         $this->receiveTimeout = $timeout;

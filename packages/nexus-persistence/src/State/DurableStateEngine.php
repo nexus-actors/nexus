@@ -113,7 +113,7 @@ final class DurableStateEngine
                                 $writerId,
                             ),
                             DurableEffectType::None => self::sameState(),
-                            DurableEffectType::Unhandled => self::sameState(),
+                            DurableEffectType::Unhandled => self::handleUnhandled($ctx, $msg),
                             DurableEffectType::Stash => self::handleStash($ctx),
                             DurableEffectType::Stop => self::stoppedState(),
                             DurableEffectType::Reply => self::handleReply($effect),
@@ -178,6 +178,20 @@ final class DurableStateEngine
         foreach ($effect->sideEffects as $sideEffect) {
             $sideEffect($state);
         }
+    }
+
+    /**
+     * Handle an Unhandled effect: route the command to dead letters so
+     * protocol drift is observable, matching Behavior::unhandled() in the
+     * stateless actor model, then keep the current state.
+     *
+     * @return BehaviorWithState<object, EngineState>
+     */
+    private static function handleUnhandled(ActorContext $ctx, object $command): BehaviorWithState
+    {
+        $ctx->toDeadLetters($command);
+
+        return self::sameState();
     }
 
     /**

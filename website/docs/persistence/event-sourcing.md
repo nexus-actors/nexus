@@ -189,7 +189,7 @@ Persistence failures surface as exceptions during actor startup or command proce
 | Actor never starts, `RecoveryException` logged | `EventStore` unreachable or corrupted during replay | Verify store connectivity; restart the actor system after the store is healthy |
 | `WriterConflictException` on startup | Two `ActorSystem` instances wrote to the same event stream | Run a single writer per stream; use `ReplayFilter::repairByDiscardOld()` for migration scenarios |
 | `ConcurrentModificationException` on persist | Duplicate sequence number — optimistic lock violation | A single actor is the only writer; this indicates an implementation bug; inspect the store |
-| Command silently discarded | `Effect::unhandled()` returned; no match in command handler | Add the missing match branch or return `Effect::none()` for intentional no-ops |
+| Command routed to dead letters | `Effect::unhandled()` returned; no match in command handler | Observe the actor system's dead letters; add the missing match branch, or return `Effect::none()` for intentional no-ops |
 | Stash never drained | `$ctx->unstashAll()` not called after recovery | Call `$ctx->unstashAll()` in the command handler branch that completes the stash condition |
 
 ## See also
