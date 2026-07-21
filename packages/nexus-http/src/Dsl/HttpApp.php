@@ -18,6 +18,7 @@ use Monadial\Nexus\Http\Cache\RouteCachePersister;
 use Monadial\Nexus\Http\Discovery\RouteDiscoverer;
 use Monadial\Nexus\Http\Exception\DefaultMappers;
 use Monadial\Nexus\Http\Exception\ExceptionMapperRegistry;
+use Monadial\Nexus\Http\Exception\HttpAppAlreadyCompiledException;
 use Monadial\Nexus\Http\Handler\HandlerResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
@@ -56,9 +57,11 @@ use Throwable;
  * and is ready to be handed to a Swoole or Fiber HTTP server adapter.
  *
  * `HttpApp` itself does NOT implement `RequestHandlerInterface`. The separation
- * of "building" from "serving" allows the DSL to be compiled multiple times
- * (e.g. in tests) and keeps the hot-path handler allocation cost in the server
- * adapter rather than here.
+ * of "building" from "serving" keeps the hot-path handler allocation cost in
+ * the server adapter rather than here. The first {@see compile()} call freezes
+ * the DSL: repeated compiles are idempotent (reusing the frozen state and the
+ * live actor table), and any further mutation throws
+ * {@see HttpAppAlreadyCompiledException}.
  *
  * Example — minimal JSON API:
  * ```php
@@ -130,6 +133,8 @@ final class HttpApp
 
     private bool $compiled = false;
 
+    private ?ResolvedActorTable $actorTable = null;
+
     private function __construct(
         private readonly ActorSystem $system,
         private readonly ?ContainerInterface $container,
@@ -174,6 +179,8 @@ final class HttpApp
      */
     public function actor(string $name, Props $props): ActorRegistration
     {
+        $this->assertNotCompiled('actor()');
+
         return $this->registry->register($name, $props, ActorMode::WorkerLocal);
     }
 
@@ -194,8 +201,12 @@ final class HttpApp
 
     /**
      * Freeze the DSL state into an immutable, ready-to-serve CompiledHttpApp.
-     * Calling compile() multiple times yields independent CompiledHttpApp
-     * instances reflecting the DSL state at each call.
+     *
+     * The first call is terminal: routes, actors, middleware, and configuration
+     * are frozen, and worker-local/pool-singleton actors are spawned exactly
+     * once. Repeated calls are idempotent — they reuse the frozen state and the
+     * live actor table and return an equivalent CompiledHttpApp. Mutating the
+     * DSL after compile() throws {@see HttpAppAlreadyCompiledException}.
      */
     public function compile(): CompiledHttpApp
     {
@@ -244,9 +255,15 @@ final class HttpApp
             }
         }
 
-        // 2b. Resolve actor table.
-        $entries = $this->registry->freeze();
-        $table = ResolvedActorTable::build($entries, $this->system, $this->poolSingletonSpawner);
+        // 2b. Resolve actor table exactly once per HttpApp instance. Worker-local
+        // and pool-singleton actors are long-lived per-worker singletons; building
+        // the table again would respawn the same names and throw
+        // ActorNameExistsException, so subsequent compiles reuse the live table.
+        $table = $this->actorTable ??= ResolvedActorTable::build(
+            $this->registry->freeze(),
+            $this->system,
+            $this->poolSingletonSpawner,
+        );
 
         // 3. Resolve handlers per route. If this throws (e.g. UnknownActorException),
         // we must NOT have written to the route cache yet — see step 3a.
@@ -340,6 +357,8 @@ final class HttpApp
      */
     public function discover(string $directory): self
     {
+        $this->assertNotCompiled('discover()');
+
         $this->discoveryDirs[] = $directory;
 
         return $this;
@@ -355,6 +374,8 @@ final class HttpApp
      */
     public function errorMode(ErrorMode $mode): self
     {
+        $this->assertNotCompiled('errorMode()');
+
         $this->errorMode = $mode;
 
         return $this;
@@ -386,6 +407,8 @@ final class HttpApp
      */
     public function group(string $prefix, Closure $register): RouteGroup
     {
+        $this->assertNotCompiled('group()');
+
         $group = new RouteGroup($prefix);
         $register($group);
 
@@ -409,6 +432,8 @@ final class HttpApp
      */
     public function middleware(string|MiddlewareInterface $middleware): self
     {
+        $this->assertNotCompiled('middleware()');
+
         $this->globalMiddleware[] = $middleware;
 
         return $this;
@@ -430,6 +455,8 @@ final class HttpApp
      */
     public function onException(string $exceptionClass, Closure $mapper): self
     {
+        $this->assertNotCompiled('onException()');
+
         $this->userExceptionRegistrations[] = static function (ExceptionMapperRegistry $r) use ($exceptionClass, $mapper): void {
             $r->register($exceptionClass, $mapper);
         };
@@ -449,6 +476,8 @@ final class HttpApp
      */
     public function paramResolver(ParamResolver $resolver, bool $override = false): self
     {
+        $this->assertNotCompiled('paramResolver()');
+
         if ($override) {
             array_unshift($this->paramResolvers, $resolver);
         } else {
@@ -482,6 +511,8 @@ final class HttpApp
      */
     public function perRequestActor(string $name, Props $props): ActorRegistration
     {
+        $this->assertNotCompiled('perRequestActor()');
+
         return $this->registry->register($name, $props, ActorMode::PerRequest);
     }
 
@@ -536,6 +567,8 @@ final class HttpApp
      */
     public function withMessageSerializer(MessageSerializer $serializer): self
     {
+        $this->assertNotCompiled('withMessageSerializer()');
+
         $this->messageSerializer = $serializer;
 
         return $this;
@@ -551,6 +584,8 @@ final class HttpApp
      */
     public function withPoolSingletonSpawner(PoolSingletonSpawner $spawner): self
     {
+        $this->assertNotCompiled('withPoolSingletonSpawner()');
+
         $this->poolSingletonSpawner = $spawner;
 
         return $this;
@@ -568,6 +603,8 @@ final class HttpApp
      */
     public function withRouteCache(CacheInterface $cache, ?string $key = null): self
     {
+        $this->assertNotCompiled('withRouteCache()');
+
         $this->routeCache = $cache;
 
         if ($key !== null) {
@@ -585,6 +622,8 @@ final class HttpApp
      */
     public function withoutDefaultExceptionHandler(): self
     {
+        $this->assertNotCompiled('withoutDefaultExceptionHandler()');
+
         $this->useDefaultExceptionHandler = false;
 
         return $this;
@@ -636,9 +675,21 @@ final class HttpApp
 
     private function registerRoute(string $method, string $path, string|Closure $handler): RouteBuilder
     {
+        $this->assertNotCompiled('route registration');
+
         $builder = new RouteBuilder($method, $path, $handler);
         $this->pendingBuilders[] = $builder;
 
         return $builder;
+    }
+
+    /**
+     * @throws HttpAppAlreadyCompiledException When the DSL is mutated after compile().
+     */
+    private function assertNotCompiled(string $operation): void
+    {
+        if ($this->compiled) {
+            throw new HttpAppAlreadyCompiledException($operation);
+        }
     }
 }

@@ -22,7 +22,7 @@ adapter.
 
 The split between "building" (`HttpApp`) and "serving" (`CompiledHttpApp`) means:
 
-- The DSL can be compiled multiple times — useful in tests or multi-environment setups.
+- The first `compile()` call is terminal: it freezes routes, actors, middleware, and configuration, and spawns worker-local/pool-singleton actors exactly once. Repeated `compile()` calls are idempotent and reuse the frozen state and live actors. Mutating the DSL after compilation throws `HttpAppAlreadyCompiledException`.
 - The cost of wiring the middleware pipeline is paid once at boot, not per request.
 - Server adapters stay thin: they receive a single `handle()` callable and know
   nothing about routing internals.

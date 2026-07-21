@@ -9,9 +9,11 @@ use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
+use Monadial\Nexus\Http\Actor\PoolSingletonSpawner;
 use Monadial\Nexus\Http\App\CompiledHttpApp;
 use Monadial\Nexus\Http\Dsl\HttpApp;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
+use Monadial\Nexus\Http\Exception\HttpAppAlreadyCompiledException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
 use Monadial\Nexus\Http\Response\Response;
@@ -172,6 +174,115 @@ final class HttpAppTest extends TestCase
 
         self::assertTrue($app->requiresPoolSingleton());
     }
+
+    // ========================================================================
+    // Compilation is terminal and idempotent (DSL-003, DSL-006)
+    // ========================================================================
+
+    #[Test]
+    public function second_compile_reuses_worker_local_actors_instead_of_respawning(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+        $app->actor('store', $props);
+        $app->get('/s', static fn(
+            ServerRequestInterface $r,
+            #[FromActor('store')]
+            ActorRef $store,
+        ): ResponseInterface => Response::ok());
+
+        $compiled1 = $app->compile();
+        $compiled2 = $app->compile();
+
+        self::assertSame(200, $compiled1->handle(new ServerRequest('GET', '/s'))->getStatusCode());
+        self::assertSame(200, $compiled2->handle(new ServerRequest('GET', '/s'))->getStatusCode());
+    }
+
+    #[Test]
+    public function second_compile_spawns_pool_singletons_once(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+        $app->actor('store', $props)->poolSingleton();
+        $spawner = new _CountingSpawner($system);
+        $app->withPoolSingletonSpawner($spawner);
+
+        $app->compile();
+        $app->compile();
+
+        self::assertSame(1, $spawner->spawns);
+    }
+
+    #[Test]
+    public function repeated_compile_with_per_request_actor_succeeds(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+        $app->perRequestActor('saga', $props);
+        $app->get('/s', static fn(
+            ServerRequestInterface $r,
+            #[FromActor('saga')]
+            ActorRef $saga,
+        ): ResponseInterface => Response::ok());
+
+        $compiled1 = $app->compile();
+        $compiled2 = $app->compile();
+
+        self::assertSame(200, $compiled1->handle(new ServerRequest('GET', '/s'))->getStatusCode());
+        self::assertSame(200, $compiled2->handle(new ServerRequest('GET', '/s'))->getStatusCode());
+    }
+
+    #[Test]
+    public function route_registered_after_compile_throws(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->get('/x', static fn(): ResponseInterface => Response::ok());
+        $app->compile();
+
+        $this->expectException(HttpAppAlreadyCompiledException::class);
+        $app->get('/late', static fn(): ResponseInterface => Response::ok());
+    }
+
+    #[Test]
+    public function actor_registered_after_compile_throws(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->compile();
+
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg) => Behavior::same()));
+
+        $this->expectException(HttpAppAlreadyCompiledException::class);
+        $app->actor('late', $props);
+    }
+
+    #[Test]
+    public function middleware_added_after_compile_throws(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->compile();
+
+        $this->expectException(HttpAppAlreadyCompiledException::class);
+        $app->middleware(_GroupSpyMiddleware::class);
+    }
+
+    #[Test]
+    public function group_registered_after_compile_throws(): void
+    {
+        $system = ActorSystem::create('test', new TestRuntime());
+        $app = HttpApp::create($system);
+        $app->compile();
+
+        $this->expectException(HttpAppAlreadyCompiledException::class);
+        $app->group('/api', static function (RouteGroup $g): void {
+            $g->get('/late', static fn(): ResponseInterface => Response::ok());
+        });
+    }
 }
 
 final class _HandlerWithUnknownActor
@@ -181,6 +292,22 @@ final class _HandlerWithUnknownActor
     public function __invoke(ServerRequestInterface $r): ResponseInterface
     {
         return Response::ok();
+    }
+}
+
+/** Pool-singleton spawner that counts spawns to verify compile() spawns exactly once. */
+final class _CountingSpawner implements PoolSingletonSpawner
+{
+    public int $spawns = 0;
+
+    public function __construct(private readonly ActorSystem $system) {}
+
+    #[Override]
+    public function spawn(Props $props, string $name): ActorRef
+    {
+        $this->spawns++;
+
+        return $this->system->spawn($props, $name);
     }
 }
 
