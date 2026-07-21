@@ -51,12 +51,14 @@ final class SetupCommandTest extends TestCase
     public function experimental_choice_prints_warning_and_writes_config(): void
     {
         $tester = $this->tester();
-        // runtime=fiber, persistence=memory, observability=none, cluster=yes, messenger=no
+        // runtime=fiber, persistence=memory (stable, no warning), observability=none,
+        // cluster=yes (experimental, warns), messenger=no
         $tester->setInputs(['fiber', 'memory', 'none', 'yes', 'no']);
         $tester->execute([]);
 
         $tester->assertCommandIsSuccessful();
-        self::assertStringContainsString('experimental, not production-ready', $tester->getDisplay());
+        self::assertStringContainsString('TCP cluster is experimental, not production-ready', $tester->getDisplay());
+        self::assertStringNotContainsString('Persistence (in-memory store) is experimental', $tester->getDisplay());
         self::assertFileExists($this->dir . '/config/packages/persistence.php');
         self::assertFileExists($this->dir . '/config/packages/cluster.php');
         self::assertSame([['nexus-actors/persistence', 'nexus-actors/cluster-tcp']], $this->required);

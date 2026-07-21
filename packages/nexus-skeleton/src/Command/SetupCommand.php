@@ -133,7 +133,7 @@ final class SetupCommand extends Command
         }
 
         $persistence = (string) $io->choice(
-            'Persistence store (experimental)',
+            'Persistence store',
             ['none', 'memory', 'dbal', 'doctrine'],
             'none',
         );
