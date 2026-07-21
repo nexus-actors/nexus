@@ -1,0 +1,51 @@
+# Validates the real user flow: create-project from the skeleton, wizard defaults,
+# generate an actor, boot the system. Uses path repositories against the monorepo
+# (Packagist registration is a separate, manual step).
+name: skeleton — create-project smoke
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/nexus-skeleton/**'
+      - 'packages/nexus-maker/**'
+      - '.github/workflows/skeleton-smoke.yml'
+  pull_request:
+    paths:
+      - 'packages/nexus-skeleton/**'
+      - 'packages/nexus-maker/**'
+      - '.github/workflows/skeleton-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          tools: composer
+
+      - name: Package unit tests (skeleton + maker)
+        run: |
+          php packages/nexus-skeleton/bin/link-monorepo
+          composer update -d packages/nexus-skeleton --quiet
+          packages/nexus-skeleton/vendor/bin/phpunit -c packages/nexus-skeleton
+          composer update -d packages/nexus-maker --quiet
+          packages/nexus-maker/vendor/bin/phpunit -c packages/nexus-maker
+
+      - name: create-project from local path
+        run: |
+          composer create-project nexus-actors/skeleton /tmp/app \
+            --repository="{\"type\":\"path\",\"url\":\"$PWD/packages/nexus-skeleton\"}" \
+            --stability=dev --no-interaction
+
+      - name: Generate an actor and boot
+        working-directory: /tmp/app
+        run: |
+          php bin/console make:actor Smoke --with-message
+          php -l src/Actor/SmokeActor.php
+          timeout 10 php bin/console run > run.log 2>&1 || test $? -eq 124
+          grep "Booting Nexus actor system" run.log
