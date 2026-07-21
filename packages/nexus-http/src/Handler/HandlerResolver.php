@@ -8,6 +8,7 @@ use Closure;
 use LogicException;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
+use Monadial\Nexus\Http\Exception\ActorShorthandHandlerException;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\ContainerFallbackResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromActorResolver;
 use Monadial\Nexus\Http\Handler\Resolver\Builtin\FromBodyResolver;
@@ -50,11 +51,19 @@ final readonly class HandlerResolver
 
     /**
      * @param string|Closure $handler Class name, 'Class::method' string, or Closure.
+     *
+     * @throws ActorShorthandHandlerException When the handler is a `'#name'` actor
+     *         shorthand string — actor-backed routes inject the actor via a
+     *         `#[FromActor('name')]` parameter instead.
      */
     public function resolve(string|Closure $handler): ResolvedHandler
     {
         if ($handler instanceof Closure) {
             return $this->resolveClosure($handler);
+        }
+
+        if (str_starts_with($handler, '#')) {
+            throw new ActorShorthandHandlerException($handler);
         }
 
         if (str_contains($handler, '::')) {
