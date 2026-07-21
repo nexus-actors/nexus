@@ -16,7 +16,18 @@ $repositories = [];
 
 foreach (glob($packagesDir . '/nexus-*') ?: [] as $dir) {
     if (is_file($dir . '/composer.json')) {
-        $repositories[] = ['type' => 'path', 'url' => $dir];
+        /** @var array{name?: string} $package */
+        $package = json_decode((string) file_get_contents($dir . '/composer.json'), true, 512, JSON_THROW_ON_ERROR);
+
+        $repository = ['type' => 'path', 'url' => $dir];
+
+        // Pin the advertised version: on CI the checkout is a detached HEAD, so
+        // composer would infer dev-<sha> and fail the dev-main constraints.
+        if (isset($package['name'])) {
+            $repository['options'] = ['versions' => [$package['name'] => 'dev-main']];
+        }
+
+        $repositories[] = $repository;
     }
 }
 
