@@ -91,6 +91,127 @@ final class MakeCommandsTest extends TestCase
     }
 
     #[Test]
+    public function make_actor_uses_camel_case_slug_for_multiword_names(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'OrderProcessor']);
+
+        $tester->assertCommandIsSuccessful();
+        $code = (string) file_get_contents($this->dir . '/src/Actor/OrderProcessorActor.php');
+        self::assertStringContainsString("#[AsActor('orderProcessor')]", $code);
+    }
+
+    #[Test]
+    public function make_actor_functional_displays_camel_case_spawn_hint_for_multiword_names(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'OrderProcessor', '--functional' => true]);
+
+        self::assertStringContainsString(
+            "Spawn it: \$system->spawn(Props::fromBehavior(OrderProcessorActor::behavior()), 'orderProcessor');",
+            $tester->getDisplay(),
+        );
+    }
+
+    #[Test]
+    public function make_actor_stateful_generates_stateful_handler(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Counter', '--type' => 'stateful']);
+
+        $tester->assertCommandIsSuccessful();
+        $file = $this->dir . '/src/Actor/CounterActor.php';
+        self::assertFileExists($file);
+
+        $code = (string) file_get_contents($file);
+        self::assertStringContainsString("#[AsActor('counter')]", $code);
+        self::assertStringContainsString('final readonly class CounterActor implements StatefulActorHandler', $code);
+        self::assertStringContainsString('public function initialState(): int', $code);
+        self::assertStringContainsString(
+            'public function handle(ActorContext $ctx, object $message, mixed $state): BehaviorWithState',
+            $code,
+        );
+
+        exec('php -l ' . escapeshellarg($file), $out, $exit);
+        self::assertSame(0, $exit, implode("\n", $out));
+    }
+
+    #[Test]
+    public function make_actor_event_sourced_generates_behavior_factory(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Order', '--type' => 'event-sourced']);
+
+        $tester->assertCommandIsSuccessful();
+        $file = $this->dir . '/src/Actor/OrderActor.php';
+        self::assertFileExists($file);
+
+        $code = (string) file_get_contents($file);
+        self::assertStringContainsString('final class OrderActor', $code);
+        self::assertStringNotContainsString('#[AsActor(', $code);
+        self::assertStringContainsString('public static function behavior(string $id): Behavior', $code);
+        self::assertStringContainsString('EventSourcedBehavior::create(', $code);
+        self::assertStringContainsString(
+            'static function (mixed $state, ActorContext $ctx, object $command): Effect {',
+            $code,
+        );
+        self::assertStringContainsString('static function (mixed $state, object $event): mixed {', $code);
+
+        exec('php -l ' . escapeshellarg($file), $out, $exit);
+        self::assertSame(0, $exit, implode("\n", $out));
+    }
+
+    #[Test]
+    public function make_actor_event_sourced_displays_persistence_requirement_note(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Order', '--type' => 'event-sourced']);
+
+        self::assertStringContainsString('Requires: composer require nexus-actors/persistence', $tester->getDisplay());
+    }
+
+    #[Test]
+    public function make_actor_durable_state_generates_behavior_factory(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Profile', '--type' => 'durable-state']);
+
+        $tester->assertCommandIsSuccessful();
+        $file = $this->dir . '/src/Actor/ProfileActor.php';
+        self::assertFileExists($file);
+
+        $code = (string) file_get_contents($file);
+        self::assertStringContainsString('final class ProfileActor', $code);
+        self::assertStringNotContainsString('#[AsActor(', $code);
+        self::assertStringContainsString('public static function behavior(string $id): Behavior', $code);
+        self::assertStringContainsString('DurableStateBehavior::create(', $code);
+        self::assertStringContainsString(
+            'static function (mixed $state, ActorContext $ctx, object $command): DurableEffect {',
+            $code,
+        );
+
+        exec('php -l ' . escapeshellarg($file), $out, $exit);
+        self::assertSame(0, $exit, implode("\n", $out));
+    }
+
+    #[Test]
+    public function make_actor_rejects_unknown_type(): void
+    {
+        $tester = $this->runCommand('make:actor', ['name' => 'Bogus', '--type' => 'bogus']);
+
+        self::assertSame(1, $tester->getStatusCode());
+        self::assertStringContainsString('Unknown actor type "bogus"', $tester->getDisplay());
+        self::assertFileDoesNotExist($this->dir . '/src/Actor/BogusActor.php');
+    }
+
+    #[Test]
+    public function make_actor_rejects_conflicting_functional_and_type(): void
+    {
+        $tester = $this->runCommand(
+            'make:actor',
+            ['name' => 'Conflict', '--functional' => true, '--type' => 'stateful'],
+        );
+
+        self::assertSame(1, $tester->getStatusCode());
+        self::assertStringContainsString('Cannot combine --functional with --type=stateful', $tester->getDisplay());
+        self::assertFileDoesNotExist($this->dir . '/src/Actor/ConflictActor.php');
+    }
+
+    #[Test]
     public function make_message_generates_readonly_class(): void
     {
         $tester = $this->runCommand('make:message', ['name' => 'OrderPlaced']);

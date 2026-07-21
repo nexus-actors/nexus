@@ -37,6 +37,7 @@
         "infection/infection": "^0.32",
         "maglnet/composer-require-checker": "^4.24",
         "monolog/monolog": "^3.0",
+        "nette/php-generator": "^4.2",
         "phpro/grumphp": "^2.19",
         "phpunit/phpunit": "^13.0",
         "shipmonk/coverage-guard": "^1.0",
