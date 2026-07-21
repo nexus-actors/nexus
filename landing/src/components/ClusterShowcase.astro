@@ -1,0 +1,48 @@
+---
+import CodeBlock from './CodeBlock.astro';
+
+const code = `<?php
+use Monadial\\Nexus\\Cluster\\NodeAddress;
+use Monadial\\Nexus\\Cluster\\Tcp\\ClusterNode;
+use Monadial\\Nexus\\Cluster\\Tcp\\ClusterTopology;
+use Monadial\\Nexus\\Cluster\\Tcp\\NodeEndpoint;
+
+$topology = ClusterTopology::create(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu', 'orders', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7361'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7361'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7361')],
+);
+
+$node = ClusterNode::boot($system, $topology, $registry);
+$node->expose($processorRef);
+
+// Location-transparent: same tell() whether the target is local or remote.
+$ref = $node->refFor(
+    new NodeAddress('production', 'eu', 'orders', 'node-2'),
+    $processorRef->path(),
+);
+$ref->tell(new OrderPlaced($orderId));`;
+---
+<section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+  <div>
+    <h2 class="text-3xl font-bold mb-4">
+      Actors across machines.
+      <span class="ml-2 align-middle inline-block rounded-full border border-amber-400/60 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-xs font-semibold">Experimental</span>
+    </h2>
+    <p class="text-slate-600 dark:text-slate-300 mb-6">
+      A Swoole TCP mesh joins Nexus nodes into one system: gossip membership,
+      phi-accrual failure detection, and the same <code class="font-mono">tell()</code>
+      and <code class="font-mono">ask()</code> you already use — whether the target actor
+      lives in-process or on another machine.
+    </p>
+    <a
+      href="/cluster"
+      class="text-primary font-semibold hover:underline"
+    >
+      Explore clustering →
+    </a>
+  </div>
+  <CodeBlock code={code} lang="php" title="bootstrap.php — join the mesh" />
+</section>
