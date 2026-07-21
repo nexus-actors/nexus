@@ -8,7 +8,7 @@ related:
 
 # Release Process
 
-Nexus is a monorepo with 40 package directories under `packages/`. Split packages are mirrored to their own GitHub repositories and published to Packagist independently. The split-and-publish pipeline is implemented in `.github/workflows/split.yml`, whose matrix currently lists 37 packages (the `nexus` meta-package, `nexus-observability-serialization`, and `nexus-skeleton` are not split).
+Nexus is a monorepo with 41 package directories under `packages/`. Split packages are mirrored to their own GitHub repositories and published to Packagist independently. The split-and-publish pipeline is implemented in `.github/workflows/split.yml`, whose matrix currently lists 40 packages (only the `nexus` meta-package is not split).
 
 ## How splits work
 
@@ -21,7 +21,7 @@ The split runs in a matrix job, one job per package, with `fail-fast: false` so 
 
 ## Package mapping
 
-Every matrix entry follows the same rule: `packages/nexus-<name>` splits to the `nexus-actors/<name>` repository (e.g., `packages/nexus-core` to `nexus-actors/core`, `packages/nexus-worker-pool-swoole` to `nexus-actors/worker-pool-swoole`). The authoritative list is the `matrix.package` block in `.github/workflows/split.yml` — 37 entries at the time of writing. When you add a package, add its matrix entry there (see [Adding a package](adding-a-package.md)).
+Every matrix entry follows the same rule: `packages/nexus-<name>` splits to the `nexus-actors/<name>` repository (e.g., `packages/nexus-core` to `nexus-actors/core`, `packages/nexus-worker-pool-swoole` to `nexus-actors/worker-pool-swoole`). The authoritative list is the `matrix.package` block in `.github/workflows/split.yml` — 40 entries at the time of writing. When you add a package, add its matrix entry there (see [Adding a package](adding-a-package.md)).
 
 ## When the split runs
 
@@ -33,7 +33,7 @@ The workflow triggers on three events:
 | Tag push (`v*`) | Splits and pushes the same tag to each split repo |
 | `workflow_dispatch` | Manual re-run (useful after fixing a split failure) |
 
-The tag-push path is what Packagist uses: when you push `v1.0.0` to the monorepo, the workflow pushes that tag to all 37 split repos, and Packagist picks up the new version within minutes.
+The tag-push path is what Packagist uses: when you push `v1.0.0` to the monorepo, the workflow pushes that tag to all 40 split repos, and Packagist picks up the new version within minutes.
 
 ## Versioning convention
 
