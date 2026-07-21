@@ -42,6 +42,7 @@ jobs:
           - { local: 'nexus-observability-logger', remote: 'observability-logger' }
           - { local: 'nexus-observability-otel', remote: 'observability-otel' }
           - { local: 'nexus-observability-persistence', remote: 'observability-persistence' }
+          - { local: 'nexus-observability-serialization', remote: 'observability-serialization' }
           - { local: 'nexus-observability-swoole', remote: 'observability-swoole' }
           - { local: 'nexus-observability-worker-pool', remote: 'observability-worker-pool' }
           - { local: 'nexus-observability', remote: 'observability' }
