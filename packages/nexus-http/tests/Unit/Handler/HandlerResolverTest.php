@@ -13,6 +13,7 @@ use Monadial\Nexus\Http\Actor\ActorMode;
 use Monadial\Nexus\Http\Actor\ActorRegistrationEntry;
 use Monadial\Nexus\Http\Actor\PerRequestActorScope;
 use Monadial\Nexus\Http\Actor\ResolvedActorTable;
+use Monadial\Nexus\Http\Exception\ActorShorthandHandlerException;
 use Monadial\Nexus\Http\Exception\PerRequestActorInConstructorException;
 use Monadial\Nexus\Http\Exception\UnknownActorException;
 use Monadial\Nexus\Http\Handler\Attribute\FromActor;
@@ -125,6 +126,17 @@ final readonly class _ArrayContainer implements ContainerInterface
 #[CoversClass(HandlerResolver::class)]
 final class HandlerResolverTest extends TestCase
 {
+    #[Test]
+    public function actor_shorthand_handler_string_throws_actionable_error(): void
+    {
+        [, $resolver] = $this->buildResolver();
+
+        $this->expectException(ActorShorthandHandlerException::class);
+        $this->expectExceptionMessage("#[FromActor('orders')]");
+
+        $resolver->resolve('#orders');
+    }
+
     #[Test]
     public function constructor_per_request_injection_throws(): void
     {

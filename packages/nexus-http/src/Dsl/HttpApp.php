@@ -73,11 +73,18 @@ use Throwable;
  * // Hand $compiled to SwooleHttpServer or similar adapter.
  * ```
  *
- * Example — actor-backed route:
+ * Example — actor-backed route (inject the actor via #[FromActor]):
  * ```php
  * $app = HttpApp::create($system)
  *     ->actor('orders', Props::fromBehavior($orderBehavior))
- *     ->post('/orders', '#orders');
+ *     ->post('/orders', static function (
+ *         ServerRequestInterface $request,
+ *         #[FromActor('orders')] ActorRef $orders,
+ *     ): ResponseInterface {
+ *         $orders->tell(new PlaceOrder(...));
+ *
+ *         return Response::accepted();
+ *     });
  * ```
  *
  * @see CompiledHttpApp     The immutable PSR-15 handler produced by compile()
@@ -157,8 +164,9 @@ final class HttpApp
      * Register a long-lived actor shared across all requests on this worker.
      *
      * The actor is spawned once per worker process when {@see compile()} is
-     * called and remains alive for the lifetime of the worker. Routes can
-     * reference the actor by prefixing its name with `#` (e.g. `'#orders'`).
+     * called and remains alive for the lifetime of the worker. Handlers and
+     * middleware receive the actor by declaring a parameter attributed with
+     * `#[FromActor('name')]`.
      *
      * @param string $name  Unique actor name within this app.
      * @param Props  $props Actor spawn configuration.
