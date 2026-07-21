@@ -262,6 +262,24 @@ $app->post('/orders', CreateOrderHandler::class)->middleware(AuthorizationMiddle
 
 If you find yourself repeating `->middleware(AuthorizationMiddleware::class)` on every route, factor it into a builder helper.
 
+## Cross-site protection (Origin allow-list)
+
+Browsers attach cookies to cross-site requests and WebSocket upgrades automatically, and neither has CORS preflight protection — so a cookie bearer token alone is exposed to CSRF and cross-site WebSocket hijacking (CSWSH). Verify the request `Origin` against an **exact** allow-list with `OriginAllowlistMiddleware` from `nexus-http-toolkit`:
+
+```php title="server.php"
+use Monadial\Nexus\Http\Toolkit\Middleware\OriginAllowlistMiddleware;
+
+$origin = new OriginAllowlistMiddleware(['https://app.example.com'], allowMissingOrigin: false);
+
+// WebSocket upgrades: runs in the pre-upgrade handshake, rejects before the 101.
+$app->wsMiddleware($origin);
+
+// State-changing HTTP routes:
+$app->post('/transfer', TransferHandler::class)->middleware($origin);
+```
+
+Matching is exact on scheme + host + port — `https://app.example.com` never matches `https://app.example.com.evil.com`, `http://app.example.com`, or a different port. WebSocket upgrades arrive as GET and are checked (GET is not exempt by default). When you set a cookie bearer token, also mark it `HttpOnly`, `Secure`, `SameSite=Strict`/`Lax`, and keep a CSRF token for defense in depth.
+
 ## Compilation fails closed
 
 Forgetting the route-level `AuthorizationMiddleware` is no longer a silent hole. `compile()` verifies every route whose handler class declares an auth attribute (`#[RequiresAuth]`, `#[RequiresScope]`, `#[RequiresRole]`, `#[RequiresAnyScope]`, `#[RequiresAnyRole]`, `#[Authorize]`) actually has an authorization enforcer in its middleware — and throws `UnprotectedRouteException` at startup otherwise. Registering `AuthorizationMiddleware` globally fails compilation too (`GlobalAuthorizationMiddlewareException`), since global middleware runs before routing.

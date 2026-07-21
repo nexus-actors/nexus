@@ -24,6 +24,7 @@ composer require nexus-actors/http-toolkit
 |---|---|
 | `AccessLogMiddleware` | Emits one PSR-3 log line per request: method, path, status, response size, and latency in ms |
 | `BodySizeLimitMiddleware` | Rejects bodies exceeding a byte limit with `413 Payload Too Large` |
+| `OriginAllowlistMiddleware` | Rejects requests whose `Origin` is not in an exact allow-list — CSWSH / CSRF defense |
 | `TraceContextMiddleware` | Parses/generates W3C `traceparent` headers; pushes `traceId`/`spanId` into MDC |
 
 ### Health checks
