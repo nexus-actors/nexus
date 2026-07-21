@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Ws\WebSocket;
 
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Http\Ws\WebSocket\Exception\ChannelCapacityExceededException;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionClosed;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionOpened;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelMessageReceived;
+use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -26,6 +29,9 @@ use Throwable;
  */
 final readonly class WebSocketDispatcher
 {
+    /** Bounded mailbox capacity for channel actors, bounding per-channel queue memory. */
+    private const int CHANNEL_MAILBOX_CAPACITY = 1_024;
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -107,17 +113,35 @@ final readonly class WebSocketDispatcher
                 $ctx = $ctx->withRequest($enriched);
 
                 $factory = $route->channelFactory;
-                $ref = $this->registry->resolveOrSpawn(
-                    $name,
-                    Props::fromStatefulFactory(
-                        // Reflection-based construction keeps the zero-arg
-                        // fallback type-safe for the dynamic class-string;
-                        // it only runs once per channel-actor spawn.
-                        $factory ?? static fn(): WebSocketChannelActor => new ReflectionClass(
-                            $actorClass,
-                        )->newInstance(),
-                    ),
-                );
+
+                try {
+                    $ref = $this->registry->resolveOrSpawn(
+                        $name,
+                        // Channel actors default to a bounded mailbox so a
+                        // flooding connection cannot grow one channel's queue
+                        // without limit (SEC-002).
+                        Props::fromStatefulFactory(
+                            // Reflection-based construction keeps the zero-arg
+                            // fallback type-safe for the dynamic class-string;
+                            // it only runs once per channel-actor spawn.
+                            $factory ?? static fn(): WebSocketChannelActor => new ReflectionClass(
+                                $actorClass,
+                            )->newInstance(),
+                        )->withMailbox(
+                            MailboxConfig::bounded(self::CHANNEL_MAILBOX_CAPACITY, OverflowStrategy::DropNewest),
+                        ),
+                    );
+                } catch (ChannelCapacityExceededException $e) {
+                    $this->logger->warning('WebSocket channel cap reached; refusing connection', [
+                        'fd' => $ctx->id(),
+                        'path' => $path,
+                    ]);
+                    // 1013 Try Again Later: the cap is a transient resource limit.
+                    $ctx->close(1013, 'Channel capacity reached');
+
+                    return;
+                }
+
                 $ref->tell(new ChannelConnectionOpened($ctx->id(), $ctx, $enriched));
                 $this->table->attachChannel($ctx->id(), $ref, $name, $ctx);
 
