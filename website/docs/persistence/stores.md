@@ -82,7 +82,7 @@ $snapshotStore = new DbalSnapshotStore($connection);
 $durableStore  = new DbalDurableStateStore($connection);
 ```
 
-The DBAL stores accept an optional `MessageSerializer` (defaults to `PhpNativeSerializer`). Pass a custom serializer to store events as JSON or use the Valinor-based mapper.
+The DBAL stores require an explicit `MessageSerializer` (there is no default — the previous `PhpNativeSerializer` default allowed unrestricted `unserialize()`, CWE-502). For self-produced, trusted rows use `PhpNativeSerializer::forTrustedData()` or, safer, `new PhpNativeSerializer(allowedClasses: $registry->allClasses())`; for cross-service or untrusted data use the Valinor-based mapper.
 
 ## Doctrine stores
 

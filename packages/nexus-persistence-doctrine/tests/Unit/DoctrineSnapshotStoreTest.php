@@ -13,6 +13,7 @@ use Doctrine\ORM\Tools\SchemaTool;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineSnapshotStore;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\Snapshot\SnapshotEnvelope;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -136,7 +137,7 @@ final class DoctrineSnapshotStoreTest extends TestCase
         $schemaTool = new SchemaTool($this->em);
         $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
 
-        $this->store = new DoctrineSnapshotStore($this->em);
+        $this->store = new DoctrineSnapshotStore($this->em, PhpNativeSerializer::forTrustedData());
         $this->id = PersistenceId::of('order', 'order-1');
         $this->testWriterId = new Ulid();
     }

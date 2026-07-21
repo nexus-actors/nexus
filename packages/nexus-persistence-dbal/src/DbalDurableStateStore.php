@@ -11,17 +11,13 @@ use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
 use Monadial\Nexus\Persistence\State\DurableStateStore;
 use Monadial\Nexus\Serialization\MessageSerializer;
-use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Override;
 use Symfony\Component\Uid\Ulid;
 
 /** @psalm-api */
 final readonly class DbalDurableStateStore implements DurableStateStore
 {
-    public function __construct(
-        private Connection $connection,
-        private MessageSerializer $serializer = new PhpNativeSerializer(),
-    ) {}
+    public function __construct(private Connection $connection, private MessageSerializer $serializer) {}
 
     #[Override]
     public function get(PersistenceId $id): ?DurableStateEnvelope

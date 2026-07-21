@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Example\TicTacToe\Persistence;
 
 use Doctrine\ORM\EntityManagerInterface;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
 use Monadial\Nexus\Persistence\Doctrine\DoctrineEventStore;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
@@ -33,7 +34,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
     public function persist(PersistenceId $id, EventEnvelope ...$events): void
     {
         $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $events): void {
-            new DoctrineEventStore($em)->persist($id, ...$events);
+            new DoctrineEventStore($em, PhpNativeSerializer::forTrustedData())->persist($id, ...$events);
         });
     }
 
@@ -45,7 +46,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
     {
         return $this->pool->withEntityManager(
             static fn(EntityManagerInterface $em): array => iterator_to_array(
-                new DoctrineEventStore($em)->load($id, $fromSequenceNr, $toSequenceNr),
+                new DoctrineEventStore($em, PhpNativeSerializer::forTrustedData())->load($id, $fromSequenceNr, $toSequenceNr),
                 preserve_keys: false,
             ),
         );
@@ -55,7 +56,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
     public function deleteUpTo(PersistenceId $id, int $toSequenceNr): void
     {
         $this->pool->withEntityManager(static function (EntityManagerInterface $em) use ($id, $toSequenceNr): void {
-            new DoctrineEventStore($em)->deleteUpTo($id, $toSequenceNr);
+            new DoctrineEventStore($em, PhpNativeSerializer::forTrustedData())->deleteUpTo($id, $toSequenceNr);
         });
     }
 
@@ -63,7 +64,7 @@ final readonly class PooledDoctrineEventStore implements EventStore
     public function highestSequenceNr(PersistenceId $id): int
     {
         return $this->pool->withEntityManager(
-            static fn(EntityManagerInterface $em): int => new DoctrineEventStore($em)->highestSequenceNr($id),
+            static fn(EntityManagerInterface $em): int => new DoctrineEventStore($em, PhpNativeSerializer::forTrustedData())->highestSequenceNr($id),
         );
     }
 }

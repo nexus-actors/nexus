@@ -14,6 +14,7 @@ use Monadial\Nexus\Persistence\Doctrine\DoctrineDurableStateStore;
 use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
 use Monadial\Nexus\Persistence\State\DurableStateEnvelope;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -152,7 +153,7 @@ final class DoctrineDurableStateStoreTest extends TestCase
         $schemaTool = new SchemaTool($this->em);
         $schemaTool->createSchema($this->em->getMetadataFactory()->getAllMetadata());
 
-        $this->store = new DoctrineDurableStateStore($this->em);
+        $this->store = new DoctrineDurableStateStore($this->em, PhpNativeSerializer::forTrustedData());
         $this->id = PersistenceId::of('counter', 'counter-1');
         $this->testWriterId = new Ulid();
     }

@@ -12,6 +12,7 @@ use Monadial\Nexus\Persistence\Dbal\Schema\PersistenceSchemaManager;
 use Monadial\Nexus\Persistence\Event\EventEnvelope;
 use Monadial\Nexus\Persistence\Exception\ConcurrentModificationException;
 use Monadial\Nexus\Persistence\PersistenceId;
+use Monadial\Nexus\Serialization\PhpNativeSerializer;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -207,7 +208,7 @@ final class DbalEventStoreTest extends TestCase
     {
         $this->connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true]);
         (new PersistenceSchemaManager($this->connection))->createSchema();
-        $this->store = new DbalEventStore($this->connection);
+        $this->store = new DbalEventStore($this->connection, PhpNativeSerializer::forTrustedData());
         $this->id = PersistenceId::of('order', 'order-1');
         $this->testWriterId = new Ulid();
     }

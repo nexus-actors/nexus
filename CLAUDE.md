@@ -407,7 +407,7 @@ NexusApp::create('my-app')
 
 - `MessageSerializer` — `serialize(object): string` / `deserialize(string, string $type): object`
 - `EnvelopeSerializer` — Wraps message serializer, handles envelope structure
-- Implementations: `PhpNativeSerializer` (PHP serialize/unserialize), Valinor-based mapper
+- Implementations: `PhpNativeSerializer` (PHP serialize/unserialize — REQUIRES an explicit `allowedClasses` list, or the explicit `PhpNativeSerializer::forTrustedData()` opt-in for self-produced trusted data; rejects disallowed classes at any object-graph depth, CWE-502), Valinor-based mapper. The DBAL/Doctrine persistence stores no longer default to a serializer — pass one explicitly.
 - `DefaultEnvelopeSerializer` — JSON envelope with delegated message serialization
 
 ### Psalm Plugin (nexus-psalm)

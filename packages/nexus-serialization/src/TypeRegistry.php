@@ -70,6 +70,18 @@ final class TypeRegistry
     }
 
     /**
+     * All registered message classes — the natural allow-list for
+     * {@see PhpNativeSerializer}. Remember to append nested value-object
+     * classes that appear inside messages but are not registered types.
+     *
+     * @return list<string>
+     */
+    public function allClasses(): array
+    {
+        return array_keys($this->classToName);
+    }
+
+    /**
      * Returns the class name for a type name, or null if not registered.
      */
     public function classForName(string $typeName): ?string
