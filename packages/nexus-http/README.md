@@ -92,3 +92,9 @@ $app->get('/dashboard', static function (
 
 - `docs/superpowers/specs/2026-06-10-nexus-http-core-design.md` — full design.
 - Section 19 of the spec — API clarifications recorded during implementation.
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.

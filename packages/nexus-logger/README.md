@@ -81,3 +81,9 @@ For very high write rates use a non-file transport (syslog, custom handler over 
 ## Status
 
 Stable for the eight PSR-3 levels with line + JSON formatters and console + file handlers. The handler interface is open — implement `Monadial\Nexus\Logger\Handler` for any custom sink.
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.

@@ -10,3 +10,9 @@ Standalone runtime and async primitives for Nexus.
 - `Monadial\Nexus\Runtime\Runtime\Runtime`
 
 These types can be consumed independently from the actor system.
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.

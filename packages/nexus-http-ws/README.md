@@ -54,3 +54,9 @@ Two modes share one DSL:
 ## Status
 
 Stable. Channel actors are local to a single runner process/thread; cross-process / cross-thread channel sharing is out of scope for v1.
+
+## Repository
+
+> **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
+> Report issues and send pull requests to the monorepo — this repository only receives
+> automated pushes and release tags.
