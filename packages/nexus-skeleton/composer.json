@@ -21,6 +21,7 @@
         "symfony/dotenv": "^7.0"
     },
     "require-dev": {
+        "nexus-actors/maker": "dev-main",
         "phpunit/phpunit": "^13.0"
     },
     "autoload": {
