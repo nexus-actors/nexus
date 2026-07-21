@@ -89,9 +89,23 @@ final readonly class ClusterTopology
         int $minimumMembers = 0,
         bool $singleNode = false,
         ?TlsConfig $tls = null,
+        bool $allowInsecureBind = false,
     ): self {
         if ($clusterName === '') {
             throw new InvalidArgumentException('ClusterTopology clusterName must not be empty.');
+        }
+
+        // Fail closed on an exposed insecure bind (SEC-007). A non-loopback bind
+        // with no TLS accepts cluster traffic from any reachable host in the
+        // clear. Require TLS, or an explicit development override — otherwise
+        // point operators at the secure production factory.
+        if (!$singleNode && $tls === null && !$allowInsecureBind && !$bindEndpoint->host->isLoopback()) {
+            throw new InvalidArgumentException(
+                "ClusterTopology binds {$bindEndpoint} without TLS, exposing cluster traffic in the clear. "
+                . 'Use ClusterTopology::createProduction() with TLS + an auth secret, pass a TlsConfig via '
+                . 'the tls argument, bind to a loopback address, or set allowInsecureBind: true to override '
+                . 'in a trusted, network-fenced development environment.',
+            );
         }
 
         if (!$singleNode && count($seeds) === 0) {
@@ -137,6 +151,63 @@ final readonly class ClusterTopology
             tls: $tls,
             authSecret: null,
         );
+    }
+
+    /**
+     * Secure production factory: TLS and an HMAC auth secret are mandatory, so
+     * the resulting topology can never expose cluster traffic in the clear or
+     * admit an unauthenticated peer. Prefer this over {@see create()} for any
+     * network-exposed deployment.
+     *
+     * TLS gives transport-level encryption and per-node certificate identity;
+     * the auth secret gates the handshake so only nodes holding the shared
+     * secret can join. All other timing/limit knobs match {@see create()} and
+     * can be tuned afterward with the wither methods.
+     *
+     * @param list<NodeEndpoint> $seeds Seed node endpoints. Must be non-empty unless `$singleNode` is true.
+     * @param string $authSecret Shared HMAC secret every joining node must present. Must be non-empty.
+     *
+     * @throws InvalidArgumentException when the auth secret is empty, or any {@see create()} invariant fails.
+     */
+    public static function createProduction(
+        string $clusterName,
+        NodeAddress $self,
+        NodeEndpoint $bindEndpoint,
+        NodeEndpoint $advertiseEndpoint,
+        array $seeds,
+        TlsConfig $tls,
+        string $authSecret,
+        ?Duration $heartbeatInterval = null,
+        float $phiThreshold = 8.0,
+        ?Duration $gossipInterval = null,
+        ?Duration $reconnectInitialBackoff = null,
+        ?Duration $reconnectMaxBackoff = null,
+        ?Duration $handshakeTimeout = null,
+        int $maxInboundLinks = 1_024,
+        int $minimumMembers = 0,
+        bool $singleNode = false,
+    ): self {
+        if ($authSecret === '') {
+            throw new InvalidArgumentException('ClusterTopology::createProduction() requires a non-empty authSecret.');
+        }
+
+        return self::create(
+            clusterName: $clusterName,
+            self: $self,
+            bindEndpoint: $bindEndpoint,
+            advertiseEndpoint: $advertiseEndpoint,
+            seeds: $seeds,
+            heartbeatInterval: $heartbeatInterval,
+            phiThreshold: $phiThreshold,
+            gossipInterval: $gossipInterval,
+            reconnectInitialBackoff: $reconnectInitialBackoff,
+            reconnectMaxBackoff: $reconnectMaxBackoff,
+            handshakeTimeout: $handshakeTimeout,
+            maxInboundLinks: $maxInboundLinks,
+            minimumMembers: $minimumMembers,
+            singleNode: $singleNode,
+            tls: $tls,
+        )->withAuthSecret($authSecret);
     }
 
     /**

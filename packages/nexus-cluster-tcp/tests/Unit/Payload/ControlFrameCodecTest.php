@@ -240,7 +240,7 @@ final class ControlFrameCodecTest extends TestCase
         return ClusterTopology::create(
             clusterName: 'prod',
             self: new NodeAddress('prod', 'dc1', 'nexus', 'node-1'),
-            bindEndpoint: NodeEndpoint::fromString('0.0.0.0:7361'),
+            bindEndpoint: NodeEndpoint::fromString('127.0.0.1:7361'),
             advertiseEndpoint: NodeEndpoint::fromString('127.0.0.1:7361'),
             seeds: [NodeEndpoint::fromString('127.0.0.1:7362')],
         );
