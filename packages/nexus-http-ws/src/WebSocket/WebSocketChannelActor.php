@@ -125,6 +125,27 @@ abstract class WebSocketChannelActor implements StatefulActorHandler
     }
 
     /**
+     * Passivate on last close: return this from {@see onClosed()} to stop the
+     * channel actor once its final connection has closed, freeing its slot in
+     * the registry's cardinality cap (SEC-002). Keeps a channel alive only
+     * while it has attached connections.
+     *
+     *   public function onClosed($ctx, $conn, $code, $state): BehaviorWithState
+     *   {
+     *       return $this->stopWhenEmpty($state);
+     *   }
+     *
+     * @param S $state
+     * @return BehaviorWithState<object, S>
+     */
+    final protected function stopWhenEmpty(mixed $state): BehaviorWithState
+    {
+        return $this->attached === []
+            ? BehaviorWithState::stopped()
+            : BehaviorWithState::next($state);
+    }
+
+    /**
      * Hook for messages that are not lifecycle events — typically replies
      * from actors this channel commands. Default is a no-op; override to
      * cache state or broadcast to attached connections.

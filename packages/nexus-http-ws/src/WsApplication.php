@@ -54,6 +54,8 @@ final class WsApplication implements Application
     /** @var list<ParamResolver> */
     private array $wsParamResolvers = [];
 
+    private int $maxChannels = ChannelActorRegistry::DEFAULT_MAX_CHANNELS;
+
     private ?ContainerInterface $container = null;
 
     private ?LoggerInterface $logger = null;
@@ -264,7 +266,7 @@ final class WsApplication implements Application
         $dispatcher = new WebSocketDispatcher(
             $router,
             $table,
-            new ChannelActorRegistry($this->system, $this->logger),
+            new ChannelActorRegistry($this->system, $this->logger, $this->maxChannels),
             new HandlerInstantiator($container, $this->logger, userResolvers: $this->wsParamResolvers),
             $this->logger,
         );
@@ -292,6 +294,20 @@ final class WsApplication implements Application
     public function wsMiddleware(MiddlewareInterface|string $middleware): self
     {
         $this->wsMiddleware[] = $middleware;
+
+        return $this;
+    }
+
+    /**
+     * Cap the number of simultaneously live channel actors (SEC-002). Once the
+     * cap is reached, a new channel connection is refused with a 1013 close
+     * instead of spawning an unbounded number of actors/refs/mailboxes from an
+     * attacker churning unique channel keys. Dead channels (stopped on last
+     * close) free their slot. Default {@see ChannelActorRegistry::DEFAULT_MAX_CHANNELS}.
+     */
+    public function withMaxChannels(int $maxChannels): self
+    {
+        $this->maxChannels = $maxChannels;
 
         return $this;
     }

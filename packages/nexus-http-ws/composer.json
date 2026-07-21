@@ -7,6 +7,7 @@
         "php": ">=8.5.7",
         "nexus-actors/core": "^0.1",
         "nexus-actors/http": "^0.1",
+        "nexus-actors/runtime": "^0.1",
         "nexus-actors/serialization": "^0.1",
         "nikic/fast-route": "^1.3",
         "nyholm/psr7": "^1.8",

@@ -258,6 +258,23 @@ Channel actors **require process mode** (`SwooleWorkerServer`). The framework de
 
 For multiplayer games and other stateful WebSocket workloads, use `SwooleWorkerServer::run(SwooleWorkerConfig::bind(...)->workers(1)->enableWebSocket(), ...)`. See the [tic-tac-toe tutorial](../tutorials/tictactoe.md) for a complete example.
 
+## Bounding the channel population (security)
+
+Because a channel actor is spawned per distinct URL key, an attacker who can reach a public, non-passivating channel route can churn unique keys to spawn actors, refs, and mailboxes without limit. Nexus bounds this by default:
+
+- **Cardinality cap.** The registry caps the number of simultaneously live channel actors (default `ChannelActorRegistry::DEFAULT_MAX_CHANNELS` = 10 000). Past the cap, a new channel connection is refused with a `1013` close instead of spawning. Tune it with `WsApplication::withMaxChannels()`. Dead channels free their slot.
+- **Bounded mailboxes.** Channel actors get a bounded mailbox (1 024, `DropNewest`) so one flooding connection cannot grow a channel's queue without limit.
+- **Passivate on last close.** Return `$this->stopWhenEmpty($state)` from `onClosed()` so a channel actor stops once its final connection closes, freeing its cap slot:
+
+```php
+public function onClosed(ActorContext $ctx, WebSocketContext $conn, int $code, mixed $state): BehaviorWithState
+{
+    return $this->stopWhenEmpty($state);
+}
+```
+
+Combine these with authentication on the upgrade (see [Auth — WebSocket auth](./auth.md#websocket-auth)) and an [Origin allow-list](./auth.md#cross-site-protection-origin-allow-list) so only authorized, same-site clients can open channels at all.
+
 ## Operational notes
 
 - **The "worker exit timeout" cycle.** Under `SwooleWorkerServer`, idle workers can be force-terminated by Swoole's watchdog. Actors survive respawn as long as their authoritative state is persisted (Doctrine row, event store). See [Swoole deadlock-detector false positives](../operations/swoole-deadlock-detector.md) for the full explanation.
