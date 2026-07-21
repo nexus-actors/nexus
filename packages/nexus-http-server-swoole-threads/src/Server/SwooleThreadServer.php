@@ -78,6 +78,9 @@ final class SwooleThreadServer
         $settings = [...$settings, ...$config->swooleSettings];
         $settings['init_arguments'] = $initArguments;
         $settings['max_request'] = $config->maxRequest;
+        // Reject oversized requests at the protocol parser (SEC-009), before
+        // PHP materializes the body — every method, known-length and chunked.
+        $settings['package_max_length'] = $config->maxRequestBodyBytes;
         $settings['worker_num'] = $threads;
 
         $server->set($settings);

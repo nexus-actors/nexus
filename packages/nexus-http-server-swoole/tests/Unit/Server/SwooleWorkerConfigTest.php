@@ -43,4 +43,26 @@ final class SwooleWorkerConfigTest extends TestCase
         self::assertTrue($cfg->installSignalHandlers);
         self::assertInstanceOf(NullLogger::class, $cfg->logger);
     }
+
+    #[Test]
+    public function default_max_request_body_is_bounded(): void
+    {
+        $cfg = SwooleWorkerConfig::bind('0.0.0.0', 8080);
+
+        // A secure default cap, not unlimited — Swoole rejects larger requests
+        // at the protocol parser before PHP allocates the body.
+        self::assertSame(8 * 1024 * 1024, $cfg->maxRequestBodyBytes);
+        self::assertSame(SwooleWorkerConfig::DEFAULT_MAX_REQUEST_BODY_BYTES, $cfg->maxRequestBodyBytes);
+    }
+
+    #[Test]
+    public function max_request_body_bytes_returns_new_instance(): void
+    {
+        $a = SwooleWorkerConfig::bind('0.0.0.0', 8080);
+        $b = $a->maxRequestBodyBytes(1024);
+
+        self::assertNotSame($a, $b);
+        self::assertSame(8 * 1024 * 1024, $a->maxRequestBodyBytes);
+        self::assertSame(1024, $b->maxRequestBodyBytes);
+    }
 }

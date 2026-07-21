@@ -120,17 +120,19 @@ With `zend.assertions=-1`, PHP compiles `assert(...)` calls out at parse time â€
 
 ## Swoole: server settings
 
+The Swoole HTTP servers enforce a native request-size cap by default: `maxRequestBodyBytes` (8 MiB) is wired to Swoole's `package_max_length`, so oversized requests are rejected at the protocol parser â€” before PHP materializes the body via `rawContent()`, for every method and for both known-length and chunked bodies. Raise it above your largest legitimate upload, or lower it to tighten the memory-DoS surface. This native cap sits *below* application-level `BodySizeLimitMiddleware`, which stays useful for per-route limits and precise `413` responses.
+
 ```php title="src/server.php"
 SwooleThreadConfig::bind('0.0.0.0', 8080)
     ->threads(8)
     ->maxRequest(100_000)
+    ->maxRequestBodyBytes(4 * 1024 * 1024)  // native package_max_length cap
     ->withSwooleSetting([
         'tcp_nodelay'          => true,
         'tcp_defer_accept'     => 1,
         'open_tcp_keepalive'   => 1,
         'tcp_keepidle'         => 60,
         'socket_buffer_size'   => 32 * 1024 * 1024,
-        'package_max_length'   => 4 * 1024 * 1024,
         'buffer_output_size'   => 32 * 1024 * 1024,
         'backlog'              => 65535,
     ]);
