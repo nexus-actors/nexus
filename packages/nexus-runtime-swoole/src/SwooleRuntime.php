@@ -101,7 +101,7 @@ final class SwooleRuntime implements Runtime
 
         $this->pendingTimers[] = function () use ($delay, $callback, $deferred): void {
             if (!$deferred->isCancelled()) {
-                $this->createOnceTimer($delay, $callback);
+                $deferred->materialize($this->createOnceTimer($delay, $callback));
             }
         };
 
@@ -120,7 +120,7 @@ final class SwooleRuntime implements Runtime
 
         $this->pendingTimers[] = function () use ($initialDelay, $interval, $callback, $deferred): void {
             if (!$deferred->isCancelled()) {
-                $this->createRepeatingTimer($initialDelay, $interval, $callback);
+                $deferred->materialize($this->createRepeatingTimer($initialDelay, $interval, $callback));
             }
         };
 
@@ -226,11 +226,25 @@ final class SwooleRuntime implements Runtime
         $intervalMs = max(1, $interval->toMillis());
         $initialMs = max(1, $initialDelay->toMillis());
 
-        // Use Timer::after for initial delay, then Timer::tick for repeating
+        // Use Timer::after for the initial delay, then Timer::tick for the
+        // repeats. The returned handle is retargeted at each handover so
+        // cancel() always clears the live timer — also after the first fire.
+        $handle = new SwooleCancellable(0);
+
         /** @var int $timerId Swoole Timer::after returns int timer ID */
-        $timerId = Timer::after($initialMs, function () use ($intervalMs, $callback): void {
+        $timerId = Timer::after($initialMs, function () use ($intervalMs, $callback, $handle): void {
+            // No pre-fire cancellation check needed: cancel() before this
+            // callback runs clears the after timer, so we never get here.
+
             // Fire first invocation
             ($callback)();
+
+            // The first invocation may suspend the coroutine; a cancel()
+            // during it must prevent the tick from ever starting.
+
+            if ($handle->isCancelled()) {
+                return;
+            }
 
             // Start repeating
             /** @var int $tickId Swoole Timer::tick returns int timer ID */
@@ -239,10 +253,12 @@ final class SwooleRuntime implements Runtime
             });
 
             $this->timerIds[$tickId] = true;
+            $handle->retarget($tickId);
         });
 
         $this->timerIds[$timerId] = true;
+        $handle->retarget($timerId);
 
-        return new SwooleCancellable($timerId);
+        return $handle;
     }
 }
