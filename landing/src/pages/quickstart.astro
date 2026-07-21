@@ -1,0 +1,144 @@
+---
+import Marketing from '../layouts/Marketing.astro';
+import CodeBlock from '../components/CodeBlock.astro';
+import CtaBlock from '../components/CtaBlock.astro';
+import { docsUrl } from '../lib/urls';
+
+const createCode = `composer create-project nexus-actors/skeleton my-app --stability=dev
+cd my-app`;
+
+const wizardCode = `  Nexus project setup
+  ===================
+
+ Runtime [fiber]:
+  [0] fiber
+  [1] swoole
+ > swoole
+
+ Add the HTTP server (Swoole)? (yes/no) [no]:
+ > yes
+
+ Persistence store (experimental) [none]:
+  [0] none  [1] memory  [2] dbal  [3] doctrine
+ > none
+
+ Observability [none]:
+  [0] none  [1] otel
+ > otel
+
+ Add TCP clustering (experimental)? (yes/no) [no]:
+ > no
+
+ Add the Symfony Messenger bridge (experimental)? (yes/no) [no]:
+ > no
+
+ [OK] Project configured.
+
+ * Create your first actor:  bin/console make:actor Greeter
+ * Run the actor system:     bin/console run`;
+
+const makeCode = `$ bin/console make:actor Payment --with-message
+
+ [OK] Created src/Actor/PaymentActor.php
+ [OK] Created src/Message/PaymentMessage.php`;
+
+const runCode = `$ bin/console run
+
+Booting Nexus actor system…
+[payment] spawned via #[AsActor('payment')]`;
+
+const treeCode = `my-app/
+├── bin/console            command-line entry point
+├── config/
+│   ├── services.php       DI container (autowires src/)
+│   └── packages/          per-module config — runtime.php picks your Runtime
+└── src/
+    ├── Actor/             #[AsActor] handlers, auto-spawned at boot
+    ├── Message/           readonly message classes
+    └── Kernel.php         boots the container and ActorSystem`;
+---
+<Marketing
+  title="Quickstart — Nexus"
+  description="Start a Nexus actor project in three commands: create-project, answer the setup wizard, run. Generators included."
+>
+  <!-- Hero -->
+  <section class="max-w-6xl mx-auto px-4 py-16 md:py-24 grid md:grid-cols-2 gap-12 items-center">
+    <div>
+      <p class="text-primary font-semibold text-sm uppercase tracking-wide mb-3">Quickstart</p>
+      <h1 class="text-3xl sm:text-5xl font-extrabold mb-6 leading-tight">
+        Zero to actors in three commands.
+      </h1>
+      <p class="text-xl text-slate-600 dark:text-slate-300 mb-8">
+        <code class="font-mono">create-project</code> scaffolds a Symfony-style project,
+        an interactive wizard wires your runtime and modules, and
+        <code class="font-mono">make:actor</code> writes the boilerplate. No config
+        spelunking on day one.
+      </p>
+      <div class="flex flex-wrap gap-3">
+        <a
+          href={docsUrl('/getting-started/quick-start')}
+          class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-md font-semibold transition"
+        >
+          Full guide in the docs
+        </a>
+      </div>
+    </div>
+    <CodeBlock code={createCode} lang="bash" title="terminal" />
+  </section>
+
+  <!-- Wizard -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Answer six questions.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        The wizard runs automatically after <code class="font-mono">create-project</code>
+        (and any time later via <code class="font-mono">bin/console nexus:setup</code>).
+        It installs only what you pick and labels experimental modules honestly.
+      </p>
+      <ul class="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Fiber runtime for development, Swoole for production — swap later by re-running the wizard</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Persistence, OpenTelemetry, TCP cluster, and Messenger are opt-in modules</span></li>
+        <li class="flex gap-2"><span class="text-primary font-bold">→</span><span>Experimental modules print an explicit warning — no surprises in production</span></li>
+      </ul>
+    </div>
+    <CodeBlock code={wizardCode} lang="text" title="bin/console nexus:setup" />
+  </section>
+
+  <!-- Generators -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center">
+    <CodeBlock code={makeCode} lang="text" title="terminal" />
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Generate, don't copy-paste.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono">make:actor</code> writes an
+        <code class="font-mono">#[AsActor]</code> handler the Kernel auto-spawns at boot;
+        <code class="font-mono">make:message</code> writes the readonly message class.
+        Prefer closures? <code class="font-mono">make:actor --functional</code> scaffolds a
+        <code class="font-mono">Behavior::receive()</code> factory instead.
+        Generated code matches the style of everything else in the project.
+      </p>
+    </div>
+  </section>
+
+  <!-- Run + layout -->
+  <section class="max-w-6xl mx-auto px-4 py-16 grid md:grid-cols-2 gap-12 items-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+    <div>
+      <h2 class="text-3xl font-bold mb-4">Run it.</h2>
+      <p class="text-slate-600 dark:text-slate-300 mb-6">
+        <code class="font-mono">bin/console run</code> boots the container, spawns every
+        <code class="font-mono">#[AsActor]</code> handler, and blocks until shutdown.
+        What you get is a small, comprehensible tree:
+      </p>
+      <CodeBlock code={treeCode} lang="text" title="project layout" />
+    </div>
+    <CodeBlock code={runCode} lang="text" title="terminal" />
+  </section>
+
+  <CtaBlock
+    title="Scaffold your first actor."
+    subtitle="The full guide walks through every wizard question and generator flag in detail."
+    installLine="composer create-project nexus-actors/skeleton my-app"
+    primary={{ href: docsUrl('/getting-started/quick-start'), label: 'Quick Start Guide' }}
+    secondary={{ href: docsUrl('/getting-started/installation'), label: 'Installation docs' }}
+  />
+</Marketing>

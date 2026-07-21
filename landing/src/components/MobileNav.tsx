@@ -32,10 +32,10 @@ export default function MobileNav({ docsHref }: Props) {
         <div className="md:hidden absolute top-full left-0 right-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 shadow-lg z-50 px-4 py-4">
           <nav className="flex flex-col gap-1">
             <a
-              href="/bootstrap"
+              href="/quickstart"
               className="inline-flex items-center px-4 py-2 rounded-full border border-emerald-500 text-emerald-600 dark:text-emerald-400 font-semibold text-sm hover:bg-emerald-500 hover:text-white transition-colors duration-150 w-fit mb-2"
             >
-              Bootstrap
+              Quickstart
             </a>
 
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mt-3 mb-1 px-2">
