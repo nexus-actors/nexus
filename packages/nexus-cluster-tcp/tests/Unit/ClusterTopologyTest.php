@@ -447,10 +447,124 @@ final class ClusterTopologyTest extends TestCase
         );
     }
 
+    // ========================================================================
+    // Secure production defaults (SEC-007)
+    // ========================================================================
+
+    #[Test]
+    public function nonLoopbackInsecureBindIsRejected(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('without TLS');
+
+        ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+    }
+
+    #[Test]
+    public function nonLoopbackInsecureBindAllowedWithExplicitOverride(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'dev',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            allowInsecureBind: true,
+        );
+
+        self::assertNull($topology->tls);
+    }
+
+    #[Test]
+    public function loopbackInsecureBindIsAllowed(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'dev',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+        );
+
+        self::assertNull($topology->tls);
+    }
+
+    #[Test]
+    public function nonLoopbackBindWithTlsIsAllowed(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            tls: new TlsConfig('/tls/cert.pem', '/tls/key.pem'),
+        );
+
+        self::assertNotNull($topology->tls);
+    }
+
+    #[Test]
+    public function createProductionRequiresTlsAndAuthSecret(): void
+    {
+        $topology = ClusterTopology::createProduction(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            tls: new TlsConfig('/tls/cert.pem', '/tls/key.pem'),
+            authSecret: 'shared-cluster-secret',
+        );
+
+        self::assertNotNull($topology->tls);
+        self::assertSame('shared-cluster-secret', $topology->authSecret);
+    }
+
+    #[Test]
+    public function createProductionRejectsEmptyAuthSecret(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('non-empty authSecret');
+
+        ClusterTopology::createProduction(
+            clusterName: 'production',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: $this->seeds,
+            tls: new TlsConfig('/tls/cert.pem', '/tls/key.pem'),
+            authSecret: '',
+        );
+    }
+
+    #[Test]
+    public function singleNodeInsecureBindIsAllowed(): void
+    {
+        $topology = ClusterTopology::create(
+            clusterName: 'dev',
+            self: $this->self,
+            bindEndpoint: new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355)),
+            advertiseEndpoint: $this->advertiseEndpoint,
+            seeds: [],
+            singleNode: true,
+        );
+
+        self::assertTrue($topology->singleNode);
+    }
+
     protected function setUp(): void
     {
         $this->self = new NodeAddress('prod', 'eu', 'payments', 'node-1');
-        $this->bindEndpoint = new NodeEndpoint(Host::of('0.0.0.0'), Port::of(7355));
+        // Loopback bind keeps the shared fixtures on the secure-by-default path;
+        // the SEC-007 tests above exercise non-loopback binds explicitly.
+        $this->bindEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(7355));
         $this->advertiseEndpoint = new NodeEndpoint(Host::of('10.0.0.1'), Port::of(7355));
         $this->seeds = [new NodeEndpoint(Host::of('10.0.0.2'), Port::of(7355))];
     }

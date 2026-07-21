@@ -9,7 +9,7 @@ related:
 # Clustering over TCP
 
 :::caution Experimental
-Clustering is experimental and not yet production-hardened. APIs and semantics may change before 1.0.
+Clustering APIs and semantics may change before 1.0. Cluster topology is **secure by default**: `ClusterTopology::create()` rejects a non-loopback bind without TLS. Use `ClusterTopology::createProduction()` (TLS + auth secret required) for any network-exposed deployment; see [Secure production defaults](#secure-production-defaults).
 :::
 
 `nexus-cluster-tcp` provides a Swoole TCP mesh so actor systems on different machines form a cluster, discover each other through gossip, and route messages transparently across node boundaries. This guide covers topology configuration, seed discovery, TLS, failure-detection tuning, and the consistency model you are operating under.
@@ -159,6 +159,31 @@ function seedsFromEnv(string $envVar = 'CLUSTER_SEEDS'): array
     ));
 }
 ```
+
+## Secure production defaults
+
+`ClusterTopology::create()` **fails closed** on an exposed insecure bind: a non-loopback `bindEndpoint` (anything other than `127.0.0.0/8`, `::1`, or `localhost`) with no `TlsConfig` throws `InvalidArgumentException`, because it would accept cluster control and actor traffic from any reachable host in the clear.
+
+For production, use `ClusterTopology::createProduction()`, which **requires** both TLS and an auth secret — the resulting topology can never expose plaintext or admit an unauthenticated peer:
+
+```php title="src/Cluster/ProductionTopology.php" verify:lint-only
+use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\TlsConfig;
+
+$topology = ClusterTopology::createProduction(
+    clusterName:       'production',
+    self:              new NodeAddress('production', 'eu-west-1', 'payments', 'node-1'),
+    bindEndpoint:      NodeEndpoint::fromString('0.0.0.0:7355'),
+    advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
+    seeds:             [NodeEndpoint::fromString('10.0.0.2:7355')],
+    tls:               new TlsConfig('/certs/node.crt', '/certs/node.key', '/certs/ca.crt'),
+    authSecret:        getenv('NEXUS_CLUSTER_SECRET'),
+);
+```
+
+For local development where the mesh is confined to a trusted, network-fenced segment, either bind to a loopback address or set `allowInsecureBind: true` on `create()` to opt out of the check deliberately. Never set `allowInsecureBind: true` on a network-exposed node.
 
 ## TLS
 

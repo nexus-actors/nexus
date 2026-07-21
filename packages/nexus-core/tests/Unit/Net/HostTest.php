@@ -7,6 +7,7 @@ namespace Monadial\Nexus\Core\Tests\Unit\Net;
 use InvalidArgumentException;
 use Monadial\Nexus\Core\Net\Host;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
@@ -170,5 +171,38 @@ final class HostTest extends TestCase
     public function toStringReturnsValue(): void
     {
         self::assertSame('example.com', (string) Host::of('example.com'));
+    }
+
+    #[Test]
+    #[DataProvider('loopbackHosts')]
+    public function isLoopbackTrueForLoopbackHosts(string $value): void
+    {
+        self::assertTrue(Host::of($value)->isLoopback());
+    }
+
+    #[Test]
+    #[DataProvider('nonLoopbackHosts')]
+    public function isLoopbackFalseForExposedHosts(string $value): void
+    {
+        self::assertFalse(Host::of($value)->isLoopback());
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function loopbackHosts(): iterable
+    {
+        yield 'ipv4 loopback' => ['127.0.0.1'];
+        yield 'ipv4 loopback range' => ['127.5.6.7'];
+        yield 'ipv6 loopback' => ['::1'];
+        yield 'localhost' => ['localhost'];
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function nonLoopbackHosts(): iterable
+    {
+        yield 'all interfaces ipv4' => ['0.0.0.0'];
+        yield 'all interfaces ipv6' => ['::'];
+        yield 'private ipv4' => ['10.0.0.1'];
+        yield 'public ipv4' => ['203.0.113.5'];
+        yield 'hostname' => ['example.com'];
     }
 }

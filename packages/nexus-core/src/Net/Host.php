@@ -9,8 +9,10 @@ use Override;
 use Stringable;
 
 use function filter_var;
+use function inet_pton;
 use function preg_match;
 use function sprintf;
+use function str_starts_with;
 use function strlen;
 
 use const FILTER_FLAG_IPV6;
@@ -92,6 +94,26 @@ final readonly class Host implements Stringable
     public function equals(self $other): bool
     {
         return $this->value === $other->value;
+    }
+
+    /**
+     * Returns true when the host refers to the local machine only: the IPv4
+     * loopback range 127.0.0.0/8, the IPv6 loopback `::1`, or the `localhost`
+     * hostname. Used to distinguish a development bind from a network-exposed
+     * one. Note `0.0.0.0` / `::` (all-interfaces) are NOT loopback — they
+     * expose the port on every interface.
+     */
+    public function isLoopback(): bool
+    {
+        if ($this->value === 'localhost') {
+            return true;
+        }
+
+        if ($this->isIpv6()) {
+            return inet_pton($this->value) === inet_pton('::1');
+        }
+
+        return str_starts_with($this->value, '127.');
     }
 
     private static function isValidRfc1123Hostname(string $value): bool

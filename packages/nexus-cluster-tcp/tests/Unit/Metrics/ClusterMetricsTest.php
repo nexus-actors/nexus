@@ -250,7 +250,7 @@ final class ClusterMetricsTest extends TestCase
         $topology = ClusterTopology::create(
             clusterName: 'production',
             self: new NodeAddress('production', 'eu', 'payments', 'node-1'),
-            bindEndpoint: NodeEndpoint::fromString('0.0.0.0:7355'),
+            bindEndpoint: NodeEndpoint::fromString('127.0.0.1:7355'),
             advertiseEndpoint: NodeEndpoint::fromString('10.0.0.1:7355'),
             seeds: [NodeEndpoint::fromString('10.0.0.9:7355')],
         );
