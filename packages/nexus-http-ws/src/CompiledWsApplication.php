@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Ws;
 
 use Monadial\Nexus\Http\App\CompiledHttpApp;
+use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
+use Monadial\Nexus\Http\Ws\WebSocket\HandshakeGate;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketDispatcher;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketRouter;
 use Override;
@@ -20,6 +22,7 @@ final readonly class CompiledWsApplication implements CompiledApplication
         private WebSocketRouter $router,
         private WebSocketDispatcher $dispatcher,
         private ContainerInterface $container,
+        private ?HandshakeGate $handshakeGate = null,
     ) {}
 
     #[Override]
@@ -47,5 +50,16 @@ final readonly class CompiledWsApplication implements CompiledApplication
     public function container(): ContainerInterface
     {
         return $this->container;
+    }
+
+    /**
+     * The pre-upgrade authorization gate servers must consult before
+     * completing the WebSocket handshake. Applications compiled without an
+     * explicit gate get a middleware-free gate over the same router: unmatched
+     * paths are still rejected with 404 before the 101 switch.
+     */
+    public function handshakeGate(): HandshakeGate
+    {
+        return $this->handshakeGate ?? new HandshakeGate($this->router, [], new MiddlewareResolver($this->container));
     }
 }

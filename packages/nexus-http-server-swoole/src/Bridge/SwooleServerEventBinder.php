@@ -10,9 +10,11 @@ use Monadial\Nexus\Http\Ws\WebSocket\WebSocketContext;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketFrame;
 use Monadial\Nexus\Runtime\Duration;
 use Nyholm\Psr7\ServerRequest;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Swoole\Coroutine;
+use Swoole\Event;
 use Swoole\Http\Request;
 use Swoole\Http\Response;
 use Swoole\Http\Server as HttpServer;
@@ -20,7 +22,10 @@ use Swoole\WebSocket\Frame as SwooleFrame;
 use Swoole\WebSocket\Server as WebSocketServer;
 use Throwable;
 
+use function base64_encode;
 use function microtime;
+use function preg_match;
+use function sha1;
 
 /**
  * @psalm-api
@@ -31,6 +36,17 @@ use function microtime;
  */
 final class SwooleServerEventBinder
 {
+    /**
+     * RFC 6455 §1.3 handshake GUID. Every WebSocket server concatenates the
+     * client's Sec-WebSocket-Key with this fixed value, SHA-1 hashes it, and
+     * base64-encodes the digest into Sec-WebSocket-Accept to prove it actually
+     * speaks the WebSocket protocol. Protocol-defined — never changes.
+     */
+    private const string RFC6455_HANDSHAKE_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+    /** RFC 6455 §4.1: Sec-WebSocket-Key is exactly 16 random bytes, base64-encoded. */
+    private const string SEC_WEBSOCKET_KEY_PATTERN = '#^[+/0-9A-Za-z]{21}[AQgw]==$#';
+
     public static function bindRequest(
         HttpServer|WebSocketServer $server,
         ServerRuntime $runtime,
@@ -73,25 +89,29 @@ final class SwooleServerEventBinder
         Closure $contextFactory,
         LoggerInterface $logger,
     ): void {
-        $logger->debug('SwooleServerEventBinder: binding WebSocket Open/Message/Close');
+        $logger->debug('SwooleServerEventBinder: binding WebSocket handshake/Message/Close');
+
+        // A custom handshake handler replaces Swoole's automatic upgrade AND
+        // suppresses the Open event: authorization runs BEFORE the 101 switch
+        // (rejections are plain HTTP responses on the not-yet-upgraded
+        // connection), and dispatchOpen is invoked here with the authorized
+        // request — principal attribute included — once the 101 is flushed.
         $server->on(
-            'Open',
-            static function (WebSocketServer $s, Request $req) use ($runtime, $contextFactory, $logger): void {
-                $logger->debug('Swoole Open event', ['fd' => $req->fd]);
+            'handshake',
+            static function (Request $req, Response $res) use ($server, $runtime, $contextFactory, $logger): bool {
+                $logger->debug('Swoole handshake event', ['fd' => $req->fd]);
 
                 try {
-                    $app = $runtime->app;
+                    return self::handshake($server, $req, $res, $runtime, $contextFactory, $logger);
+                } catch (Throwable $e) {
+                    $logger->error('WebSocket handshake failed', ['exception' => $e]);
 
-                    if (!$app instanceof CompiledWsApplication) {
-                        return;
+                    if ($res->isWritable()) {
+                        $res->status(500);
+                        $res->end();
                     }
 
-                    $psr7 = SwooleRequestTranslator::toPsr7($req);
-                    $ctx = $contextFactory($s, $req->fd, $psr7);
-                    $app->dispatcher()->dispatchOpen($ctx, $psr7);
-                } catch (Throwable $e) {
-                    $logger->error('WebSocket Open failed', ['exception' => $e]);
-                    $s->disconnect($req->fd, 1011, 'Server error');
+                    return false;
                 }
             },
         );
@@ -217,5 +237,119 @@ final class SwooleServerEventBinder
             $logger->error($shutdownMessage);
             $server->shutdown();
         }
+    }
+
+    /**
+     * The pre-upgrade handshake protocol, in order: gate the upgrade request
+     * through the application's authorization pipeline, validate the client
+     * key, complete the RFC 6455 accept, and dispatch the open event with the
+     * authorized request once the 101 is on the wire.
+     *
+     * @param Closure(WebSocketServer, int, ServerRequestInterface): WebSocketContext $contextFactory
+     */
+    private static function handshake(
+        WebSocketServer $server,
+        Request $req,
+        Response $res,
+        ServerRuntime $runtime,
+        Closure $contextFactory,
+        LoggerInterface $logger,
+    ): bool {
+        $app = $runtime->app;
+
+        if (!$app instanceof CompiledWsApplication) {
+            return self::deny($res, 404, 'WebSocket not supported');
+        }
+
+        $result = $app->handshakeGate()->evaluate(SwooleRequestTranslator::toPsr7($req));
+        $authorized = $result->request;
+
+        if ($authorized === null) {
+            return self::denyWith($res, $result->rejection);
+        }
+
+        $key = self::clientKey($req);
+
+        if ($key === null) {
+            return self::deny($res, 400, 'Invalid Sec-WebSocket-Key');
+        }
+
+        self::completeUpgrade($res, $key);
+        self::dispatchOpenWhenEstablished($server, $req->fd, $authorized, $app, $contextFactory, $logger);
+
+        return true;
+    }
+
+    /** Refuse the upgrade with a plain HTTP response on the not-yet-upgraded connection. */
+    private static function deny(Response $res, int $status, string $body): bool
+    {
+        $res->status($status);
+        $res->end($body);
+
+        return false;
+    }
+
+    /** Refuse the upgrade with the gate's rejection response (401/403/404/...). */
+    private static function denyWith(Response $res, ?ResponseInterface $rejection): bool
+    {
+        if ($rejection === null) {
+            return self::deny($res, 403, '');
+        }
+
+        SwooleResponseWriter::write($rejection, $res);
+
+        return false;
+    }
+
+    /** The client's Sec-WebSocket-Key, or null when absent or malformed. */
+    private static function clientKey(Request $req): ?string
+    {
+        /** @var array<string, string> $headers */
+        $headers = $req->header ?? [];
+        $key = $headers['sec-websocket-key'] ?? '';
+
+        return preg_match(self::SEC_WEBSOCKET_KEY_PATTERN, $key) === 1
+            ? $key
+            : null;
+    }
+
+    /** Send the RFC 6455 §4.2.2 server handshake: the 101 protocol switch. */
+    private static function completeUpgrade(Response $res, string $key): void
+    {
+        $accept = base64_encode(sha1($key . self::RFC6455_HANDSHAKE_GUID, true));
+
+        $res->header('Upgrade', 'websocket');
+        $res->header('Connection', 'Upgrade');
+        $res->header('Sec-WebSocket-Accept', $accept);
+        $res->header('Sec-WebSocket-Version', '13');
+        $res->status(101);
+        $res->end();
+    }
+
+    /**
+     * Dispatch the open event carrying the authorized upgrade request.
+     * Server::defer() no longer exists in Swoole 6 — Event::defer runs the
+     * callback on the next event-loop tick, after the 101 has been flushed
+     * and the connection is established.
+     *
+     * @param Closure(WebSocketServer, int, ServerRequestInterface): WebSocketContext $contextFactory
+     */
+    private static function dispatchOpenWhenEstablished(
+        WebSocketServer $server,
+        int $fd,
+        ServerRequestInterface $authorized,
+        CompiledWsApplication $app,
+        Closure $contextFactory,
+        LoggerInterface $logger,
+    ): void {
+        Event::defer(static function () use ($server, $fd, $authorized, $app, $contextFactory, $logger): void {
+            try {
+                $ctx = $contextFactory($server, $fd, $authorized);
+                $app->dispatcher()->dispatchOpen($ctx, $authorized);
+            } catch (Throwable $e) {
+                $logger->error('WebSocket Open failed', ['exception' => $e]);
+                $server->disconnect($fd, 1011, 'Server error');
+            }
+        });
     }
 }

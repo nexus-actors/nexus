@@ -15,10 +15,12 @@ use Monadial\Nexus\Http\Dsl\ActorRegistration;
 use Monadial\Nexus\Http\Dsl\RouteBuilder;
 use Monadial\Nexus\Http\Dsl\RouteGroup;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolver;
+use Monadial\Nexus\Http\Middleware\MiddlewareResolver;
 use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Http\Ws\WebSocket\ChannelActorRegistry;
 use Monadial\Nexus\Http\Ws\WebSocket\Exception\DuplicateRouteException;
 use Monadial\Nexus\Http\Ws\WebSocket\HandlerInstantiator;
+use Monadial\Nexus\Http\Ws\WebSocket\HandshakeGate;
 use Monadial\Nexus\Http\Ws\WebSocket\InMemoryConnectionTable;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketChannelActor;
 use Monadial\Nexus\Http\Ws\WebSocket\WebSocketDispatcher;
@@ -43,6 +45,12 @@ final class WsApplication implements Application
 {
     /** @var list<WebSocketRoute> */
     private array $wsRoutes = [];
+
+    /** @var list<MiddlewareInterface|class-string<MiddlewareInterface>> */
+    private array $wsMiddleware = [];
+
+    /** @var list<ParamResolver> */
+    private array $wsParamResolvers = [];
 
     private ?ContainerInterface $container = null;
 
@@ -129,6 +137,10 @@ final class WsApplication implements Application
     public function paramResolver(ParamResolver $resolver, bool $override = false): self
     {
         $this->inner->paramResolver($resolver, $override);
+
+        // Shared with the WebSocket HandlerInstantiator so attribute-driven
+        // resolution (e.g. #[FromPrincipal]) works identically on WS handlers.
+        $this->wsParamResolvers[] = $resolver;
 
         return $this;
     }
@@ -236,20 +248,46 @@ final class WsApplication implements Application
             $router,
             $table,
             new ChannelActorRegistry($this->system, $this->logger),
-            new HandlerInstantiator($container, $this->logger),
+            new HandlerInstantiator($container, $this->logger, userResolvers: $this->wsParamResolvers),
+            $this->logger,
+        );
+        $gate = new HandshakeGate(
+            $router,
+            $this->wsMiddleware,
+            new MiddlewareResolver($this->container),
             $this->logger,
         );
 
-        return new CompiledWsApplication($compiledHttp, $router, $dispatcher, $container);
+        return new CompiledWsApplication($compiledHttp, $router, $dispatcher, $container, $gate);
     }
 
     // ============ WebSocket DSL additions ============
 
-    /** @param class-string<WebSocketHandler> $handlerClass */
-    public function ws(string $path, string $handlerClass): self
+    /**
+     * Append a PSR-15 middleware applied to EVERY WebSocket upgrade request,
+     * before per-route middleware, by the pre-upgrade HandshakeGate. Use this
+     * for AuthenticationMiddleware/AuthorizationMiddleware so WebSocket routes
+     * share the HTTP auth pipeline and reject unauthorized connections before
+     * the 101 switch.
+     *
+     * @param MiddlewareInterface|class-string<MiddlewareInterface> $middleware
+     */
+    public function wsMiddleware(MiddlewareInterface|string $middleware): self
+    {
+        $this->wsMiddleware[] = $middleware;
+
+        return $this;
+    }
+
+    /**
+     * @param class-string<WebSocketHandler> $handlerClass
+     * @param list<MiddlewareInterface|class-string<MiddlewareInterface>> $middleware
+     *        Per-route middleware run by the HandshakeGate before the upgrade.
+     */
+    public function ws(string $path, string $handlerClass, array $middleware = []): self
     {
         $this->guardDuplicate($path);
-        $this->wsRoutes[] = WebSocketRoute::handler($path, $handlerClass);
+        $this->wsRoutes[] = WebSocketRoute::handler($path, $handlerClass, $middleware);
 
         return $this;
     }
@@ -261,15 +299,22 @@ final class WsApplication implements Application
      *        a factory when the channel actor needs dependencies (e.g. an
      *        EntityRefFactory or a repository) that DI would otherwise
      *        supply on an HTTP handler.
+     * @param list<MiddlewareInterface|class-string<MiddlewareInterface>> $middleware
+     *        Per-route middleware run by the HandshakeGate before the upgrade.
      */
-    public function channel(string $path, string $actorClass, string $key, ?Closure $factory = null): self
-    {
+    public function channel(
+        string $path,
+        string $actorClass,
+        string $key,
+        ?Closure $factory = null,
+        array $middleware = [],
+    ): self {
         if ($key === '') {
             throw new InvalidArgumentException("WsApplication::channel('{$path}') requires a non-empty key parameter.");
         }
 
         $this->guardDuplicate($path);
-        $this->wsRoutes[] = WebSocketRoute::channel($path, $actorClass, $key, $factory);
+        $this->wsRoutes[] = WebSocketRoute::channel($path, $actorClass, $key, $factory, $middleware);
 
         return $this;
     }

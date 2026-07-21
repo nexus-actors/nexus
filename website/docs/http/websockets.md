@@ -10,8 +10,8 @@ related:
 
 # WebSockets
 
-:::caution Experimental
-WebSocket support is experimental and not yet production-hardened. In particular, the WebSocket upgrade currently bypasses the HTTP auth middleware pipeline — enforce authentication outside Nexus (e.g. at a reverse proxy) until this is fixed.
+:::note Pre-upgrade authorization
+WebSocket upgrades are authorized **before** the 101 protocol switch. The handshake gate runs the same PSR-15 auth middleware used on HTTP routes against the upgrade request; unauthorized connections are rejected with plain HTTP status codes (401/403/404) on the not-yet-upgraded connection. See [Auth — WebSocket auth](./auth.md#websocket-auth) for wiring.
 :::
 
 The [`nexus-http-ws`](../packages/http-ws.md) package adds WebSocket routes to the HTTP application. Two flavours of route are available:

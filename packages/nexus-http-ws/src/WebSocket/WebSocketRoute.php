@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Ws\WebSocket;
 
 use Closure;
+use Psr\Http\Server\MiddlewareInterface;
 
 /** @psalm-api */
 final readonly class WebSocketRoute
@@ -18,6 +19,9 @@ final readonly class WebSocketRoute
      *        factory for channel actors that need constructor-injected
      *        dependencies. When null, the dispatcher calls `new $actorClass()`
      *        (zero-arg construction).
+     * @param list<MiddlewareInterface|class-string<MiddlewareInterface>> $middleware
+     *        Per-route PSR-15 middleware run by the HandshakeGate against the
+     *        upgrade request BEFORE the 101 switch (after global WS middleware).
      */
     public function __construct(
         public string $mode,
@@ -25,20 +29,30 @@ final readonly class WebSocketRoute
         public string $targetClass,
         public ?string $keyFrom,
         public ?Closure $channelFactory = null,
+        public array $middleware = [],
     ) {}
 
-    /** @param class-string $handlerClass */
-    public static function handler(string $path, string $handlerClass): self
+    /**
+     * @param class-string $handlerClass
+     * @param list<MiddlewareInterface|class-string<MiddlewareInterface>> $middleware
+     */
+    public static function handler(string $path, string $handlerClass, array $middleware = []): self
     {
-        return new self(self::MODE_HANDLER, $path, $handlerClass, null);
+        return new self(self::MODE_HANDLER, $path, $handlerClass, null, null, $middleware);
     }
 
     /**
      * @param class-string $actorClass
      * @param ?Closure(): WebSocketChannelActor $factory
+     * @param list<MiddlewareInterface|class-string<MiddlewareInterface>> $middleware
      */
-    public static function channel(string $path, string $actorClass, string $keyFrom, ?Closure $factory = null): self
-    {
-        return new self(self::MODE_CHANNEL, $path, $actorClass, $keyFrom, $factory);
+    public static function channel(
+        string $path,
+        string $actorClass,
+        string $keyFrom,
+        ?Closure $factory = null,
+        array $middleware = [],
+    ): self {
+        return new self(self::MODE_CHANNEL, $path, $actorClass, $keyFrom, $factory, $middleware);
     }
 }
