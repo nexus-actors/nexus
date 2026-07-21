@@ -100,12 +100,26 @@ final class ConnectionPool
         $heldNanos = hrtime(true) - $meta['takenAt'];
         $this->inUse->offsetUnset($conn);
 
-        if ($poison || $this->closed) {
+        // Decide whether this connection is safe to reuse. A connection that
+        // is discarded anyway (caller-poisoned or closing pool) is not
+        // sanitized. Otherwise it is rolled back and reset BEFORE requeue so
+        // the next borrower — possibly a different tenant/request — never
+        // inherits an open transaction, session role, search_path, SET
+        // variables, temp tables, or advisory locks. A sanitize that itself
+        // fails poisons the connection rather than leaking dirty state.
+        $reason = match (true) {
+            $poison => 'caller',
+            $this->closed => 'closed-pool',
+            !$this->sanitize($conn) => 'cleanup-failed',
+            default => null,
+        };
+
+        if ($reason !== null) {
             $this->total--;
             $this->safeClose($conn);
 
             if ($this->events !== null) {
-                $this->events->dispatch(new ConnectionPoisonedEvent($this->name, $poison ? 'caller' : 'closed-pool'));
+                $this->events->dispatch(new ConnectionPoisonedEvent($this->name, $reason));
                 $this->events->dispatch(new ConnectionDestroyed($this->name));
             }
 
@@ -312,6 +326,35 @@ final class ConnectionPool
     {
         if ($this->events !== null) {
             $this->events->dispatch(new ConnectionDestroyed($this->name));
+        }
+    }
+
+    /**
+     * Reset a released connection to a clean state before it is reused.
+     * Rolls back any active transaction unconditionally, then runs the
+     * configured reset query (if any) to clear per-session state. Returns
+     * false if cleanup fails, signalling the caller to poison the connection
+     * instead of returning tainted state to the pool.
+     */
+    private function sanitize(Connection $conn): bool
+    {
+        try {
+            if ($conn->isTransactionActive()) {
+                $conn->rollBack();
+            }
+
+            if ($this->config->resetQuery !== null) {
+                $conn->executeStatement($this->config->resetQuery);
+            }
+
+            return true;
+        } catch (Throwable $e) {
+            $this->logger->warning(
+                'Failed to sanitize connection in pool "{pool}"; poisoning it: {error}',
+                ['error' => $e->getMessage(), 'pool' => $this->name],
+            );
+
+            return false;
         }
     }
 

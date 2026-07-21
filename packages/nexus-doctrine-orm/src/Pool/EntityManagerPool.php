@@ -141,6 +141,18 @@ final class EntityManagerPool
             return;
         }
 
+        // Roll back any transaction left open on the EM's underlying connection
+        // before the EM is reused: the ORM shares that connection, so a later
+        // borrow (possibly a different tenant/request) must not inherit an open
+        // transaction. A rollback that fails poisons the EM rather than
+        // requeueing dirty state. The identity map is cleared on the next
+        // lendFromIdle() when clearOnReturn is enabled.
+        if (!$this->rollbackActiveTransaction($em)) {
+            $this->destroy($em, 'cleanup-failed');
+
+            return;
+        }
+
         $accepted = $this->idle->push($em);
 
         if (!$accepted) {
@@ -198,6 +210,26 @@ final class EntityManagerPool
     public function name(): string
     {
         return $this->name;
+    }
+
+    private function rollbackActiveTransaction(PooledEntityManager $em): bool
+    {
+        try {
+            $connection = $em->getConnection();
+
+            if ($connection->isTransactionActive()) {
+                $connection->rollBack();
+            }
+
+            return true;
+        } catch (Throwable $e) {
+            $this->logger->warning(
+                'Failed to roll back EM connection on release; poisoning it: {error}',
+                ['error' => $e->getMessage()],
+            );
+
+            return false;
+        }
     }
 
     private function createAndBorrow(): PooledEntityManager

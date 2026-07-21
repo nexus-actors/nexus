@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit\Pool;
 
+use Doctrine\DBAL\Connection;
 use Monadial\Nexus\Doctrine\Dbal\Exception\PoolClosedException;
 use Monadial\Nexus\Doctrine\Dbal\Exception\PoolExhaustedException;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
@@ -210,5 +211,163 @@ final class ConnectionPoolTest extends TestCase
 
         $this->expectException(PoolClosedException::class);
         $pool->take();
+    }
+
+    // ========================================================================
+    // Connections are sanitized before reuse (SEC-005)
+    // ========================================================================
+
+    #[Test]
+    public function releaseRollsBackAnActiveTransactionBeforeRequeue(): void
+    {
+        $conn = $this->createMock(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(true);
+        $conn->expects(self::once())->method('rollBack');
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'tenant-a',
+            factory: $factory,
+            config: new PoolConfig(max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+
+        $borrowed = $pool->take();
+        $pool->release($borrowed);
+
+        // Sanitized, not poisoned: returned to the idle pool for reuse.
+        self::assertSame(1, $pool->stats()->idle);
+        self::assertSame(1, $pool->stats()->total);
+    }
+
+    #[Test]
+    public function releaseRunsTheConfiguredResetQuery(): void
+    {
+        $conn = $this->createMock(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(false);
+        $conn->expects(self::once())
+            ->method('executeStatement')
+            ->with('DISCARD ALL')
+            ->willReturn(0);
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'tenant-a',
+            factory: $factory,
+            config: new PoolConfig(max: 1, minIdle: 0, resetQuery: 'DISCARD ALL'),
+            channel: new FiberChannel(1),
+        );
+
+        $pool->release($pool->take());
+
+        self::assertSame(1, $pool->stats()->idle);
+    }
+
+    #[Test]
+    public function releasePoisonsWhenRollbackFails(): void
+    {
+        $conn = $this->createStub(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(true);
+        $conn->method('rollBack')->willThrowException(new RuntimeException('rollback failed'));
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'tenant-a',
+            factory: $factory,
+            config: new PoolConfig(max: 2, minIdle: 0),
+            channel: new FiberChannel(2),
+        );
+
+        $pool->release($pool->take());
+
+        // Cleanup failed → connection discarded, never returned to the pool.
+        self::assertSame(0, $pool->stats()->idle);
+        self::assertSame(0, $pool->stats()->total);
+    }
+
+    #[Test]
+    public function releasePoisonsWhenResetQueryFails(): void
+    {
+        $conn = $this->createStub(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(false);
+        $conn->method('executeStatement')->willThrowException(new RuntimeException('reset failed'));
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'tenant-a',
+            factory: $factory,
+            config: new PoolConfig(max: 1, minIdle: 0, resetQuery: 'DISCARD ALL'),
+            channel: new FiberChannel(1),
+        );
+
+        $pool->release($pool->take());
+
+        self::assertSame(0, $pool->stats()->idle);
+        self::assertSame(0, $pool->stats()->total);
+    }
+
+    #[Test]
+    public function cleanReleaseDoesNotRollBackAndIsReused(): void
+    {
+        $conn = $this->createMock(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(false);
+        $conn->expects(self::never())->method('rollBack');
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'tenant-a',
+            factory: $factory,
+            config: new PoolConfig(max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+
+        $pool->release($pool->take());
+
+        self::assertSame(1, $pool->stats()->idle);
+        self::assertSame($conn, $pool->take());
+    }
+
+    #[Test]
+    public function sequentialTenantBorrowsGetSanitizedConnections(): void
+    {
+        // Tenant A leaves an open transaction and dirty session state; on
+        // release it is rolled back and reset. Tenant B (same pool, next
+        // borrow) receives the same physical connection already sanitized.
+        $conn = $this->createMock(Connection::class);
+        $conn->method('isTransactionActive')->willReturn(true);
+        $conn->expects(self::once())->method('rollBack');
+        $conn->expects(self::once())
+            ->method('executeStatement')
+            ->with('RESET ALL')
+            ->willReturn(0);
+
+        $factory = new StubConnectionFactory();
+        $factory->prepend($conn);
+
+        $pool = new ConnectionPool(
+            name: 'shared',
+            factory: $factory,
+            config: new PoolConfig(max: 1, minIdle: 0, resetQuery: 'RESET ALL'),
+            channel: new FiberChannel(1),
+        );
+
+        $tenantA = $pool->take();
+        $pool->release($tenantA); // sanitized here (rollBack + RESET ALL)
+
+        $tenantB = $pool->take(); // reuses the sanitized connection
+
+        self::assertSame($conn, $tenantB);
+        self::assertSame(1, $factory->creations, 'connection reused, not recreated');
+        // tenantB left borrowed: asserting a single sanitize on the A→B handover.
     }
 }
