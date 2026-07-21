@@ -54,6 +54,7 @@ Idempotent. Calls `Swoole\Runtime::enableCoroutine(SWOOLE_HOOK_ALL)` when Swoole
 | `acquireTtl` | `Duration::seconds(30)` | Warn on borrows held longer than this — leak detection. |
 | `healthCheckOnBorrow` | `false` | `SELECT 1` on borrow if the connection has been idle past threshold. Costs one RTT. |
 | `validationQuery` | `'SELECT 1'` | Driver-overridable validation query. |
+| `resetQuery` | `null` | SQL run on every release to clear per-session state (roles, `search_path`, `SET` vars, temp tables, advisory locks) before reuse — e.g. `'DISCARD ALL'` or `'RESET ALL'` on PostgreSQL. **Required for multi-tenant or session-role deployments.** An active transaction is always rolled back regardless. |
 
 Validation rules: `max > 0`, `minIdle <= max`.
 
@@ -71,7 +72,13 @@ Throws `PoolClosedException` if the pool has been closed. Throws `PoolExhaustedE
 
 ### `release(Connection $conn, bool $poison = false): void`
 
-Returns the connection to the idle channel. If `poison: true`, the connection is destroyed — the next `take()` creates a fresh one. Use `poison: true` when you observe a network or protocol error that may have left the connection in a corrupt state.
+Sanitizes and returns the connection to the idle channel. Before requeue, `release()` **rolls back any active transaction unconditionally** and, if `resetQuery` is configured, runs it to clear per-session state — so the next borrower (possibly a different tenant or request) can never inherit an open transaction, session role, `search_path`, `SET` variables, temp tables, or advisory locks. If that cleanup itself fails, the connection is **poisoned** (destroyed) rather than requeued with dirty state.
+
+If `poison: true`, the connection is destroyed without sanitizing — the next `take()` creates a fresh one. Use `poison: true` when you observe a network or protocol error that may have left the connection in a corrupt state.
+
+### Multi-tenant deployments
+
+The pool is keyed by its `name`. When different trust domains (tenants, roles) share a database server, either give each tenant its **own** named pool, or set `resetQuery` (e.g. `'DISCARD ALL'`) so a connection is fully reset between borrows. Without one of these, session-scoped state set by one tenant can be observed by the next — the transaction rollback alone does not clear roles or `search_path`. The `nexus-doctrine-orm` `EntityManagerPool` applies the same transaction-rollback-on-release and clears the identity map on reuse (`clearOnReturn`).
 
 SQL errors do not poison. A unique-constraint violation or syntax error is a caller bug, not a connection bug; the connection itself is still healthy. The HTTP `ConnectionScopeMiddleware` only poisons on `Doctrine\DBAL\Exception` (the documented root for connection-state-corrupting errors). Domain and HTTP exceptions (validation, 404s) release the connection back to the pool intact, so a single buggy handler cannot shrink the pool.
 

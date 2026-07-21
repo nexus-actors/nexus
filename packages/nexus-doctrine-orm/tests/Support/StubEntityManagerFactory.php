@@ -40,7 +40,7 @@ final class StubEntityManagerFactory implements EntityManagerFactory
         }
 
         /**
-         * @var EntityManagerInterface $mock
+         * @var EntityManagerInterface&\PHPUnit\Framework\MockObject\MockObject $mock
          */
         $mock = (new Generator())->testDouble(
             EntityManagerInterface::class,
@@ -50,6 +50,15 @@ final class StubEntityManagerFactory implements EntityManagerFactory
             '',
             false,
         );
+
+        // release() sanitizes the EM's underlying connection, so the double
+        // must expose a clean connection with no active transaction.
+        /**
+         * @var Connection&\PHPUnit\Framework\MockObject\MockObject $conn
+         */
+        $conn = (new Generator())->testDouble(Connection::class, true, null, [], '', false);
+        $conn->method('isTransactionActive')->willReturn(false);
+        $mock->method('getConnection')->willReturn($conn);
 
         return $mock;
     }
