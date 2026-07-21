@@ -10,7 +10,7 @@ related:
 
 Adding a new package to the Nexus monorepo requires updating multiple files. This checklist covers every location that must change. Missing any one of them will result in a broken CI pipeline, failed splits, or missing Packagist publication.
 
-The monorepo currently has **24 packages** under `packages/`:
+The monorepo currently has **41 packages** under `packages/`:
 
 `nexus`, `nexus-app`, `nexus-cluster`, `nexus-core`, `nexus-doctrine-dbal`, `nexus-doctrine-orm`, `nexus-http`, `nexus-http-auth`, `nexus-http-server-swoole`, `nexus-http-server-swoole-threads`, `nexus-http-toolkit`, `nexus-http-ws`, `nexus-logger`, `nexus-persistence`, `nexus-persistence-dbal`, `nexus-persistence-doctrine`, `nexus-psalm`, `nexus-runtime`, `nexus-runtime-fiber`, `nexus-runtime-step`, `nexus-runtime-swoole`, `nexus-serialization`, `nexus-worker-pool`, `nexus-worker-pool-swoole`.
 
@@ -71,7 +71,7 @@ Run `make install` after editing to regenerate `composer.lock`.
 
 ### 3. Update affected `packages/*/composer.json` files
 
-If any existing package depends on your new package, add it to that package's `require` section. There are 24 `composer.json` files total — check each one that is logically related to your package's functionality.
+If any existing package depends on your new package, add it to that package's `require` section. There are 41 `composer.json` files total — check each one that is logically related to your package's functionality.
 
 ### 4. Update `deptrac.yaml`
 
@@ -128,7 +128,7 @@ Add the page to `website/sidebars.js` under the appropriate Packages sub-categor
 |---|---|
 | `packages/nexus-my-package/` | Create directory with `src/`, `tests/`, `composer.json`, `README.md` |
 | `composer.json` (root) | Add path repository + `require`/`require-dev` entry |
-| `packages/*/composer.json` | Add dependency where needed (up to 24 files) |
+| `packages/*/composer.json` | Add dependency where needed (up to 41 files) |
 | `deptrac.yaml` | Add layer + ruleset entries |
 | `.github/workflows/split.yml` | Add matrix entry |
 | `website/docs/intro.md` | Add row to packages table |

@@ -9,11 +9,19 @@ on:
     paths:
       - 'packages/nexus-skeleton/**'
       - 'packages/nexus-maker/**'
+      - 'packages/nexus-core/**'
+      - 'packages/nexus-app/**'
+      - 'packages/nexus-runtime/**'
+      - 'packages/nexus-runtime-fiber/**'
       - '.github/workflows/skeleton-smoke.yml'
   pull_request:
     paths:
       - 'packages/nexus-skeleton/**'
       - 'packages/nexus-maker/**'
+      - 'packages/nexus-core/**'
+      - 'packages/nexus-app/**'
+      - 'packages/nexus-runtime/**'
+      - 'packages/nexus-runtime-fiber/**'
       - '.github/workflows/skeleton-smoke.yml'
   workflow_dispatch:
 
