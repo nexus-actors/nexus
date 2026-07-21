@@ -66,3 +66,4 @@ jobs:
           php -l src/Actor/SmokeActor.php
           timeout 10 php bin/console run > run.log 2>&1 || test $? -eq 124
           grep "Booting Nexus actor system" run.log
+          grep "Hello, Nexus" run.log

@@ -212,6 +212,30 @@ final class MakeCommandsTest extends TestCase
     }
 
     #[Test]
+    public function maker_honors_recorded_minimal_architecture(): void
+    {
+        file_put_contents($this->dir . '/composer.json', '{"extra": {"nexus": {"architecture": "minimal"}}}');
+
+        $tester = $this->runCommand('make:actor', ['name' => 'Payment']);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertFileExists($this->dir . '/src/Actor/PaymentActor.php');
+    }
+
+    #[Test]
+    public function maker_rejects_unknown_architecture(): void
+    {
+        file_put_contents($this->dir . '/composer.json', '{"extra": {"nexus": {"architecture": "ddd"}}}');
+
+        $tester = $this->runCommand('make:actor', ['name' => 'Payment']);
+
+        self::assertSame(1, $tester->getStatusCode());
+        self::assertStringContainsString('Unknown architecture "ddd"', $tester->getDisplay());
+        self::assertStringContainsString('supports: minimal', $tester->getDisplay());
+        self::assertFileDoesNotExist($this->dir . '/src/Actor/PaymentActor.php');
+    }
+
+    #[Test]
     public function make_message_generates_readonly_class(): void
     {
         $tester = $this->runCommand('make:message', ['name' => 'OrderPlaced']);

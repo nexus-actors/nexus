@@ -29,14 +29,37 @@ final class SetupCommandTest extends TestCase
             'FiberRuntime',
             (string) file_get_contents($this->dir . '/config/packages/runtime.php'),
         );
+
+        /** @var array{extra: array{nexus: array{architecture: string}}} $composer */
+        $composer = json_decode((string) file_get_contents($this->dir . '/composer.json'), true);
+        self::assertSame('minimal', $composer['extra']['nexus']['architecture']);
+    }
+
+    #[Test]
+    public function swoole_without_extension_falls_back_to_fiber(): void
+    {
+        $tester = $this->tester(swooleLoaded: false);
+        // architecture=default, runtime=swoole, "install anyway?"=no -> fiber,
+        // persistence=none, observability=none, cluster=no, messenger=no
+        $tester->setInputs(['', 'swoole', 'no', 'none', 'none', 'no', 'no']);
+        $tester->execute([]);
+
+        $tester->assertCommandIsSuccessful();
+        self::assertStringContainsString('ext-swoole >= 6.2.1 is not loaded', $tester->getDisplay());
+        self::assertStringContainsString('Falling back to the Fiber runtime.', $tester->getDisplay());
+        self::assertSame([], $this->required);
+        self::assertStringContainsString(
+            'FiberRuntime',
+            (string) file_get_contents($this->dir . '/config/packages/runtime.php'),
+        );
     }
 
     #[Test]
     public function swoole_choice_overwrites_runtime_config_and_requires_package(): void
     {
         $tester = $this->tester();
-        // runtime=swoole, http=no, persistence=none, observability=none, cluster=no, messenger=no
-        $tester->setInputs(['swoole', 'no', 'none', 'none', 'no', 'no']);
+        // architecture=default, runtime=swoole, http=no, persistence=none, observability=none, cluster=no, messenger=no
+        $tester->setInputs(['', 'swoole', 'no', 'none', 'none', 'no', 'no']);
         $tester->execute([]);
 
         $tester->assertCommandIsSuccessful();
@@ -53,7 +76,7 @@ final class SetupCommandTest extends TestCase
         $tester = $this->tester();
         // runtime=fiber, persistence=memory (stable, no warning), observability=none,
         // cluster=yes (experimental, warns), messenger=no
-        $tester->setInputs(['fiber', 'memory', 'none', 'yes', 'no']);
+        $tester->setInputs(['', 'fiber', 'memory', 'none', 'yes', 'no']);
         $tester->execute([]);
 
         $tester->assertCommandIsSuccessful();
@@ -69,7 +92,7 @@ final class SetupCommandTest extends TestCase
     {
         $tester = $this->tester();
         // runtime=fiber → no http question: persistence=none, observability=none, cluster=no, messenger=no
-        $tester->setInputs(['fiber', 'none', 'none', 'no', 'no']);
+        $tester->setInputs(['', 'fiber', 'none', 'none', 'no', 'no']);
         $tester->execute([]);
 
         $tester->assertCommandIsSuccessful();
@@ -82,7 +105,7 @@ final class SetupCommandTest extends TestCase
         file_put_contents($this->dir . '/config/packages/cluster.php', "<?php return ['keep' => true];\n");
 
         $tester = $this->tester();
-        $tester->setInputs(['fiber', 'none', 'none', 'yes', 'no']);
+        $tester->setInputs(['', 'fiber', 'none', 'none', 'yes', 'no']);
         $tester->execute([]);
 
         self::assertStringContainsString(
@@ -112,10 +135,11 @@ final class SetupCommandTest extends TestCase
         $this->dir = sys_get_temp_dir() . '/nexus-setup-' . uniqid();
         mkdir($this->dir . '/config/packages', 0o777, true);
         file_put_contents($this->dir . '/config/packages/runtime.php', "<?php return static fn() => null;\n");
+        file_put_contents($this->dir . '/composer.json', "{\n    \"name\": \"acme/app\"\n}\n");
         $this->required = [];
     }
 
-    private function tester(): CommandTester
+    private function tester(bool $swooleLoaded = true): CommandTester
     {
         $runner = function (array $packages): int {
             $this->required[] = $packages;
@@ -123,6 +147,12 @@ final class SetupCommandTest extends TestCase
             return 0;
         };
 
-        return new CommandTester(new SetupCommand($runner, $this->dir));
+        return new CommandTester(new SetupCommand(
+            $runner,
+            $this->dir,
+            static fn(string $extension): bool => $extension === 'swoole'
+                ? $swooleLoaded
+                : extension_loaded($extension),
+        ));
     }
 }

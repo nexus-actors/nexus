@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nexus\Maker;
 
+use InvalidArgumentException;
 use Nette\PhpGenerator\PhpFile;
 use Nette\PhpGenerator\PsrPrinter;
 use Override;
@@ -87,6 +88,14 @@ final class MakeActorCommand extends Command
         $type = $this->resolveType($input, $io);
 
         if ($type === null) {
+            return Command::FAILURE;
+        }
+
+        try {
+            ProjectArchitecture::resolve($this->projectDir);
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
             return Command::FAILURE;
         }
 
