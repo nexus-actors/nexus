@@ -18,13 +18,17 @@ Every actor has a mailbox — a queue that buffers incoming messages until the a
 
 ### Unbounded mailbox
 
-The default. No capacity limit; the mailbox grows as needed.
+The default. No configured capacity limit; the mailbox grows as needed.
 
 ```php title="src/Actor/UnboundedExample.php"
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
 
 $config = MailboxConfig::unbounded();
 ```
+
+:::note Swoole physical capacity
+On the Swoole runtime, "unbounded" mailboxes are backed by a coroutine channel with a physical capacity of **65,536 messages** (exposed as `SwooleMailbox::$effectiveCapacity`). Admission is truthful: reaching the physical cap throws `MailboxOverflowException` rather than silently losing messages, and `isFull()` reports the real channel state. The Fiber runtime's unbounded mailbox has no such cap.
+:::
 
 ### Bounded mailbox
 

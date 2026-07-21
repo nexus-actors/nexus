@@ -428,6 +428,7 @@ All exceptions extend `NexusException` (abstract, extends `RuntimeException`):
 - `ActorInitializationException` — Setup/startup failed
 - `ActorNameExistsException` — Duplicate child name in spawn
 - `AskTimeoutException` — Request-response timeout
+- `AskUndeliverableException` — Ask message dropped/backpressured by the mailbox; fails the future immediately
 - `MailboxClosedException` — Enqueue/dequeue on closed mailbox
 - `MailboxOverflowException` — Bounded queue at capacity with ThrowException strategy
 - `InvalidActorStateTransition` — Invalid lifecycle state change

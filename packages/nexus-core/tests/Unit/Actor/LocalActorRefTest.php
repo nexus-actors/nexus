@@ -6,10 +6,12 @@ namespace Monadial\Nexus\Core\Tests\Unit\Actor;
 
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
+use Monadial\Nexus\Core\Exception\AskUndeliverableException;
 use Monadial\Nexus\Core\Tests\Support\TestMailbox;
 use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -142,5 +144,53 @@ final class LocalActorRefTest extends TestCase
         self::assertSame($envelope->requestId, $envelope->correlationId);
         self::assertSame($envelope->requestId, $envelope->causationId);
         self::assertFalse($future->isResolved());
+    }
+
+    // ========================================================================
+    // Asks fail immediately when the mailbox refuses the message (REL-001)
+    // ========================================================================
+
+    #[Test]
+    public function ask_fails_immediately_when_mailbox_backpressures(): void
+    {
+        $mailbox = TestMailbox::bounded(1, OverflowStrategy::Backpressure);
+        $ref = $this->refFor($mailbox);
+        $ref->tell(new stdClass()); // fill to capacity
+
+        $future = $ref->ask(new stdClass(), Duration::seconds(5));
+
+        // The future must fail without waiting for the 5s timeout.
+        self::assertTrue($future->isResolved());
+
+        $this->expectException(AskUndeliverableException::class);
+        $this->expectExceptionMessage('backpressured');
+        $future->await();
+    }
+
+    #[Test]
+    public function ask_fails_immediately_when_mailbox_drops(): void
+    {
+        $mailbox = TestMailbox::bounded(1, OverflowStrategy::DropNewest);
+        $ref = $this->refFor($mailbox);
+        $ref->tell(new stdClass()); // fill to capacity
+
+        $future = $ref->ask(new stdClass(), Duration::seconds(5));
+
+        self::assertTrue($future->isResolved());
+
+        $this->expectException(AskUndeliverableException::class);
+        $this->expectExceptionMessage('dropped');
+        $future->await();
+    }
+
+    private function refFor(TestMailbox $mailbox): LocalActorRef
+    {
+        return new LocalActorRef(
+            ActorPath::fromString('/user/service'),
+            $mailbox,
+            static fn(): bool => true,
+            new TestRuntime(),
+            new NoopObservability(),
+        );
     }
 }

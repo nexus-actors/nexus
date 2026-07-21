@@ -21,6 +21,13 @@ use Swoole\Coroutine\Channel;
 /**
  * Swoole-backed mailbox using a Swoole\Coroutine\Channel for message passing.
  *
+ * "Unbounded" configs are physically capped by the channel at 65,536 slots
+ * (exposed via {@see SwooleMailbox::$effectiveCapacity}). Admission is
+ * truthful: every push result is inspected, and a full channel surfaces the
+ * configured overflow strategy — for unbounded configs that strategy is
+ * ThrowException, so hitting the physical cap throws MailboxOverflowException
+ * instead of silently losing the message.
+ *
  * On close(), remaining messages are drained from the channel into an internal
  * SplQueue backup so they can still be dequeued after the channel is closed.
  *
@@ -39,6 +46,9 @@ final class SwooleMailbox implements Mailbox
     /** Minimum positive timeout for non-blocking Channel operations (seconds). */
     private const float NON_BLOCKING_TIMEOUT = 0.001;
 
+    /** The real slot count of the underlying channel, also for "unbounded" configs. */
+    public readonly int $effectiveCapacity;
+
     private Channel $channel;
 
     private bool $closed = false;
@@ -48,11 +58,11 @@ final class SwooleMailbox implements Mailbox
 
     public function __construct(private readonly MailboxConfig $config)
     {
-        $capacity = $this->config->bounded
+        $this->effectiveCapacity = $this->config->bounded
             ? $this->config->capacity
             : self::UNBOUNDED_CAPACITY;
 
-        $this->channel = new Channel($capacity);
+        $this->channel = new Channel($this->effectiveCapacity);
 
         /** @var SplQueue<T> $queue */
         $queue = new SplQueue();
@@ -71,18 +81,19 @@ final class SwooleMailbox implements Mailbox
             throw new MailboxClosedException();
         }
 
-        if ($this->config->bounded && $this->channel->length() >= $this->config->capacity) {
+        if ($this->channel->length() >= $this->effectiveCapacity) {
             return $this->handleOverflow($message);
         }
 
         if (Coroutine::getCid() === -1) {
             // Outside coroutine context (e.g. Swoole WorkerStop hook).
             // Channel::push() requires a coroutine to suspend in, so wrap
-            // the push in a fresh one. Caller sees Accepted immediately;
-            // the push lands asynchronously inside the new coroutine.
-            // The only producer that runs out-of-coroutine is the shutdown
-            // sequence broadcasting PoisonPill — message ordering across
-            // the no-coroutine window doesn't matter for that.
+            // the push in a fresh one. Accepted is best-effort here: the
+            // fullness pre-check above already ran, and the push lands
+            // asynchronously inside the new coroutine. The only producer
+            // that runs out-of-coroutine is the shutdown sequence
+            // broadcasting PoisonPill — message ordering across the
+            // no-coroutine window doesn't matter for that.
             $channel = $this->channel;
             $nonBlockingTimeout = self::NON_BLOCKING_TIMEOUT;
             Coroutine::create(static function () use ($channel, $message, $nonBlockingTimeout): void {
@@ -92,9 +103,7 @@ final class SwooleMailbox implements Mailbox
             return EnqueueResult::Accepted;
         }
 
-        $this->channel->push($message, self::NON_BLOCKING_TIMEOUT);
-
-        return EnqueueResult::Accepted;
+        return $this->pushInspected($message);
     }
 
     /** @return T|null */
@@ -174,15 +183,11 @@ final class SwooleMailbox implements Mailbox
     #[Override]
     public function isFull(): bool
     {
-        if (!$this->config->bounded) {
-            return false;
-        }
-
         if ($this->closed) {
-            return $this->drainQueue->count() >= $this->config->capacity;
+            return $this->drainQueue->count() >= $this->effectiveCapacity;
         }
 
-        return $this->channel->length() >= $this->config->capacity;
+        return $this->channel->length() >= $this->effectiveCapacity;
     }
 
     #[Override]
@@ -226,6 +231,35 @@ final class SwooleMailbox implements Mailbox
     }
 
     /**
+     * Push with the result inspected: a failed push never reports Accepted.
+     * A push that loses the fullness race maps to the overflow strategy
+     * without retrying (DropOldest degrades to Dropped rather than looping).
+     *
+     * @param T $message
+     * @throws MailboxClosedException
+     * @throws MailboxOverflowException
+     */
+    private function pushInspected(object $message): EnqueueResult
+    {
+        if ($this->channel->push($message, self::NON_BLOCKING_TIMEOUT)) {
+            return EnqueueResult::Accepted;
+        }
+
+        if ($this->channel->errCode === SWOOLE_CHANNEL_CLOSED) {
+            throw new MailboxClosedException();
+        }
+
+        return match ($this->config->strategy) {
+            OverflowStrategy::DropNewest, OverflowStrategy::DropOldest => EnqueueResult::Dropped,
+            OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
+            OverflowStrategy::ThrowException => throw new MailboxOverflowException(
+                $this->effectiveCapacity,
+                $this->config->strategy,
+            ),
+        };
+    }
+
+    /**
      * @throws MailboxOverflowException
      */
     /**
@@ -238,7 +272,7 @@ final class SwooleMailbox implements Mailbox
             OverflowStrategy::DropOldest => $this->dropOldestAndEnqueue($message),
             OverflowStrategy::Backpressure => EnqueueResult::Backpressured,
             OverflowStrategy::ThrowException => throw new MailboxOverflowException(
-                $this->config->capacity,
+                $this->effectiveCapacity,
                 $this->config->strategy,
             ),
         };
@@ -249,10 +283,15 @@ final class SwooleMailbox implements Mailbox
      */
     private function dropOldestAndEnqueue(object $message): EnqueueResult
     {
-        // Pop the oldest message (non-blocking)
-        $this->channel->pop(self::NON_BLOCKING_TIMEOUT);
-        // Push the new message
-        $this->channel->push($message, self::NON_BLOCKING_TIMEOUT);
+        // Pop the oldest message (non-blocking); if even that fails, the new
+        // message cannot be admitted — report the drop instead of lying.
+        if ($this->channel->pop(self::NON_BLOCKING_TIMEOUT) === false) {
+            return EnqueueResult::Dropped;
+        }
+
+        if (!$this->channel->push($message, self::NON_BLOCKING_TIMEOUT)) {
+            return EnqueueResult::Dropped;
+        }
 
         return EnqueueResult::Accepted;
     }
