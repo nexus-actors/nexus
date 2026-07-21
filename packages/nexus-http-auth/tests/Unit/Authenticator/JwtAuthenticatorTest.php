@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Auth\Tests\Unit\Authenticator;
 
 use DateInterval;
+use Lcobucci\JWT\Validation\Constraint\IssuedBy;
 use Monadial\Nexus\Http\Auth\Authenticator\JwtAuthenticator;
 use Monadial\Nexus\Http\Auth\Extractor\BearerTokenExtractor;
 use Monadial\Nexus\Http\Auth\Principal;
@@ -113,8 +114,136 @@ final class JwtAuthenticatorTest extends TestCase
         self::assertSame(['admin'], $captured['roles'] ?? null);
     }
 
-    private function makeAuth(): JwtAuthenticator
+    // ========================================================================
+    // Issuer / audience / subject / clock-skew constraints (SEC-006)
+    // ========================================================================
+
+    #[Test]
+    public function rejects_token_from_wrong_issuer(): void
     {
+        $auth = $this->makeAuth(issuers: ['https://auth.example.com']);
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'), issuer: 'https://evil.example.com');
+
+        self::assertNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function rejects_token_missing_required_issuer(): void
+    {
+        $auth = $this->makeAuth(issuers: ['https://auth.example.com']);
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice')); // no iss claim
+
+        self::assertNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function accepts_token_from_configured_issuer(): void
+    {
+        $auth = $this->makeAuth(issuers: ['https://auth.example.com']);
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'), issuer: 'https://auth.example.com');
+
+        self::assertNotNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function accepts_token_from_any_of_multiple_configured_issuers(): void
+    {
+        $auth = $this->makeAuth(issuers: ['https://a.example.com', 'https://b.example.com']);
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'), issuer: 'https://b.example.com');
+
+        self::assertNotNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function rejects_token_for_wrong_audience(): void
+    {
+        $auth = $this->makeAuth(audience: 'orders-api');
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'), audience: 'billing-api');
+
+        self::assertNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function rejects_token_missing_required_audience(): void
+    {
+        $auth = $this->makeAuth(audience: 'orders-api');
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice')); // no aud claim
+
+        self::assertNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function accepts_token_for_configured_audience(): void
+    {
+        $auth = $this->makeAuth(audience: 'orders-api');
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'), audience: 'orders-api');
+
+        self::assertNotNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function rejects_token_with_wrong_subject(): void
+    {
+        $auth = $this->makeAuth(subject: 'service-account');
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice')); // sub = alice
+
+        self::assertNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function accepts_token_with_configured_subject(): void
+    {
+        $auth = $this->makeAuth(subject: 'alice');
+        $token = Fixtures::tokenFor(new SimplePrincipal('alice'));
+
+        self::assertNotNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function unconstrained_authenticator_accepts_any_issuer_and_audience(): void
+    {
+        // Backward-compatible default: no issuer/audience configured -> only
+        // signature + time are enforced (existing behavior).
+        $auth = $this->makeAuth();
+        $token = Fixtures::tokenFor(
+            new SimplePrincipal('alice'),
+            issuer: 'https://whoever.example.com',
+            audience: 'any-api',
+        );
+
+        self::assertNotNull($auth->authenticate($this->reqWithToken($token->toString())));
+    }
+
+    #[Test]
+    public function honors_constraints_configured_on_the_jwt_configuration(): void
+    {
+        // The Configuration itself carries an IssuedBy constraint; the
+        // authenticator must merge and enforce it even without explicit args.
+        $config = Fixtures::hs256Config();
+        $config->setValidationConstraints(new IssuedBy('https://auth.example.com'));
+
+        $auth = new JwtAuthenticator(
+            $config,
+            new BearerTokenExtractor(),
+            static fn($token) => new SimplePrincipal((string) $token->claims()->get('sub')),
+        );
+
+        $wrong = Fixtures::tokenFor(new SimplePrincipal('alice'), issuer: 'https://evil.example.com');
+        $right = Fixtures::tokenFor(new SimplePrincipal('alice'), issuer: 'https://auth.example.com');
+
+        self::assertNull($auth->authenticate($this->reqWithToken($wrong->toString())));
+        self::assertNotNull($auth->authenticate($this->reqWithToken($right->toString())));
+    }
+
+    /**
+     * @param list<non-empty-string> $issuers
+     */
+    private function makeAuth(
+        array $issuers = [],
+        ?string $audience = null,
+        ?string $subject = null,
+        ?DateInterval $leeway = null,
+    ): JwtAuthenticator {
         return new JwtAuthenticator(
             Fixtures::hs256Config(),
             new BearerTokenExtractor(),
@@ -123,6 +252,10 @@ final class JwtAuthenticatorTest extends TestCase
                 scopes: explode(' ', (string) $token->claims()->get('scope', '')),
                 claims: $token->claims()->all(),
             ),
+            issuers: $issuers,
+            audience: $audience,
+            subject: $subject,
+            leeway: $leeway,
         );
     }
 

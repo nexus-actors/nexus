@@ -52,6 +52,14 @@ $auth = new JwtAuthenticator(
         id: (string) $t->claims()->get('sub'),
         scopes: explode(' ', (string) $t->claims()->get('scope', '')),
     ),
+    // Always constrain issuer AND audience when a signing key is shared
+    // across issuers, services, or tenants — otherwise a correctly signed
+    // token minted for another service is accepted here (cross-service replay).
+    issuers: ['https://auth.example.com'],
+    audience: 'orders-api',
+    // Optional: require a specific subject, and allow small clock skew.
+    // subject: 'service-account',
+    // leeway: new \DateInterval('PT30S'),
 );
 
 $app = HttpApplication::create($system)
