@@ -1057,6 +1057,252 @@ final class PersistenceEngineTest extends TestCase
         self::assertSame(['apple', 'banana', 'cherry'], $recoveredState->items);
     }
 
+    // ========================================================================
+    // Side-effect hooks execute on every base effect (DDD-001)
+    // ========================================================================
+
+    #[Test]
+    public function then_reply_on_none_replies_with_current_state(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $replyCapture = new DeadLetterRef();
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg): Effect {
+                if ($msg instanceof AddItem) {
+                    return Effect::persist(new ItemAdded($msg->item));
+                }
+
+                if ($msg instanceof GetItems) {
+                    return Effect::none()
+                        ->thenReply($msg->replyTo, static function (object $state): object {
+                            return new ItemsReply($state->items);
+                        });
+                }
+
+                return Effect::none();
+            },
+            static function (object $state, object $event): object {
+                if ($event instanceof ItemAdded) {
+                    return new ShoppingCart([...$state->items, $event->item]);
+                }
+
+                return $state;
+            },
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new AddItem('apple')));
+        $cell->processMessage($this->envelope(new GetItems($replyCapture)));
+
+        $captured = $replyCapture->captured();
+        self::assertCount(1, $captured);
+        self::assertInstanceOf(ItemsReply::class, $captured[0]);
+        self::assertSame(['apple'], $captured[0]->items);
+
+        // The read query must not persist anything
+        self::assertCount(1, iterator_to_array($eventStore->load($this->persistenceId)));
+    }
+
+    #[Test]
+    public function then_run_on_none_executes_with_current_state(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $sideEffectLog = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): Effect {
+                if ($msg instanceof AddItem) {
+                    return Effect::persist(new ItemAdded($msg->item));
+                }
+
+                return Effect::none()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'on-none: ' . implode(',', $state->items);
+                    });
+            },
+            static function (object $state, object $event): object {
+                if ($event instanceof ItemAdded) {
+                    return new ShoppingCart([...$state->items, $event->item]);
+                }
+
+                return $state;
+            },
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new AddItem('apple')));
+        $cell->processMessage($this->envelope(new DoNothing()));
+
+        self::assertSame(['on-none: apple'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_unhandled_execute_with_current_state(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $sideEffectLog = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): Effect {
+                return Effect::unhandled()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'on-unhandled';
+                    });
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DoNothing()));
+
+        self::assertSame(['on-unhandled'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_reply_execute_after_primary_reply(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $replyCapture = new DeadLetterRef();
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg): Effect {
+                if ($msg instanceof GetItems) {
+                    return Effect::reply($msg->replyTo, new ItemsReply(['primary']))
+                        ->thenReply($msg->replyTo, static function (object $state): object {
+                            return new ItemsReply($state->items);
+                        });
+                }
+
+                return Effect::none();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new GetItems($replyCapture)));
+
+        $captured = $replyCapture->captured();
+        self::assertCount(2, $captured);
+        self::assertInstanceOf(ItemsReply::class, $captured[0]);
+        self::assertSame(['primary'], $captured[0]->items);
+        self::assertInstanceOf(ItemsReply::class, $captured[1]);
+        self::assertSame([], $captured[1]->items);
+    }
+
+    #[Test]
+    public function hooks_on_stash_execute_with_current_state(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $sideEffectLog = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): Effect {
+                if ($msg instanceof DoNothing) {
+                    return Effect::stash()
+                        ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                            $sideEffectLog[] = 'on-stash';
+                        });
+                }
+
+                return Effect::none();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DoNothing()));
+
+        self::assertSame(['on-stash'], $sideEffectLog);
+    }
+
+    #[Test]
+    public function hooks_on_stop_execute_before_actor_stops(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $sideEffectLog = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): Effect {
+                if ($msg instanceof StopCommand) {
+                    return Effect::stop()
+                        ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                            $sideEffectLog[] = 'on-stop';
+                        });
+                }
+
+                return Effect::none();
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new StopCommand()));
+
+        self::assertSame(['on-stop'], $sideEffectLog);
+        self::assertFalse($cell->isAlive());
+    }
+
+    #[Test]
+    public function multiple_hooks_on_none_execute_in_registration_order(): void
+    {
+        $eventStore = new InMemoryEventStore();
+        $sideEffectLog = [];
+
+        $behavior = PersistenceEngine::create(
+            $this->persistenceId,
+            new ShoppingCart(),
+            static function (object $state, ActorContext $ctx, object $msg) use (&$sideEffectLog): Effect {
+                return Effect::none()
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'first';
+                    })
+                    ->thenRun(static function (object $state) use (&$sideEffectLog): void {
+                        $sideEffectLog[] = 'second';
+                    });
+            },
+            static fn(object $state, object $event): object => $state,
+            $eventStore,
+        );
+
+        $cell = $this->createCell($behavior);
+        $cell->start();
+
+        $cell->processMessage($this->envelope(new DoNothing()));
+
+        self::assertSame(['first', 'second'], $sideEffectLog);
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new TestRuntime();

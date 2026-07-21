@@ -161,7 +161,7 @@ final class PersistenceEngine
 
                         $effect = $commandHandler($state, $ctx, $msg);
 
-                        return match ($effect->type) {
+                        $result = match ($effect->type) {
                             EffectType::Persist => self::handlePersist(
                                 $effect,
                                 $state,
@@ -180,6 +180,16 @@ final class PersistenceEngine
                             EffectType::Stop => self::stoppedState(),
                             EffectType::Reply => self::handleReply($effect),
                         };
+
+                        // Hooks on the persist path already ran inside handlePersist,
+                        // after the durable write and with the post-persist state.
+                        // Every other effect runs its hooks here with the current state.
+
+                        if ($effect->type !== EffectType::Persist) {
+                            self::runSideEffects($effect, $state);
+                        }
+
+                        return $result;
                     },
                 );
             },
@@ -265,10 +275,8 @@ final class PersistenceEngine
             }
         }
 
-        // 6. Execute side effects (thenRun, thenReply)
-        foreach ($effect->sideEffects as $sideEffect) {
-            $sideEffect($newState);
-        }
+        // 6. Execute side effects (thenRun, thenReply) with the post-persist state
+        self::runSideEffects($effect, $newState);
 
         // 7. Return with updated state and sequenceNr
 
@@ -276,6 +284,20 @@ final class PersistenceEngine
         $nextData = ['state' => $newState, 'sequenceNr' => $newSeqNr];
 
         return BehaviorWithState::next($nextData);
+    }
+
+    /**
+     * Execute the side-effect hooks registered via thenRun()/thenReply().
+     *
+     * On the persist path `$state` is the post-persist projected state; for
+     * every other effect it is the unchanged current state. Hooks execute in
+     * registration order, after the effect's primary action.
+     */
+    private static function runSideEffects(Effect $effect, object $state): void
+    {
+        foreach ($effect->sideEffects as $sideEffect) {
+            $sideEffect($state);
+        }
     }
 
     /**

@@ -50,7 +50,7 @@ The command handler returns a `DurableEffect`:
 - `DurableEffect::stop()` — stop the actor.
 - `DurableEffect::unhandled()` — route to dead letters.
 
-Chain `->thenReply($to, fn($state) => $msg)` or `->thenRun(fn($state) => ...)` to attach side-effects that execute after the state is durably stored. These hooks run only on the persist path — chained on any other effect (including `DurableEffect::none()`) they are silently dropped.
+Chain `->thenReply($to, fn($state) => $msg)` or `->thenRun(fn($state) => ...)` to attach side-effects. On the persist path they execute after the state is durably stored and receive the new state; on any other effect (including `DurableEffect::none()`) they run after the effect's primary action and receive the unchanged current state — `DurableEffect::none()->thenReply(...)` is the canonical read-only query.
 
 ## Comparison with event sourcing
 

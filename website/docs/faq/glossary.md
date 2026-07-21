@@ -62,7 +62,7 @@ A persistence model where the actor's current state is stored as a single snapsh
 
 ### Effect
 
-The return type from a persistence command handler. `Effect` describes what the actor wants to do: `Effect::persist(...$events)` to emit domain events, `Effect::none()` to do nothing, `Effect::stash()` to buffer the message until recovery completes, `Effect::stop()` to stop the actor, or `Effect::reply($to, $msg)` to send a response. Side effects are attached via `->thenRun()` and `->thenReply()` and execute only after the event is durably stored; they run only on the persist path — chained on any other effect (including `Effect::none()`) they are silently dropped.
+The return type from a persistence command handler. `Effect` describes what the actor wants to do: `Effect::persist(...$events)` to emit domain events, `Effect::none()` to do nothing, `Effect::stash()` to buffer the message until recovery completes, `Effect::stop()` to stop the actor, or `Effect::reply($to, $msg)` to send a response. Side effects are attached via `->thenRun()` and `->thenReply()` and run on every effect, after its primary action: on the persist path they run only after the event is durably stored and receive the post-persist state; on any other effect (including `Effect::none()`) they receive the unchanged current state.
 
 ### Envelope
 

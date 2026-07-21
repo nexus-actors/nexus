@@ -104,7 +104,7 @@ final class DurableStateEngine
 
                         $effect = $commandHandler($state, $ctx, $msg);
 
-                        return match ($effect->type) {
+                        $result = match ($effect->type) {
                             DurableEffectType::Persist => self::handlePersist(
                                 $effect,
                                 $version,
@@ -118,6 +118,16 @@ final class DurableStateEngine
                             DurableEffectType::Stop => self::stoppedState(),
                             DurableEffectType::Reply => self::handleReply($effect),
                         };
+
+                        // Hooks on the persist path already ran inside handlePersist,
+                        // after the durable write and with the persisted state.
+                        // Every other effect runs its hooks here with the current state.
+
+                        if ($effect->type !== DurableEffectType::Persist) {
+                            self::runSideEffects($effect, $state);
+                        }
+
+                        return $result;
                     },
                 );
             },
@@ -150,12 +160,24 @@ final class DurableStateEngine
             writerId: $writerId,
         ));
 
-        // Execute side effects (thenRun, thenReply)
-        foreach ($effect->sideEffects as $sideEffect) {
-            $sideEffect($newState);
-        }
+        // Execute side effects (thenRun, thenReply) with the persisted state
+        self::runSideEffects($effect, $newState);
 
         return BehaviorWithState::next(['state' => $newState, 'version' => $newVersion]);
+    }
+
+    /**
+     * Execute the side-effect hooks registered via thenRun()/thenReply().
+     *
+     * On the persist path `$state` is the newly persisted state; for every
+     * other effect it is the unchanged current state. Hooks execute in
+     * registration order, after the effect's primary action.
+     */
+    private static function runSideEffects(DurableEffect $effect, object $state): void
+    {
+        foreach ($effect->sideEffects as $sideEffect) {
+            $sideEffect($state);
+        }
     }
 
     /**
