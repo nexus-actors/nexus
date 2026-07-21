@@ -8,6 +8,7 @@ use Monadial\Nexus\Http\Toolkit\Health\HealthCheck;
 use Monadial\Nexus\Http\Toolkit\Health\HealthCheckHandler;
 use Monadial\Nexus\Http\Toolkit\Health\HealthCheckRegistry;
 use Monadial\Nexus\Http\Toolkit\Health\HealthStatus;
+use Monadial\Nexus\Http\Toolkit\Health\LivenessHandler;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -21,6 +22,7 @@ use function json_decode;
 #[CoversClass(HealthCheckHandler::class)]
 #[CoversClass(HealthCheckRegistry::class)]
 #[CoversClass(HealthStatus::class)]
+#[CoversClass(LivenessHandler::class)]
 final class HealthCheckHandlerTest extends TestCase
 {
     #[Test]
@@ -87,11 +89,93 @@ final class HealthCheckHandlerTest extends TestCase
         $response = (new HealthCheckHandler($registry))($request);
 
         self::assertSame(503, $response->getStatusCode());
-        /** @var array{checks: array{database: array{state: string, detail: array{error: string, message: string}}}} $body */
+        /** @var array{checks: array{database: array{state: string, detail: array<string, mixed>}}} $body */
         $body = json_decode((string) $response->getBody(), true);
         self::assertSame('down', $body['checks']['database']['state']);
+    }
+
+    // ========================================================================
+    // Readiness redacts error detail by default; liveness is opaque (SEC-011)
+    // ========================================================================
+
+    #[Test]
+    public function readiness_redacts_thrown_exception_detail_by_default(): void
+    {
+        $registry = (new HealthCheckRegistry())
+            ->add(new ThrowingCheck('database', new RuntimeException('pgsql://user:secret@db-internal:5432 refused')));
+
+        $response = (new HealthCheckHandler($registry))(
+            (new Psr17Factory())->createServerRequest('GET', 'http://localhost/readyz'),
+        );
+
+        self::assertSame(503, $response->getStatusCode());
+        $raw = (string) $response->getBody();
+        // No exception class, message, or internal DSN leaks in the response.
+        self::assertStringNotContainsString('RuntimeException', $raw);
+        self::assertStringNotContainsString('secret', $raw);
+        self::assertStringNotContainsString('db-internal', $raw);
+
+        /** @var array{checks: array{database: array{state: string, detail: array<string, mixed>}}} $body */
+        $body = json_decode($raw, true);
+        self::assertSame('down', $body['checks']['database']['state']);
+        self::assertSame([], $body['checks']['database']['detail']);
+    }
+
+    #[Test]
+    public function readiness_includes_exception_detail_when_explicitly_opted_in(): void
+    {
+        $registry = (new HealthCheckRegistry())
+            ->add(new ThrowingCheck('database', new RuntimeException('cannot connect')));
+
+        $response = (new HealthCheckHandler($registry, includeErrorDetail: true))(
+            (new Psr17Factory())->createServerRequest('GET', 'http://localhost/readyz'),
+        );
+
+        /** @var array{checks: array{database: array{detail: array{error: string, message: string}}}} $body */
+        $body = json_decode((string) $response->getBody(), true);
         self::assertSame(RuntimeException::class, $body['checks']['database']['detail']['error']);
         self::assertSame('cannot connect', $body['checks']['database']['detail']['message']);
+    }
+
+    #[Test]
+    public function liveness_is_opaque_up(): void
+    {
+        $registry = (new HealthCheckRegistry())
+            ->add(new StubCheck('database', HealthStatus::up(['latencyMs' => 1.2])))
+            ->add(new StubCheck('cache', HealthStatus::degraded(['hitRatio' => 0.42])));
+
+        $response = (new LivenessHandler($registry))();
+
+        self::assertSame(200, $response->getStatusCode());
+        $raw = (string) $response->getBody();
+        // Aggregate state only — no check names or details.
+        self::assertStringNotContainsString('database', $raw);
+        self::assertStringNotContainsString('cache', $raw);
+        self::assertStringNotContainsString('latencyMs', $raw);
+
+        /** @var array{status: string} $body */
+        $body = json_decode($raw, true);
+        self::assertSame('up', $body['status']);
+        self::assertArrayNotHasKey('checks', $body);
+    }
+
+    #[Test]
+    public function liveness_is_opaque_down_without_leaking_which_check_failed(): void
+    {
+        $registry = (new HealthCheckRegistry())
+            ->add(new StubCheck('database', HealthStatus::up()))
+            ->add(new ThrowingCheck('redis', new RuntimeException('redis-internal:6379 down')));
+
+        $response = (new LivenessHandler($registry))();
+
+        self::assertSame(503, $response->getStatusCode());
+        $raw = (string) $response->getBody();
+        self::assertStringNotContainsString('redis', $raw);
+        self::assertStringNotContainsString('redis-internal', $raw);
+
+        /** @var array{status: string} $body */
+        $body = json_decode($raw, true);
+        self::assertSame('down', $body['status']);
     }
 }
 
