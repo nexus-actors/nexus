@@ -22,8 +22,16 @@ install: ## Composer install
 update: ## Composer install
 	$(DC) composer update
 
-test: ## Run all tests safe on the php container (Swoole suites: make test-swoole; Doctrine fiber: make test-doctrine)
+test: ## Run the suites safe on the php container only — NOT comprehensive (full matrix: make test-all)
 	$(DC) vendor/bin/phpunit --testsuite=unit,integration-doctrine-entity-behavior,integration-fiber,integration-http,integration-step,integration-serialization,integration-messenger,integration-persistence,psalm
+
+test-all: ## Run the FULL correctness matrix across the php AND php-swoole containers (everything except perf benchmarks)
+	$(MAKE) test
+	$(MAKE) test-swoole
+	$(MAKE) test-worker-pool-swoole
+	$(MAKE) test-cluster
+	$(MAKE) test-http-swoole
+	$(MAKE) test-doctrine
 
 test-unit: ## Unit tests only
 	$(DC) vendor/bin/phpunit --testsuite=unit
@@ -120,4 +128,4 @@ docs-api-serve: ## Serve API docs locally on http://127.0.0.1:$(PORT) (default P
 
 PORT ?= 8081
 
-.PHONY: help build up down shell install test test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-debug test-swoole-debug test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm deps-check phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve
+.PHONY: help build up down shell install test test-all test-unit test-fiber test-swoole test-worker-pool-swoole test-serialization test-messenger test-cluster test-cluster-debug test-swoole-debug test-cluster-loopback test-doctrine test-persistence test-http test-http-swoole test-observability psalm deps-check phpcs phpcbf mutation cs cs-fix profile-hotpath spx-ui docs-verify docs-api docs-api-serve
