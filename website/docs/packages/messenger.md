@@ -18,7 +18,7 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 - `MessengerGateway` — explicit `publish()` egress service over the same sender
 - `ReceiverActor` — supervised poll→route→ack loop, one per Messenger `ReceiverInterface`; handles ask envelopes when a `ReplySenderLocator` is configured
 - `ReceiverActorConfig` — poll interval, unroutable policy, ask pending timeout (default 30 s), and pending-ask cap (`maxPendingAsks`, default 1024)
-- `MessageRouter` — pluggable inbound routing; `MapMessageRouter` (message class → ref) is the default, `StampMessageRouter` (target-path stamp → ref) is the cluster seam
+- `MessageRouter` — pluggable inbound routing; `MapMessageRouter` (message class → ref) is the default, `StampMessageRouter` (target-path stamp → ref) is the cluster seam. `StampMessageRouter` accepts an optional `TargetAuthorizer` (e.g. `MapTargetAuthorizer`) to authorize producer → target routing per envelope so a producer cannot invoke every registered target (SEC-012)
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer`
 - `LifecycleWatchdog` + `LifecycleThresholds` — worker recycling via graceful shutdown on memory/uptime/message-count limits
 - `MessengerBridge` — static wiring facade (`producer()`, `gateway()`, `receiverProps()`, `spawnReceivers()`, `watchdogProps()`, `askSupport()`)
@@ -29,6 +29,7 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 - `MapReplySenderLocator` — static map from logical channel name to `SenderInterface`; SSRF-safe: wire values resolve via this map only, never as DSNs
 - `MessengerReplyRef` — reply-only `ActorRef` that publishes the reply to the configured sender and fires the process-ack; injected as `$ctx->sender()` by `ReceiverActor`
 - `CorrelationIdStamp` / `ReplyToStamp` — outbound ask stamps; travel as `X-Nexus-Correlation-Id` and `X-Nexus-Reply-To` headers on the wire
+- `ProducerIdentityStamp` — provenance stamp naming the publishing producer; travels as `X-Nexus-Producer-Identity` and drives `MapTargetAuthorizer` route authorization (see its trust-boundary note)
 - `SourceActorPathStamp` / `TargetActorPathStamp` / `TraceContextStamp` — provenance, routing, and trace-context stamps
 - `UnsupportedOperationException` — thrown by `MessengerActorRef::ask()` when no `AskSupport` is configured, and by `MessengerReplyRef::ask()` (reply refs are send-only)
 

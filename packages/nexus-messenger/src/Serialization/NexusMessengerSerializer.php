@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Messenger\Serialization;
 
 use JsonException;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ProducerIdentityStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
@@ -48,14 +49,14 @@ use function sprintf;
 final readonly class NexusMessengerSerializer implements SerializerInterface
 {
     private const string HEADER_CORRELATION_ID = 'X-Nexus-Correlation-Id';
+    private const string HEADER_PRODUCER_IDENTITY = 'X-Nexus-Producer-Identity';
     private const string HEADER_REPLY_TO = 'X-Nexus-Reply-To';
     private const string HEADER_SOURCE_PATH = 'X-Nexus-Source-Path';
     private const string HEADER_TARGET_PATH = 'X-Nexus-Target-Path';
     private const string HEADER_TRACE_CONTEXT = 'X-Nexus-Trace-Context';
     private const string HEADER_TYPE = 'type';
 
-    public function __construct(private MessageSerializer $messages, private TypeRegistry $types,) {
-    }
+    public function __construct(private MessageSerializer $messages, private TypeRegistry $types) {}
 
     /**
      * @param array<string, mixed> $encodedEnvelope
@@ -149,6 +150,12 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
             $headers[self::HEADER_TARGET_PATH] = $target->path;
         }
 
+        $producer = $envelope->last(ProducerIdentityStamp::class);
+
+        if ($producer instanceof ProducerIdentityStamp) {
+            $headers[self::HEADER_PRODUCER_IDENTITY] = $producer->identity;
+        }
+
         $traceStamp = $envelope->last(TraceContextStamp::class);
 
         if ($traceStamp instanceof TraceContextStamp) {
@@ -187,6 +194,12 @@ final readonly class NexusMessengerSerializer implements SerializerInterface
 
         if ($target !== null && $target !== '') {
             $stamps[] = new TargetActorPathStamp($target);
+        }
+
+        $producer = $this->stringHeader($headers, self::HEADER_PRODUCER_IDENTITY);
+
+        if ($producer !== null && $producer !== '') {
+            $stamps[] = new ProducerIdentityStamp($producer);
         }
 
         $traceContext = $this->stringHeader($headers, self::HEADER_TRACE_CONTEXT);
