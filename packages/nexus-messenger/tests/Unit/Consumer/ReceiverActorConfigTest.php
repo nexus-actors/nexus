@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Tests\Unit\Consumer;
 
+use InvalidArgumentException;
 use Monadial\Nexus\Messenger\Consumer\ReceiverActorConfig;
 use Monadial\Nexus\Messenger\Consumer\UnroutablePolicy;
 use Monadial\Nexus\Runtime\Duration;
@@ -45,5 +46,31 @@ final class ReceiverActorConfigTest extends TestCase
         // Other fields are unchanged.
         self::assertTrue($config->pollInterval->equals(Duration::millis(100)));
         self::assertSame(UnroutablePolicy::Reject, $config->unroutablePolicy);
+    }
+
+    #[Test]
+    public function defaultsToBoundedPendingAsks(): void
+    {
+        self::assertSame(1024, ReceiverActorConfig::default()->maxPendingAsks);
+    }
+
+    #[Test]
+    public function withMaxPendingAsksReturnsCopyWithUpdatedCap(): void
+    {
+        $config = ReceiverActorConfig::default()->withMaxPendingAsks(50);
+
+        self::assertSame(50, $config->maxPendingAsks);
+        self::assertSame(1024, ReceiverActorConfig::default()->maxPendingAsks);
+        // Other fields are unchanged.
+        self::assertTrue($config->pollInterval->equals(Duration::millis(100)));
+        self::assertSame(UnroutablePolicy::Reject, $config->unroutablePolicy);
+    }
+
+    #[Test]
+    public function rejectsNonPositiveMaxPendingAsks(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        ReceiverActorConfig::default()->withMaxPendingAsks(0);
     }
 }

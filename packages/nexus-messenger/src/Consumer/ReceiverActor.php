@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Messenger\Consumer;
 
+use Closure;
 use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\BackpressureCapable;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
+use Monadial\Nexus\Core\Lifecycle\PostStop;
+use Monadial\Nexus\Core\Lifecycle\PreRestart;
+use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Mailbox\Envelope as CoreEnvelope;
 use Monadial\Nexus\Messenger\Ask\MessengerReplyRef;
 use Monadial\Nexus\Messenger\Ask\ReplySenderLocator;
@@ -21,6 +25,7 @@ use Monadial\Nexus\Messenger\Routing\MessageRouter;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\TraceContextStamp;
+use Monadial\Nexus\Observability\Metric\UpDownCounter;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
 use Monadial\Nexus\Observability\Trace\SpanKind;
@@ -29,6 +34,8 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Messenger\Envelope;
 use Symfony\Component\Messenger\Transport\Receiver\ReceiverInterface;
 use Throwable;
+
+use function count;
 
 /**
  * Supervised poll → route → ack loop over one Messenger receiver.
@@ -47,7 +54,12 @@ use Throwable;
  * responder actor can call `$ctx->reply($msg)`. The broker envelope is NOT
  * acked until the responder publishes the reply. Pending asks are tracked in
  * an in-actor map and rejected for redelivery if not answered within
- * ReceiverActorConfig::$askPendingTimeout (default 30 s).
+ * ReceiverActorConfig::$askPendingTimeout (default 30 s). The map is bounded by
+ * ReceiverActorConfig::$maxPendingAsks (default 1024): once full, a new ask is
+ * shed — rejected for redelivery rather than tracked — so a producer flooding
+ * asks cannot exhaust consumer memory. On stop/restart every still-pending ask
+ * is rejected for redelivery so none is silently abandoned. The live pending
+ * count is exposed as the `nexus.messenger.asks.pending` gauge.
  *
  * Every drained envelope is traced with a Consumer span and counted via the
  * actor context's tracer/meter (no-ops when observability is disabled). When
@@ -94,7 +106,7 @@ enum ReceiverActor
             static function (ActorContext $ctx) use ($receiver, $router, $config, $deadLetters, $processedListener, $events, $observability, $replySenders): Behavior {
                 $ctx->self()->tell(new Poll());
 
-                /** @var array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> */
+                /** @var array<string, array{deadline: float, disarm: Closure(): void, envelope: Envelope}> */
                 $pendingAsks = [];
                 $warnedNoLocator = false;
 
@@ -108,7 +120,9 @@ enum ReceiverActor
                             return Behavior::unhandled();
                         }
 
-                        self::expirePendingAsks($ctx, $receiver, $pendingAsks);
+                        $pendingGauge = self::pendingGauge($ctx);
+
+                        self::expirePendingAsks($ctx, $receiver, $pendingAsks, $pendingGauge);
 
                         [$processed, $backpressured] = self::drainOnce(
                             $ctx,
@@ -121,6 +135,7 @@ enum ReceiverActor
                             $replySenders,
                             $pendingAsks,
                             $warnedNoLocator,
+                            $pendingGauge,
                         );
 
                         if ($processed > 0 && $processedListener !== null) {
@@ -135,6 +150,21 @@ enum ReceiverActor
 
                         return Behavior::same();
                     },
+                )->onSignal(
+                    /**
+                     * @param ActorContext<object> $ctx
+                     * @return Behavior<object>
+                     */
+                    static function (ActorContext $ctx, Signal $signal) use ($receiver, &$pendingAsks): Behavior {
+                        // On stop/restart the responder is gone: reject every still-pending ask
+                        // for broker redelivery so no envelope is silently abandoned, and clear
+                        // the map so the gauge returns to zero.
+                        if ($signal instanceof PostStop || $signal instanceof PreRestart) {
+                            self::drainPendingAsks($ctx, $receiver, $pendingAsks);
+                        }
+
+                        return Behavior::same();
+                    },
                 );
             },
         );
@@ -143,7 +173,7 @@ enum ReceiverActor
     /**
      * @param ActorContext<object> $ctx
      * @param ActorRef<object>|null $deadLetters
-     * @param array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> $pendingAsks
+     * @param array<string, array{deadline: float, disarm: Closure(): void, envelope: Envelope}> $pendingAsks
      * @return array{0: int, 1: bool} messages counted this tick, whether the tick stopped on backpressure
      */
     private static function drainOnce(
@@ -157,6 +187,7 @@ enum ReceiverActor
         ?ReplySenderLocator $replySenders,
         array &$pendingAsks,
         bool &$warnedNoLocator,
+        UpDownCounter $pendingGauge,
     ): array {
         $processed = 0;
 
@@ -261,9 +292,28 @@ enum ReceiverActor
                         continue;
                     }
 
+                    // Load shedding: a full pending map means a producer is asking faster than
+                    // responders reply. Rather than grow the map without bound, reject this ask
+                    // for broker redelivery; a slot may be free by the time it comes back.
+                    if (count($pendingAsks) >= $config->maxPendingAsks) {
+                        self::swallow(static fn(): mixed => $ctx->meter()->counter(
+                            'nexus.messenger.asks.shed',
+                            '{message}',
+                            'Ask envelopes rejected for redelivery because the pending-ask cap was reached',
+                        )->add(1, ['nexus.message.type' => $inner::class]));
+                        $ctx->log()->warning(
+                            'Pending-ask cap reached; shedding ask for redelivery',
+                            ['cap' => $config->maxPendingAsks, 'type' => $inner::class],
+                        );
+                        $receiver->reject($envelope);
+                        $span?->setAttribute('nexus.messenger.outcome', 'ask_shed');
+
+                        continue;
+                    }
+
                     // LocalActorRef: create the process-ack reply ref and deliver with senderRef.
                     $fired = false;
-                    $ackCallback = static function () use ($receiver, $envelope, &$fired, &$pendingAsks, $correlationId): void {
+                    $ackCallback = static function () use ($receiver, $envelope, &$fired, &$pendingAsks, $correlationId, $pendingGauge): void {
                         if ($fired) {
                             return;
                         }
@@ -279,7 +329,10 @@ enum ReceiverActor
                         // Prune from the pending map so that the expiry path never sees an
                         // already-acked entry — otherwise expiry would call reject() on the
                         // same envelope (double settlement) and emit a false responder_expired count.
-                        unset($pendingAsks[$correlationId]);
+                        if (isset($pendingAsks[$correlationId])) {
+                            unset($pendingAsks[$correlationId]);
+                            self::swallow(static fn(): mixed => $pendingGauge->add(-1));
+                        }
                     };
                     $disarm = static function () use (&$fired): void {
                         $fired = true;
@@ -337,6 +390,7 @@ enum ReceiverActor
                         'disarm' => $disarm,
                         'envelope' => $envelope,
                     ];
+                    self::swallow(static fn(): mixed => $pendingGauge->add(1));
                     $processed++;
                     self::swallow(static fn(): mixed => $ctx->meter()->counter(
                         'nexus.messenger.messages.consumed',
@@ -425,12 +479,13 @@ enum ReceiverActor
      * their broker envelopes for redelivery and disarming the ack callback.
      *
      * @param ActorContext<object> $ctx
-     * @param array<string, array{deadline: float, disarm: \Closure(): void, envelope: Envelope}> $pendingAsks
+     * @param array<string, array{deadline: float, disarm: Closure(): void, envelope: Envelope}> $pendingAsks
      */
     private static function expirePendingAsks(
         ActorContext $ctx,
         ReceiverInterface $receiver,
         array &$pendingAsks,
+        UpDownCounter $pendingGauge,
     ): void {
         if ($pendingAsks === []) {
             return;
@@ -449,8 +504,8 @@ enum ReceiverActor
                 'nexus.messenger.asks.responder_expired',
                 '{message}',
                 'Ask envelopes rejected for redelivery because the responder did not reply within the deadline',
-            // No attributes: nexus.message.type is unavailable at expiry (not stored in the pending entry);
-            // correlation IDs are unbounded and must never be used as metric dimensions (high-cardinality).
+                // No attributes: nexus.message.type is unavailable at expiry (not stored in the pending entry);
+                // correlation IDs are unbounded and must never be used as metric dimensions (high-cardinality).
             )->add(1));
             $ctx->log()->warning(
                 'Ask responder did not reply within deadline; rejecting for redelivery',
@@ -458,7 +513,47 @@ enum ReceiverActor
             );
 
             unset($pendingAsks[$correlationId]);
+            self::swallow(static fn(): mixed => $pendingGauge->add(-1));
         }
+    }
+
+    /**
+     * Reject and clear every still-pending ask — used on stop/restart when the responder
+     * is gone, so no broker envelope is silently abandoned. Disarms each ack callback first
+     * to keep settlement single-shot, and resets the pending gauge to zero.
+     *
+     * @param ActorContext<object> $ctx
+     * @param array<string, array{deadline: float, disarm: Closure(): void, envelope: Envelope}> $pendingAsks
+     */
+    private static function drainPendingAsks(ActorContext $ctx, ReceiverInterface $receiver, array &$pendingAsks): void
+    {
+        if ($pendingAsks === []) {
+            return;
+        }
+
+        $pendingGauge = self::pendingGauge($ctx);
+
+        foreach ($pendingAsks as $correlationId => $entry) {
+            ($entry['disarm'])();
+            self::swallow(static fn(): mixed => $receiver->reject($entry['envelope']));
+            unset($pendingAsks[$correlationId]);
+            self::swallow(static fn(): mixed => $pendingGauge->add(-1));
+        }
+    }
+
+    /**
+     * Resolve the bounded-pending-ask gauge instrument. Meters memoise instruments by name,
+     * so repeated calls return the same underlying counter.
+     *
+     * @param ActorContext<object> $ctx
+     */
+    private static function pendingGauge(ActorContext $ctx): UpDownCounter
+    {
+        return $ctx->meter()->upDownCounter(
+            'nexus.messenger.asks.pending',
+            '{ask}',
+            'Ask envelopes awaiting a responder reply; bounded by ReceiverActorConfig::$maxPendingAsks',
+        );
     }
 
     /**

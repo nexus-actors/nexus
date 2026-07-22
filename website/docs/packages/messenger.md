@@ -17,7 +17,7 @@ Two-way bridge between Nexus actors and standalone Symfony Messenger transports 
 - `MessengerActorRef<T>` — location-transparent `ActorRef` backed by a Messenger `SenderInterface`; `tell()` publishes to the transport; `ask()` is enabled when an `AskSupport` is configured (throws `UnsupportedOperationException` without one)
 - `MessengerGateway` — explicit `publish()` egress service over the same sender
 - `ReceiverActor` — supervised poll→route→ack loop, one per Messenger `ReceiverInterface`; handles ask envelopes when a `ReplySenderLocator` is configured
-- `ReceiverActorConfig` — poll interval, unroutable policy, and ask pending timeout (default 30 s)
+- `ReceiverActorConfig` — poll interval, unroutable policy, ask pending timeout (default 30 s), and pending-ask cap (`maxPendingAsks`, default 1024)
 - `MessageRouter` — pluggable inbound routing; `MapMessageRouter` (message class → ref) is the default, `StampMessageRouter` (target-path stamp → ref) is the cluster seam
 - `NexusMessengerSerializer` — Messenger `SerializerInterface` backed by a Nexus `MessageSerializer`
 - `LifecycleWatchdog` + `LifecycleThresholds` — worker recycling via graceful shutdown on memory/uptime/message-count limits
@@ -108,6 +108,7 @@ On AWS SQS, prefer `Persistent`: queue creation is an asynchronous API call that
 - **Timeout does not cancel remote work.** When the deadline passes, `AskTimeoutException` fails the future — but the responder continues and will publish a reply that is simply dropped. Build idempotent responders.
 - **Capacity fail-fast.** When the registry is at `maxPending` (default 10 000), `AskCapacityExceededException` is thrown before any message is sent. Shed load at the call site.
 - **Process-ack.** `ReceiverActor` holds the broker envelope un-acked until the responder calls `$ctx->sender()->tell($reply)`. If the responder does not reply within `askPendingTimeout` (default 30 s), the envelope is rejected for redelivery.
+- **Bounded pending map.** The responder-side pending-ask map is capped at `maxPendingAsks` (default 1024). Once full, a new ask is shed — rejected for redelivery instead of tracked — and `nexus.messenger.asks.shed` is incremented, so a producer flooding asks cannot exhaust consumer memory. On stop/restart every still-pending ask is rejected for redelivery so none is silently abandoned.
 
 ## Consumer — broker → actor
 
@@ -180,6 +181,7 @@ Pass an `Observability` instance (from `nexus-observability-otel`) and a PSR-14 
 | `nexus.messenger.asks.pending` | Reply consumer | **Gauge** — current number of in-flight asks awaiting a reply |
 | `nexus.messenger.asks.unroutable_reply_to` | Consumer | Incremented when an ask envelope is rejected because the reply-to channel is not in the `ReplySenderLocator` |
 | `nexus.messenger.asks.responder_expired` | Consumer | Incremented when a pending ask envelope is rejected for redelivery because the responder did not reply within `askPendingTimeout` |
+| `nexus.messenger.asks.shed` | Consumer | Incremented when an ask is rejected for redelivery because the pending-ask cap (`maxPendingAsks`) was reached |
 | `nexus.messenger.replies.sent` | Consumer (responder) | Incremented when a reply is published back to the requester transport |
 | `nexus.messenger.replies.dropped` | Reply consumer | Incremented when a reply envelope is dropped — missing `CorrelationIdStamp` or unknown correlation ID |
 
@@ -192,7 +194,7 @@ All counters carry a `nexus.message.type` attribute with the message class name,
 | `messenger.send` | Producer | `messaging.system`, `nexus.message.type`, `nexus.messenger.sender` |
 | `messenger.receive` | Consumer | `messaging.system`, `nexus.message.type`, `nexus.messenger.outcome` |
 
-`nexus.messenger.outcome` values: `acked`, `ask_already_pending`, `ask_non_local`, `ask_pending`, `backpressured`, `dead_lettered`, `dropped`, `rejected`, `reply_to_rejected`.
+`nexus.messenger.outcome` values: `acked`, `ask_already_pending`, `ask_non_local`, `ask_pending`, `ask_shed`, `backpressured`, `dead_lettered`, `dropped`, `rejected`, `reply_to_rejected`.
 
 ### PSR-14 events
 
