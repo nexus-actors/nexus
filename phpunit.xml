@@ -25,6 +25,8 @@
             <directory>packages/nexus-persistence-doctrine/tests/Unit</directory>
             <directory>packages/nexus-runtime-step/tests/Unit</directory>
             <directory>packages/nexus-http/tests/Unit</directory>
+            <directory>packages/nexus-http-auth/tests/Unit</directory>
+            <directory>packages/nexus-http-toolkit/tests/Unit</directory>
             <directory>packages/nexus-http-ws/tests/Unit</directory>
             <directory>packages/nexus-logger/tests/Unit</directory>
             <directory>packages/nexus-observability/tests/Unit</directory>
@@ -150,6 +152,8 @@
             <directory>packages/nexus-persistence-doctrine/src</directory>
             <directory>packages/nexus-runtime-step/src</directory>
             <directory>packages/nexus-http/src</directory>
+            <directory>packages/nexus-http-auth/src</directory>
+            <directory>packages/nexus-http-toolkit/src</directory>
             <directory>packages/nexus-http-ws/src</directory>
             <directory>packages/nexus-logger/src</directory>
             <directory>packages/nexus-http-server-swoole/src</directory>
