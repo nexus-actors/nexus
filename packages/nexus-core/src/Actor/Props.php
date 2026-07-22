@@ -10,6 +10,7 @@ use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
+use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use Psr\Container\ContainerInterface;
 
 /**
@@ -219,6 +220,22 @@ final readonly class Props
     public function withMailbox(MailboxConfig $config): self
     {
         return clone($this, ['mailbox' => $config]);
+    }
+
+    /**
+     * Return a new Props with a bounded mailbox of the given capacity.
+     *
+     * Convenience over {@see withMailbox()} for callers that only need a hard
+     * memory bound and do not want to name the runtime mailbox types. The
+     * overflow strategy defaults to {@see OverflowStrategy::DropNewest}, so a
+     * flood past capacity drops incoming messages rather than throwing or
+     * blocking; pass an explicit strategy to change that.
+     *
+     * @return Props<T>
+     */
+    public function withBoundedMailbox(int $capacity, OverflowStrategy $strategy = OverflowStrategy::DropNewest): self
+    {
+        return clone($this, ['mailbox' => MailboxConfig::bounded($capacity, $strategy)]);
     }
 
     /**

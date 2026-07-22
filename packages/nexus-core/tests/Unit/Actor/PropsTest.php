@@ -69,6 +69,29 @@ final class PropsTest extends TestCase
     }
 
     #[Test]
+    public function withBoundedMailboxDefaultsToDropNewest(): void
+    {
+        $original = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg): Behavior => Behavior::same()));
+
+        $updated = $original->withBoundedMailbox(1_024);
+
+        self::assertFalse($original->mailbox->bounded);
+        self::assertTrue($updated->mailbox->bounded);
+        self::assertSame(1_024, $updated->mailbox->capacity);
+        self::assertSame(OverflowStrategy::DropNewest, $updated->mailbox->strategy);
+    }
+
+    #[Test]
+    public function withBoundedMailboxAcceptsExplicitStrategy(): void
+    {
+        $props = Props::fromBehavior(Behavior::receive(static fn($ctx, $msg): Behavior => Behavior::same()))
+            ->withBoundedMailbox(64, OverflowStrategy::Backpressure);
+
+        self::assertSame(64, $props->mailbox->capacity);
+        self::assertSame(OverflowStrategy::Backpressure, $props->mailbox->strategy);
+    }
+
+    #[Test]
     public function withSupervisionReturnsNewPropsWithStrategy(): void
     {
         $handler = static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same();

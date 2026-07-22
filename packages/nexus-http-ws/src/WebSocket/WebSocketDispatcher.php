@@ -9,8 +9,6 @@ use Monadial\Nexus\Http\Ws\WebSocket\Exception\ChannelCapacityExceededException;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionClosed;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelConnectionOpened;
 use Monadial\Nexus\Http\Ws\WebSocket\Message\ChannelMessageReceived;
-use Monadial\Nexus\Runtime\Mailbox\MailboxConfig;
-use Monadial\Nexus\Runtime\Mailbox\OverflowStrategy;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
@@ -127,9 +125,7 @@ final readonly class WebSocketDispatcher
                             $factory ?? static fn(): WebSocketChannelActor => new ReflectionClass(
                                 $actorClass,
                             )->newInstance(),
-                        )->withMailbox(
-                            MailboxConfig::bounded(self::CHANNEL_MAILBOX_CAPACITY, OverflowStrategy::DropNewest),
-                        ),
+                        )->withBoundedMailbox(self::CHANNEL_MAILBOX_CAPACITY),
                     );
                 } catch (ChannelCapacityExceededException $e) {
                     $this->logger->warning('WebSocket channel cap reached; refusing connection', [
