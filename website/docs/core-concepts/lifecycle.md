@@ -188,6 +188,14 @@ System messages are handled by the actor infrastructure before user-defined hand
 | `Watch` | Registers a watcher to receive `Terminated` when this actor stops. |
 | `Unwatch` | Removes a previously registered watcher. |
 
+## Death watch and child cleanup
+
+`ActorContext::watch($ref)` subscribes the calling actor to the target's termination. When the target stops — for any reason, including being stopped as part of its parent's shutdown — every watcher receives a `Terminated($ref)` signal through its behavior's signal handler. `unwatch($ref)` cancels the subscription; a subsequent stop delivers nothing. Watching an actor that has **already** stopped delivers `Terminated` immediately, so there is no race between `spawn()`/`stop()` and `watch()`.
+
+The same mechanism cleans up the supervision tree. When a child stops, its parent deregisters it: the child is pruned from the parent's children map, so `ActorContext::child($name)` returns `null` and `children()` no longer lists it, and the **name becomes reusable** — `spawn($props, $name)` with a previously used name succeeds once the prior child has stopped (a live name still throws `ActorNameExistsException`). This makes passivation and respawn patterns work: stop an idle child and re-spawn it under the same name on demand.
+
+Death watch and child cleanup behave identically on the Fiber and Swoole runtimes — the notifications travel as ordinary mailbox messages, so the same actor code observes the same `Terminated`/lookup/reuse contract on both.
+
 ## Failure modes
 
 Lifecycle failures are usually caused by exceptions during setup or by incorrect shutdown ordering.

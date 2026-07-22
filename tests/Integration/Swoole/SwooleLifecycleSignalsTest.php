@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\Swoole;
 
 use Monadial\Nexus\Core\Actor\ActorContext;
+use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
+use Monadial\Nexus\Core\Exception\ActorNameExistsException;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Lifecycle\Terminated;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use PHPUnit\Framework\TestCase;
@@ -198,4 +201,114 @@ final class SwooleLifecycleSignalsTest extends TestCase
         self::assertContains(PreStart::class, $signals);
         self::assertContains(PostStop::class, $signals);
     }
+
+    /**
+     * REL-002 cross-runtime: a watcher receives Terminated when the watched actor
+     * stops under the Swoole runtime.
+     */
+    public function testWatcherReceivesTerminatedWhenWatchedActorStops(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('swoole-death-watch', $runtime);
+
+        /** @var list<string> $terminatedPaths */
+        $terminatedPaths = [];
+
+        $target = $system->spawn(
+            Props::fromBehavior(Behavior::receive(
+                static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same(),
+            )),
+            'target',
+        );
+
+        $watcher = $system->spawn(
+            Props::fromBehavior(
+                Behavior::receive(static function (ActorContext $ctx, object $msg): Behavior {
+                    if ($msg instanceof SwooleWatchThat) {
+                        $ctx->watch($msg->target);
+                    }
+
+                    return Behavior::same();
+                })->onSignal(static function (ActorContext $ctx, Signal $signal) use (&$terminatedPaths): Behavior {
+                    if ($signal instanceof Terminated) {
+                        $terminatedPaths[] = (string) $signal->ref->path();
+                    }
+
+                    return Behavior::same();
+                }),
+            ),
+            'watcher',
+        );
+
+        $runtime->scheduleOnce(Duration::millis(20), static fn() => $watcher->tell(new SwooleWatchThat($target)));
+        $runtime->scheduleOnce(Duration::millis(60), static fn() => $system->stop($target));
+        $runtime->scheduleOnce(Duration::millis(200), static fn() => $system->shutdown(Duration::seconds(1)));
+
+        $runtime->run();
+
+        self::assertContains('/user/target', $terminatedPaths);
+    }
+
+    /**
+     * REL-002 cross-runtime: a child name is reusable after the child stops under
+     * the Swoole runtime.
+     */
+    public function testChildNameIsReusableAfterChildStops(): void
+    {
+        $runtime = new SwooleRuntime();
+        $system = ActorSystem::create('swoole-child-reuse', $runtime);
+
+        /** @var list<string> $log */
+        $log = [];
+        $childRef = null;
+
+        $parent = $system->spawn(
+            Props::fromBehavior(Behavior::receive(
+                static function (ActorContext $ctx, object $msg) use (&$log, &$childRef): Behavior {
+                    if ($msg instanceof SwooleSpawnChild) {
+                        try {
+                            $childRef = $ctx->spawn(
+                                Props::fromBehavior(Behavior::receive(
+                                    static fn(ActorContext $c, object $m): Behavior => Behavior::same(),
+                                )),
+                                'c',
+                            );
+                            $log[] = 'spawned';
+                        } catch (ActorNameExistsException) {
+                            $log[] = 'name-exists';
+                        }
+                    }
+
+                    if ($msg instanceof SwooleStopChild && $childRef !== null) {
+                        $ctx->stop($childRef);
+                    }
+
+                    return Behavior::same();
+                },
+            )),
+            'parent',
+        );
+
+        $runtime->scheduleOnce(Duration::millis(20), static fn() => $parent->tell(new SwooleSpawnChild()));
+        $runtime->scheduleOnce(Duration::millis(60), static fn() => $parent->tell(new SwooleStopChild()));
+        $runtime->scheduleOnce(Duration::millis(120), static fn() => $parent->tell(new SwooleSpawnChild()));
+        $runtime->scheduleOnce(Duration::millis(240), static fn() => $system->shutdown(Duration::seconds(1)));
+
+        $runtime->run();
+
+        self::assertSame(['spawned', 'spawned'], $log);
+    }
 }
+
+/** @internal */
+final readonly class SwooleWatchThat
+{
+    /** @param ActorRef<object> $target */
+    public function __construct(public ActorRef $target) {}
+}
+
+/** @internal */
+final readonly class SwooleSpawnChild {}
+
+/** @internal */
+final readonly class SwooleStopChild {}
