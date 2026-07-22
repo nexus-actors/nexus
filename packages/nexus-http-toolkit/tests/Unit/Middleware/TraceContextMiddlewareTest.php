@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Http\Toolkit\Tests\Unit\Middleware;
 
 use Monadial\Nexus\Http\Toolkit\Middleware\TraceContextMiddleware;
+use Monadial\Nexus\Logger\Mdc;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use Override;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -95,6 +96,16 @@ final class TraceContextMiddlewareTest extends TestCase
             '/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/',
             $response->getHeaderLine('traceparent'),
         );
+    }
+
+    /**
+     * The middleware writes trace context into the process-static MDC tier; clear it so
+     * the keys do not leak into later tests that assert on exact MDC contents.
+     */
+    #[Override]
+    protected function tearDown(): void
+    {
+        Mdc::clearStatic();
     }
 }
 
