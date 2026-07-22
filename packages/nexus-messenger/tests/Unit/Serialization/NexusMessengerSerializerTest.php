@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Messenger\Tests\Unit\Serialization;
 
 use Monadial\Nexus\Messenger\Serialization\NexusMessengerSerializer;
 use Monadial\Nexus\Messenger\Stamp\CorrelationIdStamp;
+use Monadial\Nexus\Messenger\Stamp\ProducerIdentityStamp;
 use Monadial\Nexus\Messenger\Stamp\ReplyToStamp;
 use Monadial\Nexus\Messenger\Stamp\SourceActorPathStamp;
 use Monadial\Nexus\Messenger\Stamp\TargetActorPathStamp;
@@ -159,6 +160,19 @@ final class NexusMessengerSerializerTest extends TestCase
 
         self::assertInstanceOf(ReplyToStamp::class, $stamp);
         self::assertSame('reply-queue', $stamp->channel);
+    }
+
+    #[Test]
+    public function producerIdentityStampRoundTripsAsXNexusProducerIdentityHeader(): void
+    {
+        $envelope = new Envelope(new Greeting('hi'), [new ProducerIdentityStamp('orders-svc')]);
+
+        $encoded = $this->serializer->encode($envelope);
+        self::assertSame('orders-svc', $encoded['headers']['X-Nexus-Producer-Identity'] ?? null);
+
+        $stamp = $this->serializer->decode($encoded)->last(ProducerIdentityStamp::class);
+        self::assertInstanceOf(ProducerIdentityStamp::class, $stamp);
+        self::assertSame('orders-svc', $stamp->identity);
     }
 
     #[Test]

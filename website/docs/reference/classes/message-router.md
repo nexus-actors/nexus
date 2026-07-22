@@ -35,12 +35,35 @@ Cluster seam: resolves the `TargetActorPathStamp` on the envelope against a path
 
 ```php
 /**
- * @param array<string, ActorRef<object>> $registry keyed by actor-path string
+ * @param array<string, ActorRef<object>> $registry   keyed by actor-path string
+ * @param TargetAuthorizer|null           $authorizer  authorizes producer → target routing per envelope
  */
-public function __construct(private array $registry)
+public function __construct(private array $registry, private ?TargetAuthorizer $authorizer = null)
 ```
 
 `route()` reads `$envelope->last(TargetActorPathStamp::class)` and looks up `$registry[$stamp->path]`.
+
+#### Authorizing producer → target routes
+
+Because the target is selected by a producer-controlled stamp, a producer with publish rights could otherwise invoke **any** registered target and consume its capacity (SEC-012). Pass a `TargetAuthorizer` to gate this: a resolved target is only returned if the authorizer permits the envelope's producer to reach it. A denied envelope is unroutable — the `ReceiverActor` rejects or dead-letters it per its policy — so an unauthorized producer never reaches the target actor.
+
+`MapTargetAuthorizer` is a static allowlist mapping a producer identity (read from the `ProducerIdentityStamp`, wire header `X-Nexus-Producer-Identity`) to the exact target paths it may reach. It fails closed: no identity stamp, an unknown identity, or a target outside that identity's list is denied (and logged when a PSR-3 logger is supplied).
+
+```php
+$router = new StampMessageRouter(
+    ['/user/orders' => $ordersRef, '/user/payments' => $paymentsRef],
+    new MapTargetAuthorizer([
+        'orders-svc'   => ['/user/orders'],
+        'billing-svc'  => ['/user/payments'],
+    ]),
+);
+```
+
+:::warning Trust boundary
+A `ProducerIdentityStamp` proves origin only as far as the producer is trusted. Across mutually untrusted producers the identity must be established or validated at a **trusted boundary** — an authenticated transport, a broker ACL that stamps identity, or a signed envelope — otherwise a producer can assert any identity. The authorizer enforces the ACL; the trust in the identity comes from the boundary that set it. Pair it with broker-side ACLs when producers are not mutually trusted.
+:::
+
+Omitting the authorizer preserves the previous behavior (any producer may reach any registered target), so this is a backward-compatible, opt-in tightening.
 
 ## Interface
 
