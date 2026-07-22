@@ -32,7 +32,7 @@ composer require nexus-actors/http-toolkit
 |---|---|
 | `HealthCheck` | Interface — implement `name(): string` and `check(): HealthStatus` |
 | `HealthCheckRegistry` | Aggregates `HealthCheck` implementations; iterable at request time |
-| `LivenessHandler` | Opaque public probe — `{status: up|down}` only, no details; safe to expose |
+| `LivenessHandler` | Opaque public probe — aggregate up/down status only, no details; safe to expose |
 | `HealthCheckHandler` | Detailed readiness handler — per-check states; mount on an INTERNAL/authenticated route |
 | `HealthStatus` | Value object: `up(array $detail)`, `degraded(array $detail)`, `down(array $detail)` |
 | `State` | Enum: `Up`, `Degraded`, `Down` |
