@@ -159,7 +159,7 @@ Ten on-call scenarios with the symptom you see, what to check next, and how to r
 
 **Action:**
 1. Ensure only one pod is active per persistence ID. Use rolling deployments, not blue-green, for event-sourced services.
-2. If the conflict is from a restart, check the `ReplayFilter` mode. `RepairByDiscardOld` keeps only the latest writer's events and is the safest recovery option.
+2. If the conflict is from a restart, check the `ReplayFilter` mode. `RepairByDiscardOld` recovers using only the latest writer's events **for that replay** — the interleaved events remain in the store, so it masks the conflict rather than repairing it. Use it only after confirming the older writer is gone; the durable fix is step 3 plus enforcing a single writer.
 3. Inspect the event store for interleaved sequences: events with two different `writer_id` values on the same `persistence_id`.
 4. After recovery, rotate the persistence ID or archive the conflicted sequence before resuming normal operation.
 
