@@ -10,12 +10,14 @@ Each plan is a separate document written **after** its predecessor lands, so
 task code is grounded in the real, landed shape of the previous phase. Each
 plan produces working, testable software and its own PR.
 
-## Prerequisites — audit-stack merge sequencing
+## Prerequisites — audit-stack merge sequencing ✅ SATISFIED 2026-07-22
 
-The refactor branch is stacked on the full open audit series (#79–#105); all
-26 PRs are in its ancestry. **No refactor plan-PR opens until that stack has
-merged to `main`**, then this branch rebases onto `main` (content-identical —
-expected clean) so each plan PR diffs only refactor work.
+The audit stack #79–#105 **landed on `main` 2026-07-22** via rebase-merge of
+the chain tip (see the executed
+`2026-07-22-audit-stack-merge-plan.md`); `main`'s tree was verified
+byte-identical to the CI-green chain tip, `main` CI passed, and this branch
+was rebased onto `main` (the 30 stack commits dropped as patch-identical).
+Plan-PR sequencing is unblocked.
 
 Fixes the design explicitly depends on (regressing any of these is a plan
 failure):

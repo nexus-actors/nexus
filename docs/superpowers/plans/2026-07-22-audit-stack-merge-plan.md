@@ -1,5 +1,17 @@
 # Audit Stack Merge Plan (#79–#105)
 
+> **EXECUTED 2026-07-22.** Outcome: the repo allows ONLY rebase-merge
+> (`allow_merge_commit=false`, `allow_squash_merge=false`), so Phase B landed
+> the retargeted #105 with `gh pr merge 105 --rebase` instead of a merge
+> commit — honoring the repo's linear-history convention rather than
+> temporarily overriding settings. All 30 per-finding commits replayed onto
+> `main`; `main` tree verified byte-identical to the CI-green chain tip;
+> #79–#104 closed with provenance comments (rebase rewrites SHAs, so GitHub
+> cannot auto-close — the plan's B3 fallback); `main` CI green; refactor
+> branch rebased clean (stack commits dropped as patch-identical). Remote
+> `fix/audit-*` branch deletion (C1) completed partially (4/27) before a
+> permission gate paused it — cosmetic, content fully merged.
+
 > Prerequisite for the ClusterNode actorization series — see
 > `2026-07-22-clusternode-actorization-roadmap.md`. Execute top to bottom;
 > stop on any unexpected output.

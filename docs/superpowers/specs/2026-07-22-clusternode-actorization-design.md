@@ -1,7 +1,12 @@
 # ClusterNode Actorization — Design
 
 - **Date:** 2026-07-22
-- **Status:** Approved (brainstorm complete, pending implementation plan)
+- **Status:** Approved. Plan series roadmap + Plan 1 written
+  (`docs/superpowers/plans/`). Prerequisite audit stack #79–#105 **landed on
+  `main` 2026-07-22** (rebase-merge, tree verified byte-identical to the
+  CI-green chain tip) — all constraints C6/C14 and the framework fixes the
+  design relies on (REL-002/003/004, OPS-001, DSL-001/004, SEC-004) are now
+  on `main`.
 - **Package:** `nexus-cluster-tcp`
 - **Supersedes:** the monolithic `ClusterNode` service (`src/ClusterNode.php`, 1485 lines)
 - **Companion docs (to be written during implementation):** ADR `docs/adr/0009-actorized-cluster-node.md`, updated `website/docs/packages/cluster-tcp.md`
@@ -38,7 +43,7 @@ Goals of the refactor, in priority order:
 | D1 | Migration posture | **Greenfield redesign inside `nexus-cluster-tcp`** | Not in production; no BC constraints. Protocol behavior and soak-won fixes preserved; tests adapted to the new API keep asserting the same behavior. |
 | D2 | Persistence role | **Full event sourcing with redesigned fact-events + safe replay** | See §2.1 for the recorded dissent and its resolution. |
 | D3 | Byte→actor boundary | **Actors from the frame up** | Thin coroutine pumps do socket reads + incremental framing; complete typed frames enter link-actor mailboxes. One extra mailbox hop on ingress, benchmark-gated. |
-| D4 | SEC-008 | **Absorbed into the redesign** | Identity bound into the HMAC handshake; control frames validated against the link's authenticated identity. The `fix/audit-sec-008-node-identity` branch is repurposed/closed by this work. |
+| D4 | SEC-008 | **Absorbed into the redesign** | Identity bound into the HMAC handshake; control frames validated against the link's authenticated identity. Delivered via Plan 3 of the series; the `fix/audit-sec-008-node-identity` branch was dropped (no commits) when the audit stack landed. |
 | D5 | Topology | **Per-connection supervision tree** (§3) | Per-peer isolation preserved; a coarse single-manager actor was rejected because one inbound funnel re-introduces cross-peer head-of-line blocking. |
 | D6 | Multi-transport | **Transport seam now, TCP first; HTTP and Queue as follow-ups** (§3.4) | The actor core (membership+journal, routing, peer actors, asks) becomes transport-neutral behind an explicit SPI with pluggable wire formats. TCP is reimplemented on the seam as the proving transport in this refactor. HTTP (point-to-point, JSON/msgpack wire formats) and Queue (brokered, building on nexus-messenger's `StampMessageRouter` cluster seam) each get their own follow-up spec on the frozen SPI. |
 
