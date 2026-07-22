@@ -112,6 +112,9 @@ final class ActorCell implements ActorContext
     /** @var list<Envelope> */
     private array $stashBuffer = [];
 
+    /** @var list<Envelope> user messages/signals deferred while Suspended, replayed in order on Resume */
+    private array $suspendBuffer = [];
+
     private ?Envelope $currentEnvelope = null;
 
     /** @var list<TaskContext> */
@@ -203,17 +206,43 @@ final class ActorCell implements ActorContext
 
     public function processMessage(Envelope $envelope): void
     {
+        if ($this->state === ActorState::Stopped || $this->state === ActorState::Stopping) {
+            return;
+        }
+
+        $message = $envelope->message;
+
+        // Lifecycle (system) messages are dispatched BEFORE the Running-state guard, so a
+        // Suspended actor can still be resumed or stopped (REL-004) — previously every
+        // envelope, including Resume, was dropped while Suspended.
+        if ($message instanceof SystemMessage) {
+            $this->currentEnvelope = $envelope;
+
+            try {
+                $this->handleSystemMessage($message);
+            } finally {
+                $this->currentEnvelope = null;
+            }
+
+            return;
+        }
+
+        // While Suspended, defer user messages and signals (in arrival order) instead of
+        // discarding them; Resume replays the buffer.
+        if ($this->state === ActorState::Suspended) {
+            $this->suspendBuffer[] = $envelope;
+
+            return;
+        }
+
         if ($this->state !== ActorState::Running) {
             return;
         }
 
         $this->currentEnvelope = $envelope;
-        $message = $envelope->message;
 
         try {
-            if ($message instanceof SystemMessage) {
-                $this->handleSystemMessage($message);
-            } elseif ($message instanceof Signal) {
+            if ($message instanceof Signal) {
                 $this->handleSignal($message);
             } else {
                 $this->resetReceiveTimer();
@@ -314,6 +343,7 @@ final class ActorCell implements ActorContext
 
         // Drop buffered work and the pending receive-timeout timer.
         $this->stashBuffer = [];
+        $this->suspendBuffer = [];
 
         if ($this->receiveTimer !== null) {
             $this->receiveTimer->cancel();
@@ -728,6 +758,7 @@ final class ActorCell implements ActorContext
         } elseif ($message instanceof Resume) {
             if ($this->state->canTransitionTo(ActorState::Running)) {
                 $this->transitionTo(ActorState::Running);
+                $this->replaySuspendBuffer();
             }
         } elseif ($message instanceof Watch) {
             $this->watchedBy[(string) $message->watcher->path()] = $message->watcher;
@@ -1085,6 +1116,27 @@ final class ActorCell implements ActorContext
     {
         if ($this->state === ActorState::Suspended) {
             $this->transitionTo(ActorState::Running);
+            $this->replaySuspendBuffer();
+        }
+    }
+
+    /**
+     * Replay the messages deferred while Suspended, in arrival order, now that the actor
+     * is Running again. Re-entrant-safe: if a replayed message re-suspends or stops the
+     * actor, the remaining envelopes fall back into the buffer (or are dropped once
+     * stopped) via the normal {@see self::processMessage()} state checks.
+     */
+    private function replaySuspendBuffer(): void
+    {
+        if ($this->suspendBuffer === []) {
+            return;
+        }
+
+        $buffered = $this->suspendBuffer;
+        $this->suspendBuffer = [];
+
+        foreach ($buffered as $envelope) {
+            $this->processMessage($envelope);
         }
     }
 

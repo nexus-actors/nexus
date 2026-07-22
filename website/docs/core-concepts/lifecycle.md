@@ -35,7 +35,7 @@ _Figure 1: The actor state machine. `Suspended` and `Running` are the only state
 | `New` | Actor constructed but not yet started. |
 | `Starting` | `start()` called; setup behavior resolving. |
 | `Running` | Actor processing messages from its mailbox. |
-| `Suspended` | Actor paused; messages queue but are not processed. |
+| `Suspended` | Actor paused; user messages are deferred and replayed in order on `Resume`, system messages still dispatch. |
 | `Stopping` | Shutting down; children receive `PoisonPill`, `PostStop` delivers. |
 | `Stopped` | Terminal. Mailbox closed. No further messages processed. |
 
@@ -183,8 +183,10 @@ System messages are handled by the actor infrastructure before user-defined hand
 |---|---|
 | `PoisonPill` | Graceful stop after the current message. Delivers `PostStop`. |
 | `Kill` | Immediate stop. No further messages processed. |
-| `Suspend` | Transitions to `Suspended`. Messages queue but are not processed. |
-| `Resume` | Transitions from `Suspended` back to `Running`. |
+| `Suspend` | Transitions to `Suspended`. User messages are deferred (buffered in arrival order), not processed. |
+| `Resume` | Transitions from `Suspended` back to `Running` and replays the deferred user messages in order — nothing is lost. |
+
+System messages are dispatched **before** the running-state guard, so a `Suspended` actor still handles `Resume` and `PoisonPill` (it can always be resumed or stopped). Only user messages and signals are deferred while suspended.
 | `Watch` | Registers a watcher to receive `Terminated` when this actor stops. |
 | `Unwatch` | Removes a previously registered watcher. |
 
