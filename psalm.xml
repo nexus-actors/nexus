@@ -150,6 +150,7 @@
                 <file name="packages/nexus-core/src/Message/DeadLetter.php"/>
                 <file name="packages/nexus-core/src/Message/Unwatch.php"/>
                 <file name="packages/nexus-core/src/Message/Watch.php"/>
+                <file name="packages/nexus-core/src/Message/WatcheeTerminated.php"/>
                 <!-- Sender ref in Envelope is carried by identity; the sender's message type is unknowable at the call site -->
                 <file name="packages/nexus-core/src/Mailbox/Envelope.php"/>
                 <!-- Reply-to pattern: the reply-to ref type cannot be known at the Effect level (Akka Typed: ActorRef[Nothing]) -->

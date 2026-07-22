@@ -19,13 +19,16 @@ use Monadial\Nexus\Core\Lifecycle\PreRestart;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
 use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Core\Lifecycle\Signal;
+use Monadial\Nexus\Core\Lifecycle\Terminated;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Core\Message\ChildTerminated;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Message\Resume;
 use Monadial\Nexus\Core\Message\Suspend;
 use Monadial\Nexus\Core\Message\SystemMessage;
 use Monadial\Nexus\Core\Message\Unwatch;
 use Monadial\Nexus\Core\Message\Watch;
+use Monadial\Nexus\Core\Message\WatcheeTerminated;
 use Monadial\Nexus\Core\Supervision\Directive;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Observability\Metric\Meter;
@@ -96,8 +99,11 @@ final class ActorCell implements ActorContext
     /** @var array<string, ActorRef<object>> */
     private array $childrenMap = [];
 
-    /** @var array<string, ActorRef<object>> */
-    private array $watchers = [];
+    /** @var array<string, ActorRef<object>> actors watching THIS actor; each is sent Terminated when it stops */
+    private array $watchedBy = [];
+
+    /** @var array<string, ActorRef<object>> actors THIS actor watches; kept for unwatch bookkeeping */
+    private array $watching = [];
 
     /** @var list<Envelope> */
     private array $stashBuffer = [];
@@ -244,6 +250,21 @@ final class ActorCell implements ActorContext
         // Deliver PostStop
         $this->handleSignal(new PostStop());
 
+        // Death watch: notify every actor watching this one that it has terminated.
+        $notification = new WatcheeTerminated($this->selfRef);
+
+        foreach ($this->watchedBy as $watcher) {
+            $watcher->tell($notification);
+        }
+
+        $this->watchedBy = [];
+        $this->watching = [];
+
+        // Parent deregistration: let the parent prune this child from its children
+        // map so the map stays bounded and the name can be reused. Top-level actors
+        // have no parent cell (the ActorSystem prunes dead names on respawn).
+        $this->parentRef?->tell(new ChildTerminated($this->actorPath));
+
         $this->mailbox->close();
 
         $this->transitionTo(ActorState::Stopped);
@@ -356,9 +377,14 @@ final class ActorCell implements ActorContext
     #[Override]
     public function spawn(Props $props, string $name): ActorRef
     {
-        // Check for duplicate child name
+        // Reject a duplicate LIVE child name; a previously stopped child with this
+        // name is pruned so the name can be reused (matches ActorSystem::spawn).
         if (isset($this->childrenMap[$name])) {
-            throw new ActorNameExistsException($this->actorPath, $name);
+            if ($this->childrenMap[$name]->isAlive()) {
+                throw new ActorNameExistsException($this->actorPath, $name);
+            }
+
+            unset($this->childrenMap[$name]);
         }
 
         $childPath = $this->actorPath->child($name);
@@ -406,14 +432,20 @@ final class ActorCell implements ActorContext
     #[Override]
     public function child(string $name): ?ActorRef
     {
-        return $this->childrenMap[$name] ?? null;
+        $ref = $this->childrenMap[$name] ?? null;
+
+        // A stopped child is no longer a valid lookup even if its ChildTerminated
+        // notification has not yet been processed.
+        return $ref !== null && $ref->isAlive()
+            ? $ref
+            : null;
     }
 
     /** @return array<string, ActorRef<object>> */
     #[Override]
     public function children(): array
     {
-        return $this->childrenMap;
+        return array_filter($this->childrenMap, static fn(ActorRef $ref): bool => $ref->isAlive());
     }
 
     /**
@@ -423,8 +455,16 @@ final class ActorCell implements ActorContext
     #[Override]
     public function watch(ActorRef $target): void
     {
+        // Watching an already-dead actor delivers Terminated immediately — the
+        // target's mailbox is closed and would never process a Watch message.
+        if (!$target->isAlive()) {
+            $this->selfRef->tell(new WatcheeTerminated($target));
+
+            return;
+        }
+
         $target->tell(new Watch($this->selfRef));
-        $this->watchers[(string) $target->path()] = $target;
+        $this->watching[(string) $target->path()] = $target;
     }
 
     /**
@@ -435,7 +475,7 @@ final class ActorCell implements ActorContext
     public function unwatch(ActorRef $target): void
     {
         $target->tell(new Unwatch($this->selfRef));
-        unset($this->watchers[(string) $target->path()]);
+        unset($this->watching[(string) $target->path()]);
     }
 
     /** @param T $message */
@@ -684,9 +724,29 @@ final class ActorCell implements ActorContext
                 $this->transitionTo(ActorState::Running);
             }
         } elseif ($message instanceof Watch) {
-            $this->watchers[(string) $message->watcher->path()] = $message->watcher;
+            $this->watchedBy[(string) $message->watcher->path()] = $message->watcher;
         } elseif ($message instanceof Unwatch) {
-            unset($this->watchers[(string) $message->watcher->path()]);
+            unset($this->watchedBy[(string) $message->watcher->path()]);
+        } elseif ($message instanceof ChildTerminated) {
+            $this->pruneTerminatedChild($message->childPath);
+        } elseif ($message instanceof WatcheeTerminated) {
+            // A watched actor terminated: surface it to the behavior as a Terminated
+            // signal (signals cannot travel through a mailbox directly).
+            $this->handleSignal(new Terminated($message->subject));
+        }
+    }
+
+    /**
+     * Deregister a terminated child so the children map stays bounded and the name
+     * becomes reusable. Guarded by isAlive() so a stale notification cannot evict a
+     * freshly respawned child that reuses the same path.
+     */
+    private function pruneTerminatedChild(ActorPath $childPath): void
+    {
+        $name = $childPath->name();
+
+        if (isset($this->childrenMap[$name]) && !$this->childrenMap[$name]->isAlive()) {
+            unset($this->childrenMap[$name]);
         }
     }
 
