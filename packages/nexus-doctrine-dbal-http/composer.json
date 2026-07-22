@@ -1,0 +1,34 @@
+{
+    "name": "nexus-actors/doctrine-dbal-http",
+    "description": "Nexus Doctrine DBAL HTTP integration — per-request connection scope middleware, transactional decorator, and pool-exhaustion handling.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.5.7",
+        "doctrine/dbal": "^4.0",
+        "nexus-actors/core": "^0.1",
+        "nexus-actors/doctrine-dbal": "^0.1",
+        "nexus-actors/http": "^0.1",
+        "nyholm/psr7": "^1.8",
+        "psr/http-factory": "^1.1",
+        "psr/http-message": "^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/log": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Monadial\\Nexus\\Doctrine\\Dbal\\Http\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Monadial\\Nexus\\Doctrine\\Dbal\\Http\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

@@ -13,7 +13,9 @@
         <directory name="packages/nexus-cluster-tcp/src" />
         <directory name="packages/nexus-core/src" />
         <directory name="packages/nexus-doctrine-dbal/src" />
+        <directory name="packages/nexus-doctrine-dbal-http/src" />
         <directory name="packages/nexus-doctrine-orm/src" />
+        <directory name="packages/nexus-doctrine-orm-http/src" />
         <directory name="packages/nexus-http/src" />
         <directory name="packages/nexus-http-auth/src" />
         <directory name="packages/nexus-http-server-swoole/src" />

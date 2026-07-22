@@ -1,6 +1,6 @@
 # nexus-actors/doctrine-orm
 
-Nexus Doctrine ORM — pooled EntityManager, HTTP middleware, and EntityBehavior DSL.
+Nexus Doctrine ORM — pooled EntityManager and EntityBehavior DSL. HTTP middleware lives in [nexus-actors/doctrine-orm-http](https://github.com/nexus-actors/doctrine-orm-http).
 
 > **Read-only subtree split** of [nexus-actors/nexus](https://github.com/nexus-actors/nexus).
 > Report issues and send pull requests to the monorepo — this repository only receives

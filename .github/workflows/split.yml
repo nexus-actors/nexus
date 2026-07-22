@@ -26,7 +26,9 @@ jobs:
           - { local: 'nexus-cluster', remote: 'cluster' }
           - { local: 'nexus-core', remote: 'core' }
           - { local: 'nexus-doctrine-dbal', remote: 'doctrine-dbal' }
+          - { local: 'nexus-doctrine-dbal-http', remote: 'doctrine-dbal-http' }
           - { local: 'nexus-doctrine-orm', remote: 'doctrine-orm' }
+          - { local: 'nexus-doctrine-orm-http', remote: 'doctrine-orm-http' }
           - { local: 'nexus-http-auth', remote: 'http-auth' }
           - { local: 'nexus-http-server-swoole-threads', remote: 'http-server-swoole-threads' }
           - { local: 'nexus-http-server-swoole', remote: 'http-server-swoole' }

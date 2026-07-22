@@ -17,7 +17,9 @@
             <directory>packages/nexus-messenger-console/tests/Unit</directory>
             <directory>packages/nexus-cluster-tcp/tests/Unit</directory>
             <directory>packages/nexus-doctrine-dbal/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-dbal-http/tests/Unit</directory>
             <directory>packages/nexus-doctrine-orm/tests/Unit</directory>
+            <directory>packages/nexus-doctrine-orm-http/tests/Unit</directory>
             <directory>packages/nexus-worker-pool/tests/Unit</directory>
             <directory>packages/nexus-app/tests/Unit</directory>
             <directory>packages/nexus-persistence/tests/Unit</directory>
@@ -143,7 +145,9 @@
             <directory>packages/nexus-messenger-console/src</directory>
             <directory>packages/nexus-cluster-tcp/src</directory>
             <directory>packages/nexus-doctrine-dbal/src</directory>
+            <directory>packages/nexus-doctrine-dbal-http/src</directory>
             <directory>packages/nexus-doctrine-orm/src</directory>
+            <directory>packages/nexus-doctrine-orm-http/src</directory>
             <directory>packages/nexus-worker-pool/src</directory>
             <directory>packages/nexus-worker-pool-swoole/src</directory>
             <directory>packages/nexus-app/src</directory>

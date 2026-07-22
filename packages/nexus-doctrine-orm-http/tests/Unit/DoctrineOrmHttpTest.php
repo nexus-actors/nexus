@@ -2,17 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit\Http;
+namespace Monadial\Nexus\Doctrine\Orm\Http\Tests\Unit;
 
-use Doctrine\DBAL\Connection;
-use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionResolver;
-use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionScopeMiddleware;
-use Monadial\Nexus\Doctrine\Dbal\Http\DoctrineHttp;
+use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Doctrine\Dbal\Http\PoolExhaustedToServiceUnavailable;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
 use Monadial\Nexus\Doctrine\Dbal\Pool\ConnectionPool;
 use Monadial\Nexus\Doctrine\Dbal\Pool\PoolConfig;
 use Monadial\Nexus\Doctrine\Dbal\Tests\Support\StubConnectionFactory;
+use Monadial\Nexus\Doctrine\Orm\Http\DoctrineOrmHttp;
+use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerResolver;
+use Monadial\Nexus\Doctrine\Orm\Http\EntityManagerScopeMiddleware;
+use Monadial\Nexus\Doctrine\Orm\Pool\EmPoolConfig;
+use Monadial\Nexus\Doctrine\Orm\Pool\EntityManagerPool;
+use Monadial\Nexus\Doctrine\Orm\Tests\Support\StubEntityManagerFactory;
 use Monadial\Nexus\Http\Handler\Resolver\CompileContext;
 use Monadial\Nexus\Http\Handler\Resolver\Exception\UnresolvableParameterException;
 use Monadial\Nexus\Http\Handler\Resolver\ParamResolverRegistry;
@@ -23,43 +26,42 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
 
-#[CoversClass(DoctrineHttp::class)]
-final class DoctrineHttpTest extends TestCase
+#[CoversClass(DoctrineOrmHttp::class)]
+final class DoctrineOrmHttpTest extends TestCase
 {
     #[Test]
-    public function installReturnsRegistryThatResolvesConnectionParam(): void
+    public function installOrmReturnsRegistryThatResolvesEntityManagerParam(): void
     {
         $pool = $this->makePool();
         $registry = new ParamResolverRegistry();
         $middlewares = [];
 
-        $updated = DoctrineHttp::install(registry: $registry, middlewares: $middlewares, connPool: $pool);
+        $updated = DoctrineOrmHttp::installOrm(registry: $registry, middlewares: $middlewares, emPool: $pool);
 
-        // Behavioral: compiling a Connection-typed parameter must succeed
-        $param = (new ReflectionFunction(static function (Connection $c): void {}))->getParameters()[0];
+        $param = (new ReflectionFunction(static function (EntityManagerInterface $em): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 
         $metadata = $updated->compile($param, $ctx);
 
-        self::assertSame('c', $metadata->name);
-        self::assertSame(Connection::class, $metadata->type);
-        self::assertInstanceOf(ConnectionResolver::class, $metadata->resolver);
+        self::assertSame('em', $metadata->name);
+        self::assertSame(EntityManagerInterface::class, $metadata->type);
+        self::assertInstanceOf(EntityManagerResolver::class, $metadata->resolver);
     }
 
     #[Test]
-    public function installAppendsScopeAndExhaustedMiddlewares(): void
+    public function installOrmAppendsScopeAndExhaustedMiddlewares(): void
     {
         $pool = $this->makePool();
         $registry = new ParamResolverRegistry();
         $middlewares = [];
 
-        DoctrineHttp::install(registry: $registry, middlewares: $middlewares, connPool: $pool);
+        DoctrineOrmHttp::installOrm(registry: $registry, middlewares: $middlewares, emPool: $pool);
 
         $hasScopeMiddleware = false;
         $hasExhaustedMiddleware = false;
 
         foreach ($middlewares as $m) {
-            if ($m instanceof ConnectionScopeMiddleware) {
+            if ($m instanceof EntityManagerScopeMiddleware) {
                 $hasScopeMiddleware = true;
             }
 
@@ -73,28 +75,35 @@ final class DoctrineHttpTest extends TestCase
     }
 
     #[Test]
-    public function installDoesNotMutateOriginalRegistry(): void
+    public function installOrmDoesNotMutateOriginalRegistry(): void
     {
         $pool = $this->makePool();
         $registry = new ParamResolverRegistry();
         $middlewares = [];
 
-        DoctrineHttp::install(registry: $registry, middlewares: $middlewares, connPool: $pool);
+        DoctrineOrmHttp::installOrm(registry: $registry, middlewares: $middlewares, emPool: $pool);
 
-        // The original registry must remain empty (immutable contract)
-        $param = (new ReflectionFunction(static function (Connection $c): void {}))->getParameters()[0];
+        $param = (new ReflectionFunction(static function (EntityManagerInterface $em): void {}))->getParameters()[0];
         $ctx = new CompileContext(Scope::HttpRequest, 'TestOwner', new ResolverServices());
 
         $this->expectException(UnresolvableParameterException::class);
         $registry->compile($param, $ctx);
     }
 
-    private function makePool(): ConnectionPool
+    private function makePool(): EntityManagerPool
     {
-        return new ConnectionPool(
-            name: 'orders',
+        $connPool = new ConnectionPool(
+            name: 'em-private',
             factory: new StubConnectionFactory(),
             config: new PoolConfig(max: 1, minIdle: 0),
+            channel: new FiberChannel(1),
+        );
+
+        return new EntityManagerPool(
+            name: 'orders',
+            factory: new StubEntityManagerFactory(),
+            connPool: $connPool,
+            config: new EmPoolConfig(max: 1, minIdle: 0),
             channel: new FiberChannel(1),
         );
     }

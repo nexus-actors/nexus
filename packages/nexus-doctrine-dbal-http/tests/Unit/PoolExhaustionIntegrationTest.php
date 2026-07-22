@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Doctrine\Dbal\Tests\Unit\Http;
+namespace Monadial\Nexus\Doctrine\Dbal\Http\Tests\Unit;
 
 use Closure;
 use Monadial\Nexus\Doctrine\Dbal\Http\ConnectionLease;

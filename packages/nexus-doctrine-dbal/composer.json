@@ -1,20 +1,14 @@
 {
     "name": "nexus-actors/doctrine-dbal",
-    "description": "Nexus Doctrine DBAL — coroutine-aware connection pool, HTTP scope middleware, and actor-side integration.",
+    "description": "Nexus Doctrine DBAL — coroutine-aware connection pool and actor-side integration (HTTP middleware lives in nexus-actors/doctrine-dbal-http).",
     "type": "library",
     "license": "MIT",
     "require": {
         "php": ">=8.5.7",
         "doctrine/dbal": "^4.0",
         "nexus-actors/core": "^0.1",
-        "nexus-actors/http": "^0.1",
         "nexus-actors/runtime": "^0.1",
-        "nyholm/psr7": "^1.8",
         "psr/event-dispatcher": "^1.0",
-        "psr/http-factory": "^1.1",
-        "psr/http-message": "^2.0",
-        "psr/http-server-handler": "^1.0",
-        "psr/http-server-middleware": "^1.0",
         "psr/log": "^3.0"
     },
     "require-dev": {
