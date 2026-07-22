@@ -38,6 +38,7 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
      * @param Closure(): bool $aliveChecker Closure that checks whether the actor is alive
      * @param Runtime $runtime Runtime for creating FutureSlots
      * @param Observability $observability Provider used to inject trace context into outgoing envelopes.
+     * @param DeadLetterRef|null $deadLetters Sink for fire-and-forget deliveries the mailbox cannot accept.
      */
     public function __construct(
         private ActorPath $path,
@@ -45,13 +46,21 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
         private Closure $aliveChecker,
         private Runtime $runtime,
         private Observability $observability,
+        private ?DeadLetterRef $deadLetters = null,
     ) {}
 
     /** @param T|SystemMessage $message */
     #[Override]
     public function tell(object $message): void
     {
-        $_ = $this->offer($message);
+        // Fire-and-forget: a message the mailbox drops (closed, or full under a
+        // drop strategy) is undeliverable and must be routed to dead letters rather
+        // than vanish. Backpressured is NOT a drop — the caller is expected to retry —
+        // so only Dropped is dead-lettered. offer() (BackpressureCapable) deliberately
+        // does not dead-letter, leaving the outcome for the caller to handle.
+        if ($this->offer($message) === EnqueueResult::Dropped) {
+            $this->deadLetters?->tell($message);
+        }
     }
 
     /**
@@ -75,9 +84,13 @@ final readonly class LocalActorRef implements ActorRef, BackpressureCapable
     public function enqueueEnvelope(Envelope $envelope): void
     {
         try {
-            $_ = $this->mailbox->enqueue($envelope);
+            if ($this->mailbox->enqueue($envelope) === EnqueueResult::Dropped) {
+                $this->deadLetters?->tell($envelope->message);
+            }
         } catch (MailboxClosedException) {
-            // fire-and-forget: silently drop messages to closed mailboxes
+            // fire-and-forget: a closed mailbox cannot accept the envelope — route it
+            // to dead letters instead of silently dropping it.
+            $this->deadLetters?->tell($envelope->message);
         }
     }
 

@@ -144,6 +144,7 @@ final class ActorCell implements ActorContext
             fn(): bool => $this->isAlive(),
             $this->runtime,
             $this->observability,
+            $this->deadLetters,
         );
         $this->selfRef = $ref;
     }
@@ -538,6 +539,7 @@ final class ActorCell implements ActorContext
             static fn(): bool => true,
             $this->runtime,
             $this->observability,
+            $this->deadLetters,
         );
     }
 

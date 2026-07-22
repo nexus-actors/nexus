@@ -60,6 +60,8 @@ Ten on-call scenarios with the symptom you see, what to check next, and how to r
 3. If the actor is crashing on a specific message, fix the handler or add supervision to restart it.
 4. If the spike is deployment-related and transient, no action required — monitor that it returns to baseline.
 
+**Reading the signal:** the `nexus.actor_system.dead_letters` gauge is a **monotonic total** (`DeadLetterRef::total()`) — it counts every dead letter and never resets, so alert on its *rate of change*, not its absolute value. For inspection, `DeadLetterRef::captured()` retains only the most recent ~1000 messages (bounded so it cannot leak memory under a flood); subscribe to the PSR-14 `MessageDeadLettered` event to capture every one without polling. A `tell()` whose mailbox is closed or full is now dead-lettered consistently rather than silently dropped, so a genuine delivery-failure spike is fully visible here.
+
 ---
 
 ### 4. Ask timeout cascade
