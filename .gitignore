@@ -38,3 +38,4 @@ landing/.astro/
 
 .codegraph/
 .whet/
+.deptrac.cache
