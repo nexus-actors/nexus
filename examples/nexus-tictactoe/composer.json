@@ -7,7 +7,7 @@
         "php": ">=8.5",
         "ext-pdo_pgsql": "*",
         "ext-pdo_sqlite": "*",
-        "ext-swoole": "^6.0",
+        "ext-swoole": ">=6.2.1",
         "cuyz/valinor": "^2.3",
         "doctrine/dbal": "^4.0",
         "doctrine/orm": "^3.0",

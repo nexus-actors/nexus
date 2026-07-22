@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Documentation
+- Reconciled the Swoole extension requirement so every source agrees (audit DOC-005). The core Swoole packages, the docs (installation, runtimes, deployment, glossary), and the `Dockerfile` already required `ext-swoole >= 6.2.1`, but three manifests disagreed — `nexus-tictactoe` and `nexus-wallet-app` declared `^6.0` and `nexus-observability-swoole` declared `*`. All now declare `>=6.2.1`, so the supported platform is unambiguous and a copied example cannot resolve an unsupported Swoole build.
 - Corrected `ReplayFilter` / `RepairByDiscardOld` documentation to stop implying a permanent, on-disk repair (audit DOC-004). All replay-filter modes operate only on the in-memory list of events being replayed for a single recovery — `RepairByDiscardOld` excludes older-writer events from the *rebuilt state* but never deletes or mutates the event store; the conflicting events stay persisted and are re-read and re-filtered on every subsequent recovery. The persistence overview, the operations runbook, and the `ReplayFilter` class/`repairByDiscardOld()` docblocks now state this explicitly so operators don't believe a conflict was durably repaired when only one replay was filtered.
 
 ### Changed
