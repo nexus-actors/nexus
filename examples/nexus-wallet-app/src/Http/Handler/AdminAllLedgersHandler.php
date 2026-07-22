@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Monadial\Nexus\Doctrine\Dbal\Http\Attribute\Transactional;
 use Monadial\Nexus\Example\Wallet\Http\Response\AdminWalletsResponse;
 use Monadial\Nexus\Example\Wallet\Http\Response\AdminWalletSummary;
+use Monadial\Nexus\Http\Auth\Attribute\RequiresRole;
 use Monadial\Nexus\Http\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 
@@ -29,6 +30,7 @@ use function count;
  * write handlers, `#[Transactional]` wraps the call in
  * `Connection::beginTransaction()` / `commit()` / `rollBack()`.
  */
+#[RequiresRole('admin')]
 #[Transactional]
 final readonly class AdminAllLedgersHandler
 {

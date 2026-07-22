@@ -113,7 +113,9 @@ curl -H "Authorization: Bearer alice-token" \
 
 # Admin view — raw SQL via injected DBAL Connection (NOT the ORM EM),
 # wrapped in #[Transactional]. Lists all wallets ranked by net balance.
-curl http://localhost:8080/admin/wallets
+# Requires the admin role: a user token (or no token) is rejected 401/403.
+curl -H "Authorization: Bearer admin-token" \
+     http://localhost:8080/admin/wallets
 
 make down
 ```
@@ -204,18 +206,42 @@ results
 
 ## Authentication
 
-Three demo tokens are baked in via the `WALLET_AUTH_TOKENS` env var:
+Two separate token lists are baked in, each minting a different role. User
+tokens come from `WALLET_AUTH_TOKENS`:
 
 ```
 WALLET_AUTH_TOKENS=alice-token=alice,bob-token=bob,carol-token=carol
 ```
 
-Format: `token1=user1,token2=user2,…`. Each token maps to a `SimplePrincipal`
-with `roles=[user]` and scopes `wallet:read`, `wallet:write`.
+Each maps to a `SimplePrincipal` with `roles=[user]` and scopes
+`wallet:read`, `wallet:write`. Admin tokens come from a **separate**
+`WALLET_ADMIN_TOKENS` list so an admin capability can never be issued by
+accident from the user list:
+
+```
+WALLET_ADMIN_TOKENS=admin-token=root
+```
+
+Admin tokens add `roles=[admin]` and the `wallet:admin` scope. The
+`/admin/wallets` route carries `AuthorizationMiddleware` and its handler is
+annotated `#[RequiresRole('admin')]`, so anonymous or user-only callers are
+rejected (401/403) before any query runs.
+
+Format for both lists: `token1=user1,token2=user2,…`.
 
 For real auth, swap `StaticTokenAuthenticator` for `JwtAuthenticator`
 (also in `nexus-actors/http-auth`) and verify against your IdP — the
 middleware contract is identical.
+
+### Production safety
+
+These demo credentials — plus the demo Postgres password (`wallet`) — are
+fine for `WALLET_ENV=dev` (the default) but must never ship as-is. Set
+`WALLET_ENV=production` and the app **fails closed at boot**
+(`DemoDefaultsInProductionException`) if the DB password, `WALLET_AUTH_TOKENS`,
+or `WALLET_ADMIN_TOKENS` still hold a built-in demo value. The Postgres port
+is bound to `127.0.0.1` in `compose.yaml` so the database is not reachable
+off-host.
 
 ## File layout
 

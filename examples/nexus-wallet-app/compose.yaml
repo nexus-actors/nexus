@@ -28,7 +28,12 @@ services:
       # Worker count — override at boot via `WALLET_THREADS=N docker compose up -d app`.
       # 4 is enough for ~42k rps at low concurrency; 8 hits ~56k at 256 clients.
       WALLET_THREADS: "${WALLET_THREADS:-4}"
+      # Demo mode. In production set WALLET_ENV=production AND real secrets
+      # (WALLET_DB_PASS, WALLET_AUTH_TOKENS, WALLET_ADMIN_TOKENS) — boot fails
+      # closed on the built-in demo defaults (SEC-013).
+      WALLET_ENV: "dev"
       WALLET_AUTH_TOKENS: "alice-token=alice,bob-token=bob,carol-token=carol"
+      WALLET_ADMIN_TOKENS: "admin-token=root"
       # Doctrine wiring — the ledger is now a shared Postgres database
       # (one source of truth across all worker threads) instead of
       # per-worker SQLite files.
@@ -79,7 +84,10 @@ services:
       POSTGRES_USER: "wallet"
       POSTGRES_PASSWORD: "wallet"
     ports:
-      - "5433:5432"
+      # Loopback-bound: the demo DB is reachable only from the host, not
+      # published on every interface (SEC-013). Drop this block entirely to
+      # keep the DB fully internal to the compose network.
+      - "127.0.0.1:5433:5432"
     volumes:
       - wallet-db-data:/var/lib/postgresql/data
     healthcheck:
