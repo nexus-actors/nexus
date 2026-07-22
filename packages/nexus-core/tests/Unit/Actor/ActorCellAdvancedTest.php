@@ -199,15 +199,8 @@ final class ActorCellAdvancedTest extends TestCase
     #[Test]
     public function resume_transitions_back_to_running(): void
     {
-        // NOTE: processMessage() early-returns when state !== Running.
-        // After Suspend, the actor is Suspended, so a Resume via processMessage
-        // will be ignored. This test documents the design gap:
-        // Resume cannot be delivered through processMessage in Suspended state.
-        //
-        // However, we can verify the handleSystemMessage logic works correctly
-        // if called directly. Since handleSystemMessage is private, we test
-        // the observable behavior: after Suspend, processMessage with Resume
-        // does NOT transition back (this is the design gap).
+        // REL-004: system messages are dispatched before the Running-state guard, so
+        // a Resume delivered while Suspended transitions the actor back to Running.
 
         /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
@@ -217,28 +210,26 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        // Suspend
         $cell->processMessage($this->envelope(new Suspend()));
         self::assertSame(ActorState::Suspended, $cell->actorState());
 
-        // Attempt Resume via processMessage -- early-returns because state !== Running
         $cell->processMessage($this->envelope(new Resume()));
 
-        // Actor remains Suspended: the Resume is silently dropped because
-        // processMessage guards on Running state. A dedicated system message
-        // queue is needed to fix this.
-        self::assertSame(ActorState::Suspended, $cell->actorState());
+        self::assertSame(ActorState::Running, $cell->actorState());
     }
 
     #[Test]
-    public function suspended_actor_ignores_user_messages(): void
+    public function suspended_actor_defers_user_messages_until_resume(): void
     {
-        $messageProcessed = false;
+        /** @var list<string> $processed */
+        $processed = [];
 
         /** @var Behavior<AdvancedTestMessage> */
         $behavior = Behavior::receive(
-            static function (ActorContext $ctx, object $msg) use (&$messageProcessed): Behavior {
-                $messageProcessed = true;
+            static function (ActorContext $ctx, object $msg) use (&$processed): Behavior {
+                if ($msg instanceof AdvancedTestMessage) {
+                    $processed[] = $msg->value;
+                }
 
                 return Behavior::same();
             },
@@ -247,15 +238,19 @@ final class ActorCellAdvancedTest extends TestCase
         $cell = $this->createCell($behavior);
         $cell->start();
 
-        // Suspend the actor
         $cell->processMessage($this->envelope(new Suspend()));
-        self::assertSame(ActorState::Suspended, $cell->actorState());
 
-        // User message should be ignored
-        $cell->processMessage($this->envelope(new AdvancedTestMessage('ignored')));
+        // User messages arriving while Suspended are deferred, not processed and not lost.
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('first')));
+        $cell->processMessage($this->envelope(new AdvancedTestMessage('second')));
 
-        self::assertFalse($messageProcessed, 'User message should not be processed while Suspended');
-        self::assertSame(ActorState::Suspended, $cell->actorState());
+        self::assertSame([], $processed, 'User messages must not be processed while Suspended');
+
+        // Resuming replays the deferred messages in arrival order.
+        $cell->processMessage($this->envelope(new Resume()));
+
+        self::assertSame(['first', 'second'], $processed);
+        self::assertSame(ActorState::Running, $cell->actorState());
     }
 
     // ======================================================================
