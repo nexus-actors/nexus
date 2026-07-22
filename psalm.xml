@@ -135,6 +135,26 @@
             </errorLevel>
         </UnusedProperty>
 
+        <!-- Plan-1 seams of the cluster actorization (spec §3.4-§3.5): the WireFormat
+             seam and the injected metrics classes deliberately ship AHEAD of their
+             consumers — the transport edge and actors that use them land in Plans 2-5
+             of docs/superpowers/plans/2026-07-22-clusternode-actorization-roadmap.md.
+             Delete each entry the moment its first src consumer lands. -->
+        <UnusedClass>
+            <errorLevel type="suppress">
+                <file name="packages/nexus-cluster-tcp/src/Protocol/MsgpackWireFormat.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/AskMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/ConnectionMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/MembershipMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/TelemetryGuard.php" />
+            </errorLevel>
+        </UnusedClass>
+        <PossiblyUnusedMethod>
+            <errorLevel type="suppress">
+                <file name="packages/nexus-cluster-tcp/src/Protocol/WireFormat.php" />
+            </errorLevel>
+        </PossiblyUnusedMethod>
+
         <PluginIssue name="UntypedActorRefInjection">
             <errorLevel type="suppress">
                 <!-- Heterogeneous children/registry maps: one map holds refs with different message types; PHP has no per-key generics -->
