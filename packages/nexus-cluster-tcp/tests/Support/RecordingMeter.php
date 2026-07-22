@@ -13,6 +13,11 @@ use Monadial\Nexus\Observability\Metric\ObservableGauge;
 use Monadial\Nexus\Observability\Metric\UpDownCounter;
 use Override;
 
+/**
+ * Records instrument creation (name => unit) and actual values for testing.
+ * Instruments use RecordingCounter/RecordingHistogram for value tracking,
+ * and instrument creation data is recorded for metric name pinning tests.
+ */
 final class RecordingMeter implements Meter
 {
     /** @var array<string, RecordingCounter> */
@@ -51,7 +56,8 @@ final class RecordingMeter implements Meter
         callable $callback,
         string $unit = '',
         string $description = '',
-    ): ObservableGauge {
+    ): ObservableGauge
+    {
         $this->gaugeCallbacks[$name] = $callback;
 
         return new NoopObservableGauge();
