@@ -92,10 +92,11 @@ make build && make up && make install
 | `make down` | Stop containers |
 | `make install` | Run `composer install` inside the container |
 | `make shell` | Open a bash shell in the PHP container |
-| `make test` | Run the suites that fit on the `php` container (unit + Fiber/HTTP/Step/serialization/messenger/persistence integration) |
+| `make test` | Run only the suites that fit on the `php` container (unit + Fiber/HTTP/Step/serialization/messenger/persistence integration) — **not** comprehensive |
+| `make test-all` | Run the full correctness matrix across both the `php` and `php-swoole` containers |
 | `make psalm` | Run Psalm static analysis |
 
-`make test` is **not** every suite: Swoole, worker-pool, cluster, HTTP-Swoole, and Doctrine-Swoole integration tests run on the `php-swoole` container via dedicated targets (`make test-swoole`, `make test-worker-pool-swoole`, `make test-cluster`, `make test-http-swoole`, `make test-doctrine`), and performance benchmarks have their own `perf-*` targets. Run `make help` for the full list.
+`make test` is **not** every suite: Swoole, worker-pool, cluster, HTTP-Swoole, and Doctrine-Swoole integration tests run on the `php-swoole` container via dedicated targets (`make test-swoole`, `make test-worker-pool-swoole`, `make test-cluster`, `make test-http-swoole`, `make test-doctrine`), and performance benchmarks have their own `perf-*` targets. Run **`make test-all`** to execute the whole correctness matrix (everything except the perf benchmarks) with a single command, or `make help` for the full list of targets.
 
 ## Smoke test
 
