@@ -12,6 +12,9 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
+use function array_keys;
+use function ksort;
+
 #[CoversClass(AskMetrics::class)]
 #[CoversClass(ConnectionMetrics::class)]
 #[CoversClass(MembershipMetrics::class)]
@@ -52,6 +55,42 @@ final class MetricsClassesTest extends TestCase
     }
 
     #[Test]
+    public function connectionMetricsPinsInstrumentUnits(): void
+    {
+        $meter = new RecordingMeter();
+        new ConnectionMetrics($meter);
+
+        $expectedCounterUnits = [
+            'nexus.cluster.control_send.failed' => '{send}',
+            'nexus.cluster.frames.buffered' => '{frame}',
+            'nexus.cluster.frames.decode_failed' => '{frame}',
+            'nexus.cluster.frames.dropped' => '{frame}',
+            'nexus.cluster.frames.handler_failed' => '{frame}',
+            'nexus.cluster.frames.received' => '{frame}',
+            'nexus.cluster.frames.sent' => '{frame}',
+            'nexus.cluster.handshake.rejected' => '{handshake}',
+            'nexus.cluster.messages.local_shortcircuit' => '{message}',
+            'nexus.cluster.messages.received' => '{message}',
+            'nexus.cluster.messages.sent' => '{message}',
+            'nexus.cluster.messages.unroutable' => '{message}',
+            'nexus.cluster.send_buffer.dropped' => '{message}',
+            'nexus.cluster.socket_write.failed' => '{write}',
+        ];
+        $expectedHistogramUnits = [
+            'nexus.cluster.bytes.received' => 'By',
+            'nexus.cluster.bytes.sent' => 'By',
+        ];
+
+        $actualCounterUnits = $meter->counterUnits;
+        ksort($actualCounterUnits);
+        $actualHistogramUnits = $meter->histogramUnits;
+        ksort($actualHistogramUnits);
+
+        self::assertSame($expectedCounterUnits, $actualCounterUnits);
+        self::assertSame($expectedHistogramUnits, $actualHistogramUnits);
+    }
+
+    #[Test]
     public function membershipMetricsCreatesEveryDocumentedInstrumentEagerly(): void
     {
         $meter = new RecordingMeter();
@@ -67,6 +106,26 @@ final class MetricsClassesTest extends TestCase
             ],
             array_keys($meter->counters),
         );
+    }
+
+    #[Test]
+    public function membershipMetricsPinsInstrumentUnits(): void
+    {
+        $meter = new RecordingMeter();
+        new MembershipMetrics($meter);
+
+        $expectedCounterUnits = [
+            'nexus.cluster.gossip.rounds' => '{round}',
+            'nexus.cluster.heartbeats.received' => '{heartbeat}',
+            'nexus.cluster.nodes.pruned' => '{node}',
+            'nexus.cluster.nodes.recovered' => '{node}',
+            'nexus.cluster.nodes.suspected' => '{node}',
+        ];
+
+        $actualCounterUnits = $meter->counterUnits;
+        ksort($actualCounterUnits);
+
+        self::assertSame($expectedCounterUnits, $actualCounterUnits);
     }
 
     #[Test]
@@ -86,6 +145,27 @@ final class MetricsClassesTest extends TestCase
         );
         self::assertSame(['nexus.cluster.ask.duration'], array_keys($meter->histograms));
         self::assertSame(7, $meter->observableGaugeValue('nexus.cluster.asks.pending'));
+    }
+
+    #[Test]
+    public function askMetricsPinsInstrumentUnits(): void
+    {
+        $meter = new RecordingMeter();
+        new AskMetrics($meter, static fn(): int => 0);
+
+        $expectedCounterUnits = [
+            'nexus.cluster.asks.capacity_rejected' => '{message}',
+            'nexus.cluster.asks.resolved' => '{message}',
+            'nexus.cluster.asks.sent' => '{message}',
+            'nexus.cluster.asks.timed_out' => '{message}',
+        ];
+
+        $actualCounterUnits = $meter->counterUnits;
+        ksort($actualCounterUnits);
+
+        self::assertSame($expectedCounterUnits, $actualCounterUnits);
+        self::assertSame(['nexus.cluster.ask.duration' => 'ms'], $meter->histogramUnits);
+        self::assertSame(['nexus.cluster.asks.pending' => '{message}'], $meter->gaugeUnits);
     }
 
     #[Test]
