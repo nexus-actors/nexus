@@ -1,5 +1,7 @@
 #!/usr/bin/env php
-<?php declare(strict_types=1);
+<?php
+
+declare(strict_types=1);
 
 /**
  * Sub-spec 2 deliverable. Per spec §7.3.1.
@@ -32,24 +34,33 @@ function resolveAutoload(): string
     // In a git worktree the .git file (not dir) points to the common dir.
     // Walk up from __DIR__ looking for vendor/ alongside any .git entry.
     $dir = dirname(__DIR__);
+
     for ($i = 0; $i < 5; $i++) {
         if (file_exists($dir . '/.git')) {
             // Could be a worktree .git file — resolve the common dir.
             $gitEntry = $dir . '/.git';
+
             if (is_file($gitEntry)) {
                 // e.g. "gitdir: /path/to/main/.git/worktrees/ia-restructure-2"
                 $content = file_get_contents($gitEntry);
+
                 if (preg_match('/gitdir:\s*(.+)/i', $content, $m)) {
                     $worktreeGitDir = trim($m[1]);
                     // Walk up from worktree gitdir to main .git, then to repo root.
-                    $commonGitDir = realpath($worktreeGitDir . '/../../..') ?: null;
+                    $resolvedCommon = realpath($worktreeGitDir . '/../../..');
+                    $commonGitDir = $resolvedCommon !== false
+                        ? $resolvedCommon
+                        : null;
+
                     if ($commonGitDir !== null) {
                         $candidates[] = $commonGitDir . '/vendor/autoload.php';
                     }
                 }
             }
+
             $candidates[] = $dir . '/vendor/autoload.php';
         }
+
         $dir = dirname($dir);
     }
 
@@ -60,6 +71,62 @@ function resolveAutoload(): string
     }
 
     return __DIR__ . '/../vendor/autoload.php'; // return original for error message
+}
+
+/**
+ * Wrap a doc snippet into a runnable PHP file body: the autoload require plus the
+ * snippet. If the snippet already declares its own `<?php` open tag, inject the
+ * require directly after it — unconditionally prepending a second `<?php` bootstrap
+ * (the historical bug) produced a duplicate open tag that `php -l` rejected with
+ * "unexpected '<'", so every tagged example failed before analysis.
+ */
+function buildRunnableSnippet(string $code, string $autoload): string
+{
+    $require = "require_once '" . $autoload . "';\n";
+
+    if (preg_match('/^\s*<\?php\b[^\n]*\n?/', $code, $m) === 1) {
+        $openTag = $m[0];
+        $body = substr($code, strlen($openTag));
+
+        return $openTag . $require . $body;
+    }
+
+    return "<?php\n" . $require . $code;
+}
+
+// Self-test: verify the snippet bootstrapping produces exactly one open tag for both
+// tagged and untagged snippets (regression guard for the duplicate-`<?php` bug).
+if (($argv[1] ?? null) === '--self-test') {
+    $auto = '/tmp/autoload.php';
+    $cases = [
+        "echo 1;\n",                                  // bare body → bootstrap prepended
+        "<?php\necho 1;\n",                           // own open tag → require injected
+        "<?php declare(strict_types=1);\necho 1;\n",  // open tag with declare on the same line
+        "\n<?php\necho 1;\n",                         // leading blank line before the open tag
+    ];
+    $selfTestOk = true;
+
+    foreach ($cases as $case) {
+        $built = buildRunnableSnippet($case, $auto);
+        $openTags = substr_count($built, '<?php');
+        $hasRequire = str_contains($built, "require_once '" . $auto . "';");
+
+        if ($openTags !== 1 || !$hasRequire) {
+            fwrite(STDERR, sprintf(
+                "self-test FAILED: %s → open tags=%d, require=%s\n",
+                json_encode($case),
+                $openTags,
+                $hasRequire ? 'yes' : 'no',
+            ));
+            $selfTestOk = false;
+        }
+    }
+
+    if ($selfTestOk) {
+        echo "verify-doc-snippets self-test: OK (" . count($cases) . " cases)\n";
+    }
+
+    exit($selfTestOk ? 0 : 1);
 }
 
 $autoload = resolveAutoload();
@@ -77,6 +144,7 @@ if (!is_dir(DOCS_GLOB)) {
 
 $mdFiles = [];
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(DOCS_GLOB));
+
 foreach ($iterator as $file) {
     if ($file->getExtension() === 'md' || $file->getExtension() === 'mdx') {
         $mdFiles[] = $file->getPathname();
@@ -93,6 +161,7 @@ $failures = [];
 
 foreach ($mdFiles as $mdPath) {
     $content = file_get_contents($mdPath);
+
     // Extract ```php blocks (with optional metadata on the fence line)
     if (!preg_match_all('/```php([^\n]*)\n(.*?)```/s', $content, $matches, PREG_SET_ORDER)) {
         continue;
@@ -105,27 +174,29 @@ foreach ($mdFiles as $mdPath) {
 
         if (str_contains($fenceLine, 'verify:skip')) {
             $skipped++;
+
             continue;
         }
 
         $lintOnly = str_contains($fenceLine, 'verify:lint-only');
 
-        // Write to tempfile with autoload header
+        // Write to a tempfile with the autoload require, injecting it correctly whether
+        // or not the snippet declares its own <?php open tag (see buildRunnableSnippet).
         $tmpFile = tempnam(sys_get_temp_dir(), 'docsnip_') . '.php';
-        $bootstrap = "<?php\nrequire_once '" . $autoload . "';\n";
-        file_put_contents($tmpFile, $bootstrap . $code);
+        file_put_contents($tmpFile, buildRunnableSnippet($code, $autoload));
 
         // php -l
         $output = [];
         $exitCode = 0;
         exec("php -l " . escapeshellarg($tmpFile) . " 2>&1", $output, $exitCode);
+
         if ($exitCode !== 0) {
             $failed++;
             $failures[] = [
                 'file' => $mdPath,
-                'snippet' => $i + 1,
                 'kind' => 'php -l',
                 'output' => implode("\n", $output),
+                'snippet' => $i + 1,
             ];
         }
 
@@ -139,13 +210,14 @@ foreach ($mdFiles as $mdPath) {
                 $psalmOutput,
                 $psalmExit,
             );
+
             if ($psalmExit !== 0) {
                 $failed++;
                 $failures[] = [
                     'file' => $mdPath,
-                    'snippet' => $i + 1,
                     'kind' => 'psalm',
                     'output' => implode("\n", $psalmOutput),
+                    'snippet' => $i + 1,
                 ];
             }
         }
@@ -162,10 +234,12 @@ echo "  Failed: $failed\n";
 
 if ($failed > 0) {
     echo "\nFailures:\n";
+
     foreach ($failures as $fail) {
         echo "\n--- {$fail['file']}, snippet #{$fail['snippet']} ({$fail['kind']}) ---\n";
         echo $fail['output'] . "\n";
     }
+
     exit(1);
 }
 

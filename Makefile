@@ -117,6 +117,7 @@ spx-ui: ## Serve SPX web UI to browse saved flame charts (http://localhost:8889?
 	docker compose exec php-swoole php -S 0.0.0.0:8889 docker/spx-ui.php
 
 docs-verify: ## Verify ```php snippets in website/docs/ via bin/verify-doc-snippets
+	@docker compose exec -T php bin/verify-doc-snippets --self-test
 	@docker compose exec -T php bin/verify-doc-snippets
 
 docs-api: ## Build the api.nexusactors.com phpDocumentor reference (nexus-actors/phpDocumentor fork)
