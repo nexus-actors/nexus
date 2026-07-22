@@ -36,7 +36,9 @@
         "psr-4": {
             "Monadial\\Nexus\\App\\": "/nexus-packages/nexus-app/src/",
             "Monadial\\Nexus\\Core\\": "/nexus-packages/nexus-core/src/",
+            "Monadial\\Nexus\\Doctrine\\Dbal\\Http\\": "/nexus-packages/nexus-doctrine-dbal-http/src/",
             "Monadial\\Nexus\\Doctrine\\Dbal\\": "/nexus-packages/nexus-doctrine-dbal/src/",
+            "Monadial\\Nexus\\Doctrine\\Orm\\Http\\": "/nexus-packages/nexus-doctrine-orm-http/src/",
             "Monadial\\Nexus\\Doctrine\\Orm\\": "/nexus-packages/nexus-doctrine-orm/src/",
             "Monadial\\Nexus\\Example\\TicTacToe\\": "src/",
             "Monadial\\Nexus\\Http\\": "/nexus-packages/nexus-http/src/",

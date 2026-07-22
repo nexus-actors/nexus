@@ -87,6 +87,16 @@ deptrac:
         - type: directory
           value: packages/nexus-doctrine-orm/src/.*
 
+    - name: DoctrineDbalHttp
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-dbal-http/src/.*
+
+    - name: DoctrineOrmHttp
+      collectors:
+        - type: directory
+          value: packages/nexus-doctrine-orm-http/src/.*
+
     - name: WorkerPool
       collectors:
         - type: directory
@@ -251,13 +261,18 @@ deptrac:
       - SerializationMsgpack
     DoctrineDbal:
       - Core
-      - Http
       - Runtime
     DoctrineOrm:
       - Core
       - DoctrineDbal
-      - Http
       - Runtime
+    DoctrineDbalHttp:
+      - DoctrineDbal
+      - Http
+    DoctrineOrmHttp:
+      - DoctrineDbalHttp
+      - DoctrineOrm
+      - Http
     WorkerPool:
       - Core
       - Runtime

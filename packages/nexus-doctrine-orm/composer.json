@@ -1,6 +1,6 @@
 {
     "name": "nexus-actors/doctrine-orm",
-    "description": "Nexus Doctrine ORM — pooled EntityManager, HTTP middleware, and EntityBehavior DSL.",
+    "description": "Nexus Doctrine ORM — pooled EntityManager and EntityBehavior DSL (HTTP middleware lives in nexus-actors/doctrine-orm-http).",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -9,14 +9,8 @@
         "doctrine/orm": "^3.0",
         "nexus-actors/core": "^0.1",
         "nexus-actors/doctrine-dbal": "^0.1",
-        "nexus-actors/http": "^0.1",
         "nexus-actors/runtime": "^0.1",
-        "nyholm/psr7": "^1.8",
         "psr/event-dispatcher": "^1.0",
-        "psr/http-factory": "^1.1",
-        "psr/http-message": "^2.0",
-        "psr/http-server-handler": "^1.0",
-        "psr/http-server-middleware": "^1.0",
         "psr/log": "^3.0"
     },
     "require-dev": {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Doctrine\Orm\Tests\Unit\Http;
+namespace Monadial\Nexus\Doctrine\Orm\Http\Tests\Unit;
 
 use Doctrine\ORM\EntityManagerInterface;
 use Monadial\Nexus\Doctrine\Dbal\Pool\Channel\FiberChannel;
