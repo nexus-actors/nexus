@@ -77,8 +77,9 @@ abstract class ActorCommand extends Command implements SignalableCommandInterfac
         $app = NexusApp::create($this->getName() ?? 'nexus-app');
         $this->buildApp($app, $input);
 
-        $this->system = $app->start($runtime, $logger);
-        $this->system->run();
+        $started = $app->start($runtime, $logger);
+        $this->system = $started->system();
+        $started->run();
 
         return Command::SUCCESS;
     }

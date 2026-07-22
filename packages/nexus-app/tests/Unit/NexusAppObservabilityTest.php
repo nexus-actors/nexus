@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Monadial\Nexus\App\Tests\Unit;
 
 use Monadial\Nexus\App\NexusApp;
+use Monadial\Nexus\App\StartedApp;
 use Monadial\Nexus\Core\Actor\ActorContext;
-use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Observability\Context\BaggagePropagator;
@@ -46,7 +46,8 @@ final class NexusAppObservabilityTest extends TestCase
 
         $runtime = new FiberRuntime();
         $app = NexusApp::create('app-obs-test')
-            ->onStart(static function (ActorSystem $system) use ($runtime): void {
+            ->onStart(static function (StartedApp $app) use ($runtime): void {
+                $system = $app->system();
                 $worker = $system->spawn(
                     Props::fromBehavior(
                         Behavior::receive(static fn(ActorContext $ctx, object $msg): Behavior => Behavior::same()),

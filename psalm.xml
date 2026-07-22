@@ -138,6 +138,7 @@
                 <!-- Heterogeneous children/registry maps: one map holds refs with different message types; PHP has no per-key generics -->
                 <file name="packages/nexus-core/src/Actor/ActorCell.php"/>
                 <file name="packages/nexus-core/src/Actor/ActorSystem.php"/>
+                <file name="packages/nexus-app/src/StartedApp.php"/>
                 <file name="packages/nexus-http/src/Actor/PerRequestActorScope.php"/>
                 <file name="packages/nexus-http/src/Actor/ResolvedActorTable.php"/>
                 <file name="packages/nexus-worker-pool/src/WorkerNode.php"/>
