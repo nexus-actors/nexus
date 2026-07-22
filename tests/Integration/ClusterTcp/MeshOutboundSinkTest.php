@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Tests\Integration\ClusterTcp;
 
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
@@ -22,6 +23,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
+use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingMeter;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\LocalActorRef;
 use Monadial\Nexus\Core\Net\Host;
@@ -149,6 +151,7 @@ final class MeshOutboundSinkTest extends TestCase
         $transport = new LoopbackMeshTransport($hub, new FiberRuntime());
         $unknownNode = new NodeAddress('test', 'dc1', 'nexus', 'unknown');
 
+        $meter = new RecordingMeter();
         $sink = new MeshOutboundSink(
             new MapEndpointResolver([]),  // empty — no endpoint for unknownNode
             $transport,
@@ -156,6 +159,7 @@ final class MeshOutboundSinkTest extends TestCase
             new MessagePayloadCodec(),
             Duration::millis(10),
             Duration::millis(100),
+            meter: $meter,
         );
 
         $encoded = $this->codec()->encode(new Ping('lost'));
@@ -168,10 +172,54 @@ final class MeshOutboundSinkTest extends TestCase
             trace: [],
         );
 
-        $sink->send($unknownNode, $payload);
-        $sink->send($unknownNode, $payload);
+        // REL-009: a no-route send returns Dropped and is counted as dropped — never as sent.
+        self::assertSame(DeliveryOutcome::Dropped, $sink->send($unknownNode, $payload));
+        self::assertSame(DeliveryOutcome::Dropped, $sink->send($unknownNode, $payload));
 
         self::assertSame(2, $sink->drops());
+        self::assertSame(2, $meter->counterSum('nexus.cluster.frames.dropped'));
+        self::assertSame(0, $meter->counterSum('nexus.cluster.frames.sent'));
+    }
+
+    /**
+     * REL-009: a resolvable peer with no live link buffers the frame — the send is counted as
+     * buffered (a pending, not-guaranteed admission), never as sent.
+     */
+    #[Test]
+    public function disconnectedPeerBuffersAndCountsAsBuffered(): void
+    {
+        $hub = new LoopbackHub();
+        // No server is serving the endpoint, so PeerConnection can never connect — every send buffers.
+        $transport = new LoopbackMeshTransport($hub, new FiberRuntime());
+        $node = new NodeAddress('test', 'dc1', 'nexus', 'offline');
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(8109));
+
+        $meter = new RecordingMeter();
+        $sink = new MeshOutboundSink(
+            new MapEndpointResolver([$node->toPathPrefix() => $endpoint]),
+            $transport,
+            new FiberRuntime(),
+            new MessagePayloadCodec(),
+            Duration::seconds(60),  // long backoff so the link never re-establishes during the test
+            Duration::seconds(120),
+            meter: $meter,
+        );
+
+        $encoded = $this->codec()->encode(new Ping('queued'));
+        $payload = new MessagePayload(
+            targetPath: '/user/somebody',
+            messageType: $encoded->type,
+            body: $encoded->body,
+            correlationId: null,
+            replyPath: null,
+            trace: [],
+        );
+
+        self::assertSame(DeliveryOutcome::Buffered, $sink->send($node, $payload));
+
+        self::assertSame(1, $meter->counterSum('nexus.cluster.frames.buffered'));
+        self::assertSame(0, $meter->counterSum('nexus.cluster.frames.sent'));
+        self::assertSame(0, $meter->counterSum('nexus.cluster.frames.dropped'));
     }
 
     // -- helpers ---------------------------------------------------------------

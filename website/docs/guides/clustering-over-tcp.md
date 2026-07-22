@@ -299,6 +299,26 @@ $topology = ClusterTopology::create(
 For use cases that require coordination — distributed counters, single-writer aggregates, distributed locks — combine TCP mesh with the [single-writer aggregate pattern](../core-concepts/passivation.md) (one actor per entity, routed by consistent hash) or delegate coordination to an external store.
 :::
 
+## Message delivery semantics
+
+TCP mesh delivery is **at-most-once**. A remote `tell` is written to the peer's socket with no application-level acknowledgement, retry, or de-duplication — if the frame is lost after it leaves this process (peer crash, TCP reset), it is gone. Cross-node `ask` layers a request/response correlation and a timeout on top, but the underlying send is still at-most-once; a timed-out ask means "no reply arrived in time", not "the request was not delivered". If you need durable, at-least-once delivery, route through a broker-edge transport (the [Messenger bridge](messenger-bridge.md)) instead of the mesh.
+
+Every send reports an admission **outcome** (`DeliveryOutcome`) so delivery telemetry never claims success for a lost message:
+
+| Outcome | Meaning | What it does **not** mean |
+|---|---|---|
+| `Admitted` | The frame was written to a live link (its bytes left this process). | Not a delivery receipt — TCP can still lose it on a later crash. |
+| `Buffered` | No live link right now; the frame is queued in the peer's bounded reconnect buffer and flushed if the link re-establishes first. | Not a guarantee — a buffered frame is still lost if reconnect never succeeds, the buffer overflows, or the connection is closed. |
+| `Dropped` | The frame was **not** admitted and is gone: no route to the peer, the reconnect buffer was full, the link was closed, or the socket write failed (short write). | — |
+
+These outcomes are surfaced as counters on the injected meter, so `sent` counts only frames that were actually admitted:
+
+- `nexus.cluster.frames.sent` — admitted frames (written to the socket).
+- `nexus.cluster.frames.buffered` — frames queued for a reconnecting peer.
+- `nexus.cluster.frames.dropped` — frames not admitted, tagged with `drop.reason` (`no_route` / `peer_unavailable` / `unrouted`).
+
+Alert on a sustained non-zero `frames.dropped` rate — it is direct evidence of message loss that the older, always-incrementing `frames.sent` counter used to hide.
+
 ## Membership edge cases
 
 Two behaviours are worth understanding when reasoning about how peers appear and disappear from a view:

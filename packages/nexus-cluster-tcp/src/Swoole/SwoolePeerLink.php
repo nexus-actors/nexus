@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Swoole;
 
 use Closure;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Exception\ProtocolException;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameCodec;
@@ -133,13 +134,15 @@ final class SwoolePeerLink implements PeerLink
     }
 
     #[Override]
-    public function sendFrame(Frame $frame): void
+    public function sendFrame(Frame $frame): DeliveryOutcome
     {
         if ($this->closed) {
-            return;
+            return DeliveryOutcome::Dropped;
         }
 
-        $this->write($this->codec->encode($frame));
+        return $this->write($this->codec->encode($frame))
+            ? DeliveryOutcome::Admitted
+            : DeliveryOutcome::Dropped;
     }
 
     #[Override]
@@ -314,11 +317,15 @@ final class SwoolePeerLink implements PeerLink
      * Write bytes to the socket under the per-link write mutex so concurrent
      * senders (e.g. an app tell and a gossip frame) never write it at the same
      * time. The token is always returned, even if the write throws.
+     *
+     * @return bool `true` when the full frame was written (admitted), `false` on a short
+     *   write — the caller reports that as a {@see DeliveryOutcome::Dropped}. A short write is
+     *   never silently swallowed as success.
      */
-    private function write(string $bytes): void
+    private function write(string $bytes): bool
     {
         if ($this->closed) {
-            return;
+            return false;
         }
 
         $this->writeLock->pop();
@@ -330,7 +337,7 @@ final class SwoolePeerLink implements PeerLink
         }
 
         if ($sent === strlen($bytes)) {
-            return;
+            return true;
         }
 
         // Short write: the peer did not accept the full frame within the deadline (stalled/dead peer)
@@ -340,6 +347,8 @@ final class SwoolePeerLink implements PeerLink
         // (which drive that reconnect); it is idempotent with the receive loop's own close detection.
         $this->socket->close();
         $this->notifyClose();
+
+        return false;
     }
 
     /**

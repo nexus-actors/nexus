@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Loopback;
 
 use Closure;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\PeerLink;
@@ -78,17 +79,19 @@ final class LoopbackPeerLink implements PeerLink
     }
 
     #[Override]
-    public function sendFrame(Frame $frame): void
+    public function sendFrame(Frame $frame): DeliveryOutcome
     {
         $peer = $this->peer;
 
         if ($this->closed || $peer === null) {
-            return;
+            return DeliveryOutcome::Dropped;
         }
 
         $this->runtime->spawn(static function () use ($peer, $frame): void {
             $peer->receiveFrame($frame);
         });
+
+        return DeliveryOutcome::Admitted;
     }
 
     #[Override]

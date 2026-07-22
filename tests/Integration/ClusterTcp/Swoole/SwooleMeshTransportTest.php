@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\ClusterTcp\Swoole;
 
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\MeshTransport;
@@ -86,6 +87,50 @@ final class SwooleMeshTransportTest extends TestCase
         self::assertCount(1, $serverReceived);
         self::assertSame(FrameType::Ping, $serverReceived[0]->type);
         self::assertSame('hello-server', $serverReceived[0]->payload);
+    }
+
+    /**
+     * REL-009: a real Swoole link reports {@see DeliveryOutcome::Admitted} for a write to a live
+     * socket and {@see DeliveryOutcome::Dropped} once the link is closed — the admission outcome is
+     * returned to the caller on the real-socket runtime, never silently swallowed.
+     *
+     * @var array<string, DeliveryOutcome> $outcomes
+     */
+    #[Test]
+    public function sendFrameReportsAdmittedThenDroppedAfterClose(): void
+    {
+        /** @var array<string, DeliveryOutcome> $outcomes */
+        $outcomes = [];
+
+        run(static function () use (&$outcomes): void {
+            $runtime = new SwooleRuntime();
+            $transport = new SwooleMeshTransport($runtime);
+
+            $port = $transport->bindEphemeral(Host::of('127.0.0.1'));
+            $bind = new NodeEndpoint(Host::of('127.0.0.1'), Port::of($port));
+
+            $transport->serve(
+                $bind,
+                static function (PeerLink $serverLink): void {
+                    $serverLink->onFrame(static function (Frame $frame): void {});
+                },
+            );
+
+            Coroutine::sleep(0.05); // Give the accept-loop coroutine time to start
+
+            $clientLink = $transport->connect($bind);
+            $outcomes['live'] = $clientLink->sendFrame(new Frame(FrameType::Ping, 'live'));
+
+            Coroutine::sleep(0.05); // Let the frame drain before closing
+
+            $clientLink->close();
+            $outcomes['closed'] = $clientLink->sendFrame(new Frame(FrameType::Ping, 'after-close'));
+
+            $transport->close();
+        });
+
+        self::assertSame(DeliveryOutcome::Admitted, $outcomes['live'] ?? null);
+        self::assertSame(DeliveryOutcome::Dropped, $outcomes['closed'] ?? null);
     }
 
     /**

@@ -82,17 +82,19 @@ final class PeerConnection
      * buffers up to the queue cap; frames beyond the cap are dropped and counted.
      * Overflow uses a drop-newest strategy: the incoming frame is discarded while
      * already-buffered frames are retained.
+     *
+     * @return DeliveryOutcome {@see DeliveryOutcome::Admitted} when handed to a live link,
+     *   {@see DeliveryOutcome::Buffered} when queued during reconnect,
+     *   {@see DeliveryOutcome::Dropped} when the connection is closed or the queue is full.
      */
-    public function sendFrame(Frame $frame): void
+    public function sendFrame(Frame $frame): DeliveryOutcome
     {
         if ($this->intentionallyClosed) {
-            return;
+            return DeliveryOutcome::Dropped;
         }
 
         if ($this->link !== null) {
-            $this->link->sendFrame($frame);
-
-            return;
+            return $this->link->sendFrame($frame);
         }
 
         if (count($this->queue) >= $this->queueCap) {
@@ -106,10 +108,12 @@ final class PeerConnection
                 ]));
             }
 
-            return;
+            return DeliveryOutcome::Dropped;
         }
 
         $this->queue[] = $frame;
+
+        return DeliveryOutcome::Buffered;
     }
 
     /**

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\ClusterTcp;
 
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
@@ -317,12 +318,66 @@ final class PeerConnectionTest extends TestCase
             2,                      // queueCap = 2 to trigger overflow easily
         );
 
-        // 4 frames sent while disconnected: 2 buffered, 2 dropped.
-        $conn->sendFrame(new Frame(FrameType::Ping, '1'));
-        $conn->sendFrame(new Frame(FrameType::Ping, '2'));
-        $conn->sendFrame(new Frame(FrameType::Ping, '3'));
-        $conn->sendFrame(new Frame(FrameType::Ping, '4'));
+        // 4 frames sent while disconnected: 2 buffered, 2 dropped — each send reports its own outcome.
+        self::assertSame(DeliveryOutcome::Buffered, $conn->sendFrame(new Frame(FrameType::Ping, '1')));
+        self::assertSame(DeliveryOutcome::Buffered, $conn->sendFrame(new Frame(FrameType::Ping, '2')));
+        self::assertSame(DeliveryOutcome::Dropped, $conn->sendFrame(new Frame(FrameType::Ping, '3')));
+        self::assertSame(DeliveryOutcome::Dropped, $conn->sendFrame(new Frame(FrameType::Ping, '4')));
 
         self::assertSame(2, $conn->drops());
+    }
+
+    /**
+     * REL-009: a send over a live link is admitted (its bytes leave the process).
+     */
+    #[Test]
+    public function sendFrameReturnsAdmittedOverLiveLink(): void
+    {
+        $runtime = new FiberRuntime();
+        $hub = new LoopbackHub();
+        $serverTransport = new LoopbackMeshTransport($hub, $runtime);
+        $clientTransport = new LoopbackMeshTransport($hub, $runtime);
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(8007));
+
+        $serverTransport->serve(
+            $endpoint,
+            static function (PeerLink $link): void {
+                $link->onFrame(static function (Frame $frame): void {});
+            },
+        );
+
+        $conn = new PeerConnection(
+            $endpoint,
+            $clientTransport,
+            $runtime,
+            Duration::millis(10),
+            Duration::millis(100),
+        );
+
+        // The loopback transport connects synchronously in the constructor, so the link is live now.
+        self::assertSame(DeliveryOutcome::Admitted, $conn->sendFrame(new Frame(FrameType::Ping, 'live')));
+    }
+
+    /**
+     * REL-009: a send after an intentional close is dropped, never silently swallowed.
+     */
+    #[Test]
+    public function sendFrameReturnsDroppedAfterClose(): void
+    {
+        $hub = new LoopbackHub();
+        $clientTransport = new LoopbackMeshTransport($hub, new FiberRuntime());
+        $endpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(8008));
+
+        $conn = new PeerConnection(
+            $endpoint,
+            $clientTransport,
+            new FiberRuntime(),
+            Duration::seconds(60),
+            Duration::seconds(120),
+        );
+
+        $conn->close();
+
+        self::assertSame(DeliveryOutcome::Dropped, $conn->sendFrame(new Frame(FrameType::Ping, 'after-close')));
     }
 }
