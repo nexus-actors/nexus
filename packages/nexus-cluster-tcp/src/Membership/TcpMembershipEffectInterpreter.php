@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
 use Closure;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
@@ -40,8 +41,10 @@ final class TcpMembershipEffectInterpreter implements MembershipEffectInterprete
     private ?Counter $gossipRounds = null;
 
     /**
-     * @param Closure(string $prefix, Frame $frame): void $sender
-     *        Routes a frame to the peer identified by NodeAddress path-prefix.
+     * @param Closure(string $prefix, Frame $frame): DeliveryOutcome $sender
+     *        Routes a frame to the peer identified by NodeAddress path-prefix and returns its
+     *        admission outcome. Control frames are fire-and-forget here, so the outcome is not
+     *        inspected — a failed control send is surfaced by ClusterNode's control-send counter.
      *        Injected by ClusterNode::boot to share the connection infrastructure.
      */
     public function __construct(

@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Override;
 
@@ -38,13 +39,15 @@ final class RecordingOutboundSink implements OutboundSink
     }
 
     #[Override]
-    public function send(NodeAddress $target, MessagePayload $payload): void
+    public function send(NodeAddress $target, MessagePayload $payload): DeliveryOutcome
     {
         $this->sent[] = ['address' => $target, 'payload' => $payload];
 
         if ($this->inbound !== null) {
             ($this->inbound)($target, $payload);
         }
+
+        return DeliveryOutcome::Admitted;
     }
 
     /**

@@ -271,10 +271,12 @@ final class ClusterNode
         /**
          *                 across the closure boundary; the variable is always set before first call.
          */
-        $sender = static function (string $prefix, Frame $frame) use (&$selfNode): void {
+        $sender = static function (string $prefix, Frame $frame) use (&$selfNode): DeliveryOutcome {
             if ($selfNode !== null) {
-                $selfNode->sendByPrefix($prefix, $frame);
+                return $selfNode->sendByPrefix($prefix, $frame);
             }
+
+            return DeliveryOutcome::Dropped;
         };
 
         // 7. Outbound sink for user messages (ClusterRef::tell / ask). The MessagePayload
@@ -556,10 +558,11 @@ final class ClusterNode
      *
      * @internal Used by the $sender closure injected into TcpMembershipEffectInterpreter.
      */
-    public function sendByPrefix(string $prefix, Frame $frame): void
+    public function sendByPrefix(string $prefix, Frame $frame): DeliveryOutcome
     {
         if ($this->stopped) {
-            return; // Departed node: emit nothing further (see $stopped) — no gossip, ack, or re-dial.
+            // Departed node: emit nothing further (see $stopped) — no gossip, ack, or re-dial.
+            return DeliveryOutcome::Dropped;
         }
 
         $endpoint = $this->endpointRegistry->resolveByPrefix($prefix);
@@ -580,20 +583,20 @@ final class ClusterNode
             }
 
             $conn = $this->outboundConns[$key];
-            $this->routeSend($frame, static function () use ($conn, $frame): void {
-                $conn->sendFrame($frame);
-            });
 
-            return;
+            return $this->routeSend($frame, static fn(): DeliveryOutcome => $conn->sendFrame($frame));
         }
 
         // Endpoint not yet in registry — fall back to the accepted inbound link.
         if (isset($this->acceptedLinks[$prefix])) {
             $link = $this->acceptedLinks[$prefix];
-            $this->routeSend($frame, static function () use ($link, $frame): void {
-                $link->sendFrame($frame);
-            });
+
+            return $this->routeSend($frame, static fn(): DeliveryOutcome => $link->sendFrame($frame));
         }
+
+        // No route: neither a resolvable outbound endpoint nor an accepted inbound link for this
+        // prefix. Previously the frame vanished here with no signal; report it so the sink can count it.
+        return DeliveryOutcome::Dropped;
     }
 
     /**
@@ -627,17 +630,21 @@ final class ClusterNode
      * a blocking write here only ever back-pressures the calling actor, never failure detection. Per-link
      * write ordering is preserved either way by {@see SwoolePeerLink}'s write mutex.
      *
-     * @param Closure(): void $send
+     * @param Closure(): DeliveryOutcome $send
      */
-    private function routeSend(Frame $frame, Closure $send): void
+    private function routeSend(Frame $frame, Closure $send): DeliveryOutcome
     {
         if ($frame->type === FrameType::Message) {
-            $send();
-
-            return;
+            // Message frames send synchronously so the admission outcome is returned to the caller.
+            return $send();
         }
 
+        // Control frames dispatch on their own coroutine (see dispatchControlSend); the outcome is
+        // not synchronously available, and control-send failures are surfaced via a dedicated
+        // counter instead. Report the hand-off as admitted.
         $this->dispatchControlSend($frame, $send);
+
+        return DeliveryOutcome::Admitted;
     }
 
     /**
@@ -654,12 +661,14 @@ final class ClusterNode
      * serialization or logic fault would otherwise fail silently on every attempt. So it is recorded
      * ({@see recordControlSendFailure()}) rather than swallowed blind.
      *
-     * @param Closure(): void $send
+     * @param Closure(): DeliveryOutcome $send
      */
     private function dispatchControlSend(Frame $frame, Closure $send): void
     {
         $this->runtime->spawn(function () use ($frame, $send): void {
             try {
+                // Control frame: fire-and-forget on this coroutine. The admission outcome is not
+                // propagated (the caller already returned); a failed send is surfaced by the catch.
                 $send();
             } catch (Throwable $e) {
                 $this->recordControlSendFailure($frame->type, $e);
@@ -1350,13 +1359,12 @@ final class ClusterNode
     /**
      * Build an OutboundSink that routes MessagePayload frames via the shared sender closure.
      * User messages flow over the same connections as membership frames, sharing peer identity.
-     * Instruments nexus.cluster.frames.sent and nexus.cluster.bytes.sent via the injected meter.
+     * The sender returns a {@see DeliveryOutcome}, so this sink meters admission honestly:
+     * nexus.cluster.frames.sent counts ONLY admitted frames, while buffered and dropped frames
+     * land on nexus.cluster.frames.buffered / nexus.cluster.frames.dropped. Delivery is
+     * at-most-once — an admitted frame is written to the socket, not acknowledged by the peer.
      *
-     * Note: nexus.cluster.send_buffer.dropped is not emitted on this path because drop detection
-     * requires PeerConnection queue-overflow visibility, which is not threaded to this sink.
-     * MeshOutboundSink retains all three send-side metrics for its own direct callers.
-     *
-     * @param Closure(string, Frame): void $sender
+     * @param Closure(string, Frame): DeliveryOutcome $sender
      */
     private static function buildOutboundSink(
         Closure $sender,
@@ -1366,8 +1374,15 @@ final class ClusterNode
         return new class ($sender, $payloadCodec, $meter) implements OutboundSink {
             private ?Counter $framesSent = null;
 
+            private ?Counter $framesBuffered = null;
+
+            private ?Counter $framesDropped = null;
+
             private ?Histogram $bytesSent = null;
 
+            /**
+             * @param Closure(string, Frame): DeliveryOutcome $sender
+             */
             public function __construct(
                 private readonly Closure $sender,
                 private readonly MessagePayloadCodec $payloadCodec,
@@ -1375,12 +1390,28 @@ final class ClusterNode
             ) {}
 
             #[Override]
-            public function send(NodeAddress $target, MessagePayload $payload): void
+            public function send(NodeAddress $target, MessagePayload $payload): DeliveryOutcome
             {
                 $bytes = $this->payloadCodec->pack($payload);
                 $this->safely(fn(): mixed => $this->bytesSentHistogram()->record(strlen($bytes)));
-                ($this->sender)($target->toPathPrefix(), new Frame(FrameType::Message, $bytes));
-                $this->safely(fn(): mixed => $this->framesSentCounter()->add(1, ['frame.type' => 'message']));
+                $outcome = ($this->sender)($target->toPathPrefix(), new Frame(FrameType::Message, $bytes));
+                $this->safely(fn(): mixed => $this->recordOutcome($outcome));
+
+                return $outcome;
+            }
+
+            private function recordOutcome(DeliveryOutcome $outcome): void
+            {
+                match ($outcome) {
+                    DeliveryOutcome::Admitted => $this->framesSentCounter()->add(1, ['frame.type' => 'message']),
+                    DeliveryOutcome::Buffered => $this->framesBufferedCounter()->add(1, ['frame.type' => 'message']),
+                    DeliveryOutcome::Dropped => $this->framesDroppedCounter()->add(
+                        1,
+                        // sendByPrefix conflates no-route and peer-unavailable, so the reason is coarse here;
+                        // MeshOutboundSink, which resolves the endpoint itself, labels no_route precisely.
+                        ['drop.reason' => 'unrouted', 'frame.type' => 'message'],
+                    ),
+                };
             }
 
             /**
@@ -1400,7 +1431,25 @@ final class ClusterNode
                 return $this->framesSent ??= $this->meter->counter(
                     'nexus.cluster.frames.sent',
                     '{frame}',
-                    'Cluster frames sent to remote peers',
+                    'Cluster frames admitted to a live link (written to the socket) — not a delivery receipt',
+                );
+            }
+
+            private function framesBufferedCounter(): Counter
+            {
+                return $this->framesBuffered ??= $this->meter->counter(
+                    'nexus.cluster.frames.buffered',
+                    '{frame}',
+                    'Cluster frames queued for a reconnecting peer — may still be lost if reconnect fails',
+                );
+            }
+
+            private function framesDroppedCounter(): Counter
+            {
+                return $this->framesDropped ??= $this->meter->counter(
+                    'nexus.cluster.frames.dropped',
+                    '{frame}',
+                    'Cluster frames not admitted (no route, buffer full, or write failed) — the message is gone',
                 );
             }
 

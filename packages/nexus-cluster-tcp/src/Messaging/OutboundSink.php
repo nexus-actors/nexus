@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
 use Monadial\Nexus\Cluster\NodeAddress;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 
 /**
@@ -17,5 +18,13 @@ use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
  */
 interface OutboundSink
 {
-    public function send(NodeAddress $target, MessagePayload $payload): void;
+    /**
+     * Send one message to a peer under at-most-once semantics.
+     *
+     * @return DeliveryOutcome the admission outcome — {@see DeliveryOutcome::Admitted} (written
+     *   to a live link), {@see DeliveryOutcome::Buffered} (queued for reconnect), or
+     *   {@see DeliveryOutcome::Dropped} (no route, buffer full, or write failed). Never a
+     *   delivery receipt; see {@see DeliveryOutcome}.
+     */
+    public function send(NodeAddress $target, MessagePayload $payload): DeliveryOutcome;
 }

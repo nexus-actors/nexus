@@ -26,9 +26,13 @@ interface PeerLink
 {
     /**
      * Send a frame to the remote peer.
-     * No-op if the link is already closed.
+     *
+     * @return DeliveryOutcome {@see DeliveryOutcome::Admitted} when the frame was written to
+     *   the live link, {@see DeliveryOutcome::Dropped} when the link is closed or the write
+     *   failed. A link never buffers — buffering is the {@see PeerConnection} layer's job — so
+     *   a link only ever returns Admitted or Dropped.
      */
-    public function sendFrame(Frame $frame): void;
+    public function sendFrame(Frame $frame): DeliveryOutcome;
 
     /**
      * Register a handler for frames arriving from the remote peer.
