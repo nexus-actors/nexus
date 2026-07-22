@@ -72,10 +72,31 @@ deptrac:
         - type: directory
           value: packages/nexus-messenger-console-swoole/src/.*
 
-    - name: ClusterTcp
+    # ClusterTcpCore must not depend on ClusterTcpTransport (spec §3.4): the actor
+    # core is transport-neutral; ClusterNode.php is the composition root and the
+    # only file allowed to see both plus RuntimeSwoole. Enforced by
+    # bin/verify-cluster-boundary.php.
+    - name: ClusterTcpTransport
       collectors:
         - type: directory
-          value: packages/nexus-cluster-tcp/src/.*
+          value: packages/nexus-cluster-tcp/src/(Loopback|Swoole)/.*
+
+    - name: ClusterTcpWiring
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/ClusterNode\.php
+
+    - name: ClusterTcpCore
+      collectors:
+        - type: bool
+          must:
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/.*
+          must_not:
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/(Loopback|Swoole)/.*
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/ClusterNode\.php
 
     - name: DoctrineDbal
       collectors:
@@ -253,8 +274,24 @@ deptrac:
       - Serialization
       - WorkerPool
       - WorkerPoolSwoole
-    ClusterTcp:
+    ClusterTcpCore:
       - Cluster
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
+      - SerializationMsgpack
+    ClusterTcpTransport:
+      - Cluster
+      - ClusterTcpCore
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
+    ClusterTcpWiring:
+      - Cluster
+      - ClusterTcpCore
+      - ClusterTcpTransport
       - Core
       - Observability
       - Runtime
