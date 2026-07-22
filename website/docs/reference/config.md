@@ -221,7 +221,7 @@ $config = ReceiverActorConfig::default()
 
 | Method | Description |
 |---|---|
-| `ReceiverActorConfig::default()` | `pollInterval` = 100 ms, `unroutablePolicy` = `Reject`, `askPendingTimeout` = 30 s. |
+| `ReceiverActorConfig::default()` | `pollInterval` = 100 ms, `unroutablePolicy` = `Reject`, `askPendingTimeout` = 30 s, `maxPendingAsks` = 1024. |
 
 ### Modifier methods
 
@@ -230,6 +230,7 @@ $config = ReceiverActorConfig::default()
 | `withPollInterval(Duration $pollInterval)` | `ReceiverActorConfig` | Override how long the actor waits before the next poll when idle or backpressured. |
 | `withUnroutablePolicy(UnroutablePolicy $policy)` | `ReceiverActorConfig` | Override what happens to messages that `MessageRouter::route()` returns `null` for. |
 | `withAskPendingTimeout(Duration $timeout)` | `ReceiverActorConfig` | Override the deadline after which an un-answered ask envelope is rejected for redelivery. |
+| `withMaxPendingAsks(int $max)` | `ReceiverActorConfig` | Override the cap on concurrently pending asks. Must be a positive integer (throws `InvalidArgumentException` otherwise). |
 
 ### Parameters
 
@@ -238,6 +239,7 @@ $config = ReceiverActorConfig::default()
 | `$pollInterval` | `Duration` | `Duration::millis(100)` | Wait between idle or backpressured poll ticks. Busy ticks re-poll immediately. |
 | `$unroutablePolicy` | `UnroutablePolicy` | `UnroutablePolicy::Reject` | `Reject` — reject back to transport; `DeadLetters` — forward to the dead-letters ref and ack. |
 | `$askPendingTimeout` | `Duration` | `Duration::seconds(30)` | How long the receiver holds a broker envelope un-acked while waiting for the responder actor to publish a reply. When the deadline passes, the envelope is rejected for redelivery and `nexus.messenger.asks.responder_expired` is incremented. |
+| `$maxPendingAsks` | `int` | `1024` | Cap on the number of unanswered ask envelopes held in memory at once. Once reached, a new ask is shed — rejected for broker redelivery instead of being tracked — and `nexus.messenger.asks.shed` is incremented, so a producer flooding asks cannot grow the pending map without bound. The live pending count is exposed as the `nexus.messenger.asks.pending` gauge. |
 
 ---
 

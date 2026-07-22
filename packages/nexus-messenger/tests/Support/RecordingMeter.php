@@ -9,7 +9,6 @@ use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopHistogram;
 use Monadial\Nexus\Observability\Metric\NoopObservableGauge;
-use Monadial\Nexus\Observability\Metric\NoopUpDownCounter;
 use Monadial\Nexus\Observability\Metric\ObservableGauge;
 use Monadial\Nexus\Observability\Metric\UpDownCounter;
 use Override;
@@ -18,6 +17,9 @@ final class RecordingMeter implements Meter
 {
     /** @var array<string, RecordingCounter> */
     public array $counters = [];
+
+    /** @var array<string, RecordingUpDownCounter> */
+    public array $upDownCounters = [];
 
     #[Override]
     public function counter(string $name, string $unit = '', string $description = ''): Counter
@@ -28,7 +30,7 @@ final class RecordingMeter implements Meter
     #[Override]
     public function upDownCounter(string $name, string $unit = '', string $description = ''): UpDownCounter
     {
-        return new NoopUpDownCounter();
+        return $this->upDownCounters[$name] ??= new RecordingUpDownCounter();
     }
 
     #[Override]
@@ -54,6 +56,22 @@ final class RecordingMeter implements Meter
     {
         return isset($this->counters[$name])
             ? $this->counters[$name]->total
+            : 0;
+    }
+
+    /** Current value of an up-down counter gauge (0 if never touched). */
+    public function gaugeValue(string $name): int|float
+    {
+        return isset($this->upDownCounters[$name])
+            ? $this->upDownCounters[$name]->value
+            : 0;
+    }
+
+    /** Highest value an up-down counter gauge ever reached (0 if never touched). */
+    public function gaugePeak(string $name): int|float
+    {
+        return isset($this->upDownCounters[$name])
+            ? $this->upDownCounters[$name]->peak
             : 0;
     }
 }
