@@ -95,6 +95,10 @@ ruleset:
 
 Run `make deptrac` to verify the new rules are valid.
 
+:::warning Keep the ruleset direction honest
+A package's Deptrac ruleset must list **only** the layers it actually imports — never more. A rule that is broader than the package's `composer.json` (for example allowing `Runtime -> Core` when `nexus-runtime` declares no `nexus-actors/core` dependency and imports no Core symbol) passes monorepo boundary analysis but breaks a standalone split install, since the dependency it silently relies on is absent from the published package. Boundary direction is one-way: `nexus-core` consumes `nexus-runtime` primitives (`Duration`, `Mailbox`), so `Core -> Runtime` is allowed while `Runtime -> Core` is forbidden. `bin/verify-runtime-core-boundary.php` (CI step *Runtime→Core boundary fixture*, or `make boundary-check`) guards that specific edge by injecting an intentional violation and asserting both Deptrac and `bin/check-package-deps.php` reject it.
+:::
+
 ### 5. Update `.github/workflows/split.yml`
 
 Add your package to the split matrix:

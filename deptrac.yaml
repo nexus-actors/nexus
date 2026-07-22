@@ -202,8 +202,10 @@ deptrac:
     Core:
       - Observability
       - Runtime
-    Runtime:
-      - Core
+    # Runtime is a pure leaf: nexus-runtime declares no Core dependency and imports
+    # no Core symbols, so Runtime -> Core is forbidden (ARCH-002). Core -> Runtime is
+    # the legitimate, used edge — ActorCell consumes Duration/Mailbox from nexus-runtime.
+    # Enforced by bin/verify-runtime-core-boundary.php (intentional-violation fixture).
     App:
       - Core
       - Observability

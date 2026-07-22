@@ -110,6 +110,9 @@ jobs:
       - name: Package dependency completeness
         run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci php bin/check-package-deps.php
 
+      - name: Runtime→Core boundary fixture
+        run: docker run --rm -v "$PWD":/app -w /app nexus-php-swoole:ci php bin/verify-runtime-core-boundary.php
+
       - name: No Psalm suppressions
         run: |
           if grep -rn '@psalm-suppress' packages/*/src --include='*.php'; then
