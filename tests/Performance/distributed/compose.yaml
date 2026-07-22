@@ -1,0 +1,57 @@
+# Distributed mesh soak — 4 containers x 4 Swoole threads = 16 cluster nodes in one
+# full mesh over real cross-container TCP (Docker bridge network).
+#
+# Driven by run.sh; containers run the soak and EXIT (0 = all threads passed).
+#
+#   ./tests/Performance/distributed/run.sh [durationSeconds] [payloadBytes]
+
+x-worker: &worker
+  image: nexus-mesh-soak:dev
+  build:
+    context: ../../..
+    dockerfile: docker/Dockerfile
+    target: php-swoole
+  working_dir: /app
+  volumes:
+    - ../../..:/app
+  command: ["php", "tests/Performance/distributed/thread_mesh_node.php"]
+  networks:
+    - mesh-net
+
+services:
+  worker1:
+    <<: *worker
+    hostname: worker1
+    environment: &env
+      BASE_PORT: "7361"
+      DURATION: "${DURATION:-300}"
+      PAYLOAD: "${PAYLOAD:-1024}"
+      START_AT: "${START_AT:-0}"
+      THREADS: "${THREADS:-4}"
+      WORKERS: "${WORKERS:-4}"
+      WORKER_ID: "1"
+
+  worker2:
+    <<: *worker
+    hostname: worker2
+    environment:
+      <<: *env
+      WORKER_ID: "2"
+
+  worker3:
+    <<: *worker
+    hostname: worker3
+    environment:
+      <<: *env
+      WORKER_ID: "3"
+
+  worker4:
+    <<: *worker
+    hostname: worker4
+    environment:
+      <<: *env
+      WORKER_ID: "4"
+
+networks:
+  mesh-net:
+    driver: bridge

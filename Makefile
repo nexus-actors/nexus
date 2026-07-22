@@ -89,6 +89,15 @@ perf-http-swoole: ## HTTP Swoole performance benchmarks (worker mode)
 perf-http-swoole-threads: ## HTTP Swoole performance benchmarks (thread mode)
 	docker compose exec php-swoole vendor/bin/phpunit --testsuite=performance-http-swoole-threads
 
+soak-mesh: ## Loaded 16-node mesh soak: 4 containers x 4 threads, real TCP (~7 min)
+	cd tests/Performance/distributed && ./run.sh
+
+soak-idle: ## Idle 16-container mesh proof: zero traffic, default phi (~5 min)
+	cd tests/Performance/distributed && ./run-roundtrip.sh
+
+bench-saturation: ## Multi-process cluster throughput sweep K=1..16
+	tests/Performance/cluster_tcp_saturation.sh
+
 psalm: ## Run Psalm analysis
 	$(DC) vendor/bin/psalm --find-unused-psalm-suppress
 
