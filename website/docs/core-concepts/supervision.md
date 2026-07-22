@@ -82,7 +82,11 @@ stateDiagram-v2
     }
 ```
 
-_Figure 3: OneForOne applies the directive only to the failed child; AllForOne applies it to every child under the same parent._
+_Figure 3: OneForOne applies the directive only to the failed child; AllForOne would apply it to every child under the same parent._
+
+:::note AllForOne is not currently supported
+The AllForOne behavior shown above is the intended contract, but the current self-supervision runtime cannot restart a failed child's siblings — spawning with `allForOne()` is rejected (see [All-for-one](#all-for-one) below). OneForOne, escalation, and exponential backoff behave as documented.
+:::
 
 ## SupervisionStrategy
 
@@ -106,21 +110,13 @@ When `$window` is `null`, it defaults to `Duration::seconds(60)`. When `$decider
 
 ### All-for-one
 
-When one child fails, all siblings are acted upon. Use this when children depend on each other and a degraded sibling breaks the group.
-
-```php title="src/Supervision/AllForOneExample.php"
-use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
-use Monadial\Nexus\Runtime\Duration;
-
-$strategy = SupervisionStrategy::allForOne(
-    maxRetries: 3,
-    window: Duration::seconds(60),
-);
-```
+:::warning Not supported — rejected at spawn
+All-for-one restarts a failed child's **siblings**, which requires the parent to manage its children's lifecycles. The current runtime uses a self-supervision model (each actor restarts itself), so sibling restart cannot be honored. Rather than silently behaving like one-for-one, spawning an actor configured with `SupervisionStrategy::allForOne()` throws `UnsupportedSupervisionStrategyException`. The value object can still be constructed (so existing code and tests compile); the rejection happens when the actor is spawned. Use `oneForOne()` for independent children, or model cross-child dependencies explicitly (e.g. via death watch).
+:::
 
 ### Exponential backoff
 
-Restarts the failed child with increasing delays. Useful for transient failures like network timeouts or rate limits where immediate retries make the problem worse.
+Restarts the failed child with increasing delays instead of immediately. Useful for transient failures like network timeouts or rate limits where immediate retries make the problem worse. During the backoff delay the actor is suspended and does not process messages; when the delay elapses it restarts (delivering `PreStart` on the fresh instance).
 
 ```php title="src/Supervision/BackoffExample.php"
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
@@ -221,7 +217,7 @@ Supervision failures almost always trace to retry exhaustion or misconfigured es
 |---|---|---|
 | `MaxRetriesExceededException` thrown; child permanently stopped | The child failed more times than `maxRetries` within `window` | Increase `maxRetries`, widen the `window`, or fix the root cause in the child |
 | Exception propagates to the top-level actor and crashes the system | All strategies in the chain returned `Escalate`; no handler claimed the failure | Add a terminating decider at the root level that returns `Stop` or `Restart` instead of `Escalate` |
-| Sibling actors stop unexpectedly alongside the failing child | `AllForOne` strategy is in use — one failure restarts all children | Switch to `OneForOne` if siblings are independent; verify the strategy choice matches the dependency model |
+| `UnsupportedSupervisionStrategyException` at spawn | The actor was configured with `allForOne()`, which the self-supervision runtime cannot honor | Use `oneForOne()`; model cross-child dependencies with death watch instead of sibling restart |
 | Child restarts immediately loop with no delay | `Restart` directive without exponential backoff on a persistent transient failure | Switch to `exponentialBackoff` so the child has time to recover between attempts |
 | `ChildFailed` signal is never delivered to the parent | Parent has no `onSignal` handler attached to its behavior | Attach a signal handler via `->onSignal(...)` and dispatch on `ChildFailed` |
 
