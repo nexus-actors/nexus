@@ -50,7 +50,7 @@ The `nexus-cluster` package provides contracts (`ClusterTransport`, `NodeDirecto
 
 ### Dead letter
 
-A message that could not be delivered to its intended recipient — because the target actor stopped, the mailbox was closed, or the `ActorRef` was already a `DeadLetterRef`. Undeliverable messages are routed to the actor system's dead-letter sink. Monitor dead letters during development to detect mis-routed messages or premature actor shutdown.
+A message that could not be delivered to its intended recipient — because the target actor stopped, the mailbox was closed or full, or the `ActorRef` was already a `DeadLetterRef`. Undeliverable fire-and-forget deliveries are routed to the actor system's dead-letter sink consistently (a `tell()` the mailbox drops is dead-lettered rather than silently dropped; `offer()` leaves the outcome to the caller). The sink keeps a **monotonic total** of every dead letter (`DeadLetterRef::total()`, surfaced as the `nexus.actor_system.dead_letters` gauge) and dispatches a PSR-14 `MessageDeadLettered` event per message, while retaining only a **bounded ring buffer** of the most recent messages (`DeadLetterRef::captured()`, default 1000) so memory stays stable under a flood. Monitor dead letters during development to detect mis-routed messages or premature actor shutdown.
 
 ### Death watch
 

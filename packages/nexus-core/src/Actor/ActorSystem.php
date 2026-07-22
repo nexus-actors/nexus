@@ -129,13 +129,15 @@ final class ActorSystem
             }
         };
 
+        $resolvedDispatcher = $eventDispatcher ?? new NullDispatcher();
+
         return new self(
             $name,
             $runtime,
             $resolvedClock,
             $logger ?? new NullLogger(),
-            $eventDispatcher ?? new NullDispatcher(),
-            new DeadLetterRef(),
+            $resolvedDispatcher,
+            new DeadLetterRef(events: $resolvedDispatcher),
             self::generateUlid(),
             [],
             [],

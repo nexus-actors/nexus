@@ -7,8 +7,6 @@ namespace Monadial\Nexus\Observability\Actor;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Observability\Observability;
 
-use function count;
-
 /**
  * @psalm-api
  *
@@ -17,12 +15,9 @@ use function count;
  * disabled. Register once per system at startup — calling {@see self::register()}
  * more than once registers duplicate instruments.
  */
-final class ActorSystemMetrics
+final readonly class ActorSystemMetrics
 {
-    public function __construct(
-        private readonly Observability $observability,
-        private readonly ActorSystem $system,
-    ) {}
+    public function __construct(private Observability $observability, private ActorSystem $system,) {}
 
     public function register(): void
     {
@@ -35,19 +30,19 @@ final class ActorSystemMetrics
 
         $meter->observableGauge(
             'nexus.actor_system.live_actors',
-            static fn (): int => $system->liveActorCount(),
+            static fn(): int => $system->liveActorCount(),
             '{actor}',
             'Number of live root actors in the system',
         );
         $meter->observableGauge(
             'nexus.actor_system.dead_letters',
-            static fn (): int => count($system->deadLetters()->captured()),
+            static fn(): int => $system->deadLetters()->total(),
             '{message}',
             'Total dead-lettered messages captured by the system',
         );
         $meter->observableGauge(
             'nexus.actor_system.running',
-            static fn (): int => $system->isRunning()
+            static fn(): int => $system->isRunning()
                 ? 1
                 : 0,
             '{system}',
