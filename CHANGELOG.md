@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Documentation
+- Corrected `ReplayFilter` / `RepairByDiscardOld` documentation to stop implying a permanent, on-disk repair (audit DOC-004). All replay-filter modes operate only on the in-memory list of events being replayed for a single recovery — `RepairByDiscardOld` excludes older-writer events from the *rebuilt state* but never deletes or mutates the event store; the conflicting events stay persisted and are re-read and re-filtered on every subsequent recovery. The persistence overview, the operations runbook, and the `ReplayFilter` class/`repairByDiscardOld()` docblocks now state this explicitly so operators don't believe a conflict was durably repaired when only one replay was filtered.
+
 ### Changed
 - `NexusApp` now returns typed root-actor handles (audit DSL-007). `start()` previously spawned actors and discarded the returned refs, and `onStart` received only the bare `ActorSystem` with no way to look a root up by name — so real applications bypassed the DSL to hold their own refs. `start()` now returns a `StartedApp` carrying a name → `ActorRef` registry of every spawned root (in registration/spawn order): `ref(name)` returns the handle (throws `UnknownRootActorException` for an unknown name), `has(name)`/`refs()` inspect it, `system()` reaches the underlying system, and `run()`/`shutdown()` own the lifecycle. The `onStart` callback now receives the `StartedApp` instead of the `ActorSystem`. **Upgrade note:** callers using the `start()` return value directly should call `$app->system()`; `onStart(function (ActorSystem $system) ...)` callbacks should be retyped to `function (StartedApp $app) ...` and reach the system via `$app->system()`. `run(Runtime)` is unchanged.
 

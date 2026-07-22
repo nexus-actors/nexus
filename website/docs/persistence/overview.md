@@ -98,7 +98,7 @@ sequenceDiagram
     end
 ```
 
-_Figure 3: Two actor systems targeting the same persistence stream. The `ReplayFilter` mode governs whether recovery fails hard, repairs by discarding older-writer events, or logs a warning and continues._
+_Figure 3: Two actor systems targeting the same persistence stream. The `ReplayFilter` mode governs whether recovery fails hard, excludes older-writer events from **this replay** (`RepairByDiscardOld` — the stored events are not modified), or logs a warning and continues._
 
 ### Snapshot vs full-replay decision
 

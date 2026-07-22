@@ -13,6 +13,12 @@ use Symfony\Component\Uid\Ulid;
 /**
  * Detects interleaved writers during event replay (recovery).
  *
+ * All modes operate on the in-memory list of events being replayed for a single
+ * recovery — none of them mutate the event store. In particular `RepairByDiscardOld`
+ * does NOT delete or "repair" anything on disk: it merely excludes older-writer
+ * events from the state rebuilt during this replay. The conflicting events remain
+ * persisted and are re-read (and re-filtered) on every subsequent recovery.
+ *
  * @psalm-api
  */
 final readonly class ReplayFilter
@@ -29,6 +35,12 @@ final readonly class ReplayFilter
         return new self(ReplayFilterMode::Warn);
     }
 
+    /**
+     * Recover using only the latest writer's events for this replay; older-writer
+     * events are excluded from the rebuilt state but left untouched in the store
+     * (the name's "repair" is a recovery convenience, not a durable fix). Use only in
+     * migrations where the older writer is confirmed gone.
+     */
     public static function repairByDiscardOld(): self
     {
         return new self(ReplayFilterMode::RepairByDiscardOld);
