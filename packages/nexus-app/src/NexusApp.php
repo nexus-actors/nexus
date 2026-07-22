@@ -27,9 +27,9 @@ use Throwable;
  * NexusApp::create('shop')
  *     ->actor('orders', Props::fromBehavior($orderBehavior))
  *     ->actor('payments', Props::fromFactory(fn() => new PaymentActor()))
- *     ->onStart(function (ActorSystem $system): void {
- *         // send a warm-up message after all actors are spawned
- *         $system->deadLetters();
+ *     ->onStart(function (StartedApp $app): void {
+ *         // retrieve a typed handle to a root actor spawned above
+ *         $app->ref('orders')->tell(new WarmUp());
  *     })
  *     ->run(new FiberRuntime());
  * ```
@@ -47,7 +47,7 @@ final class NexusApp
 
     private ?Observability $observability = null;
 
-    /** @var ?Closure(ActorSystem): void */
+    /** @var ?Closure(StartedApp): void */
     private ?Closure $startCallback = null;
 
     private function __construct(private readonly string $appName) {}
@@ -101,13 +101,13 @@ final class NexusApp
      * Register a callback invoked after all actors are spawned.
      *
      * The callback fires synchronously at the end of {@see start()}, before the
-     * runtime event loop is started, with the configured
-     * {@see \Monadial\Nexus\Core\Actor\ActorSystem} as its sole argument. Use it
-     * to send warm-up messages, wire external listeners, or capture refs for
-     * later use. Replacing a previously registered callback is allowed; only
-     * the most recent one is invoked.
+     * runtime event loop is started, with the {@see StartedApp} as its sole
+     * argument. Use it to retrieve typed handles to the spawned root actors
+     * (`$app->ref('orders')`), send warm-up messages, or wire external listeners.
+     * Replacing a previously registered callback is allowed; only the most recent
+     * one is invoked. Reach the underlying system via `$app->system()`.
      *
-     * @param callable(ActorSystem): void $callback Invoked once with the live ActorSystem after spawn
+     * @param callable(StartedApp): void $callback Invoked once with the StartedApp after spawn
      * @return self This builder, for fluent chaining
      */
     public function onStart(callable $callback): self
@@ -151,9 +151,9 @@ final class NexusApp
      *
      * @param Runtime              $runtime Concurrency backend (Fiber, Swoole, Step)
      * @param LoggerInterface|null $logger  Optional PSR-3 logger; defaults to the ActorSystem default when null
-     * @return ActorSystem The configured system with all actors spawned, ready for `run()`
+     * @return StartedApp The started app: the live system plus the named root actor handles, ready for `run()`
      */
-    public function start(Runtime $runtime, ?LoggerInterface $logger = null): ActorSystem
+    public function start(Runtime $runtime, ?LoggerInterface $logger = null): StartedApp
     {
         $system = ActorSystem::create(
             $this->appName,
@@ -162,25 +162,31 @@ final class NexusApp
             observability: $this->observability ?? new NoopObservability(),
         );
 
+        $refs = [];
+
+        // Spawn in registration order so a later root can be wired to an earlier
+        // one via the returned handles.
         foreach ($this->definitions as $definition) {
-            $system->spawn($definition->props, $definition->name);
+            $refs[$definition->name] = $system->spawn($definition->props, $definition->name);
         }
+
+        $started = new StartedApp($system, $refs);
 
         if ($this->startCallback !== null) {
-            ($this->startCallback)($system);
+            ($this->startCallback)($started);
         }
 
-        return $system;
+        return $started;
     }
 
     /**
      * Run in single-process mode with the given runtime.
      *
      * Convenience wrapper that calls {@see start()} and then blocks on
-     * {@see \Monadial\Nexus\Core\Actor\ActorSystem::run()} until the system is
-     * shut down. Suitable for Hello World and CLI entry points; long-running
-     * services that need to react to OS signals should call {@see start()} and
-     * drive the loop explicitly.
+     * {@see StartedApp::run()} until the system is shut down. Suitable for Hello
+     * World and CLI entry points; long-running services that need to react to OS
+     * signals should call {@see start()} and drive the loop explicitly via the
+     * returned {@see StartedApp}.
      *
      * @param Runtime              $runtime Concurrency backend (Fiber, Swoole, Step)
      * @param LoggerInterface|null $logger  Optional PSR-3 logger; defaults to the ActorSystem default when null
@@ -190,8 +196,7 @@ final class NexusApp
         $observability = $this->observability;
 
         try {
-            $system = $this->start($runtime, $logger);
-            $system->run();
+            $this->start($runtime, $logger)->run();
         } finally {
             try {
                 $observability?->shutdown();
