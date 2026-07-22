@@ -14,6 +14,8 @@ use Monadial\Nexus\Core\Exception\InvalidActorStateTransition;
 use Monadial\Nexus\Core\Exception\MaxRetriesExceededException;
 use Monadial\Nexus\Core\Exception\NexusException;
 use Monadial\Nexus\Core\Exception\NoSenderException;
+use Monadial\Nexus\Core\Exception\UnsupportedSupervisionStrategyException;
+use Monadial\Nexus\Core\Lifecycle\ChildFailed;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
 use Monadial\Nexus\Core\Lifecycle\PreRestart;
 use Monadial\Nexus\Core\Lifecycle\PreStart;
@@ -21,6 +23,7 @@ use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Core\Lifecycle\Terminated;
 use Monadial\Nexus\Core\Mailbox\Envelope;
+use Monadial\Nexus\Core\Message\ChildFailedNotification;
 use Monadial\Nexus\Core\Message\ChildTerminated;
 use Monadial\Nexus\Core\Message\PoisonPill;
 use Monadial\Nexus\Core\Message\Resume;
@@ -30,6 +33,7 @@ use Monadial\Nexus\Core\Message\Unwatch;
 use Monadial\Nexus\Core\Message\Watch;
 use Monadial\Nexus\Core\Message\WatcheeTerminated;
 use Monadial\Nexus\Core\Supervision\Directive;
+use Monadial\Nexus\Core\Supervision\StrategyType;
 use Monadial\Nexus\Core\Supervision\SupervisionStrategy;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Observability;
@@ -140,6 +144,8 @@ final class ActorCell implements ActorContext
         private readonly DeadLetterRef $deadLetters,
         private readonly Observability $observability,
     ) {
+        self::assertStrategySupported($supervision->type);
+
         $this->currentBehavior = $behavior;
         $this->initialBehavior = $behavior;
 
@@ -733,6 +739,9 @@ final class ActorCell implements ActorContext
             // A watched actor terminated: surface it to the behavior as a Terminated
             // signal (signals cannot travel through a mailbox directly).
             $this->handleSignal(new Terminated($message->subject));
+        } elseif ($message instanceof ChildFailedNotification) {
+            // A child escalated a failure: surface it to the behavior as a ChildFailed signal.
+            $this->handleSignal(new ChildFailed($message->child, $message->cause));
         }
     }
 
@@ -1068,9 +1077,7 @@ final class ActorCell implements ActorContext
             Directive::Resume => $this->resumeAfterFailure(),
             Directive::Restart => $this->restartWithinLimits($strategy, $cause),
             Directive::Stop => $this->initiateStop(),
-            // Escalation-to-parent is not yet wired (there is no ChildFailed
-            // channel toward the parent). Fail safe by stopping for now.
-            Directive::Escalate => $this->escalateAsStop(),
+            Directive::Escalate => $this->escalateToParent($cause),
         };
     }
 
@@ -1081,11 +1088,14 @@ final class ActorCell implements ActorContext
         }
     }
 
-    private function escalateAsStop(): void
+    /**
+     * Escalate a failure this actor chose not to handle: notify the parent so its
+     * behavior observes a {@see ChildFailed} signal, then stop — the failure has been
+     * handed up the tree. A root actor has no parent to escalate to, so it just stops.
+     */
+    private function escalateToParent(Throwable $cause): void
     {
-        $this->logger->warning(
-            'Supervision escalation is not wired to the parent; stopping actor ' . (string) $this->actorPath,
-        );
+        $this->parentRef?->tell(new ChildFailedNotification($this->selfRef, $cause));
         $this->initiateStop();
     }
 
@@ -1122,8 +1132,55 @@ final class ActorCell implements ActorContext
             return;
         }
 
+        $attempt = count($this->restartLog);
         $this->restartLog[] = $now;
+
+        if ($strategy->type === StrategyType::ExponentialBackoff) {
+            $this->scheduleBackoffRestart($strategy, $cause, $attempt);
+
+            return;
+        }
+
         $this->restart($cause);
+    }
+
+    /**
+     * Suspend the actor and schedule its restart after an exponential-backoff delay
+     * (initialBackoff × multiplier^attempt, capped at maxBackoff) instead of restarting
+     * immediately. Suspending stops the failed behavior from processing further messages
+     * during the wait, matching the {@see Suspend} contract.
+     */
+    private function scheduleBackoffRestart(SupervisionStrategy $strategy, Throwable $cause, int $attempt): void
+    {
+        $delay = $this->backoffDelay($strategy, $attempt);
+
+        if ($this->state->canTransitionTo(ActorState::Suspended)) {
+            $this->transitionTo(ActorState::Suspended);
+        }
+
+        $self = $this;
+        $this->runtime->scheduleOnce($delay, static function () use ($self, $cause): void {
+            // The actor may have been stopped while waiting; only restart if still suspended.
+            if ($self->actorState() === ActorState::Suspended) {
+                $self->restart($cause);
+            }
+        });
+    }
+
+    private function backoffDelay(SupervisionStrategy $strategy, int $attempt): Duration
+    {
+        // Compute wholly in floats so strict-mode type checking sees no int/float mix,
+        // then round back to an integer nanosecond count.
+        $initial = (float) $strategy->initialBackoff->toNanos();
+        $factor = $strategy->multiplier ** (float) $attempt;
+        $delayNanos = (int) ($initial * $factor);
+        $maxNanos = $strategy->maxBackoff->toNanos();
+
+        if ($maxNanos > 0 && $delayNanos > $maxNanos) {
+            $delayNanos = $maxNanos;
+        }
+
+        return Duration::nanos($delayNanos);
     }
 
     /**
@@ -1160,5 +1217,12 @@ final class ActorCell implements ActorContext
             'to' => $target->name,
         ]);
         $this->state = $target;
+    }
+
+    private static function assertStrategySupported(StrategyType $type): void
+    {
+        if ($type === StrategyType::AllForOne) {
+            throw UnsupportedSupervisionStrategyException::forStrategy($type);
+        }
     }
 }

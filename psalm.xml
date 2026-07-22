@@ -146,6 +146,7 @@
                 <file name="packages/nexus-core/src/Actor/TaskContext.php"/>
                 <!-- Watch/lifecycle plumbing: refs carried by identity, type erased by design (Akka Typed: ActorRef[Nothing]) -->
                 <file name="packages/nexus-core/src/Lifecycle/ChildFailed.php"/>
+                <file name="packages/nexus-core/src/Message/ChildFailedNotification.php"/>
                 <file name="packages/nexus-core/src/Lifecycle/Terminated.php"/>
                 <file name="packages/nexus-core/src/Message/DeadLetter.php"/>
                 <file name="packages/nexus-core/src/Message/Unwatch.php"/>
