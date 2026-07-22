@@ -15,6 +15,7 @@ use Monadial\Nexus\Example\Wallet\Http\Handler\LedgerRecordHandler;
 use Monadial\Nexus\Example\Wallet\Http\Handler\WithdrawHandler;
 use Monadial\Nexus\Example\Wallet\Http\Response\IndexLink;
 use Monadial\Nexus\Example\Wallet\Http\Response\IndexResponse;
+use Monadial\Nexus\Http\Auth\Middleware\AuthorizationMiddleware;
 use Monadial\Nexus\Http\Response\Response;
 use Monadial\Nexus\Http\Routing\RouteSummary;
 use Monadial\Nexus\Http\Ws\HttpApplication;
@@ -84,9 +85,15 @@ final class WalletRoutes
     /**
      * Admin endpoint demonstrating raw DBAL + #[Transactional] (read-only
      * snapshot). Returns every ledger ranked by net balance.
+     *
+     * Requires the `admin` role: the handler is annotated #[RequiresRole('admin')]
+     * and the route carries AuthorizationMiddleware, so an anonymous or
+     * non-admin caller is rejected (401/403) before the query runs. Compilation
+     * fails closed if the enforcer is ever removed (SEC-003).
      */
     private static function admin(HttpApplication $app): void
     {
-        $app->get('/admin/wallets', AdminAllLedgersHandler::class);
+        $app->get('/admin/wallets', AdminAllLedgersHandler::class)
+            ->middleware(AuthorizationMiddleware::class);
     }
 }

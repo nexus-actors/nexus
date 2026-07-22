@@ -141,7 +141,7 @@ final class WalletApp
         LoggerInterface $log,
     ): void {
         // Auth: stamps `Principal` on the request from a Bearer token.
-        $app->middleware(new AuthenticationMiddleware(DemoUsers::fromEnv($config->auth->tokens), $log));
+        $app->middleware(new AuthenticationMiddleware(DemoUsers::fromConfig($config->auth), $log));
         $app->paramResolver(new FromPrincipalResolver());
 
         // Doctrine: scope a Connection + EntityManager for the request,
