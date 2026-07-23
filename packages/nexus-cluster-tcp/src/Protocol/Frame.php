@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp;
+namespace Monadial\Nexus\Cluster\Tcp\Protocol;
 
 /**
  * @psalm-api

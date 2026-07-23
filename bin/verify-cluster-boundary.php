@@ -35,7 +35,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
-use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
+use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackHub;
 
 /**
  * INTENTIONAL core->transport boundary violation, written and removed by
@@ -82,7 +82,7 @@ $failures = [];
     'php -d error_reporting="E_ALL & ~E_DEPRECATED" vendor/bin/deptrac analyse --no-progress',
 );
 
-if ($deptracCode === 0 || !str_contains($deptracOut, 'must not depend on Monadial\Nexus\Cluster\Tcp\Loopback')) {
+if ($deptracCode === 0 || !str_contains($deptracOut, 'must not depend on Monadial\Nexus\Cluster\Tcp\Transport')) {
     $failures[] = "Deptrac did not reject ClusterTcpCore -> ClusterTcpTransport (exit {$deptracCode}). Output:\n{$deptracOut}";
 }
 

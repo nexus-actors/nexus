@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp\Swoole;
+namespace Monadial\Nexus\Cluster\Tcp\Transport\Tcp;
 
 use Closure;
 use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\Exception\ProtocolException;
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameCodec;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
-use Monadial\Nexus\Cluster\Tcp\PeerLink;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Transport\FrameCodec;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 use Swoole\Coroutine\Channel;

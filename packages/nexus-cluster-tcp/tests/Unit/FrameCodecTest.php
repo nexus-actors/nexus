@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit;
 
 use Monadial\Nexus\Cluster\Tcp\Exception\ProtocolException;
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameCodec;
-use Monadial\Nexus\Cluster\Tcp\FrameType;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
+use Monadial\Nexus\Cluster\Tcp\Transport\FrameCodec;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp;
+namespace Monadial\Nexus\Cluster\Tcp\Transport;
 
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Messaging\FrameIngress;

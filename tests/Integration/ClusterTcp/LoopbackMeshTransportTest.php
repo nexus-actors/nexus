@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Tests\Integration\ClusterTcp;
 
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameType;
-use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackHub;
-use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackMeshTransport;
-use Monadial\Nexus\Cluster\Tcp\Loopback\LoopbackPeerLink;
-use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
-use Monadial\Nexus\Cluster\Tcp\PeerLink;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
+use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackHub;
+use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackPeerLink;
+use Monadial\Nexus\Cluster\Tcp\Transport\MeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Core\Net\Port;
 use Monadial\Nexus\Runtime\Duration;

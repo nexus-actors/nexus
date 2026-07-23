@@ -129,6 +129,7 @@
 | `MeshTransport.php`, `PeerLink.php`, `LinkState.php`, `PeerConnection.php` | `Transport/` |
 | `Swoole/SwooleMeshTransport.php`, `Swoole/SwoolePeerLink.php` | `Transport/Tcp/` (namespace `…\Transport\Tcp`, class names unchanged) |
 | `Loopback/LoopbackHub.php`, `LoopbackMeshTransport.php`, `LoopbackPeerLink.php` | `Transport/Loopback/` |
+| `Messaging/MeshOutboundSink.php` | `Transport/` — discovered during execution: it constructs `PeerConnection`/`MeshTransport` (a Core→Transport edge post-move). It implements the core `OutboundSink` interface FROM the transport layer (allowed direction), has no src consumers (test-only twin of the anonymous sink; dies in Plan 5), and its REL-009 test coverage rides along via import updates. |
 
 NOT moved: `NodeEndpoint`, `DeliveryOutcome` (root — shared carriers consumed by core; the two-enum unification is Plan 5), `EndpointResolver`/`MapEndpointResolver`/`MutableEndpointRegistry` (core directory), `TlsConfig` (consumed by topology config — root), `ClusterTopology`, `NodeEndpoint`-census test files (imports updated only).
 

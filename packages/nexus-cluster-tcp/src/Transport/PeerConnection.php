@@ -2,9 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp;
+namespace Monadial\Nexus\Cluster\Tcp\Transport;
 
 use Closure;
+use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
+use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Psr\Log\LoggerInterface;

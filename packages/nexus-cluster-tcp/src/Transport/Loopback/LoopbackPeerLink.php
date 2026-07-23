@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp\Loopback;
+namespace Monadial\Nexus\Cluster\Tcp\Transport\Loopback;
 
 use Closure;
 use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
-use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
-use Monadial\Nexus\Cluster\Tcp\PeerLink;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;
 

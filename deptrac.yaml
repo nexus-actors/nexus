@@ -79,7 +79,7 @@ deptrac:
     - name: ClusterTcpTransport
       collectors:
         - type: directory
-          value: packages/nexus-cluster-tcp/src/(Loopback|Swoole)/.*
+          value: packages/nexus-cluster-tcp/src/Transport/.*
 
     - name: ClusterTcpWiring
       collectors:
@@ -94,7 +94,7 @@ deptrac:
               value: packages/nexus-cluster-tcp/src/.*
           must_not:
             - type: directory
-              value: packages/nexus-cluster-tcp/src/(Loopback|Swoole)/.*
+              value: packages/nexus-cluster-tcp/src/Transport/.*
             - type: directory
               value: packages/nexus-cluster-tcp/src/ClusterNode\.php
 

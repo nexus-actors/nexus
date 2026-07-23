@@ -2,18 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp\Messaging;
+namespace Monadial\Nexus\Cluster\Tcp\Transport;
 
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
 use Monadial\Nexus\Cluster\Tcp\EndpointResolver;
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameType;
-use Monadial\Nexus\Cluster\Tcp\MeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Messaging\OutboundSink;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
-use Monadial\Nexus\Cluster\Tcp\PeerConnection;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;

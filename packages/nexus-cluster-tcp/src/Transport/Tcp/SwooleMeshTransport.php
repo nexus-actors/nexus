@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp\Swoole;
+namespace Monadial\Nexus\Cluster\Tcp\Transport\Tcp;
 
 use Closure;
-use Monadial\Nexus\Cluster\Tcp\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
-use Monadial\Nexus\Cluster\Tcp\PeerLink;
 use Monadial\Nexus\Cluster\Tcp\TlsConfig;
+use Monadial\Nexus\Cluster\Tcp\Transport\MeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Core\Net\Host;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Override;

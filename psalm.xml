@@ -77,7 +77,7 @@
         -->
         <!-- Swoole\Coroutine\Server and Server\Connection live in swoole_library (pure PHP),
              not in swoole/ide-helper's native-ext stubs. Add them explicitly so Psalm
-             resolves these classes when analyzing nexus-cluster-tcp/src/Swoole/.
+             resolves these classes when analyzing nexus-cluster-tcp/src/Transport/Tcp/.
              Client and Socket are native-ext classes; their stubs give Psalm the correct
              return types (e.g. Client::connect():bool, Client::exportSocket():Socket|false,
              Socket::recv():string|false) that the extension reflection alone does not always
@@ -131,7 +131,7 @@
              underlying socket. The property is never read; holding it is the entire purpose. -->
         <UnusedProperty>
             <errorLevel type="suppress">
-                <file name="packages/nexus-cluster-tcp/src/Swoole/SwoolePeerLink.php" />
+                <file name="packages/nexus-cluster-tcp/src/Transport/Tcp/SwoolePeerLink.php" />
             </errorLevel>
         </UnusedProperty>
 

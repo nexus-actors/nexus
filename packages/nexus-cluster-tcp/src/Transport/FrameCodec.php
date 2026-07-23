@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Monadial\Nexus\Cluster\Tcp;
+namespace Monadial\Nexus\Cluster\Tcp\Transport;
 
 use Monadial\Nexus\Cluster\Tcp\Exception\ProtocolException;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 
 use function chr;
 use function ord;
