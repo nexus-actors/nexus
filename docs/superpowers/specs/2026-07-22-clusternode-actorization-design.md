@@ -236,9 +236,37 @@ supervisor registers endpoint + supersedes prior slot + clears tombstone →
 `become(Identified)` → `HandshakeAck` (with view) sent. Failure or
 `ReceiveTimeout` (Slowloris) → close + stop; queued frames die with the actor,
 never reaching ingress. `HandshakeAck` view application remains gated behind
-identification (registry-poisoning defense). Control-frame authorization: a
-`Leave`/control frame naming node X arriving on a link authenticated as node Y
-is rejected and counted.
+identification (registry-poisoning defense).
+
+**Control-frame authorization (SEC-008, concretized 2026-07-23):** the HMAC
+already binds the full identity claim (node map + advertise are in the signed
+canonical JSON); the gap is downstream authorization of control frames on
+identified links. Five checks close it:
+
+1. **Leave is self-attesting** — `LeavePayload` gains optional
+   `nonce/issuedAt/mac` signed by the *leaver* with the group secret
+   (freshness window + nonce replay set, mirroring the handshake). This
+   preserves the deliberate star-relay (in a B→A←C star, C legitimately
+   receives B's Leave on A's link — a strict naming-must-match-link rule
+   would break it) while making forged Leaves impossible without the secret.
+   Unsigned Leaves are accepted only when no `authSecret` is configured.
+2. **Re-identification pinning** — a Handshake on an already-identified link
+   asserting a DIFFERENT NodeAddress is rejected and counted (same-identity
+   re-handshake keeps C10 supersede + endpoint-failover semantics).
+3. **Ack-view authority** — the ack sender's own view entry must match its
+   HMAC-bound advertise; view entries are filtered against tombstones.
+4. **Gossip endpoint-write policy** — a gossip member entry naming the
+   *sender's own* address must match the link's HMAC-bound advertise;
+   endpoints registered from a verified Handshake are not overwritable by
+   unauthenticated-per-entry gossip. The membership VIEW merge is untouched
+   (gossip's transitive third-party value must survive; only the
+   endpoint-registry write path is restricted).
+5. **Liveness accounting excludes rejected frames** — a frame rejected by
+   authorization must not feed the phi detector.
+
+Known ceiling (documented, deferred): the shared group secret means an
+admitted member can still forge a fresh *handshake* as another identity;
+per-node keypairs (spec §9 deferred hardening) are the full fix.
 
 ### 4.3 Egress (1 mailbox hop)
 `ClusterRef::tell` on the caller's coroutine: encode (caller pays, as today) →
@@ -331,7 +359,7 @@ post-Leave lazy re-dial can never re-announce identity (constraint C1).
 |---|---|---|
 | Guardian → Membership | `oneForOne` restart; journal replay = consistent full reset. `WriterConflictException`/replay failure **escalates** to node shutdown | Identity corruption must not limp along |
 | Guardian → ConnectionSupervisor | Escalate to node shutdown | Link directory without sockets is incoherent; fail fast |
-| Supervisor → OutboundPeerActor | `exponentialBackoff`; decider: `ConnectionLost → Restart`, `IntentionalClose → Stop`, retries exhausted → Stop + membership notified | Supervision *is* the reconnect policy; mailbox (send queue) survives restarts within backoff = `Buffered` |
+| Supervisor → OutboundPeerActor | **Crash containment only** (`oneForOne`, modest retries; `IntentionalClose → Stop`); supervisor `watch`es and respawns on `Terminated`. **Reconnect is an internal backoff state machine** inside the actor (scheduleOnce retries, preamble-then-flush, exactly today's `PeerConnection` semantics) | AMENDED 2026-07-23 during Plan-3 grounding: the framework's real semantics disprove supervision-as-reconnect for queue survival — `restart()` clears the suspend buffer (frames sent during backoff would be silently lost, no dead-letter, `ActorCell::restart`) and `exponentialBackoff`'s `maxRetries` is a lifetime cap (window is zero). Internal reconnect keeps the mailbox (send queue) intact across retries = `Buffered`, preserving C-semantics verbatim. |
 | Supervisor → InboundLinkActor | Any failure → Stop | Inbound links are cheap; the peer re-dials |
 | Decode failure on identified link | Close link (protocol violation) | Never crashes membership |
 
