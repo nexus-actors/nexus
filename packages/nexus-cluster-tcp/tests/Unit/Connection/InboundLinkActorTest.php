@@ -189,7 +189,7 @@ final class InboundLinkActorTest extends TestCase
     }
 
     #[Test]
-    public function receiveTimeoutClosesTheLinkAndStopsWhileUnidentified(): void
+    public function handshakeDeadlineClosesTheLinkAndStopsWhileUnidentified(): void
     {
         $link = new FakePeerLink();
         $this->spawnActor(link: $link, handshakeTimeout: Duration::seconds(5));
@@ -200,8 +200,39 @@ final class InboundLinkActorTest extends TestCase
         self::assertTrue($link->wasClosed());
     }
 
+    /**
+     * Regression (review Critical): the deadline must be HARD. A `setReceiveTimeout`-based
+     * implementation resets on every user message, so an unauthenticated peer trickling junk
+     * non-Handshake frames at intervals just under the deadline would defer it forever — each
+     * junk frame is silently dropped (C2), so neither the bounded mailbox nor the acceptor's
+     * Dropped-enqueue flood bound trips either. The self-scheduled
+     * {@see \Monadial\Nexus\Cluster\Tcp\Transport\HandshakeDeadline} must fire at the ORIGINAL
+     * deadline regardless of intervening traffic.
+     */
     #[Test]
-    public function receiveTimeoutIsCancelledOnceIdentified(): void
+    public function aTrickleOfJunkFramesDoesNotDeferTheHandshakeDeadline(): void
+    {
+        $link = new FakePeerLink();
+        $ref = $this->spawnActor(link: $link, handshakeTimeout: Duration::seconds(5));
+
+        // Junk non-Handshake frames every 2s — each interval shorter than the 5s deadline, the
+        // span (6s) exceeding it. A resettable timeout would never fire under this traffic.
+        foreach ([0, 2, 4] as $atSecond) {
+            $this->send($ref, $this->gossipFrame([]));
+            $this->runtime->drain();
+            self::assertFalse($link->wasClosed(), "must not close before the deadline (t={$atSecond}s)");
+            $this->runtime->advanceTime(Duration::seconds(2));
+            $this->runtime->drain();
+        }
+
+        // t=6s > the 5s hard deadline: closed despite the continuous junk trickle.
+        self::assertTrue($link->wasClosed(), 'the hard deadline must fire despite trickle traffic');
+        self::assertSame([], $this->supervisorInbox, 'C2 held throughout: junk produced no ingress');
+        self::assertSame([], $this->membershipInbox);
+    }
+
+    #[Test]
+    public function handshakeDeadlineIsCancelledOnceIdentified(): void
     {
         $link = new FakePeerLink();
         $ref = $this->spawnActor(link: $link, handshakeTimeout: Duration::seconds(5));
@@ -222,7 +253,7 @@ final class InboundLinkActorTest extends TestCase
     }
 
     #[Test]
-    public function noReceiveTimeoutIsArmedWhenNoneIsConfigured(): void
+    public function noHandshakeDeadlineIsArmedWhenNoneIsConfigured(): void
     {
         $link = new FakePeerLink();
         $ref = $this->spawnActor(link: $link, handshakeTimeout: null);

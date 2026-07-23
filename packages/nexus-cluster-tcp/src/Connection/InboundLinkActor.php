@@ -32,6 +32,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
 use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
 use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
+use Monadial\Nexus\Cluster\Tcp\Transport\HandshakeDeadline;
 use Monadial\Nexus\Cluster\Tcp\Transport\LinkClosedNotice;
 use Monadial\Nexus\Cluster\Tcp\Transport\LinkFrame;
 use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
@@ -40,7 +41,6 @@ use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Core\Lifecycle\PostStop;
-use Monadial\Nexus\Core\Lifecycle\ReceiveTimeout;
 use Monadial\Nexus\Core\Lifecycle\Signal;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Meter;
@@ -49,6 +49,7 @@ use Monadial\Nexus\Observability\Trace\Span;
 use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Observability\Trace\Tracer;
 use Monadial\Nexus\Runtime\Duration;
+use Monadial\Nexus\Runtime\Runtime\Cancellable;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -78,9 +79,17 @@ use function time;
  * departed-tombstone clear, and the `HandshakeReceived` tell to membership all happen there, in its
  * own serialized mailbox — see {@see ConnectionSupervisor}); dispatch {@see PeerConnected}; cancel
  * the Slowloris deadline; **become** `Identified`. Every other frame type is silently dropped — C2
- * (zero pre-identification ingress) holds structurally, not by a runtime check. A
- * {@see ReceiveTimeout} (armed only when `$handshakeTimeout` is non-null — the accepted-inbound
- * path) closes the link and stops.
+ * (zero pre-identification ingress) holds structurally, not by a runtime check.
+ *
+ * Slowloris deadline: when `$handshakeTimeout` is non-null (the accepted-inbound path), setup
+ * self-schedules a HARD {@see HandshakeDeadline} via `scheduleOnce`; Unidentified handles it by
+ * closing the link and stopping, identification cancels the {@see Cancellable}, and Identified
+ * ignores a stale delivery that fired before the cancel. Deliberately NOT
+ * `setReceiveTimeout`/`ReceiveTimeout`: the receive-timeout resets on EVERY user message, so an
+ * unauthenticated peer trickling junk non-Handshake frames at intervals just under the deadline
+ * would defer it forever (each junk frame is silently dropped per C2, so neither the bounded
+ * mailbox nor the acceptor's Dropped-enqueue flood bound trips). The hard `scheduleOnce` deadline
+ * is immune to intervening traffic — exactly the pre-actorization acceptor-owned timer's semantics.
  *
  * **Identified**: the non-handshake frame branches from the old `handleLinkFrame` — ack-view,
  * gossip, leave, message — move here verbatim. A SECOND {@see FrameType::Handshake} is also handled
@@ -143,8 +152,9 @@ final class InboundLinkActor
      * @param ?PeerLink $link The accepted inbound link this actor identifies, forwarded on
      *        {@see RegisterIdentifiedLink} for the C10 accepted-link-slot write and closed on
      *        PostStop/timeout; null on the dialed-outbound path (no accepted-link bookkeeping there).
-     * @param ?Duration $handshakeTimeout Slowloris deadline armed via `setReceiveTimeout()` while
-     *        Unidentified; null arms none (the dialed-outbound path — see class docblock).
+     * @param ?Duration $handshakeTimeout HARD Slowloris deadline armed via a self-scheduled
+     *        {@see HandshakeDeadline} while Unidentified — deliberately NOT a receive-timeout, which
+     *        user messages reset (see class docblock); null arms none (the dialed-outbound path).
      */
     public function __construct(
         private readonly ActorRef $supervisorRef,
@@ -180,11 +190,13 @@ final class InboundLinkActor
              * @return Behavior<object>
              */
             static function (ActorContext $ctx) use ($actor, $timeout): Behavior {
-                if ($timeout !== null) {
-                    $ctx->setReceiveTimeout($timeout);
-                }
+                // HARD Slowloris deadline (not setReceiveTimeout, which every user message resets —
+                // a junk-frame trickle would defer it forever; see the class docblock).
+                $deadline = $timeout !== null
+                    ? $ctx->scheduleOnce($timeout, new HandshakeDeadline())
+                    : null;
 
-                return $actor->unidentified();
+                return $actor->unidentified($deadline);
             },
         );
 
@@ -196,24 +208,28 @@ final class InboundLinkActor
     // -------------------------------------------------------------------------
 
     /**
+     * @param ?Cancellable $deadline The armed {@see HandshakeDeadline} timer (null on the
+     *        dialed-outbound path) — cancelled by {@see handleHandshake()} at identification.
      * @return Behavior<object>
      */
-    private function unidentified(): Behavior
+    private function unidentified(?Cancellable $deadline): Behavior
     {
         $actor = $this;
 
         return Behavior::receive(
             /**
-             * @param ActorContext<object> $ctx
+             * @param ActorContext<object> $_ctx
              * @return Behavior<object>
              */
-            static function (ActorContext $ctx, object $msg) use ($actor): Behavior {
+            static function (ActorContext $_ctx, object $msg) use ($actor, $deadline): Behavior {
                 return match (true) {
                     $msg instanceof LinkFrame && $msg->frame->type === FrameType::Handshake
-                        => $actor->handleHandshake($ctx, $msg, null),
+                        => $actor->handleHandshake($msg, null, $deadline),
                     // C2 (zero pre-identification ingress): every other frame type is silently
-                    // dropped — structural, not a runtime allow-list.
+                    // dropped — structural, not a runtime allow-list. Deliberately does NOT defer
+                    // the HandshakeDeadline: a junk-frame trickle must not extend the deadline.
                     $msg instanceof LinkFrame => Behavior::same(),
+                    $msg instanceof HandshakeDeadline => $actor->onHandshakeDeadline(),
                     $msg instanceof LinkClosedNotice => Behavior::stopped(),
                     default => Behavior::same(),
                 };
@@ -224,12 +240,6 @@ final class InboundLinkActor
              * @return Behavior<object>
              */
             static function (ActorContext $_ctx, Signal $signal) use ($actor): Behavior {
-                if ($signal instanceof ReceiveTimeout) {
-                    $actor->closeLink();
-
-                    return Behavior::stopped();
-                }
-
                 if ($signal instanceof PostStop) {
                     $actor->closeLink();
                 }
@@ -237,6 +247,21 @@ final class InboundLinkActor
                 return Behavior::same();
             },
         );
+    }
+
+    /**
+     * The hard Slowloris deadline elapsed without a valid identification: close the link and stop.
+     *
+     * @return Behavior<object>
+     */
+    private function onHandshakeDeadline(): Behavior
+    {
+        $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.timeout', [
+            'peer_endpoint' => $this->remoteLabel,
+        ]));
+        $this->closeLink();
+
+        return Behavior::stopped();
     }
 
     /**
@@ -248,12 +273,19 @@ final class InboundLinkActor
 
         return Behavior::receive(
             /**
-             * @param ActorContext<object> $ctx
+             * @param ActorContext<object> $_ctx
              * @return Behavior<object>
              */
-            static function (ActorContext $ctx, object $msg) use ($actor, $peerAddr, $boundAdvertise, $ingress): Behavior {
+            static function (ActorContext $_ctx, object $msg) use ($actor, $peerAddr, $boundAdvertise, $ingress): Behavior {
                 if ($msg instanceof LinkClosedNotice) {
                     return $actor->handleLinkClosedNotice($peerAddr);
+                }
+
+                // A stale HandshakeDeadline that fired and was enqueued behind the identifying
+                // Handshake, before identification could cancel the timer — the link IS
+                // identified, so the deadline no longer applies.
+                if ($msg instanceof HandshakeDeadline) {
+                    return Behavior::same();
                 }
 
                 if (!$msg instanceof LinkFrame) {
@@ -261,7 +293,7 @@ final class InboundLinkActor
                 }
 
                 return match ($msg->frame->type) {
-                    FrameType::Handshake => $actor->handleHandshake($ctx, $msg, $peerAddr),
+                    FrameType::Handshake => $actor->handleHandshake($msg, $peerAddr, null),
                     FrameType::HandshakeAck => $actor->onHandshakeAck($msg->frame, $peerAddr, $boundAdvertise),
                     FrameType::Gossip => $actor->onGossip($msg, $peerAddr, $boundAdvertise),
                     FrameType::Leave => $actor->onLeave($msg->frame, $peerAddr),
@@ -294,9 +326,11 @@ final class InboundLinkActor
      * with) and the already-bound peer address when called from Identified (a genuine re-handshake,
      * e.g. on endpoint failover — same-prefix proceeds unchanged, C10 supersede semantics).
      *
+     * @param ?Cancellable $deadline Unidentified's armed {@see HandshakeDeadline} timer, cancelled
+     *        on acceptance; null from Identified (already cancelled) and on the dialed-outbound path.
      * @return Behavior<object>
      */
-    private function handleHandshake(ActorContext $ctx, LinkFrame $msg, ?NodeAddress $currentPeerAddr): Behavior
+    private function handleHandshake(LinkFrame $msg, ?NodeAddress $currentPeerAddr, ?Cancellable $deadline): Behavior
     {
         $span = $this->safeStartHandshakeSpan();
         $parsed = $this->parseHandshakeFrame($msg->frame);
@@ -346,8 +380,9 @@ final class InboundLinkActor
         $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
         $this->safeEndSpan($span);
 
-        // Cancel the Slowloris deadline — a no-op once already disabled (Identified re-handshake).
-        $ctx->setReceiveTimeout(null);
+        // Cancel the hard Slowloris deadline. If the timer already fired and its HandshakeDeadline
+        // is queued behind this frame, Identified ignores the stale delivery.
+        $deadline?->cancel();
 
         return $this->identified($peerAddr, $handshake->advertise, $ingress);
     }

@@ -36,8 +36,9 @@ use function spl_object_id;
  *    rejected the frame) closes the link outright, rather than let a flooding peer sit on an
  *    accepted-but-unproductive connection.
  *
- * The Slowloris handshake deadline is NOT owned here any more — it is armed by the actor itself
- * (`setReceiveTimeout()` in `Behavior::setup`), since the actor is what knows whether it has
+ * The Slowloris handshake deadline is NOT owned here any more — the actor self-schedules a HARD
+ * {@see HandshakeDeadline} in `Behavior::setup` (immune to intervening junk traffic, unlike a
+ * receive-timeout — see that class's docblock), since the actor is what knows whether it has
  * identified yet. One acceptor instance is constructed once at boot and reused for every accepted
  * connection — `$inboundLinks` tracks live links across the acceptor's whole lifetime, which is
  * what makes the concurrency cap meaningful.
