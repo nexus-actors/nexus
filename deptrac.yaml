@@ -86,6 +86,14 @@ deptrac:
         - type: directory
           value: packages/nexus-cluster-tcp/src/ClusterNode\.php
 
+    # Connection/ actorizes state ownership + (from Plan 3 Task 3 onward) the inbound/outbound link
+    # actors themselves, so — like ClusterNode.php — it necessarily touches transport types
+    # (PeerLink) that stay off-limits to the transport-neutral ClusterTcpCore layer below.
+    - name: ClusterTcpConnection
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/Connection/.*
+
     - name: ClusterTcpCore
       collectors:
         - type: bool
@@ -97,6 +105,8 @@ deptrac:
               value: packages/nexus-cluster-tcp/src/Transport/.*
             - type: directory
               value: packages/nexus-cluster-tcp/src/ClusterNode\.php
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/Connection/.*
 
     - name: DoctrineDbal
       collectors:
@@ -281,6 +291,14 @@ deptrac:
       - Runtime
       - Serialization
       - SerializationMsgpack
+    ClusterTcpConnection:
+      - Cluster
+      - ClusterTcpCore
+      - ClusterTcpTransport
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
     ClusterTcpTransport:
       - Cluster
       - ClusterTcpCore
@@ -290,6 +308,7 @@ deptrac:
       - Serialization
     ClusterTcpWiring:
       - Cluster
+      - ClusterTcpConnection
       - ClusterTcpCore
       - ClusterTcpTransport
       - Core

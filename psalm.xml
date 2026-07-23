@@ -202,6 +202,8 @@
                 <file name="packages/nexus-cluster-tcp/src/Messaging/LocalDelivery.php"/>
                 <!-- ClusterNode::$membershipRef accepts a heterogeneous union of membership messages; expose() takes any actor ref (typed by caller) -->
                 <file name="packages/nexus-cluster-tcp/src/ClusterNode.php"/>
+                <!-- ConnectionSupervisor::$membershipRef accepts the same heterogeneous union (HandshakeReceived, PeerLinkClosed) as ClusterNode's -->
+                <file name="packages/nexus-cluster-tcp/src/Connection/ConnectionSupervisor.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>

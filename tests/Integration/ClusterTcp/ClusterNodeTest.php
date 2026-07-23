@@ -7,9 +7,10 @@ namespace Monadial\Nexus\Tests\Integration\ClusterTcp;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterNode;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
+use Monadial\Nexus\Cluster\Tcp\Connection\RoutingSnapshot;
+use Monadial\Nexus\Cluster\Tcp\Connection\RoutingSnapshotHolder;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
-use Monadial\Nexus\Cluster\Tcp\MutableEndpointRegistry;
 use Monadial\Nexus\Cluster\Tcp\NodeEndpoint;
 use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
 use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
@@ -1961,48 +1962,52 @@ final class ClusterNodeTest extends TestCase
     }
 
     /**
-     * Reflect the private acceptedLinks map to check whether the given peer has a live accepted link.
+     * Reflect the private routingSnapshotHolder to check whether the given peer currently has a
+     * live accepted link. The accepted-link directory moved off ClusterNode onto
+     * ConnectionSupervisor (Plan 3 Task 2); reads now go through the published RoutingSnapshot
+     * rather than a ClusterNode-owned field.
      */
     private function hasAcceptedLink(ClusterNode $node, NodeAddress $peer): bool
     {
-        /** @var array<string, mixed> $accepted */
-        $accepted = (new ReflectionProperty(ClusterNode::class, 'acceptedLinks'))->getValue($node);
-
-        return isset($accepted[$peer->toPathPrefix()]);
+        return isset($this->routingSnapshot($node)->acceptedLinks[$peer->toPathPrefix()]);
     }
 
     /**
-     * Reflect the private departedTombstones map to check whether a path-prefix is tombstoned.
+     * Reflect the private routingSnapshotHolder to check whether a path-prefix is tombstoned.
      */
     private function isTombstoned(ClusterNode $node, string $prefix): bool
     {
-        /** @var array<string, true> $tombstones */
-        $tombstones = (new ReflectionProperty(ClusterNode::class, 'departedTombstones'))->getValue($node);
-
-        return isset($tombstones[$prefix]);
+        return isset($this->routingSnapshot($node)->tombstones[$prefix]);
     }
 
     /**
-     * Reflect the private verifiedEndpointPrefixes set to check whether a path-prefix's registry
+     * Reflect the private routingSnapshotHolder to check whether a path-prefix's registry
      * entry is marked as handshake-verified (SEC-008 check 4).
      */
     private function isEndpointVerified(ClusterNode $node, string $prefix): bool
     {
-        /** @var array<string, true> $verified */
-        $verified = (new ReflectionProperty(ClusterNode::class, 'verifiedEndpointPrefixes'))->getValue($node);
-
-        return isset($verified[$prefix]);
+        return isset($this->routingSnapshot($node)->verifiedPrefixes[$prefix]);
     }
 
     /**
-     * Reflect the private endpointRegistry to read the currently-registered endpoint for a prefix.
+     * Reflect the private routingSnapshotHolder to read the currently-registered endpoint for a
+     * prefix. The endpoint registry became ConnectionSupervisor-internal (Plan 3 Task 2); its
+     * current contents are exposed on every published RoutingSnapshot.
      */
     private function registeredEndpoint(ClusterNode $node, string $prefix): ?NodeEndpoint
     {
-        /** @var MutableEndpointRegistry $registry */
-        $registry = (new ReflectionProperty(ClusterNode::class, 'endpointRegistry'))->getValue($node);
+        return $this->routingSnapshot($node)->endpoints[$prefix] ?? null;
+    }
 
-        return $registry->resolveByPrefix($prefix);
+    /**
+     * Reflect the private routingSnapshotHolder and return its current RoutingSnapshot.
+     */
+    private function routingSnapshot(ClusterNode $node): RoutingSnapshot
+    {
+        /** @var RoutingSnapshotHolder $holder */
+        $holder = (new ReflectionProperty(ClusterNode::class, 'routingSnapshotHolder'))->getValue($node);
+
+        return $holder->current();
     }
 
     /**
