@@ -53,7 +53,7 @@ use const JSON_THROW_ON_ERROR;
  * single node and is never shared across Swoole threads, so the mutable nonce set needs
  * no locking — matching the rest of the package's confinement convention.
  */
-final class HandshakeAuthenticator
+final class HandshakeAuthenticator implements PeerAuthenticator
 {
     private readonly int $freshnessWindowSeconds;
 
@@ -85,6 +85,7 @@ final class HandshakeAuthenticator
     /**
      * Return a copy of `$handshake` carrying a fresh nonce, issue timestamp, and HMAC.
      */
+    #[Override]
     public function sign(Handshake $handshake): Handshake
     {
         $nonce = bin2hex(random_bytes(16));
@@ -107,6 +108,7 @@ final class HandshakeAuthenticator
      * handshake whose nonce this verifier has already accepted within the freshness window
      * is rejected as a replay. On acceptance the nonce is remembered until it ages out.
      */
+    #[Override]
     public function verify(Handshake $handshake, int $nowUnix): bool
     {
         $nonce = $handshake->nonce;

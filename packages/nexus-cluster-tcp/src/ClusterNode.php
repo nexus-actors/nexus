@@ -24,6 +24,7 @@ use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLinkClosed;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerDisconnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
@@ -184,7 +185,7 @@ final class ClusterNode
         private readonly EventDispatcherInterface $dispatcher,
         private readonly TcpAskRegistry $askRegistry,
         private readonly LoggerInterface $logger,
-        private readonly ?HandshakeAuthenticator $authenticator = null,
+        private readonly ?PeerAuthenticator $authenticator = null,
     ) {
         $this->livenessThrottle = new LivenessThrottle();
     }

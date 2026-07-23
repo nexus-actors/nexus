@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Runtime\Duration;
@@ -22,6 +23,12 @@ final class HandshakeAuthenticatorTest extends TestCase
 
     /** The fixed Unix second the injected clock reports; sign() stamps issuedAt from it. */
     private int $now;
+
+    #[Test]
+    public function implementsPeerAuthenticator(): void
+    {
+        self::assertInstanceOf(PeerAuthenticator::class, new HandshakeAuthenticator('secret'));
+    }
 
     #[Test]
     public function signsThenVerifiesItsOwnHandshake(): void
