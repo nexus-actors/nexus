@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Transport;
 
+use Closure;
 use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
 use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
@@ -15,6 +16,7 @@ use Monadial\Nexus\Cluster\Tcp\Transport\LinkFrame;
 use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Tests\Support\TestRuntime;
 use Monadial\Nexus\Runtime\Async\Future;
 use Monadial\Nexus\Runtime\Duration;
 use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
@@ -26,13 +28,23 @@ use RuntimeException;
 
 /**
  * Unit tests for the pump: capacity gate, spawner hand-off, C3 stamping, the pre-auth
- * flood-bound close on a `Dropped` enqueue, and close bookkeeping. The Slowloris deadline and
- * the per-link frame state machine both moved to {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor}
- * — see the class docblock for exactly what stayed here.
+ * flood-bound close on a `Dropped` enqueue, close bookkeeping, and the OUT-OF-BAND Slowloris
+ * backstop (armed per accepted link, disarmed via the `$onIdentified` seam or on link close).
+ * The per-link frame state machine and the in-band
+ * {@see \Monadial\Nexus\Cluster\Tcp\Transport\HandshakeDeadline} both live on
+ * {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor} — see the acceptor's class
+ * docblock for exactly what stays here and why the backstop exists (mailbox starvation).
  */
 #[CoversClass(InboundLinkAcceptor::class)]
 final class InboundLinkAcceptorTest extends TestCase
 {
+    private const int HANDSHAKE_TIMEOUT_SECONDS = 10;
+
+    /** Mirrors the acceptor's private BACKSTOP_GRACE_SECONDS — the backstop fires at timeout + grace. */
+    private const int BACKSTOP_GRACE_SECONDS = 1;
+
+    private TestRuntime $runtime;
+
     private ClockInterface $clock;
 
     #[Test]
@@ -40,14 +52,13 @@ final class InboundLinkAcceptorTest extends TestCase
     {
         $spawnCalls = 0;
 
-        $acceptor = new InboundLinkAcceptor(
-            1,
-            static function () use (&$spawnCalls): RecordingRef {
+        $acceptor = $this->acceptor(
+            spawner: static function () use (&$spawnCalls): RecordingRef {
                 ++$spawnCalls;
 
                 return new RecordingRef();
             },
-            $this->clock,
+            maxInboundLinks: 1,
         );
 
         $first = new FakePeerLink();
@@ -66,7 +77,7 @@ final class InboundLinkAcceptorTest extends TestCase
     public function everyFrameIsStampedAndOfferedToTheSpawnedActor(): void
     {
         $ref = new RecordingRef();
-        $acceptor = new InboundLinkAcceptor(10, static fn(): RecordingRef => $ref, $this->clock);
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => $ref);
 
         $link = new FakePeerLink();
         $acceptor->accept($link);
@@ -85,7 +96,7 @@ final class InboundLinkAcceptorTest extends TestCase
     {
         $ref = new RecordingRef();
         $ref->offerResult = EnqueueResult::Dropped;
-        $acceptor = new InboundLinkAcceptor(10, static fn(): RecordingRef => $ref, $this->clock);
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => $ref);
 
         $link = new FakePeerLink();
         $acceptor->accept($link);
@@ -100,7 +111,7 @@ final class InboundLinkAcceptorTest extends TestCase
     {
         $ref = new RecordingRef();
         $ref->offerResult = EnqueueResult::Backpressured;
-        $acceptor = new InboundLinkAcceptor(10, static fn(): RecordingRef => $ref, $this->clock);
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => $ref);
 
         $link = new FakePeerLink();
         $acceptor->accept($link);
@@ -138,7 +149,7 @@ final class InboundLinkAcceptorTest extends TestCase
             }
         };
 
-        $acceptor = new InboundLinkAcceptor(10, static fn(): object => $ref, $this->clock);
+        $acceptor = $this->acceptor(spawner: static fn(): object => $ref);
         $link = new FakePeerLink();
         $acceptor->accept($link);
 
@@ -155,7 +166,7 @@ final class InboundLinkAcceptorTest extends TestCase
     public function closeTellsLinkClosedNoticeAndRemovesFromLiveCount(): void
     {
         $ref = new RecordingRef();
-        $acceptor = new InboundLinkAcceptor(10, static fn(): RecordingRef => $ref, $this->clock);
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => $ref);
 
         $link = new FakePeerLink();
         $acceptor->accept($link);
@@ -173,34 +184,119 @@ final class InboundLinkAcceptorTest extends TestCase
     }
 
     #[Test]
-    public function theSpawnerReceivesTheAcceptedLink(): void
+    public function theSpawnerReceivesTheAcceptedLinkAndTheOnIdentifiedSeam(): void
     {
         /** @var list<PeerLink> $spawnedFor */
         $spawnedFor = [];
+        /** @var list<Closure> $seams */
+        $seams = [];
 
-        $acceptor = new InboundLinkAcceptor(
-            10,
-            static function (PeerLink $link) use (&$spawnedFor): RecordingRef {
+        $acceptor = $this->acceptor(
+            spawner: static function (PeerLink $link, Closure $onIdentified) use (&$spawnedFor, &$seams): RecordingRef {
                 $spawnedFor[] = $link;
+                $seams[] = $onIdentified;
 
                 return new RecordingRef();
             },
-            $this->clock,
         );
 
         $link = new FakePeerLink();
         $acceptor->accept($link);
 
         self::assertSame([$link], $spawnedFor);
+        self::assertCount(1, $seams, 'every accepted link gets its own onIdentified seam');
     }
+
+    // -------------------------------------------------------------------------
+    // Out-of-band Slowloris backstop
+    // -------------------------------------------------------------------------
+
+    #[Test]
+    public function theBackstopClosesAnUnidentifiedLinkOutOfBand(): void
+    {
+        // RecordingRef never identifies — standing in for a starved actor whose in-band
+        // HandshakeDeadline was dropped by a filled-to-capacity mailbox.
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => new RecordingRef());
+
+        $link = new FakePeerLink();
+        $acceptor->accept($link);
+
+        $this->runtime->advanceTime(Duration::seconds(self::HANDSHAKE_TIMEOUT_SECONDS));
+        self::assertFalse($link->wasClosed(), 'the backstop waits out the grace beyond the handshake timeout');
+
+        $this->runtime->advanceTime(Duration::seconds(self::BACKSTOP_GRACE_SECONDS));
+        self::assertTrue($link->wasClosed(), 'the backstop must close the raw link out-of-band');
+    }
+
+    #[Test]
+    public function theOnIdentifiedSeamDisarmsTheBackstop(): void
+    {
+        /** @var ?Closure $seam */
+        $seam = null;
+
+        $acceptor = $this->acceptor(
+            spawner: static function (PeerLink $_link, Closure $onIdentified) use (&$seam): RecordingRef {
+                $seam = $onIdentified;
+
+                return new RecordingRef();
+            },
+        );
+
+        $link = new FakePeerLink();
+        $acceptor->accept($link);
+
+        self::assertNotNull($seam);
+        $seam();
+
+        $this->runtime->advanceTime(
+            Duration::seconds(self::HANDSHAKE_TIMEOUT_SECONDS + self::BACKSTOP_GRACE_SECONDS + 60),
+        );
+
+        self::assertFalse($link->wasClosed(), 'an identified link must never be closed by the backstop');
+    }
+
+    #[Test]
+    public function linkCloseDisarmsTheBackstop(): void
+    {
+        $acceptor = $this->acceptor(spawner: static fn(): RecordingRef => new RecordingRef());
+
+        $link = new FakePeerLink();
+        $acceptor->accept($link);
+
+        // The remote disconnects before ever identifying: the backstop timer is cancelled with the
+        // link, so it never invokes close() on our side (wasClosed() only records OUR close calls).
+        $link->triggerClose();
+
+        $this->runtime->advanceTime(
+            Duration::seconds(self::HANDSHAKE_TIMEOUT_SECONDS + self::BACKSTOP_GRACE_SECONDS + 60),
+        );
+
+        self::assertFalse($link->wasClosed(), 'a closed link needs no backstop — the timer must be cancelled');
+    }
+
+    // -------------------------------------------------------------------------
+    // Test helpers
+    // -------------------------------------------------------------------------
 
     protected function setUp(): void
     {
+        $this->runtime = new TestRuntime();
         $this->clock = new class implements ClockInterface {
             public function now(): DateTimeImmutable
             {
                 return new DateTimeImmutable('2026-01-01T00:00:00+00:00');
             }
         };
+    }
+
+    private function acceptor(Closure $spawner, int $maxInboundLinks = 10): InboundLinkAcceptor
+    {
+        return new InboundLinkAcceptor(
+            $this->runtime,
+            $maxInboundLinks,
+            Duration::seconds(self::HANDSHAKE_TIMEOUT_SECONDS),
+            $spawner,
+            $this->clock,
+        );
     }
 }

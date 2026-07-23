@@ -698,32 +698,39 @@ final class ClusterNode
      */
     private function wireInboundLink(InboxRouter $inboxRouter): InboundLinkAcceptor
     {
-        $spawner = function (PeerLink $link) use ($inboxRouter): ActorRef {
-            $actor = new InboundLinkActor(
-                supervisorRef: $this->connectionSupervisorRef,
-                membershipRef: $this->membershipRef,
-                snapshotHolder: $this->routingSnapshotHolder,
-                authenticator: $this->authenticator,
-                topology: $this->topology,
-                payloadCodec: $this->payloadCodec,
-                controlCodec: $this->controlCodec,
-                inboxRouter: $inboxRouter,
-                livenessThrottle: $this->livenessThrottle,
-                egress: $this->sendByPrefix(...),
-                tracer: $this->tracer,
-                meter: $this->meter,
-                dispatcher: $this->dispatcher,
-                logger: $this->logger,
-                link: $link,
-                remoteLabel: $link->remote() !== null ? (string) $link->remote() : 'unknown',
-                handshakeTimeout: $this->topology->handshakeTimeout,
-            );
+        $spawner =
+            /**
+             * @param Closure(): void $onIdentified
+             */
+            function (PeerLink $link, Closure $onIdentified) use ($inboxRouter): ActorRef {
+                $actor = new InboundLinkActor(
+                    supervisorRef: $this->connectionSupervisorRef,
+                    membershipRef: $this->membershipRef,
+                    snapshotHolder: $this->routingSnapshotHolder,
+                    authenticator: $this->authenticator,
+                    topology: $this->topology,
+                    payloadCodec: $this->payloadCodec,
+                    controlCodec: $this->controlCodec,
+                    inboxRouter: $inboxRouter,
+                    livenessThrottle: $this->livenessThrottle,
+                    egress: $this->sendByPrefix(...),
+                    tracer: $this->tracer,
+                    meter: $this->meter,
+                    dispatcher: $this->dispatcher,
+                    logger: $this->logger,
+                    link: $link,
+                    remoteLabel: $link->remote() !== null ? (string) $link->remote() : 'unknown',
+                    handshakeTimeout: $this->topology->handshakeTimeout,
+                    onIdentified: $onIdentified,
+                );
 
-            return $this->system->spawnAnonymous($actor->props());
-        };
+                return $this->system->spawnAnonymous($actor->props());
+            };
 
         return new InboundLinkAcceptor(
+            $this->runtime,
             $this->topology->maxInboundLinks,
+            $this->topology->handshakeTimeout,
             $spawner,
             $this->system->clock(),
             $this->logger,

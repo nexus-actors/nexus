@@ -89,7 +89,11 @@ use function time;
  * unauthenticated peer trickling junk non-Handshake frames at intervals just under the deadline
  * would defer it forever (each junk frame is silently dropped per C2, so neither the bounded
  * mailbox nor the acceptor's Dropped-enqueue flood bound trips). The hard `scheduleOnce` deadline
- * is immune to intervening traffic — exactly the pre-actorization acceptor-owned timer's semantics.
+ * is immune to intervening traffic. This in-band deadline is the graceful PRIMARY path; because it
+ * travels through the actor's own bounded mailbox, a mailbox filled exactly to capacity can starve
+ * it — the acceptor's OUT-OF-BAND backstop covers that case, disarmed at identification via the
+ * `$onIdentified` seam (see {@see \Monadial\Nexus\Cluster\Tcp\Transport\InboundLinkAcceptor}).
+ * Together they restore the pre-actorization acceptor-owned timer's semantics exactly.
  *
  * **Identified**: the non-handshake frame branches from the old `handleLinkFrame` — ack-view,
  * gossip, leave, message — move here verbatim. A SECOND {@see FrameType::Handshake} is also handled
@@ -155,6 +159,11 @@ final class InboundLinkActor
      * @param ?Duration $handshakeTimeout HARD Slowloris deadline armed via a self-scheduled
      *        {@see HandshakeDeadline} while Unidentified — deliberately NOT a receive-timeout, which
      *        user messages reset (see class docblock); null arms none (the dialed-outbound path).
+     * @param (Closure(): void)|null $onIdentified Invoked at identification, alongside cancelling
+     *        the in-band deadline — disarms the acceptor's OUT-OF-BAND Slowloris backstop, which
+     *        covers an in-band {@see HandshakeDeadline} starved by a filled-to-capacity mailbox
+     *        (see {@see \Monadial\Nexus\Cluster\Tcp\Transport\InboundLinkAcceptor}'s docblock).
+     *        Null on the dialed-outbound path (no acceptor, no backstop).
      */
     public function __construct(
         private readonly ActorRef $supervisorRef,
@@ -174,6 +183,7 @@ final class InboundLinkActor
         private readonly ?PeerLink $link,
         private readonly string $remoteLabel,
         private readonly ?Duration $handshakeTimeout,
+        private readonly ?Closure $onIdentified = null,
     ) {}
 
     /**
@@ -380,9 +390,15 @@ final class InboundLinkActor
         $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
         $this->safeEndSpan($span);
 
-        // Cancel the hard Slowloris deadline. If the timer already fired and its HandshakeDeadline
-        // is queued behind this frame, Identified ignores the stale delivery.
+        // Cancel the hard in-band Slowloris deadline (if the timer already fired and its
+        // HandshakeDeadline is queued behind this frame, Identified ignores the stale delivery)
+        // and disarm the acceptor's out-of-band backstop. Both are idempotent, so a re-handshake
+        // from Identified (deadline already null, backstop already disarmed) is harmless.
         $deadline?->cancel();
+
+        if ($this->onIdentified !== null) {
+            ($this->onIdentified)();
+        }
 
         return $this->identified($peerAddr, $handshake->advertise, $ingress);
     }

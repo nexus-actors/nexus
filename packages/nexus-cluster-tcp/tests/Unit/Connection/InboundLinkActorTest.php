@@ -46,6 +46,7 @@ use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEventDispatcher;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingLogger;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingMeter;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\SpyTracer;
+use Monadial\Nexus\Cluster\Tcp\Transport\InboundLinkAcceptor;
 use Monadial\Nexus\Cluster\Tcp\Transport\LinkClosedNotice;
 use Monadial\Nexus\Cluster\Tcp\Transport\LinkFrame;
 use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
@@ -75,6 +76,7 @@ use function hrtime;
  * link the actor closes/registers, via {@see FakePeerLink::wasClosed()}.
  */
 #[CoversClass(InboundLinkActor::class)]
+#[CoversClass(InboundLinkAcceptor::class)]
 final class InboundLinkActorTest extends TestCase
 {
     private StepRuntime $runtime;
@@ -595,6 +597,64 @@ final class InboundLinkActorTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // Out-of-band backstop (acceptor-wired: real acceptor + real actor)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Regression (review Critical #2): the in-band {@see \Monadial\Nexus\Cluster\Tcp\Transport\HandshakeDeadline}
+     * travels through the actor's bounded DropNewest mailbox, so a peer that fills that mailbox
+     * EXACTLY to capacity with junk and then goes silent starves it — the deadline self-tell is
+     * dropped on arrival, the junk drains to no-ops, no further offer() ever returns Dropped, and
+     * without a backstop the unidentified link would hold a maxInboundLinks slot forever. The
+     * acceptor's OUT-OF-BAND backstop (timeout + grace, closing the raw link directly) must catch it.
+     */
+    #[Test]
+    public function aMailboxStarvedInBandDeadlineIsBackstoppedOutOfBand(): void
+    {
+        $link = new FakePeerLink();
+        $acceptor = $this->wiredAcceptor(Duration::seconds(5));
+        $acceptor->accept($link);
+
+        // Fill the actor's bounded mailbox EXACTLY to capacity (1024, DropNewest) and go silent:
+        // never overflowing, so the acceptor's Dropped-enqueue flood bound never trips.
+        for ($i = 0; $i < 1_024; ++$i) {
+            $link->receiveFrame($this->gossipFrame([]));
+        }
+
+        self::assertFalse($link->wasClosed(), 'exactly-at-capacity junk must not trip the flood bound');
+
+        // t=5s: the in-band HandshakeDeadline fires into the FULL mailbox — DropNewest drops the
+        // ARRIVING message, so the graceful in-band path is lost forever.
+        $this->runtime->advanceTime(Duration::seconds(5));
+        $this->runtime->drain();
+        self::assertFalse($link->wasClosed(), 'the starved in-band deadline never reached the actor');
+
+        // t=6s (timeout + 1s grace): the acceptor's backstop closes the raw link out-of-band.
+        $this->runtime->advanceTime(Duration::seconds(1));
+        self::assertTrue($link->wasClosed(), 'the backstop must close a mailbox-starved unidentified link');
+    }
+
+    #[Test]
+    public function identificationDisarmsTheOutOfBandBackstop(): void
+    {
+        $link = new FakePeerLink();
+        $acceptor = $this->wiredAcceptor(Duration::seconds(5));
+        $acceptor->accept($link);
+
+        // Identify through the real pump (acceptor onFrame -> offer -> actor).
+        $link->receiveFrame($this->handshakeFrame());
+        $this->runtime->drain();
+        self::assertCount(1, $this->supervisorInbox, 'the handshake must have identified the link');
+
+        // Way past timeout + grace: neither the (cancelled) in-band deadline nor the (disarmed)
+        // backstop may close a healthy identified link.
+        $this->runtime->advanceTime(Duration::seconds(60));
+        $this->runtime->drain();
+
+        self::assertFalse($link->wasClosed(), 'a healthy identified link must never be falsely closed');
+    }
+
+    // -------------------------------------------------------------------------
     // Test helpers
     // -------------------------------------------------------------------------
 
@@ -695,6 +755,7 @@ final class InboundLinkActorTest extends TestCase
         ?Duration $handshakeTimeout,
         ?PeerAuthenticator $authenticator = null,
         ?Closure $egress = null,
+        ?Closure $onIdentified = null,
     ): ActorRef {
         $actor = new InboundLinkActor(
             supervisorRef: $this->probe($this->supervisorInbox),
@@ -714,9 +775,31 @@ final class InboundLinkActorTest extends TestCase
             link: $link,
             remoteLabel: $link?->remote() !== null ? (string) $link?->remote() : 'unknown',
             handshakeTimeout: $handshakeTimeout,
+            onIdentified: $onIdentified,
         );
 
         return $this->system->spawn($actor->props(), 'inbound-link-' . $this->refSeq++);
+    }
+
+    /**
+     * A REAL acceptor wired to spawn REAL actors — the full accepted-inbound pump, for the
+     * out-of-band backstop tests (frames delivered via `PeerLink::onFrame`, not direct tells).
+     */
+    private function wiredAcceptor(Duration $handshakeTimeout): InboundLinkAcceptor
+    {
+        return new InboundLinkAcceptor(
+            $this->runtime,
+            10,
+            $handshakeTimeout,
+            function (PeerLink $link, Closure $onIdentified) use ($handshakeTimeout): ActorRef {
+                return $this->spawnActor(
+                    link: $link,
+                    handshakeTimeout: $handshakeTimeout,
+                    onIdentified: $onIdentified,
+                );
+            },
+            $this->runtime->clock(),
+        );
     }
 
     private function egress(string $prefix, Frame $frame): DeliveryOutcome
