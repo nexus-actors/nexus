@@ -788,6 +788,10 @@ final class ClusterNode
                     return;
                 }
 
+                // Side effects only AFTER the re-identify check: registry write, verified-set
+                // mark, tombstone clear (see applyAcceptedHandshake). Registration must precede
+                // the HandshakeReceived tell below — load-bearing ordering invariant.
+                $this->applyAcceptedHandshake($peerAddr, $peerEndpoint);
                 $state->peerAddr = $peerAddr;
                 $state->boundAdvertise = $handshake->advertise;
                 $state->ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
@@ -979,8 +983,16 @@ final class ClusterNode
     }
 
     /**
-     * Parse a Handshake frame payload, register the peer's endpoint, and return
-     * the parsed address, endpoint, and Handshake as a tuple.
+     * Parse and validate a Handshake frame payload, returning the parsed address, endpoint, and
+     * Handshake as a tuple — or null on any validation failure.
+     *
+     * PURE with respect to routing state: no registry write, no verified-set marking, no
+     * tombstone clear happens here — {@see applyAcceptedHandshake()} applies those, and
+     * {@see handleLinkFrame()} calls it only after the re-identification check passes, so a
+     * rejected impersonation attempt cannot poison the claimed identity's routing state
+     * (SEC-008 review fix). The one deliberate exception: a successful HMAC verify() consumes
+     * the frame's nonce in the replay guard, so even a subsequently-rejected frame's signature
+     * cannot be replayed at this node.
      *
      * @return array{NodeAddress, NodeEndpoint, Handshake}|null
      */
@@ -1052,13 +1064,30 @@ final class ClusterNode
             return null;
         }
 
+        return [$peerAddr, $peerEndpoint, $obj];
+    }
+
+    /**
+     * Apply the admission side effects for an ACCEPTED Handshake: register the peer's advertise
+     * endpoint, mark the prefix handshake-verified (SEC-008 check 4) when a secret is enforced,
+     * and clear any departed-peer tombstone so a rejoin heals.
+     *
+     * Called from {@see handleLinkFrame()} ONLY after {@see isReidentifyMismatch()} passes — a
+     * REJECTED re-identification must leave all three untouched, or an admitted insider could
+     * poison the impersonated identity's registry entry (and resurrect its tombstone) with a
+     * handshake that never binds the link. Must run BEFORE the membership `HandshakeReceived`
+     * tell: endpoint registration preceding membership processing is a load-bearing ordering
+     * invariant (the ack the membership actor emits routes via the registry).
+     */
+    private function applyAcceptedHandshake(NodeAddress $peerAddr, NodeEndpoint $peerEndpoint): void
+    {
         $this->endpointRegistry->register($peerAddr, $peerEndpoint);
 
-        // SEC-008 check 4: this registration just came from an HMAC-verified Handshake (verify()
-        // already ran above and returned true, or no secret is configured at all) — mark the prefix
-        // so gossip cannot later overwrite it with an unauthenticated third-party claim. Only when
-        // authenticated: without a secret this set stays empty and the gossip guard it backs is a
-        // permanent no-op (current, pre-SEC-008 behaviour).
+        // SEC-008 check 4: this registration comes from an HMAC-verified Handshake (verify() ran
+        // in parseHandshakeFrame and returned true, or no secret is configured at all) — mark the
+        // prefix so gossip/ack views cannot later overwrite it with an unauthenticated per-entry
+        // claim. Only when authenticated: without a secret this set stays empty and the guard it
+        // backs is a permanent no-op (current, pre-SEC-008 behaviour).
         if ($this->authenticator !== null) {
             $this->markEndpointVerified($peerAddr->toPathPrefix());
         }
@@ -1068,8 +1097,6 @@ final class ClusterNode
         // have that second Leave silently deduped and its peers would fall back to slow
         // silence-detection instead of an immediate Down.
         unset($this->departedTombstones[$peerAddr->toPathPrefix()]);
-
-        return [$peerAddr, $peerEndpoint, $obj];
     }
 
     /**
@@ -1082,6 +1109,9 @@ final class ClusterNode
      * SENDER's own prefix must additionally match the endpoint its Handshake HMAC-bound to this
      * link ({@see LinkState::$boundAdvertise}); a mismatch is rejected and counted rather than
      * silently registered, since only that entry is otherwise unauthenticated self-reporting.
+     * Every entry then flows through {@see registerUnauthenticatedEndpoint()}, the SAME write
+     * policy gossip uses (check 4), so a third-party entry cannot overwrite a handshake-verified
+     * endpoint via an ack view either — the two per-entry ingestion paths stay symmetric.
      */
     private function applyHandshakeAckView(Frame $frame, LinkState $state): void
     {
@@ -1108,16 +1138,7 @@ final class ClusterNode
                 continue;
             }
 
-            try {
-                $addr = self::parseNodeAddress($prefix);
-                $endpoint = NodeEndpoint::fromString($endpointStr);
-
-                if ($addr !== null) {
-                    $this->endpointRegistry->register($addr, $endpoint);
-                }
-            } catch (Throwable) {
-                // Skip malformed entries; gossip will provide them later.
-            }
+            $this->registerUnauthenticatedEndpoint($prefix, $endpointStr, self::CHECK_ACK_VIEW_AUTHORITY);
         }
     }
 
@@ -1168,13 +1189,12 @@ final class ClusterNode
      * SEC-008 check 4 (gossip endpoint-write policy): register `$member`'s endpoint unless
      * authority forbids the write. A member entry naming the gossip SENDER's own prefix must
      * match the endpoint its Handshake HMAC-bound to this link — the sender cannot use gossip to
-     * redirect its own endpoint. A third-party entry (naming some other node) is registered only
-     * if that prefix has no handshake-verified endpoint yet ({@see $verifiedEndpointPrefixes}) —
-     * gossip may still introduce a never-verified peer, but cannot overwrite an endpoint a
-     * verified Handshake already established. Both restrictions are no-ops without a cluster
-     * secret: `$this->authenticator === null` skips the sender-authority check entirely, and
-     * {@see $verifiedEndpointPrefixes} stays permanently empty, so third-party registration is
-     * unconditional — current, pre-SEC-008 behaviour.
+     * redirect its own endpoint. Every entry then flows through
+     * {@see registerUnauthenticatedEndpoint()} (shared with the ack-view path, check 3), which
+     * refuses to overwrite an endpoint a verified Handshake already established. Both restrictions
+     * are no-ops without a cluster secret: `$this->authenticator === null` skips the
+     * sender-authority check entirely, and {@see $verifiedEndpointPrefixes} stays permanently
+     * empty, so registration is unconditional — current, pre-SEC-008 behaviour.
      *
      * @param array{address: string, endpoint: string, incarnation: int, status: int} $member
      */
@@ -1188,19 +1208,49 @@ final class ClusterNode
             return;
         }
 
-        if (!$isSendersOwnEntry && isset($this->verifiedEndpointPrefixes[$member['address']])) {
+        $this->registerUnauthenticatedEndpoint(
+            $member['address'],
+            $member['endpoint'],
+            self::CHECK_GOSSIP_ENDPOINT_AUTHORITY,
+        );
+    }
+
+    /**
+     * Register an endpoint learned from an UNAUTHENTICATED per-entry claim — a HandshakeAck view
+     * entry or a gossip member entry — the single shared write policy behind SEC-008 checks 3–4.
+     *
+     * A prefix whose registry entry came from an HMAC-verified Handshake is never overwritten by
+     * such a claim: a CONFLICTING value is refused and counted under `$rejectCheck`, while a
+     * matching value is skipped silently — healthy gossip and ack views re-announce every
+     * verified member's true endpoint each round, and counting those redundant no-ops as
+     * "rejected" would bury real overwrite attempts in steady-state noise. If a verified prefix
+     * has NO current registry entry (possible only via FIFO-eviction skew between the registry
+     * and the verified set, both 10k-capped), the write is a fresh introduction rather than an
+     * overwrite and is allowed so the prefix stays routable. Unverified prefixes register
+     * unconditionally — on an unauthenticated cluster the verified set is permanently empty, so
+     * every write lands (pre-SEC-008 behaviour). Malformed entries are skipped, as before.
+     */
+    private function registerUnauthenticatedEndpoint(string $prefix, string $endpointStr, string $rejectCheck): void
+    {
+        $current = $this->endpointRegistry->resolveByPrefix($prefix);
+
+        if (isset($this->verifiedEndpointPrefixes[$prefix]) && $current !== null) {
+            if ((string) $current !== $endpointStr) {
+                $this->recordControlRejected($rejectCheck);
+            }
+
             return;
         }
 
         try {
-            $addr = self::parseNodeAddress($member['address']);
-            $endpoint = NodeEndpoint::fromString($member['endpoint']);
+            $addr = self::parseNodeAddress($prefix);
+            $endpoint = NodeEndpoint::fromString($endpointStr);
 
             if ($addr !== null) {
                 $this->endpointRegistry->register($addr, $endpoint);
             }
         } catch (Throwable) {
-            // Skip malformed members.
+            // Skip malformed entries; a later frame may carry them well-formed.
         }
     }
 

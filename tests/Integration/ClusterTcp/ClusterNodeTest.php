@@ -1623,6 +1623,220 @@ final class ClusterNodeTest extends TestCase
         self::assertContains('gossip_endpoint_authority', $checks);
     }
 
+    /**
+     * SEC-008 review fix (check 3/4 symmetry): an admitted peer must not be able to overwrite a
+     * THIRD PARTY's handshake-verified endpoint via a HandshakeAck view entry either — the same
+     * write policy gossip enforces. B handshakes with A (B's endpoint becomes handshake-verified
+     * on A); an admitted attacker then sends a forged ack whose view names B's prefix with a
+     * bogus endpoint. B's registry entry must be untouched and the rejection counted.
+     */
+    #[Test]
+    public function ackViewCannotOverwriteAThirdPartysVerifiedEndpoint(): void
+    {
+        $secret = 'shared-cluster-secret';
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 95));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 95));
+
+        $obs = new RecordingObservability();
+
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            ClusterTopology::create(
+                clusterName: 'test-cluster',
+                self: $addrA,
+                bindEndpoint: $endpointA,
+                advertiseEndpoint: $endpointA,
+                seeds: [],
+                singleNode: true,
+            )->withAuthSecret($secret),
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+            observability: $obs,
+        );
+        ClusterNode::boot(
+            $this->system,
+            $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA])->withAuthSecret($secret),
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $attackerLink = $client->connect($endpointA);
+        $attacker = new NodeAddress('test', 'local', 'nexus', 'node-attacker');
+        $attackerRealEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_C + 95));
+        $bogusEndpoint = new NodeEndpoint(Host::of('10.6.6.6'), Port::of(9_997));
+
+        // T=300ms: B has long since handshaked with A (B's endpoint is handshake-verified on A).
+        // The attacker handshakes too (signed — a genuinely admitted member, third identity).
+        $this->runtime->scheduleOnce(
+            Duration::millis(300),
+            function () use ($attackerLink, $attacker, $attackerRealEndpoint, $secret): void {
+                $attackerLink->sendFrame(
+                    $this->signedHandshakeFrame('test-cluster', $attacker, $attackerRealEndpoint, $secret),
+                );
+            },
+        );
+
+        // T=350ms: the attacker sends a forged ack whose view redirects THIRD-PARTY B.
+        $this->runtime->scheduleOnce(
+            Duration::millis(350),
+            function () use ($attackerLink, $addrB, $bogusEndpoint): void {
+                $attackerLink->sendFrame($this->handshakeAckFrame([
+                    $addrB->toPathPrefix() => (string) $bogusEndpoint,
+                ]));
+            },
+        );
+
+        $bRegistered = null;
+
+        $this->runtime->scheduleOnce(
+            Duration::millis(450),
+            function () use ($nodeA, $addrB, &$bRegistered): void {
+                $bRegistered = $this->registeredEndpoint($nodeA, $addrB->toPathPrefix());
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(600), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertNotNull($bRegistered);
+        self::assertSame(
+            (string) $endpointB,
+            (string) $bRegistered,
+            "an ack view must not overwrite a third party's handshake-verified endpoint",
+        );
+
+        $checks = [];
+
+        foreach ($obs->meter->counters['nexus.cluster.control.rejected']->adds ?? [] as $add) {
+            $checks[] = $add['attributes']['check'];
+        }
+
+        self::assertContains('ack_view_authority', $checks);
+    }
+
+    /**
+     * SEC-008 review fix (pure handshake parse): a REJECTED re-identification attempt must leave
+     * the claimed identity's registry entry, verified-set membership, and tombstone untouched.
+     * Previously parseHandshakeFrame registered the claimed endpoint, marked it verified, and
+     * cleared its tombstone BEFORE the re-identify check ran — so an admitted insider could
+     * poison a victim's route and resurrect a tombstoned (departed) peer with a handshake that
+     * was ultimately rejected.
+     */
+    #[Test]
+    public function rejectedReIdentificationLeavesRegistryVerifiedSetAndTombstonesUntouched(): void
+    {
+        $secret = 'shared-cluster-secret';
+        $addrA = new NodeAddress('test', 'local', 'nexus', 'node-a');
+        $addrB = new NodeAddress('test', 'local', 'nexus', 'node-b');
+        $endpointA = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_A + 96));
+        $endpointB = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_B + 96));
+
+        $obs = new RecordingObservability();
+
+        $nodeA = ClusterNode::boot(
+            $this->system,
+            $this->fastTopology('test-cluster', $addrA, $endpointA, [], singleNode: true)->withAuthSecret($secret),
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+            observability: $obs,
+        );
+        $nodeB = ClusterNode::boot(
+            $this->system,
+            $this->fastTopology('test-cluster', $addrB, $endpointB, [$endpointA])->withAuthSecret($secret),
+            transport: new LoopbackMeshTransport($this->hub, $this->runtime),
+        );
+
+        $client = new LoopbackMeshTransport($this->hub, $this->runtime);
+        $link = $client->connect($endpointA);
+
+        $attacker = new NodeAddress('test', 'local', 'nexus', 'node-attacker');
+        $attackerEndpoint = new NodeEndpoint(Host::of('127.0.0.1'), Port::of(self::PORT_C + 96));
+        $ghost = new NodeAddress('test', 'local', 'nexus', 'node-ghost');
+        $bogusEndpoint = new NodeEndpoint(Host::of('10.6.6.6'), Port::of(9_996));
+
+        // T=300ms: the attacker is admitted under its own identity.
+        $this->runtime->scheduleOnce(
+            Duration::millis(300),
+            function () use ($link, $attacker, $attackerEndpoint, $secret): void {
+                $link->sendFrame($this->signedHandshakeFrame('test-cluster', $attacker, $attackerEndpoint, $secret));
+            },
+        );
+
+        // T=700ms: B gracefully leaves — A verifies the signed Leave and tombstones B.
+        $this->runtime->scheduleOnce(Duration::millis(700), static function () use ($nodeB): void {
+            $nodeB->shutdown();
+        });
+
+        // T=1000ms: the attacker re-handshakes on its identified link, impersonating the
+        // departed B with a bogus advertise (signed — the insider holds the secret) ...
+        $this->runtime->scheduleOnce(
+            Duration::millis(1000),
+            function () use ($link, $addrB, $bogusEndpoint, $secret): void {
+                $link->sendFrame($this->signedHandshakeFrame('test-cluster', $addrB, $bogusEndpoint, $secret));
+            },
+        );
+
+        // T=1100ms: ... and a never-seen ghost identity.
+        $this->runtime->scheduleOnce(
+            Duration::millis(1100),
+            function () use ($link, $ghost, $bogusEndpoint, $secret): void {
+                $link->sendFrame($this->signedHandshakeFrame('test-cluster', $ghost, $bogusEndpoint, $secret));
+            },
+        );
+
+        $bRegistered = null;
+        $bTombstoned = null;
+        $ghostRegistered = null;
+        $ghostVerified = null;
+
+        $this->runtime->scheduleOnce(
+            Duration::millis(1300),
+            function () use (
+                $nodeA,
+                $addrB,
+                $ghost,
+                &$bRegistered,
+                &$bTombstoned,
+                &$ghostRegistered,
+                &$ghostVerified,
+            ): void {
+                $bRegistered = $this->registeredEndpoint($nodeA, $addrB->toPathPrefix());
+                $bTombstoned = $this->isTombstoned($nodeA, $addrB->toPathPrefix());
+                $ghostRegistered = $this->registeredEndpoint($nodeA, $ghost->toPathPrefix());
+                $ghostVerified = $this->isEndpointVerified($nodeA, $ghost->toPathPrefix());
+            },
+        );
+
+        $this->runtime->scheduleOnce(Duration::millis(1500), function (): void {
+            $this->system->shutdown(Duration::seconds(1));
+        });
+
+        $this->system->run();
+
+        self::assertNotNull($bRegistered);
+        self::assertSame(
+            (string) $endpointB,
+            (string) $bRegistered,
+            "a rejected impersonation must not poison the victim's registry entry",
+        );
+        self::assertTrue($bTombstoned, 'a rejected impersonation must not resurrect a tombstoned peer');
+        self::assertNull($ghostRegistered, 'a rejected handshake must not register the claimed identity');
+        self::assertFalse($ghostVerified, 'a rejected handshake must not mark the claimed identity verified');
+
+        $reidentifyRejections = [];
+
+        foreach ($obs->meter->counters['nexus.cluster.control.rejected']->adds ?? [] as $add) {
+            if ($add['attributes']['check'] === 'reidentify_mismatch') {
+                $reidentifyRejections[] = $add;
+            }
+        }
+
+        self::assertCount(2, $reidentifyRejections, 'both impersonation attempts must be counted');
+    }
+
     protected function setUp(): void
     {
         $this->runtime = new FiberRuntime();
@@ -1766,6 +1980,18 @@ final class ClusterNodeTest extends TestCase
         $tombstones = (new ReflectionProperty(ClusterNode::class, 'departedTombstones'))->getValue($node);
 
         return isset($tombstones[$prefix]);
+    }
+
+    /**
+     * Reflect the private verifiedEndpointPrefixes set to check whether a path-prefix's registry
+     * entry is marked as handshake-verified (SEC-008 check 4).
+     */
+    private function isEndpointVerified(ClusterNode $node, string $prefix): bool
+    {
+        /** @var array<string, true> $verified */
+        $verified = (new ReflectionProperty(ClusterNode::class, 'verifiedEndpointPrefixes'))->getValue($node);
+
+        return isset($verified[$prefix]);
     }
 
     /**
