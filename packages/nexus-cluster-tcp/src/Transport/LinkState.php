@@ -22,4 +22,13 @@ final class LinkState
     public ?NodeAddress $peerAddr = null;
 
     public ?FrameIngress $ingress = null;
+
+    /**
+     * The accepted inbound {@see PeerLink} this state belongs to, set once by
+     * {@see InboundLinkAcceptor::accept()} before any frame is processed. Lets the shared
+     * `frameSink` closure it injects (constructed once, for every accepted link) resolve the
+     * concrete link for accepted-link slot registration without a per-link closure capture.
+     * Left null on the outbound dial path, which has no accepted-link bookkeeping to do.
+     */
+    public ?PeerLink $link = null;
 }

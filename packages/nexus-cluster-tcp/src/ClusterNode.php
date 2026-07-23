@@ -49,11 +49,13 @@ use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
 use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextExtractor;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextInjector;
+use Monadial\Nexus\Cluster\Tcp\Transport\InboundLinkAcceptor;
 use Monadial\Nexus\Cluster\Tcp\Transport\LinkState;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Transport\MeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Transport\PeerConnection;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerConnectionPool;
 use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 use Monadial\Nexus\Cluster\Tcp\Transport\Tcp\SwooleMeshTransport;
 use Monadial\Nexus\Core\Actor\ActorContext;
@@ -91,7 +93,6 @@ use function extension_loaded;
 use function hrtime;
 use function ltrim;
 use function preg_replace;
-use function spl_object_id;
 use function strlen;
 use function time;
 
@@ -139,12 +140,6 @@ final class ClusterNode
     /** @var array<string, PeerLink> Accepted inbound links keyed by NodeAddress::toPathPrefix() */
     private array $acceptedLinks = [];
 
-    /** @var array<int, true> Live accepted inbound links by object id — bounds concurrency (see ClusterTopology::$maxInboundLinks). */
-    private array $inboundLinks = [];
-
-    /** @var array<string, PeerConnection> Outbound connections keyed by (string) NodeEndpoint */
-    private array $outboundConns = [];
-
     /**
      * @var array<string, true> Departed-peer tombstones keyed by path-prefix. A peer lands here when it
      *      gracefully leaves (Leave frame) OR when its link definitively closes, and is cleared when it
@@ -174,6 +169,9 @@ final class ClusterNode
      */
     private readonly LivenessThrottle $livenessThrottle;
 
+    /** Lazily-dialed outbound connections, deduped by endpoint — see {@see PeerConnectionPool}. */
+    private readonly PeerConnectionPool $connectionPool;
+
     private function __construct(
         private readonly NodeAddress $selfAddress,
         private readonly ClusterTopology $topology,
@@ -194,6 +192,14 @@ final class ClusterNode
         private readonly ?PeerAuthenticator $authenticator = null,
     ) {
         $this->livenessThrottle = new LivenessThrottle();
+        $this->connectionPool = new PeerConnectionPool(
+            $this->transport,
+            $this->runtime,
+            $this->topology->reconnectInitialBackoff,
+            $this->topology->reconnectMaxBackoff,
+            $this->handshakePreamble(),
+            $this->logger,
+        );
     }
 
     /**
@@ -389,11 +395,13 @@ final class ClusterNode
             authenticator: $authenticator,
         );
 
-        // 11. Start serving: wire the inbound accept pump.
+        // 11. Start serving: build the inbound accept pump once, then wire every accepted link
+        //     through it.
+        $inboundAcceptor = $selfNode->wireInboundLink($inboxRouter);
         $meshTransport->serve(
             $topology->bindEndpoint,
-            static function (PeerLink $link) use ($selfNode, $inboxRouter): void {
-                $selfNode->wireInboundLink($link, $inboxRouter);
+            static function (PeerLink $link) use ($inboundAcceptor): void {
+                $inboundAcceptor->accept($link);
             },
         );
 
@@ -508,13 +516,12 @@ final class ClusterNode
             $link->close();
         }
 
-        foreach ($this->outboundConns as $conn) {
+        $this->connectionPool->each(static function (PeerConnection $conn) use ($leaveFrame): void {
             $conn->sendFrame($leaveFrame);
-            $conn->close();
-        }
+        });
 
         $this->acceptedLinks = [];
-        $this->outboundConns = [];
+        $this->connectionPool->closeAll();
 
         $this->transport->close();
     }
@@ -544,15 +551,7 @@ final class ClusterNode
             return;
         }
 
-        $key = (string) $endpoint;
-        $conn = $this->outboundConns[$key] ?? null;
-
-        if ($conn === null) {
-            return;
-        }
-
-        unset($this->outboundConns[$key]);
-        $conn->close();
+        $this->connectionPool->evict($endpoint);
     }
 
     /**
@@ -575,21 +574,7 @@ final class ClusterNode
         $endpoint = $this->endpointRegistry->resolveByPrefix($prefix);
 
         if ($endpoint !== null) {
-            $key = (string) $endpoint;
-
-            if (!isset($this->outboundConns[$key])) {
-                $this->outboundConns[$key] = new PeerConnection(
-                    $endpoint,
-                    $this->transport,
-                    $this->runtime,
-                    $this->topology->reconnectInitialBackoff,
-                    $this->topology->reconnectMaxBackoff,
-                    logger: $this->logger,
-                    preamble: $this->handshakePreamble(),
-                );
-            }
-
-            $conn = $this->outboundConns[$key];
+            $conn = $this->connectionPool->dial($endpoint);
 
             return $this->routeSend($frame, static fn(): DeliveryOutcome => $conn->sendFrame($frame));
         }
@@ -729,8 +714,8 @@ final class ClusterNode
      * frame pumps. Handling the Handshake → identification → (ack / gossip / leave / message) sequence
      * in one place is what keeps the two paths from drifting on which guards they apply (they had
      * already diverged). `$onHandshakeAccepted` runs the path-specific work on a successful handshake —
-     * the inbound path cancels its Slowloris deadline and records the accepted link; the outbound path
-     * has nothing extra to do.
+     * the inbound path records the accepted link (its Slowloris deadline-cancel is owned by
+     * {@see InboundLinkAcceptor}, not this callback); the outbound path has nothing extra to do.
      *
      * @param Closure(NodeAddress): void $onHandshakeAccepted
      */
@@ -815,124 +800,100 @@ final class ClusterNode
     }
 
     /**
-     * Wire the frame pump for an accepted inbound PeerLink.
+     * Build the frame-pump wiring for every accepted inbound PeerLink and hand it to a fresh
+     * {@see InboundLinkAcceptor}, called once at boot. The acceptor owns the per-link concurrency
+     * cap, Slowloris deadline, and frame/close pump (moved verbatim from what used to be this
+     * method's per-connection body); what stays here is the two closures it drives:
+     *
+     *  - `$frameSink` routes each frame through the shared {@see handleLinkFrame()} state machine.
+     *    Its `$onHandshakeAccepted` callback now does ONLY the C2 slot-registration bookkeeping —
+     *    the deadline-cancel half moved into the acceptor, which owns the timer.
+     *  - `$onLinkClosed` is the close bookkeeping bundle: accepted-link removal (object-identity
+     *    guarded so a C2 re-handshake's newer slot is never clobbered), tombstone, liveness-throttle
+     *    forget, membership notification, and ask-registry failure.
      */
-    private function wireInboundLink(PeerLink $link, InboxRouter $inboxRouter): void
+    private function wireInboundLink(InboxRouter $inboxRouter): InboundLinkAcceptor
     {
-        // Concurrency cap: inbound links are unauthenticated, so refuse new ones once the live
-        // ceiling is reached rather than let a peer exhaust memory with endless open sockets.
-        if (count($this->inboundLinks) >= $this->topology->maxInboundLinks) {
-            $this->safely(fn(): mixed => $this->logger->warning('cluster.inbound.capacity_exceeded', [
-                'limit' => $this->topology->maxInboundLinks,
-                'peer_endpoint' => $link->remote() !== null ? (string) $link->remote() : 'unknown',
-            ]));
-            $link->close();
-
-            return;
-        }
-
-        $linkId = spl_object_id($link);
-        $this->inboundLinks[$linkId] = true;
-        $state = new LinkState();
-        $remoteLabel = $link->remote() !== null
-            ? (string) $link->remote()
-            : 'unknown';
-
-        // Slowloris guard: close the link if it never completes a valid handshake in time. The
-        // receive loop tolerates recv timeouts, so an unidentified link would otherwise idle forever.
-        $deadline = $this->runtime->scheduleOnce(
-            $this->topology->handshakeTimeout,
-            function () use ($state, $link, $linkId, $remoteLabel): void {
-                if ($state->peerAddr !== null) {
-                    return;
-                }
-
-                unset($this->inboundLinks[$linkId]);
-                $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.timeout', [
-                    'peer_endpoint' => $remoteLabel,
-                ]));
-                $link->close();
-            },
-        );
-
-        $link->onFrame(function (Frame $frame) use ($link, $state, $inboxRouter, $deadline, $remoteLabel): void {
+        $frameSink = function (Frame $frame, LinkState $state, string $remoteLabel) use ($inboxRouter): void {
             $this->handleLinkFrame(
                 $frame,
                 $state,
                 $inboxRouter,
                 $remoteLabel,
-                function (NodeAddress $peerAddr) use ($link, $deadline): void {
-                    $deadline->cancel();
+                function (NodeAddress $peerAddr) use ($state): void {
+                    // $state->link is set synchronously by InboundLinkAcceptor::accept() before this
+                    // link's frame pump is ever wired, so it is always non-null by the time a Handshake
+                    // can arrive; the guard only narrows the type for Psalm.
+                    if ($state->link === null) {
+                        return;
+                    }
+
                     // Re-handshake: a new inbound link supersedes any prior one for this peer. We do
                     // NOT eagerly close the prior link — in the mutual-seed mesh close() EOFs the remote
                     // peer and triggers a reconnect/re-handshake storm that starves gossip and spuriously
                     // suspects healthy peers. Just replace the map slot; the prior link is cleaned up by
                     // its own onClose (guarded so it cannot remove this newer slot), and a genuinely
                     // orphaned link EOFs on its own when the peer drops that connection.
-                    $this->acceptedLinks[$peerAddr->toPathPrefix()] = $link;
+                    $this->acceptedLinks[$peerAddr->toPathPrefix()] = $state->link;
                 },
             );
-        });
+        };
 
-        $link->onClose(function () use ($link, $state, $linkId, $deadline): void {
-            $deadline->cancel();
-            unset($this->inboundLinks[$linkId]);
-
+        $onLinkClosed = function (LinkState $state, PeerLink $link): void {
             $peerAddr = $state->peerAddr;
 
-            if ($peerAddr !== null) {
-                $prefix = $peerAddr->toPathPrefix();
-
-                // Remove the accepted-link entry so the map does not leak a dead link (and so
-                // processLeaveFrame no longer fans out to a stale prefix). Guard against clobbering
-                // a NEWER link: a re-handshake (C2) may have already replaced this slot, in which
-                // case the entry must be left intact.
-                if (($this->acceptedLinks[$prefix] ?? null) === $link) {
-                    unset($this->acceptedLinks[$prefix]);
-                    // Tombstone the disconnected peer so a peer that hasn't yet noticed the drop cannot
-                    // resurrect it via lagging gossip before the failure detector downs it (the kill /
-                    // crash analogue of the graceful-Leave tombstone). Only when this link is still the
-                    // current one — a re-handshake that already replaced the slot means the peer is
-                    // actually still connected. Cleared when the peer re-handshakes (parseHandshakeFrame),
-                    // so a transient blip self-heals via the handshake preamble.
-                    $this->tombstoneDeparted($prefix);
-                }
-
-                $this->livenessThrottle->forget($prefix);
-                $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
-                $this->safeDispatch(new PeerDisconnected($peerAddr));
-                // Fail any in-flight asks to this node fast — the reply can't arrive over the dead link.
-                $this->askRegistry->failAllForNode($peerAddr);
+            if ($peerAddr === null) {
+                return;
             }
-        });
+
+            $prefix = $peerAddr->toPathPrefix();
+
+            // Remove the accepted-link entry so the map does not leak a dead link (and so
+            // processLeaveFrame no longer fans out to a stale prefix). Guard against clobbering
+            // a NEWER link: a re-handshake (C2) may have already replaced this slot, in which
+            // case the entry must be left intact.
+            if (($this->acceptedLinks[$prefix] ?? null) === $link) {
+                unset($this->acceptedLinks[$prefix]);
+                // Tombstone the disconnected peer so a peer that hasn't yet noticed the drop cannot
+                // resurrect it via lagging gossip before the failure detector downs it (the kill /
+                // crash analogue of the graceful-Leave tombstone). Only when this link is still the
+                // current one — a re-handshake that already replaced the slot means the peer is
+                // actually still connected. Cleared when the peer re-handshakes (parseHandshakeFrame),
+                // so a transient blip self-heals via the handshake preamble.
+                $this->tombstoneDeparted($prefix);
+            }
+
+            $this->livenessThrottle->forget($prefix);
+            $this->membershipRef->tell(new PeerLinkClosed($peerAddr, false));
+            $this->safeDispatch(new PeerDisconnected($peerAddr));
+            // Fail any in-flight asks to this node fast — the reply can't arrive over the dead link.
+            $this->askRegistry->failAllForNode($peerAddr);
+        };
+
+        return new InboundLinkAcceptor(
+            $this->runtime,
+            $this->topology->maxInboundLinks,
+            $this->topology->handshakeTimeout,
+            $frameSink,
+            $onLinkClosed,
+            $this->logger,
+        );
     }
 
     /**
-     * Dial a seed endpoint: create an outbound PeerConnection and wire its frame pump to the shared
-     * {@see handleLinkFrame()} state machine. The self-Handshake is sent by the PeerConnection
-     * preamble on the initial connect and on every reconnect (see {@see handshakePreamble()}), so a
-     * dropped seed link re-identifies us on reconnect instead of the seed silently dropping our
-     * post-reconnect frames.
+     * Dial a seed endpoint: create an outbound PeerConnection (via the shared
+     * {@see PeerConnectionPool}) and wire its frame pump to the shared {@see handleLinkFrame()}
+     * state machine. The self-Handshake is sent by the PeerConnection preamble on the initial
+     * connect and on every reconnect (see {@see handshakePreamble()}), so a dropped seed link
+     * re-identifies us on reconnect instead of the seed silently dropping our post-reconnect frames.
      */
     private function dialSeed(NodeEndpoint $seedEndpoint, InboxRouter $inboxRouter): void
     {
-        $key = (string) $seedEndpoint;
-
-        if (isset($this->outboundConns[$key])) {
+        if ($this->connectionPool->existing($seedEndpoint) !== null) {
             return; // Already dialed (e.g. shared hub in test multi-boot scenario).
         }
 
-        $conn = new PeerConnection(
-            $seedEndpoint,
-            $this->transport,
-            $this->runtime,
-            $this->topology->reconnectInitialBackoff,
-            $this->topology->reconnectMaxBackoff,
-            logger: $this->logger,
-            preamble: $this->handshakePreamble(),
-        );
-
-        $this->outboundConns[$key] = $conn;
+        $conn = $this->connectionPool->dial($seedEndpoint);
 
         $state = new LinkState();
         $remoteLabel = (string) $seedEndpoint;

@@ -19,6 +19,7 @@ use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingObservability;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\SpyTracer;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackMeshTransport;
+use Monadial\Nexus\Cluster\Tcp\Transport\PeerConnectionPool;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorSystem;
 use Monadial\Nexus\Core\Actor\Behavior;
@@ -1233,14 +1234,14 @@ final class ClusterNodeTest extends TestCase
     }
 
     /**
-     * Reflect the private outboundConns map to check whether an outbound connection exists for the endpoint.
+     * Reflect the private connectionPool to check whether an outbound connection exists for the endpoint.
      */
     private function hasOutboundConn(ClusterNode $node, NodeEndpoint $endpoint): bool
     {
-        /** @var array<string, mixed> $conns */
-        $conns = (new ReflectionProperty(ClusterNode::class, 'outboundConns'))->getValue($node);
+        /** @var PeerConnectionPool $pool */
+        $pool = (new ReflectionProperty(ClusterNode::class, 'connectionPool'))->getValue($node);
 
-        return isset($conns[(string) $endpoint]);
+        return $pool->existing($endpoint) !== null;
     }
 
     // -------------------------------------------------------------------------
