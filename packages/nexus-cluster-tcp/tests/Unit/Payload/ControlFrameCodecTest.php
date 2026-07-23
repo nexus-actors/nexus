@@ -74,7 +74,25 @@ final class ControlFrameCodecTest extends TestCase
     #[Test]
     public function leaveRoundTrips(): void
     {
+        // Old-form frame: nonce/issuedAt/mac all null (unauthenticated cluster, or a peer on an
+        // older protocol version) must round-trip to nulls, not throw.
         $leave = new LeavePayload('/cluster/prod/dc1/nexus/node-1');
+
+        $decoded = $this->codec->unpackLeave($this->codec->packLeave($leave));
+
+        self::assertEquals($leave, $decoded);
+    }
+
+    #[Test]
+    public function leaveWithAuthFieldsRoundTrips(): void
+    {
+        // New-form frame (SEC-008 check 1): the self-attestation fields must survive encode/decode.
+        $leave = new LeavePayload(
+            node: '/cluster/prod/dc1/nexus/node-1',
+            nonce: 'a1b2c3d4',
+            issuedAt: 1_700_000_000,
+            mac: 'deadbeefsignature',
+        );
 
         $decoded = $this->codec->unpackLeave($this->codec->packLeave($leave));
 

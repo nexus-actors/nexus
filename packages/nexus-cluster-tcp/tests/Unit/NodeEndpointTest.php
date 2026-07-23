@@ -100,4 +100,33 @@ final class NodeEndpointTest extends TestCase
 
         self::assertSame('localhost:9000', (string) $endpoint);
     }
+
+    #[Test]
+    public function fromUriAcceptsTcpScheme(): void
+    {
+        $endpoint = NodeEndpoint::fromUri('tcp://10.0.0.1:7355');
+
+        self::assertSame('10.0.0.1:7355', (string) $endpoint);
+        self::assertSame('tcp://10.0.0.1:7355', $endpoint->toUri());
+    }
+
+    #[Test]
+    public function fromUriRejectsUnknownScheme(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        NodeEndpoint::fromUri('http://10.0.0.1:7355');
+    }
+
+    #[Test]
+    public function fromStringToleratesTcpScheme(): void
+    {
+        self::assertSame('10.0.0.1:7355', (string) NodeEndpoint::fromString('tcp://10.0.0.1:7355'));
+    }
+
+    #[Test]
+    public function toStringStaysBareHostPort(): void
+    {
+        self::assertSame('example.org:9000', (string) NodeEndpoint::fromString('example.org:9000'));
+    }
 }

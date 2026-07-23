@@ -1,0 +1,59 @@
+# Observability overlay for the 4x4 distributed mesh.
+#
+# Adds a Grafana LGTM all-in-one (Loki / Grafana / Tempo / Mimir + OTel Collector) and
+# points every mesh node's OpenTelemetry exporter at it, so the cluster.* metrics and the
+# cluster.send / cluster.ask / cluster.handshake spans land in Grafana. Merge it on top of
+# the base compose file:
+#
+#   docker compose -f compose.yaml -f compose.observability.yaml ...
+#
+# Driven by run-observability.sh, which brings LGTM up first, runs the mesh, and LEAVES
+# Grafana running so you can explore the data. Grafana: http://localhost:3000 (anonymous).
+
+x-observed-worker: &observed
+  environment:
+    OTEL_EXPORTER_OTLP_ENDPOINT: "http://lgtm:4318"
+    OTEL_SERVICE_NAME: "nexus-cluster-mesh"
+    OTEL_TRACES_SAMPLER: "traceidratio"
+    # Fraction of per-message spans exported. Metrics are always fully aggregated; traces are
+    # sampled because the soak emits a span per message. Raise toward 1.0 with a low SEND_BATCH.
+    OTEL_TRACES_SAMPLER_ARG: "${OTEL_SAMPLE:-0.05}"
+    # Gentle send rate (tells per batch) so the demo is readable rather than link-saturated.
+    SEND_BATCH: "${SEND_BATCH:-8}"
+  depends_on:
+    lgtm:
+      condition: service_healthy
+
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    hostname: lgtm
+    ports:
+      - "3000:3000"   # Grafana UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP (mesh nodes export here)
+    environment:
+      # Tempo's metrics-generator produces the traces_spanmetrics_* series the dashboard charts.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      # A directory provider (otel-lgtm's own providers point at single files, so a JSON
+      # dropped in the provisioning dir is not scanned) + the dashboards it loads.
+      - ./grafana/provisioning/nexus-dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/nexus-dashboards.yaml:ro
+      - ./grafana/dashboards:/otel-lgtm/nexus-dashboards:ro
+    networks:
+      - mesh-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+
+  worker1:
+    <<: *observed
+  worker2:
+    <<: *observed
+  worker3:
+    <<: *observed
+  worker4:
+    <<: *observed

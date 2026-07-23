@@ -72,10 +72,41 @@ deptrac:
         - type: directory
           value: packages/nexus-messenger-console-swoole/src/.*
 
-    - name: ClusterTcp
+    # ClusterTcpCore must not depend on ClusterTcpTransport (spec §3.4): the actor
+    # core is transport-neutral; ClusterNode.php is the composition root and the
+    # only file allowed to see both plus RuntimeSwoole. Enforced by
+    # bin/verify-cluster-boundary.php.
+    - name: ClusterTcpTransport
       collectors:
         - type: directory
-          value: packages/nexus-cluster-tcp/src/.*
+          value: packages/nexus-cluster-tcp/src/Transport/.*
+
+    - name: ClusterTcpWiring
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/ClusterNode\.php
+
+    # Connection/ actorizes state ownership + (from Plan 3 Task 3 onward) the inbound/outbound link
+    # actors themselves, so — like ClusterNode.php — it necessarily touches transport types
+    # (PeerLink) that stay off-limits to the transport-neutral ClusterTcpCore layer below.
+    - name: ClusterTcpConnection
+      collectors:
+        - type: directory
+          value: packages/nexus-cluster-tcp/src/Connection/.*
+
+    - name: ClusterTcpCore
+      collectors:
+        - type: bool
+          must:
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/.*
+          must_not:
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/Transport/.*
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/ClusterNode\.php
+            - type: directory
+              value: packages/nexus-cluster-tcp/src/Connection/.*
 
     - name: DoctrineDbal
       collectors:
@@ -253,8 +284,33 @@ deptrac:
       - Serialization
       - WorkerPool
       - WorkerPoolSwoole
-    ClusterTcp:
+    ClusterTcpCore:
       - Cluster
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
+      - SerializationMsgpack
+    ClusterTcpConnection:
+      - Cluster
+      - ClusterTcpCore
+      - ClusterTcpTransport
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
+    ClusterTcpTransport:
+      - Cluster
+      - ClusterTcpCore
+      - Core
+      - Observability
+      - Runtime
+      - Serialization
+    ClusterTcpWiring:
+      - Cluster
+      - ClusterTcpConnection
+      - ClusterTcpCore
+      - ClusterTcpTransport
       - Core
       - Observability
       - Runtime

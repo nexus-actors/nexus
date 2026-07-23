@@ -6,12 +6,15 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Membership;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Membership\HandshakeAuthenticator;
+use Monadial\Nexus\Cluster\Tcp\Membership\PeerAuthenticator;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Core\Tests\Support\TestClock;
 use Monadial\Nexus\Runtime\Duration;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
 #[CoversClass(HandshakeAuthenticator::class)]
 final class HandshakeAuthenticatorTest extends TestCase
@@ -22,6 +25,12 @@ final class HandshakeAuthenticatorTest extends TestCase
 
     /** The fixed Unix second the injected clock reports; sign() stamps issuedAt from it. */
     private int $now;
+
+    #[Test]
+    public function implementsPeerAuthenticator(): void
+    {
+        self::assertInstanceOf(PeerAuthenticator::class, new HandshakeAuthenticator('secret'));
+    }
 
     #[Test]
     public function signsThenVerifiesItsOwnHandshake(): void
@@ -343,6 +352,156 @@ final class HandshakeAuthenticatorTest extends TestCase
         );
     }
 
+    // -------------------------------------------------------------------------
+    // SEC-008 check 1: signLeave / verifyLeave
+    // -------------------------------------------------------------------------
+
+    #[Test]
+    public function signsThenVerifiesItsOwnLeave(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertNotNull($signed->nonce);
+        self::assertNotNull($signed->issuedAt);
+        self::assertNotNull($signed->mac);
+        self::assertTrue($this->auth->verifyLeave($signed, $this->now));
+    }
+
+    #[Test]
+    public function signLeavePreservesTheNodeIdentifier(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertSame('/cluster/production/eu/payments/node-1', $signed->node);
+    }
+
+    #[Test]
+    public function rejectsAnUnsignedLeave(): void
+    {
+        self::assertFalse($this->auth->verifyLeave($this->leave(), $this->now));
+    }
+
+    #[Test]
+    public function rejectsALeaveSignedWithADifferentSecret(): void
+    {
+        $signed = new HandshakeAuthenticator('the-wrong-secret')->signLeave($this->leave());
+
+        self::assertFalse($this->auth->verifyLeave($signed, $this->now));
+    }
+
+    #[Test]
+    public function rejectsATamperedLeaveNode(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        $tampered = new LeavePayload(
+            node: '/cluster/production/eu/payments/node-EVIL',
+            nonce: $signed->nonce,
+            issuedAt: $signed->issuedAt,
+            mac: $signed->mac,
+        );
+
+        self::assertFalse(
+            $this->auth->verifyLeave($tampered, $this->now),
+            'a relay rewriting which node left must invalidate the MAC',
+        );
+    }
+
+    #[Test]
+    public function rejectsALeaveMissingOnlyTheMac(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        $partial = new LeavePayload(node: $signed->node, nonce: $signed->nonce, issuedAt: $signed->issuedAt, mac: null);
+
+        self::assertFalse($this->auth->verifyLeave($partial, $this->now));
+    }
+
+    #[Test]
+    public function rejectsAStaleLeaveOutsideTheFreshnessWindow(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertNotNull($signed->issuedAt);
+        self::assertFalse($this->auth->verifyLeave($signed, $signed->issuedAt + 61));
+    }
+
+    #[Test]
+    public function acceptsALeaveExactlyAtTheFreshnessWindowEdge(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertNotNull($signed->issuedAt);
+        self::assertTrue($this->auth->verifyLeave($signed, $signed->issuedAt + 60), 'window edge is inclusive');
+    }
+
+    #[Test]
+    public function rejectsAReplayOfAnAlreadyAcceptedLeaveWithinTheWindow(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertTrue($this->auth->verifyLeave($signed, $this->now), 'first presentation is accepted');
+        self::assertFalse(
+            $this->auth->verifyLeave($signed, $this->now),
+            'an identical replay within the freshness window must be rejected',
+        );
+    }
+
+    #[Test]
+    public function relayedLeaveVerifiesUnchangedOnASecondHop(): void
+    {
+        // The mac is leaver-bound and link-independent (spec §4.2 check 1): a node that relays
+        // another peer's already-signed Leave frame verbatim (star topology) must see it verify
+        // just as it did at the first hop — this is a SEPARATE authenticator instance (the relay
+        // node's own), proving verification does not depend on which node/link processes it.
+        $signed = $this->auth->signLeave($this->leave());
+        $relayNode = new HandshakeAuthenticator('cluster-secret', clock: $this->clock);
+
+        self::assertTrue($relayNode->verifyLeave($signed, $this->now));
+    }
+
+    #[Test]
+    public function signLeaveStampsIssuedAtFromTheInjectedClockNotWallClock(): void
+    {
+        $signed = $this->auth->signLeave($this->leave());
+
+        self::assertSame($this->now, $signed->issuedAt);
+
+        $this->clock->advance(Duration::seconds(30));
+        $later = $this->auth->signLeave($this->leave());
+
+        self::assertSame($this->now + 30, $later->issuedAt);
+    }
+
+    #[Test]
+    public function leaveAndHandshakeNoncesShareTheSameReplayGuard(): void
+    {
+        // "The SAME nonce-replay set as handshakes — one set, one confinement": once a Handshake's
+        // nonce has been accepted, presenting a Leave that reuses that exact nonce value must also
+        // be rejected as a replay, proving both frame kinds are guarded by one shared set.
+        $signedHandshake = $this->auth->sign($this->handshake());
+        self::assertTrue($this->auth->verify($signedHandshake, $this->now));
+
+        self::assertNotNull($signedHandshake->nonce);
+        self::assertNotNull($signedHandshake->issuedAt);
+
+        $leaveReusingHandshakeNonce = new LeavePayload(
+            node: '/cluster/production/eu/payments/node-1',
+            nonce: $signedHandshake->nonce,
+            issuedAt: $signedHandshake->issuedAt,
+            mac: 'irrelevant-mac-replay-is-checked-first',
+        );
+
+        // The nonce-replay set is keyed purely by nonce value, independent of frame kind or mac —
+        // verifyLeave's own mac check would also fail here, but the point under test is that the
+        // SAME seenNonces entry blocks it regardless.
+        self::assertArrayHasKey(
+            $signedHandshake->nonce,
+            (new ReflectionProperty(HandshakeAuthenticator::class, 'seenNonces'))->getValue($this->auth),
+        );
+        self::assertFalse($this->auth->verifyLeave($leaveReusingHandshakeNonce, $this->now));
+    }
+
     protected function setUp(): void
     {
         // Deterministic clock: sign() stamps issuedAt from it, so tests never touch wall-clock time.
@@ -358,5 +517,10 @@ final class HandshakeAuthenticatorTest extends TestCase
             node: ['application' => 'payments', 'cluster' => 'production', 'datacenter' => 'eu', 'node' => 'node-1'],
             advertise: '10.0.0.1:7355',
         );
+    }
+
+    private function leave(): LeavePayload
+    {
+        return new LeavePayload(node: '/cluster/production/eu/payments/node-1');
     }
 }

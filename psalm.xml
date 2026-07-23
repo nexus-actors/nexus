@@ -77,7 +77,7 @@
         -->
         <!-- Swoole\Coroutine\Server and Server\Connection live in swoole_library (pure PHP),
              not in swoole/ide-helper's native-ext stubs. Add them explicitly so Psalm
-             resolves these classes when analyzing nexus-cluster-tcp/src/Swoole/.
+             resolves these classes when analyzing nexus-cluster-tcp/src/Transport/Tcp/.
              Client and Socket are native-ext classes; their stubs give Psalm the correct
              return types (e.g. Client::connect():bool, Client::exportSocket():Socket|false,
              Socket::recv():string|false) that the extension reflection alone does not always
@@ -131,9 +131,29 @@
              underlying socket. The property is never read; holding it is the entire purpose. -->
         <UnusedProperty>
             <errorLevel type="suppress">
-                <file name="packages/nexus-cluster-tcp/src/Swoole/SwoolePeerLink.php" />
+                <file name="packages/nexus-cluster-tcp/src/Transport/Tcp/SwoolePeerLink.php" />
             </errorLevel>
         </UnusedProperty>
+
+        <!-- Plan-1 seams of the cluster actorization (spec §3.4-§3.5): the WireFormat
+             seam and the injected metrics classes deliberately ship AHEAD of their
+             consumers — the transport edge and actors that use them land in Plans 2-5
+             of docs/superpowers/plans/2026-07-22-clusternode-actorization-roadmap.md.
+             Delete each entry the moment its first src consumer lands. -->
+        <UnusedClass>
+            <errorLevel type="suppress">
+                <file name="packages/nexus-cluster-tcp/src/Protocol/MsgpackWireFormat.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/AskMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/ConnectionMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/MembershipMetrics.php" />
+                <file name="packages/nexus-cluster-tcp/src/Telemetry/TelemetryGuard.php" />
+            </errorLevel>
+        </UnusedClass>
+        <PossiblyUnusedMethod>
+            <errorLevel type="suppress">
+                <file name="packages/nexus-cluster-tcp/src/Protocol/WireFormat.php" />
+            </errorLevel>
+        </PossiblyUnusedMethod>
 
         <PluginIssue name="UntypedActorRefInjection">
             <errorLevel type="suppress">
@@ -182,6 +202,10 @@
                 <file name="packages/nexus-cluster-tcp/src/Messaging/LocalDelivery.php"/>
                 <!-- ClusterNode::$membershipRef accepts a heterogeneous union of membership messages; expose() takes any actor ref (typed by caller) -->
                 <file name="packages/nexus-cluster-tcp/src/ClusterNode.php"/>
+                <!-- ConnectionSupervisor::$membershipRef accepts the same heterogeneous union (HandshakeReceived, PeerLinkClosed) as ClusterNode's -->
+                <file name="packages/nexus-cluster-tcp/src/Connection/ConnectionSupervisor.php"/>
+                <!-- InboundLinkActor::$supervisorRef/$membershipRef accept the same heterogeneous message unions ConnectionSupervisor's refs do -->
+                <file name="packages/nexus-cluster-tcp/src/Connection/InboundLinkActor.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>

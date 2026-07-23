@@ -76,4 +76,16 @@ final class MutableEndpointRegistry implements EndpointResolver
     {
         return $this->endpoints[$pathPrefix] ?? null;
     }
+
+    /**
+     * Every currently-registered endpoint, keyed by path-prefix — used by
+     * {@see \Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor} to publish a
+     * {@see \Monadial\Nexus\Cluster\Tcp\Connection\RoutingSnapshot}.
+     *
+     * @return array<string, NodeEndpoint>
+     */
+    public function all(): array
+    {
+        return $this->endpoints;
+    }
 }

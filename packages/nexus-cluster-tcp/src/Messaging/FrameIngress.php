@@ -6,9 +6,9 @@ namespace Monadial\Nexus\Cluster\Tcp\Messaging;
 
 use Closure;
 use Monadial\Nexus\Cluster\NodeAddress;
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayloadCodec;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;

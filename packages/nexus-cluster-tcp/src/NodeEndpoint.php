@@ -12,6 +12,7 @@ use Stringable;
 
 use function ctype_digit;
 use function sprintf;
+use function str_starts_with;
 use function strrpos;
 use function substr;
 
@@ -30,11 +31,14 @@ use function substr;
  */
 final readonly class NodeEndpoint implements Stringable
 {
+    private const string SCHEME = 'tcp://';
+
     public function __construct(public Host $host, public Port $port) {}
 
     /**
      * Parse a 'host:port' string into a NodeEndpoint.
      *
+     * Tolerates an optional leading 'tcp://' scheme (stripped before parsing).
      * Splits on the last colon so unbracketed IPv4 addresses work correctly.
      * IPv6 bracket form (`[::1]:7355`) is out of scope for v1.
      *
@@ -42,6 +46,10 @@ final readonly class NodeEndpoint implements Stringable
      */
     public static function fromString(string $hostPort): self
     {
+        if (str_starts_with($hostPort, self::SCHEME)) {
+            $hostPort = substr($hostPort, strlen(self::SCHEME));
+        }
+
         $colonPos = strrpos($hostPort, ':');
 
         if ($colonPos === false) {
@@ -70,6 +78,28 @@ final readonly class NodeEndpoint implements Stringable
         }
 
         return new self(Host::of($hostPart), Port::of((int) $portPart));
+    }
+
+    /**
+     * Parses a URI-style endpoint ("tcp://host:port"). Only the tcp scheme is
+     * accepted; the canonical textual form (__toString, wire payloads, map
+     * keys) remains bare "host:port" — the URI form is config/display surface
+     * for the transport SPI (spec §3.4.1).
+     *
+     * @throws InvalidArgumentException
+     */
+    public static function fromUri(string $uri): self
+    {
+        if (!str_starts_with($uri, self::SCHEME)) {
+            throw new InvalidArgumentException("Unsupported endpoint URI scheme: {$uri}");
+        }
+
+        return self::fromString($uri);
+    }
+
+    public function toUri(): string
+    {
+        return self::SCHEME . (string) $this;
     }
 
     #[Override]

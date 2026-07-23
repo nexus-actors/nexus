@@ -6,10 +6,10 @@ namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
 use Closure;
 use Monadial\Nexus\Cluster\Tcp\DeliveryOutcome;
-use Monadial\Nexus\Cluster\Tcp\Frame;
-use Monadial\Nexus\Cluster\Tcp\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
 use Monadial\Nexus\Cluster\Tcp\Payload\HandshakeAck;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
+use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 use Monadial\Nexus\Observability\Metric\Counter;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\Metric\NoopMeter;
@@ -23,7 +23,7 @@ use Throwable;
  *
  * For HandshakeResponse: sends the HandshakeAck. The peer's identity is established by the
  * self-Handshake that {@see \Monadial\Nexus\Cluster\Tcp\ClusterNode} sends as the
- * {@see \Monadial\Nexus\Cluster\Tcp\PeerConnection} preamble on every (re)connect, so this
+ * {@see \Monadial\Nexus\Cluster\Tcp\Transport\PeerConnection} preamble on every (re)connect, so this
  * interpreter no longer sends a Handshake itself — that made identity a once-per-process fact
  * and left reconnected/restarted peers unidentifiable. Sending only the ack here keeps the
  * exchange from looping (an ack never triggers another handshake).

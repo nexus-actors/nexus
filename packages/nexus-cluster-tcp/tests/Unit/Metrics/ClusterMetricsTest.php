@@ -6,7 +6,6 @@ namespace Monadial\Nexus\Cluster\Tcp\Tests\Unit\Metrics;
 
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\ClusterTopology;
-use Monadial\Nexus\Cluster\Tcp\Frame;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\HandshakeReceived;
@@ -31,6 +30,7 @@ use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
 use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
+use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Ping;
 use Monadial\Nexus\Cluster\Tcp\Tests\Fixture\Pong;
 use Monadial\Nexus\Cluster\Tcp\Tests\Support\RecordingEffectInterpreter;

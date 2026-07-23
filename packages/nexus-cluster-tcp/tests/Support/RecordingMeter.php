@@ -21,12 +21,23 @@ final class RecordingMeter implements Meter
     /** @var array<string, RecordingHistogram> */
     public array $histograms = [];
 
+    /** @var array<string, string> */
+    public array $counterUnits = [];
+
+    /** @var array<string, string> */
+    public array $histogramUnits = [];
+
+    /** @var array<string, string> */
+    public array $gaugeUnits = [];
+
     /** @var array<string, callable(): (int|float)> */
     private array $gaugeCallbacks = [];
 
     #[Override]
     public function counter(string $name, string $unit = '', string $description = ''): Counter
     {
+        $this->counterUnits[$name] = $unit;
+
         return $this->counters[$name] ??= new RecordingCounter();
     }
 
@@ -39,6 +50,8 @@ final class RecordingMeter implements Meter
     #[Override]
     public function histogram(string $name, string $unit = '', string $description = ''): Histogram
     {
+        $this->histogramUnits[$name] = $unit;
+
         return $this->histograms[$name] ??= new RecordingHistogram();
     }
 
@@ -53,6 +66,7 @@ final class RecordingMeter implements Meter
         string $description = '',
     ): ObservableGauge {
         $this->gaugeCallbacks[$name] = $callback;
+        $this->gaugeUnits[$name] = $unit;
 
         return new NoopObservableGauge();
     }
