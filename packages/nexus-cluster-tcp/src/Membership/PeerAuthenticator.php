@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 
 /**
  * @psalm-api
@@ -26,4 +27,17 @@ interface PeerAuthenticator
      * Whether `$handshake` carries a valid, fresh, non-replayed signature for this secret.
      */
     public function verify(Handshake $handshake, int $nowUnix): bool;
+
+    /**
+     * Return a copy of `$leave` carrying a fresh nonce, issue timestamp, and HMAC — the
+     * self-attestation that closes SEC-008 check 1 (a Leave must be signed by the leaving node
+     * itself, not merely relayed over an authenticated link).
+     */
+    public function signLeave(LeavePayload $leave): LeavePayload;
+
+    /**
+     * Whether `$leave` carries a valid, fresh, non-replayed signature for this secret. Shares the
+     * same nonce-replay guard as {@see verify()} — one confinement for both frame kinds.
+     */
+    public function verifyLeave(LeavePayload $leave, int $nowUnix): bool;
 }

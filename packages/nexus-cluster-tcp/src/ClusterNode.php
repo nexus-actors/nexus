@@ -137,6 +137,23 @@ final class ClusterNode
      */
     private const int MAX_DEPARTED_TOMBSTONES = 10_000;
 
+    /**
+     * Hard cap on tracked handshake-verified endpoint prefixes (SEC-008 check 4) — same FIFO
+     * discipline as {@see MAX_DEPARTED_TOMBSTONES} and {@see MutableEndpointRegistry}'s cap.
+     */
+    private const int MAX_VERIFIED_ENDPOINT_PREFIXES = 10_000;
+
+    /** SEC-008 controlRejected `check` attribute values — see {@see recordControlRejected()}. */
+    private const string CHECK_LEAVE_UNSIGNED = 'leave_unsigned';
+
+    private const string CHECK_LEAVE_REPLAY = 'leave_replay';
+
+    private const string CHECK_REIDENTIFY_MISMATCH = 'reidentify_mismatch';
+
+    private const string CHECK_ACK_VIEW_AUTHORITY = 'ack_view_authority';
+
+    private const string CHECK_GOSSIP_ENDPOINT_AUTHORITY = 'gossip_endpoint_authority';
+
     /** @var array<string, PeerLink> Accepted inbound links keyed by NodeAddress::toPathPrefix() */
     private array $acceptedLinks = [];
 
@@ -147,6 +164,17 @@ final class ClusterNode
      *      lagging gossip so a downed peer cannot be resurrected before its own rejoin re-adds it.
      */
     private array $departedTombstones = [];
+
+    /**
+     * @var array<string, true> Path-prefixes whose endpoint-registry entry currently came from a
+     *      HMAC-verified Handshake (SEC-008 check 4), keyed by {@see NodeAddress::toPathPrefix()}.
+     *      Populated in {@see parseHandshakeFrame()} only when an authenticator is configured — on
+     *      an unauthenticated cluster this set stays empty forever, so the third-party gossip guard
+     *      it backs is always a no-op there (current behaviour unchanged). A prefix's membership
+     *      simply updates on every re-verified Handshake (e.g. endpoint failover keeps it marked);
+     *      entries are never explicitly cleared, only FIFO-evicted at the cap like the tombstone set.
+     */
+    private array $verifiedEndpointPrefixes = [];
 
     /**
      * Set by {@see shutdown()}. Once this node has broadcast its own Leave it must emit no further
@@ -161,6 +189,8 @@ final class ClusterNode
     private ?Counter $framesDecodeFailed = null;
 
     private ?Counter $controlSendFailed = null;
+
+    private ?Counter $controlRejected = null;
 
     /**
      * Coalesces per-frame liveness signals to at most one PeerLivenessObserved per peer
@@ -508,6 +538,10 @@ final class ClusterNode
         $this->system->stop($this->membershipRef);
 
         $leavePayload = new LeavePayload($this->selfAddress->toPathPrefix());
+        // Self-attesting Leave (SEC-008 check 1): sign with our own identity so a peer that
+        // verifies it knows THIS node produced the notice, not merely that it arrived over an
+        // authenticated link. No-op (unsigned frame) when the cluster runs without a secret.
+        $leavePayload = $this->authenticator?->signLeave($leavePayload) ?? $leavePayload;
         $leaveBytes = $this->controlCodec->packLeave($leavePayload);
         $leaveFrame = new Frame(FrameType::Leave, $leaveBytes);
 
@@ -717,6 +751,14 @@ final class ClusterNode
      * the inbound path records the accepted link (its Slowloris deadline-cancel is owned by
      * {@see InboundLinkAcceptor}, not this callback); the outbound path has nothing extra to do.
      *
+     * SEC-008 check 5 (audited): every branch that can reject a frame — the Handshake branch on
+     * parse/auth failure or {@see isReidentifyMismatch()}, and the Leave branch via
+     * {@see admitSelfAttestingLeave()} — `return`s before any {@see observeLiveness()} call. Only
+     * Gossip and Message branches feed liveness, and only after frame-level processing succeeds;
+     * a per-entry skip inside {@see applyHandshakeAckView()} / {@see registerGossipEndpoint()}
+     * does not withhold liveness for the frame as a whole (the sender's link is still genuinely
+     * live — only that one entry's registration is untrusted).
+     *
      * @param Closure(NodeAddress): void $onHandshakeAccepted
      */
     private function handleLinkFrame(
@@ -732,7 +774,22 @@ final class ClusterNode
 
             if ($parsed !== null) {
                 [$peerAddr, $peerEndpoint, $handshake] = $parsed;
+
+                if ($this->isReidentifyMismatch($state, $peerAddr)) {
+                    $this->recordControlRejected(self::CHECK_REIDENTIFY_MISMATCH);
+                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
+                    $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.reidentify_rejected', [
+                        'claimed_peer' => $peerAddr->toPathPrefix(),
+                        'existing_peer' => $state->peerAddr?->toPathPrefix(),
+                        'peer_endpoint' => $remoteLabel,
+                    ]));
+                    $this->safeEndSpan($span);
+
+                    return;
+                }
+
                 $state->peerAddr = $peerAddr;
+                $state->boundAdvertise = $handshake->advertise;
                 $state->ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
                 $onHandshakeAccepted($peerAddr);
                 // Stamp ingress time here (frame-parse), not at actor-processing time, so the phi
@@ -768,13 +825,13 @@ final class ClusterNode
         // attacker) before any HMAC check runs. The ack always follows the peer's own Handshake on
         // the same link, so this gate is safe.
         if ($frame->type === FrameType::HandshakeAck) {
-            $this->applyHandshakeAckView($frame);
+            $this->applyHandshakeAckView($frame, $state);
 
             return;
         }
 
         if ($frame->type === FrameType::Gossip) {
-            $this->processGossipFrame($frame, $peerAddr);
+            $this->processGossipFrame($frame, $peerAddr, $state);
             // Gossip is the steady-state heartbeat: receiving it proves the peer is alive, so it MUST
             // feed the failure detector. Without this the phi detector starves once traffic goes quiet
             // and falsely suspects an idle-but-alive peer (there is no separate Ping/Pong heartbeat).
@@ -909,6 +966,19 @@ final class ClusterNode
     // -------------------------------------------------------------------------
 
     /**
+     * SEC-008 check 2 (re-identification pinning): whether a freshly-parsed Handshake identity
+     * conflicts with the identity this link already bound. Applied unconditionally — independent
+     * of whether a cluster secret is configured — because it guards link-slot integrity, not
+     * signature validity: a link already identified as one peer must never be silently rebound to
+     * a different one. A same-prefix re-handshake (the peer re-announcing itself, e.g. on
+     * endpoint failover) is NOT a mismatch and proceeds unchanged (C10 supersede semantics).
+     */
+    private function isReidentifyMismatch(LinkState $state, NodeAddress $parsedPeerAddr): bool
+    {
+        return $state->peerAddr !== null && $state->peerAddr->toPathPrefix() !== $parsedPeerAddr->toPathPrefix();
+    }
+
+    /**
      * Parse a Handshake frame payload, register the peer's endpoint, and return
      * the parsed address, endpoint, and Handshake as a tuple.
      *
@@ -984,6 +1054,15 @@ final class ClusterNode
 
         $this->endpointRegistry->register($peerAddr, $peerEndpoint);
 
+        // SEC-008 check 4: this registration just came from an HMAC-verified Handshake (verify()
+        // already ran above and returned true, or no secret is configured at all) — mark the prefix
+        // so gossip cannot later overwrite it with an unauthenticated third-party claim. Only when
+        // authenticated: without a secret this set stays empty and the gossip guard it backs is a
+        // permanent no-op (current, pre-SEC-008 behaviour).
+        if ($this->authenticator !== null) {
+            $this->markEndpointVerified($peerAddr->toPathPrefix());
+        }
+
         // A fresh handshake from this prefix means the peer is (re)joining, so clear any prior
         // Leave-dedup entry: otherwise a node that left, rejoined, and later leaves again would
         // have that second Leave silently deduped and its peers would fall back to slow
@@ -996,8 +1075,15 @@ final class ClusterNode
     /**
      * Apply the view snapshot in a HandshakeAck to register endpoints for members
      * we haven't seen yet. Fast-paths endpoint discovery without waiting for gossip.
+     *
+     * SEC-008 check 3 (ack-view authority): an entry whose prefix is already tombstoned is
+     * skipped unconditionally — a departed peer must not be resurrected via a stale/forged ack
+     * view, independent of whether a cluster secret is configured. The entry naming the ack
+     * SENDER's own prefix must additionally match the endpoint its Handshake HMAC-bound to this
+     * link ({@see LinkState::$boundAdvertise}); a mismatch is rejected and counted rather than
+     * silently registered, since only that entry is otherwise unauthenticated self-reporting.
      */
-    private function applyHandshakeAckView(Frame $frame): void
+    private function applyHandshakeAckView(Frame $frame, LinkState $state): void
     {
         try {
             $obj = $this->controlCodec->unpackHandshakeAck($frame->payload);
@@ -1009,7 +1095,19 @@ final class ClusterNode
             return;
         }
 
+        $senderPrefix = $state->peerAddr?->toPathPrefix();
+
         foreach ($obj->view as $prefix => $endpointStr) {
+            if (isset($this->departedTombstones[$prefix])) {
+                continue;
+            }
+
+            if ($this->authenticator !== null && $prefix === $senderPrefix && $endpointStr !== $state->boundAdvertise) {
+                $this->recordControlRejected(self::CHECK_ACK_VIEW_AUTHORITY);
+
+                continue;
+            }
+
             try {
                 $addr = self::parseNodeAddress($prefix);
                 $endpoint = NodeEndpoint::fromString($endpointStr);
@@ -1026,7 +1124,7 @@ final class ClusterNode
     /**
      * Process an inbound Gossip frame: register member endpoints and tell membership actor.
      */
-    private function processGossipFrame(Frame $frame, NodeAddress $peerAddr): void
+    private function processGossipFrame(Frame $frame, NodeAddress $peerAddr, LinkState $state): void
     {
         try {
             $obj = $this->controlCodec->unpackGossip($frame->payload);
@@ -1037,6 +1135,7 @@ final class ClusterNode
         }
 
         $liveMembers = [];
+        $senderPrefix = $peerAddr->toPathPrefix();
 
         foreach ($obj->members as $member) {
             // Tombstone filter: drop any member we have already processed a graceful Leave for. A peer
@@ -1049,17 +1148,12 @@ final class ClusterNode
                 continue;
             }
 
-            try {
-                $addr = self::parseNodeAddress($member['address']);
-                $endpoint = NodeEndpoint::fromString($member['endpoint']);
+            $this->registerGossipEndpoint($member, $senderPrefix, $state);
 
-                if ($addr !== null) {
-                    $this->endpointRegistry->register($addr, $endpoint);
-                }
-            } catch (Throwable) {
-                // Skip malformed members.
-            }
-
+            // View merge / forwarding is unaffected by SEC-008 check 4: a member entry this node
+            // declines to REGISTER (endpoint-authority mismatch, or a third-party prefix already
+            // handshake-verified) is still merged into the membership view and re-gossiped —
+            // only the local endpoint-registry write is restricted.
             $liveMembers[] = $member;
         }
 
@@ -1068,6 +1162,46 @@ final class ClusterNode
             : new GossipPayload($liveMembers, $obj->registrations);
 
         $this->membershipRef->tell(new GossipReceived($peerAddr, $payload));
+    }
+
+    /**
+     * SEC-008 check 4 (gossip endpoint-write policy): register `$member`'s endpoint unless
+     * authority forbids the write. A member entry naming the gossip SENDER's own prefix must
+     * match the endpoint its Handshake HMAC-bound to this link — the sender cannot use gossip to
+     * redirect its own endpoint. A third-party entry (naming some other node) is registered only
+     * if that prefix has no handshake-verified endpoint yet ({@see $verifiedEndpointPrefixes}) —
+     * gossip may still introduce a never-verified peer, but cannot overwrite an endpoint a
+     * verified Handshake already established. Both restrictions are no-ops without a cluster
+     * secret: `$this->authenticator === null` skips the sender-authority check entirely, and
+     * {@see $verifiedEndpointPrefixes} stays permanently empty, so third-party registration is
+     * unconditional — current, pre-SEC-008 behaviour.
+     *
+     * @param array{address: string, endpoint: string, incarnation: int, status: int} $member
+     */
+    private function registerGossipEndpoint(array $member, string $senderPrefix, LinkState $state): void
+    {
+        $isSendersOwnEntry = $member['address'] === $senderPrefix;
+
+        if ($this->authenticator !== null && $isSendersOwnEntry && $member['endpoint'] !== $state->boundAdvertise) {
+            $this->recordControlRejected(self::CHECK_GOSSIP_ENDPOINT_AUTHORITY);
+
+            return;
+        }
+
+        if (!$isSendersOwnEntry && isset($this->verifiedEndpointPrefixes[$member['address']])) {
+            return;
+        }
+
+        try {
+            $addr = self::parseNodeAddress($member['address']);
+            $endpoint = NodeEndpoint::fromString($member['endpoint']);
+
+            if ($addr !== null) {
+                $this->endpointRegistry->register($addr, $endpoint);
+            }
+        } catch (Throwable) {
+            // Skip malformed members.
+        }
     }
 
     /**
@@ -1101,6 +1235,48 @@ final class ClusterNode
         $this->departedTombstones[$prefix] = true;
     }
 
+    /**
+     * Mark `$prefix`'s endpoint-registry entry as having come from an HMAC-verified Handshake
+     * (SEC-008 check 4) — see {@see $verifiedEndpointPrefixes}. FIFO-evicts at the cap, same
+     * discipline as {@see tombstoneDeparted()}.
+     */
+    private function markEndpointVerified(string $prefix): void
+    {
+        if (isset($this->verifiedEndpointPrefixes[$prefix])) {
+            return;
+        }
+
+        if (count($this->verifiedEndpointPrefixes) >= self::MAX_VERIFIED_ENDPOINT_PREFIXES) {
+            array_shift($this->verifiedEndpointPrefixes);
+        }
+
+        $this->verifiedEndpointPrefixes[$prefix] = true;
+    }
+
+    /**
+     * SEC-008 check 1: whether `$payload` is a validly self-attested Leave, recording the specific
+     * rejection reason when it is not. Split into two counted outcomes: `leave_unsigned` (no
+     * signature fields at all — e.g. a peer on an older protocol, or a bare forgery attempt) vs.
+     * `leave_replay` (signature fields present but {@see PeerAuthenticator::verifyLeave()} rejected
+     * them — bad mac, stale timestamp, or an exact replay).
+     */
+    private function admitSelfAttestingLeave(PeerAuthenticator $authenticator, LeavePayload $payload): bool
+    {
+        if ($payload->nonce === null || $payload->issuedAt === null || $payload->mac === null) {
+            $this->recordControlRejected(self::CHECK_LEAVE_UNSIGNED);
+
+            return false;
+        }
+
+        if (!$authenticator->verifyLeave($payload, time())) {
+            $this->recordControlRejected(self::CHECK_LEAVE_REPLAY);
+
+            return false;
+        }
+
+        return true;
+    }
+
     private function processLeaveFrame(Frame $frame, ?NodeAddress $senderAddr): void
     {
         try {
@@ -1108,6 +1284,16 @@ final class ClusterNode
         } catch (Throwable) {
             $this->recordDecodeFailure('leave');
 
+            return;
+        }
+
+        // SEC-008 check 1 (self-attesting Leave): with a cluster secret configured, a Leave must
+        // carry the leaving node's own signature — otherwise any admitted member could forge a
+        // Leave for an arbitrary victim (mesh-wide partition via the star-relay). The mac is
+        // leaver-bound and link-independent, so a Leave relayed verbatim through an intermediate
+        // node still verifies. Unsigned Leaves are accepted only when no secret is configured
+        // (current behaviour unchanged).
+        if ($this->authenticator !== null && !$this->admitSelfAttestingLeave($this->authenticator, $payload)) {
             return;
         }
 
@@ -1201,6 +1387,27 @@ final class ClusterNode
             );
             $this->framesDecodeFailed->add(1, ['frame.type' => $frameType]);
             $this->logger->debug('cluster.frame.decode_failed', ['frame.type' => $frameType]);
+        } catch (Throwable) {
+            // Telemetry must never break cluster operations.
+        }
+    }
+
+    /**
+     * Make a SEC-008 control-frame authorization rejection observable, labeled by which of the
+     * five checks fired: {@see admitSelfAttestingLeave()}, {@see isReidentifyMismatch()},
+     * {@see applyHandshakeAckView()}, {@see registerGossipEndpoint()} (spec §4.2). Mirrors
+     * {@see recordDecodeFailure()}'s silent-drop-must-be-observable discipline.
+     */
+    private function recordControlRejected(string $check): void
+    {
+        try {
+            $this->controlRejected ??= $this->meter->counter(
+                'nexus.cluster.control.rejected',
+                '{frame}',
+                'Control frames rejected by SEC-008 authorization checks',
+            );
+            $this->controlRejected->add(1, ['check' => $check]);
+            $this->logger->debug('cluster.control.rejected', ['check' => $check]);
         } catch (Throwable) {
             // Telemetry must never break cluster operations.
         }

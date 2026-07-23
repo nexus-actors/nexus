@@ -6,6 +6,7 @@ namespace Monadial\Nexus\Cluster\Tcp\Membership;
 
 use DateTimeImmutable;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
+use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Runtime\Duration;
 use Override;
 use Psr\Clock\ClockInterface;
@@ -52,6 +53,11 @@ use const JSON_THROW_ON_ERROR;
  * Thread-confinement: this object is owned by the recv path / membership actor of a
  * single node and is never shared across Swoole threads, so the mutable nonce set needs
  * no locking — matching the rest of the package's confinement convention.
+ *
+ * {@see signLeave()}/{@see verifyLeave()} apply the same scheme to Leave frames (SEC-008 check 1):
+ * the signature covers `{issuedAt, node, nonce}` and shares THE SAME seen-nonce set as handshakes
+ * — one replay guard confines both frame kinds. The mac is leaver-bound and link-independent, so a
+ * Leave relayed verbatim through an intermediate node (the star-topology relay) still verifies.
  */
 final class HandshakeAuthenticator implements PeerAuthenticator
 {
@@ -139,6 +145,58 @@ final class HandshakeAuthenticator implements PeerAuthenticator
     }
 
     /**
+     * Return a copy of `$leave` carrying a fresh nonce, issue timestamp, and HMAC.
+     */
+    #[Override]
+    public function signLeave(LeavePayload $leave): LeavePayload
+    {
+        $nonce = bin2hex(random_bytes(16));
+        $issuedAt = $this->clock->now()->getTimestamp();
+
+        return new LeavePayload(
+            node: $leave->node,
+            nonce: $nonce,
+            issuedAt: $issuedAt,
+            mac: $this->macLeave($leave, $nonce, $issuedAt),
+        );
+    }
+
+    /**
+     * Whether `$leave` carries a valid, fresh, non-replayed signature for this secret. Mirrors
+     * {@see verify()} exactly, sharing the same {@see $seenNonces} set: a Leave and a Handshake
+     * nonce are checked for replay against one confined pool.
+     */
+    #[Override]
+    public function verifyLeave(LeavePayload $leave, int $nowUnix): bool
+    {
+        $nonce = $leave->nonce;
+        $issuedAt = $leave->issuedAt;
+        $mac = $leave->mac;
+
+        if ($nonce === null || $issuedAt === null || $mac === null) {
+            return false;
+        }
+
+        if (abs($nowUnix - $issuedAt) > $this->freshnessWindowSeconds) {
+            return false;
+        }
+
+        if (!hash_equals($this->macLeave($leave, $nonce, $issuedAt), $mac)) {
+            return false;
+        }
+
+        $this->evictStaleNonces($nowUnix);
+
+        if (isset($this->seenNonces[$nonce])) {
+            return false; // Replay of a Leave (or Handshake) nonce already accepted within the window.
+        }
+
+        $this->seenNonces[$nonce] = $issuedAt;
+
+        return true;
+    }
+
+    /**
      * Drop remembered nonces whose issue timestamp has aged past the freshness window: once
      * a handshake is too old to pass the freshness check it can never be accepted again, so
      * remembering its nonce serves no purpose. This bounds the set to the handshakes seen in
@@ -173,6 +231,19 @@ final class HandshakeAuthenticator implements PeerAuthenticator
             ],
             'nonce' => $nonce,
             'protocolVersion' => $handshake->protocolVersion,
+        ], JSON_THROW_ON_ERROR);
+
+        return hash_hmac('sha256', $canonical, $this->secret);
+    }
+
+    private function macLeave(LeavePayload $leave, string $nonce, int $issuedAt): string
+    {
+        // Canonical JSON, alphabetically ordered — same discipline as mac(). Only the leaving
+        // node's identifier is bound (a Leave carries no advertise/protocol claim to sign).
+        $canonical = json_encode([
+            'issuedAt' => $issuedAt,
+            'node' => $leave->node,
+            'nonce' => $nonce,
         ], JSON_THROW_ON_ERROR);
 
         return hash_hmac('sha256', $canonical, $this->secret);

@@ -29,6 +29,7 @@ final readonly class ConnectionMetrics
     public Counter $messagesLocalShortCircuit;
     public Counter $messagesUnroutable;
     public Counter $sendBufferDropped;
+    public Counter $controlRejected;
     public Histogram $bytesSent;
     public Histogram $bytesReceived;
 
@@ -103,6 +104,11 @@ final readonly class ConnectionMetrics
             'nexus.cluster.send_buffer.dropped',
             '{message}',
             'Sends dropped for lack of a routable endpoint',
+        );
+        $this->controlRejected = $meter->counter(
+            'nexus.cluster.control.rejected',
+            '{frame}',
+            'Control frames rejected by SEC-008 authorization checks (see the `check` attribute)',
         );
         $this->bytesSent = $meter->histogram('nexus.cluster.bytes.sent', 'By', 'Encoded payload bytes sent');
         $this->bytesReceived = $meter->histogram('nexus.cluster.bytes.received', 'By', 'Payload bytes received');

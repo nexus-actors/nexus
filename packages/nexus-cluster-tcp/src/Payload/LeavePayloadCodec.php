@@ -26,7 +26,12 @@ final readonly class LeavePayloadCodec
     public function pack(LeavePayload $leave): string
     {
         try {
-            return $this->codec->pack(['node' => $leave->node]);
+            return $this->codec->pack([
+                'issuedAt' => $leave->issuedAt,
+                'mac' => $leave->mac,
+                'node' => $leave->node,
+                'nonce' => $leave->nonce,
+            ]);
         } catch (Throwable $e) {
             throw new MessageSerializationException(LeavePayload::class, $e->getMessage(), $e);
         }
@@ -39,6 +44,11 @@ final readonly class LeavePayloadCodec
     {
         $reader = MsgpackReader::from($bytes, $this->codec, self::TYPE);
 
-        return new LeavePayload(node: $reader->string('node'));
+        return new LeavePayload(
+            node: $reader->string('node'),
+            nonce: $reader->nullableString('nonce'),
+            issuedAt: $reader->nullableInt('issuedAt'),
+            mac: $reader->nullableString('mac'),
+        );
     }
 }

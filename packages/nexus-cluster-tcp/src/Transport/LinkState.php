@@ -24,6 +24,15 @@ final class LinkState
     public ?FrameIngress $ingress = null;
 
     /**
+     * The advertise endpoint string this link's peer bound at identification (the raw wire value
+     * from its Handshake, HMAC-covered when a cluster secret is configured). Set alongside
+     * {@see $peerAddr} so SEC-008 checks 3–4 ({@see ClusterNode::applyHandshakeAckView()},
+     * {@see ClusterNode::processGossipFrame()}) can compare a later ack/gossip claim about this
+     * same peer's own endpoint without a registry lookup.
+     */
+    public ?string $boundAdvertise = null;
+
+    /**
      * The accepted inbound {@see PeerLink} this state belongs to, set once by
      * {@see InboundLinkAcceptor::accept()} before any frame is processed. Lets the shared
      * `frameSink` closure it injects (constructed once, for every accepted link) resolve the

@@ -42,6 +42,7 @@ final class MetricsClassesTest extends TestCase
                 'nexus.cluster.messages.local_shortcircuit',
                 'nexus.cluster.messages.unroutable',
                 'nexus.cluster.send_buffer.dropped',
+                'nexus.cluster.control.rejected',
             ],
             array_keys($meter->counters),
         );
@@ -61,6 +62,7 @@ final class MetricsClassesTest extends TestCase
         new ConnectionMetrics($meter);
 
         $expectedCounterUnits = [
+            'nexus.cluster.control.rejected' => '{frame}',
             'nexus.cluster.control_send.failed' => '{send}',
             'nexus.cluster.frames.buffered' => '{frame}',
             'nexus.cluster.frames.decode_failed' => '{frame}',
