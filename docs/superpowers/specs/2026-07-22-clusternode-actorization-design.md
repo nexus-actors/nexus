@@ -234,8 +234,13 @@ authenticated identity is fixed at admission), tombstone check via
 `RoutingSnapshot`. Success →
 supervisor registers endpoint + supersedes prior slot + clears tombstone →
 `become(Identified)` → `HandshakeAck` (with view) sent. Failure or
-`ReceiveTimeout` (Slowloris) → close + stop; queued frames die with the actor,
-never reaching ingress. `HandshakeAck` view application remains gated behind
+the Slowloris deadline → close + stop; queued frames die with the actor,
+never reaching ingress. **AMENDED 2026-07-23:** the Slowloris deadline is a
+hard self-scheduled `HandshakeDeadline` message (`scheduleOnce` at accept,
+cancelled at identification) — NOT `setReceiveTimeout`, whose
+reset-on-every-user-message semantics let trickle junk frames defer the
+admission deadline forever (caught by adversarial review of the
+implementation; the pre-actorization code always had a hard deadline). `HandshakeAck` view application remains gated behind
 identification (registry-poisoning defense).
 
 **Control-frame authorization (SEC-008, concretized 2026-07-23):** the HMAC
