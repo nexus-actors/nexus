@@ -802,14 +802,31 @@ final class ClusterNodeTest extends TestCase
             $secondClosed = true;
         });
 
+        $closedCountBeforeShutdown = null;
+
+        // T=50ms: captured BEFORE the T=150ms shutdown below — `ActorSystem::shutdown()` broadcasts
+        // a PoisonPill to every root actor, including the FIRST (legitimately accepted) link's
+        // InboundLinkActor, whose own PostStop then closes it too. That whole-system-teardown close
+        // is expected and orthogonal to the capacity-gate invariant this test targets: the gate must
+        // reject the excess link immediately, on its own, before any shutdown is even scheduled.
+        $this->runtime->scheduleOnce(
+            Duration::millis(50),
+            static function () use (&$firstClosed, &$secondClosed, &$closedCountBeforeShutdown): void {
+                $closedCountBeforeShutdown = ($firstClosed ? 1 : 0) + ($secondClosed ? 1 : 0);
+            },
+        );
+
         $this->runtime->scheduleOnce(Duration::millis(150), function (): void {
             $this->system->shutdown(Duration::seconds(1));
         });
 
         $this->system->run();
 
-        $closedCount = ($firstClosed ? 1 : 0) + ($secondClosed ? 1 : 0);
-        self::assertSame(1, $closedCount, 'with a cap of 1, exactly one of the two inbound links must be rejected');
+        self::assertSame(
+            1,
+            $closedCountBeforeShutdown,
+            'with a cap of 1, exactly one of the two inbound links must be rejected',
+        );
     }
 
     /**
@@ -1083,12 +1100,19 @@ final class ClusterNodeTest extends TestCase
         );
 
         $stillAccepted = null;
+        $firstClosedBeforeShutdown = null;
 
-        // T=300ms: the prior link must have been closed, and the peer must still be accepted (via link 2).
+        // T=300ms: the prior link must still be open, and the peer must still be accepted (via link
+        // 2). Captured BEFORE the T=400ms shutdown below: `ActorSystem::shutdown()` broadcasts a
+        // PoisonPill to every root actor, including the prior link's now-superseded (but still
+        // alive) InboundLinkActor — its own PostStop then closes it too. That whole-system-teardown
+        // close is expected and orthogonal to the re-handshake invariant this test targets, so it
+        // must not be allowed to shadow the assertion.
         $this->runtime->scheduleOnce(
             Duration::millis(300),
-            function () use ($node, $peerAddr, &$stillAccepted): void {
+            function () use ($node, $peerAddr, &$stillAccepted, &$firstClosed, &$firstClosedBeforeShutdown): void {
                 $stillAccepted = $this->hasAcceptedLink($node, $peerAddr);
+                $firstClosedBeforeShutdown = $firstClosed;
             },
         );
 
@@ -1099,7 +1123,7 @@ final class ClusterNodeTest extends TestCase
         $this->system->run();
 
         self::assertFalse(
-            $firstClosed,
+            $firstClosedBeforeShutdown,
             'the prior link must NOT be force-closed on re-handshake — that EOF causes mesh churn (C2 mesh-safe)',
         );
         self::assertTrue($stillAccepted, 'the peer must still be accepted via the newer link');

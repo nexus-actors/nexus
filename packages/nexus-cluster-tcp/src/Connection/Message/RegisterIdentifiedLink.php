@@ -13,8 +13,9 @@ use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
 /**
  * @psalm-api
  *
- * A peer link has just been identified by a valid, admitted Handshake (`ClusterNode` has already
- * run the parse/auth/SEC-008-reidentify checks — this message carries only the accepted result).
+ * A peer link has just been identified by a valid, admitted Handshake (`InboundLinkActor` has
+ * already run the parse/auth/SEC-008-reidentify checks — this message carries only the accepted
+ * result).
  *
  * {@see \Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor} applies, in its own serialized
  * mailbox: the endpoint-registry write, the SEC-008-check-4 verified-prefix mark, the C10 same-identity
@@ -24,16 +25,16 @@ use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
  * the resulting `HandshakeReceived` (the load-bearing ordering invariant this actor hop preserves).
  *
  * `$link` is null on the dialed-outbound path (mirrors {@see
- * \Monadial\Nexus\Cluster\Tcp\Transport\LinkState}'s own `$link`, which the accepted-inbound path
- * alone populates): the registry write, verified mark, tombstone clear, and membership tell always
- * apply, but the C10 accepted-link-slot write only happens when a link is actually present.
+ * \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor}'s own per-link `$link` dependency, which
+ * only the accepted-inbound spawn populates): the registry write, verified mark, tombstone clear, and
+ * membership tell always apply, but the C10 accepted-link-slot write only happens when a link is
+ * actually present.
  */
 final readonly class RegisterIdentifiedLink
 {
     public function __construct(
         public NodeAddress $peer,
         public NodeEndpoint $endpoint,
-        public string $boundAdvertise,
         public ?PeerLink $link,
         public Handshake $handshake,
         public DateTimeImmutable $observedAt,

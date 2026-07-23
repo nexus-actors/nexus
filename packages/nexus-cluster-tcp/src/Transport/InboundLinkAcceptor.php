@@ -6,32 +6,41 @@ namespace Monadial\Nexus\Cluster\Tcp\Transport;
 
 use Closure;
 use Monadial\Nexus\Cluster\Tcp\Protocol\Frame;
-use Monadial\Nexus\Runtime\Duration;
-use Monadial\Nexus\Runtime\Runtime\Runtime;
+use Monadial\Nexus\Core\Actor\ActorRef;
+use Monadial\Nexus\Core\Actor\BackpressureCapable;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
+use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
 
 use function count;
+use function hrtime;
 use function spl_object_id;
 
 /**
  * @psalm-api
  *
- * Accepts inbound {@see PeerLink}s from a mesh transport's `serve()` listener and drives their
- * frame pump: enforces the unauthenticated-link concurrency cap, arms a Slowloris handshake
- * deadline, and forwards frames to the injected `$frameSink` (a bound partial of
- * {@see ClusterNode::handleLinkFrame()}) until the link closes.
+ * Accepts inbound {@see PeerLink}s from a mesh transport's `serve()` listener and, per accepted
+ * link, spawns a fresh {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor} (via the
+ * injected `$spawner`) to run its Unidentified→Identified frame state machine.
  *
- * One acceptor instance is constructed once at boot and reused for every accepted connection —
- * `$inboundLinks` tracks live links across the acceptor's whole lifetime, which is what makes the
- * concurrency cap meaningful.
+ * What stays here (the pump, not the state machine):
+ *  - the unauthenticated-link concurrency cap (`$maxInboundLinks`) — links are pre-auth, so a peer
+ *    must not be able to exhaust memory with endless open sockets;
+ *  - the C3 ingress stamp: `$clock->now()` and `hrtime(true)` are captured HERE, synchronously with
+ *    the transport's frame callback, and carried on the {@see LinkFrame} message rather than
+ *    recomputed once the frame reaches the actor's mailbox (which can lag under load) — see
+ *    {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor}'s class docblock;
+ *  - the pre-auth flood bound: an `EnqueueResult::Dropped` `offer()` (the actor's bounded mailbox
+ *    rejected the frame) closes the link outright, rather than let a flooding peer sit on an
+ *    accepted-but-unproductive connection.
  *
- * Slowloris deadline ownership: the acceptor owns the per-link {@see Cancellable} timer and
- * cancels it itself the moment a link's `LinkState::$peerAddr` transitions from unset to set
- * (i.e. the link just identified via a valid Handshake) — `$frameSink` never needs to know the
- * deadline exists. It is also cancelled on close, so a link that never identifies cannot leak
- * a timer past its own teardown.
+ * The Slowloris handshake deadline is NOT owned here any more — it is armed by the actor itself
+ * (`setReceiveTimeout()` in `Behavior::setup`), since the actor is what knows whether it has
+ * identified yet. One acceptor instance is constructed once at boot and reused for every accepted
+ * connection — `$inboundLinks` tracks live links across the acceptor's whole lifetime, which is
+ * what makes the concurrency cap meaningful.
  */
 final class InboundLinkAcceptor
 {
@@ -39,25 +48,21 @@ final class InboundLinkAcceptor
     private array $inboundLinks = [];
 
     /**
-     * @param Closure(Frame, LinkState, string): void $frameSink    ClusterNode::handleLinkFrame
-     *        partial (router + accepted-callback pre-bound); called for every frame once the
-     *        deadline/capacity bookkeeping below has run.
-     * @param Closure(LinkState, PeerLink): void $onLinkClosed ClusterNode's close bookkeeping
-     *        bundle (accepted-link removal, tombstone, liveness-throttle forget, membership
-     *        notification, ask-registry failure).
+     * @param Closure(PeerLink): ActorRef $spawner Spawns a fresh
+     *        {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor} for the accepted link
+     *        (injected by `ClusterNode::wireInboundLink()`, which supplies every collaborator the
+     *        actor needs plus this specific `$link` and its Slowloris `$handshakeTimeout`).
      */
     public function __construct(
-        private readonly Runtime $runtime,
         private readonly int $maxInboundLinks,
-        private readonly Duration $handshakeTimeout,
-        private readonly Closure $frameSink,
-        private readonly Closure $onLinkClosed,
+        private readonly Closure $spawner,
+        private readonly ClockInterface $clock,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
     /**
-     * Accept a freshly-inbound PeerLink: enforce the concurrency cap, arm the Slowloris deadline,
-     * and wire the frame and close pumps.
+     * Accept a freshly-inbound PeerLink: enforce the concurrency cap, spawn its
+     * {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor}, and wire the frame/close pumps.
      */
     public function accept(PeerLink $link): void
     {
@@ -75,43 +80,29 @@ final class InboundLinkAcceptor
 
         $linkId = spl_object_id($link);
         $this->inboundLinks[$linkId] = true;
-        $state = new LinkState();
-        $state->link = $link;
-        $remoteLabel = $link->remote() !== null
-            ? (string) $link->remote()
-            : 'unknown';
 
-        // Slowloris guard: close the link if it never completes a valid handshake in time. The
-        // receive loop tolerates recv timeouts, so an unidentified link would otherwise idle forever.
-        $deadline = $this->runtime->scheduleOnce(
-            $this->handshakeTimeout,
-            function () use ($state, $link, $linkId, $remoteLabel): void {
-                if ($state->peerAddr !== null) {
-                    return;
-                }
+        $ref = ($this->spawner)($link);
 
-                unset($this->inboundLinks[$linkId]);
-                $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.timeout', [
-                    'peer_endpoint' => $remoteLabel,
-                ]));
+        $link->onFrame(function (Frame $frame) use ($link, $ref): void {
+            // C3: stamp the arrival instant HERE, synchronously with the transport callback — see
+            // this class's and InboundLinkActor's docblocks.
+            $message = new LinkFrame($frame, $this->clock->now(), hrtime(true));
+
+            if (!$ref instanceof BackpressureCapable) {
+                $ref->tell($message);
+
+                return;
+            }
+
+            if ($ref->offer($message) === EnqueueResult::Dropped) {
+                // Pre-auth flood bound: the actor's bounded mailbox rejected the frame outright.
                 $link->close();
-            },
-        );
-
-        $link->onFrame(function (Frame $frame) use ($state, $remoteLabel, $deadline): void {
-            $wasIdentified = $state->peerAddr !== null;
-            ($this->frameSink)($frame, $state, $remoteLabel);
-
-            if (!$wasIdentified && $state->peerAddr !== null) {
-                $deadline->cancel();
             }
         });
 
-        $link->onClose(function () use ($link, $state, $linkId, $deadline): void {
-            $deadline->cancel();
+        $link->onClose(function () use ($ref, $linkId): void {
             unset($this->inboundLinks[$linkId]);
-
-            ($this->onLinkClosed)($state, $link);
+            $ref->tell(new LinkClosedNotice());
         });
     }
 

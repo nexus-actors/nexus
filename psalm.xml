@@ -204,6 +204,8 @@
                 <file name="packages/nexus-cluster-tcp/src/ClusterNode.php"/>
                 <!-- ConnectionSupervisor::$membershipRef accepts the same heterogeneous union (HandshakeReceived, PeerLinkClosed) as ClusterNode's -->
                 <file name="packages/nexus-cluster-tcp/src/Connection/ConnectionSupervisor.php"/>
+                <!-- InboundLinkActor::$supervisorRef/$membershipRef accept the same heterogeneous message unions ConnectionSupervisor's refs do -->
+                <file name="packages/nexus-cluster-tcp/src/Connection/InboundLinkActor.php"/>
             </errorLevel>
         </PluginIssue>
     </issueHandlers>

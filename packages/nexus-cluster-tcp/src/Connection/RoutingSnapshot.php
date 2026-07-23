@@ -12,8 +12,9 @@ use Monadial\Nexus\Cluster\Tcp\Transport\PeerLink;
  *
  * Immutable, point-in-time view of {@see ConnectionSupervisor}'s routing state, published to a
  * {@see RoutingSnapshotHolder} after every mutation. Readers on the hot path (egress via
- * `ClusterNode::sendByPrefix()`, and the SEC-008 admission checks in `ClusterNode::handleLinkFrame()`)
- * read the holder's current snapshot directly instead of going through the supervisor's mailbox —
+ * `ClusterNode::sendByPrefix()`, and the SEC-008 admission checks in
+ * {@see \Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor}) read the holder's current
+ * snapshot directly instead of going through the supervisor's mailbox —
  * lock-free, but necessarily lagging the supervisor's own state by however long its mailbox takes to
  * drain. Callers that cannot tolerate the lag do not exist yet: `sendByPrefix()`'s accepted-link
  * fallback already tolerates the equivalent staleness a pre-actorization synchronous read had, and

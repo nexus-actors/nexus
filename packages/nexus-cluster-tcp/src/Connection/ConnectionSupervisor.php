@@ -52,9 +52,9 @@ use function ltrim;
  * RoutingSnapshot} to the shared {@see RoutingSnapshotHolder} so `ClusterNode`'s egress and
  * admission-check reads stay lock-free.
  *
- * `ClusterNode` still owns the SEC-008 checks themselves, the per-link `boundAdvertise` (on
- * `LinkState`), and the parsing of untrusted wire data — this actor receives only already-validated
- * domain values and applies the resulting write, in its own serialized mailbox. That serialization
+ * `InboundLinkActor` still owns the SEC-008 checks themselves, the per-link `boundAdvertise`, and
+ * the parsing of untrusted wire data — this actor receives only already-validated domain values
+ * and applies the resulting write, in its own serialized mailbox. That serialization
  * is what preserves the pre-actorization ordering invariant: {@see RegisterIdentifiedLink} always
  * completes its registry write, then tells the membership actor `HandshakeReceived` — in that
  * order, on this actor's single message-processing loop — so registration is always visible before

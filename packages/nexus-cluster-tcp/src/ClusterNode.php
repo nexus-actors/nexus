@@ -6,14 +6,9 @@ namespace Monadial\Nexus\Cluster\Tcp;
 
 use BadMethodCallException;
 use Closure;
-use InvalidArgumentException;
 use Monadial\Nexus\Cluster\NodeAddress;
 use Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor;
-use Monadial\Nexus\Cluster\Tcp\Connection\Message\EvictPeer;
-use Monadial\Nexus\Cluster\Tcp\Connection\Message\LinkClosed;
-use Monadial\Nexus\Cluster\Tcp\Connection\Message\RecordTombstone;
-use Monadial\Nexus\Cluster\Tcp\Connection\Message\RegisterIdentifiedLink;
-use Monadial\Nexus\Cluster\Tcp\Connection\Message\RegisterUnauthenticatedEndpoint;
+use Monadial\Nexus\Cluster\Tcp\Connection\InboundLinkActor;
 use Monadial\Nexus\Cluster\Tcp\Connection\RoutingSnapshotHolder;
 use Monadial\Nexus\Cluster\Tcp\Membership\AskFailingMembershipEventPublisher;
 use Monadial\Nexus\Cluster\Tcp\Membership\ClusterView;
@@ -24,18 +19,13 @@ use Monadial\Nexus\Cluster\Tcp\Membership\LivenessThrottle;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipActor;
 use Monadial\Nexus\Cluster\Tcp\Membership\MembershipService;
 use Monadial\Nexus\Cluster\Tcp\Membership\Message\GetClusterView;
-use Monadial\Nexus\Cluster\Tcp\Membership\Message\GossipReceived;
-use Monadial\Nexus\Cluster\Tcp\Membership\Message\LeaveReceived;
-use Monadial\Nexus\Cluster\Tcp\Membership\Message\PeerLivenessObserved;
 use Monadial\Nexus\Cluster\Tcp\Membership\PeerAuthenticator;
-use Monadial\Nexus\Cluster\Tcp\Membership\PeerConnected;
 use Monadial\Nexus\Cluster\Tcp\Membership\PhiAccrualDetector;
 use Monadial\Nexus\Cluster\Tcp\Membership\ShuffledCycleSelector;
 use Monadial\Nexus\Cluster\Tcp\Membership\TcpMembershipEffectInterpreter;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterMessageCodec;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRef;
 use Monadial\Nexus\Cluster\Tcp\Messaging\ClusterRefFactory;
-use Monadial\Nexus\Cluster\Tcp\Messaging\FrameIngress;
 use Monadial\Nexus\Cluster\Tcp\Messaging\InboxRouter;
 use Monadial\Nexus\Cluster\Tcp\Messaging\LocalActorRegistry;
 use Monadial\Nexus\Cluster\Tcp\Messaging\LocalDelivery;
@@ -44,7 +34,6 @@ use Monadial\Nexus\Cluster\Tcp\Messaging\NoopTraceContextInjector;
 use Monadial\Nexus\Cluster\Tcp\Messaging\OutboundSink;
 use Monadial\Nexus\Cluster\Tcp\Messaging\TcpAskRegistry;
 use Monadial\Nexus\Cluster\Tcp\Payload\ControlFrameCodec;
-use Monadial\Nexus\Cluster\Tcp\Payload\GossipPayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\Handshake;
 use Monadial\Nexus\Cluster\Tcp\Payload\LeavePayload;
 use Monadial\Nexus\Cluster\Tcp\Payload\MessagePayload;
@@ -54,7 +43,7 @@ use Monadial\Nexus\Cluster\Tcp\Protocol\FrameType;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextExtractor;
 use Monadial\Nexus\Cluster\Tcp\Tracing\ObservabilityTraceContextInjector;
 use Monadial\Nexus\Cluster\Tcp\Transport\InboundLinkAcceptor;
-use Monadial\Nexus\Cluster\Tcp\Transport\LinkState;
+use Monadial\Nexus\Cluster\Tcp\Transport\LinkFrame;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackHub;
 use Monadial\Nexus\Cluster\Tcp\Transport\Loopback\LoopbackMeshTransport;
 use Monadial\Nexus\Cluster\Tcp\Transport\MeshTransport;
@@ -66,6 +55,7 @@ use Monadial\Nexus\Core\Actor\ActorContext;
 use Monadial\Nexus\Core\Actor\ActorPath;
 use Monadial\Nexus\Core\Actor\ActorRef;
 use Monadial\Nexus\Core\Actor\ActorSystem;
+use Monadial\Nexus\Core\Actor\BackpressureCapable;
 use Monadial\Nexus\Core\Actor\Behavior;
 use Monadial\Nexus\Core\Actor\Props;
 use Monadial\Nexus\Observability\Metric\Counter;
@@ -73,10 +63,8 @@ use Monadial\Nexus\Observability\Metric\Histogram;
 use Monadial\Nexus\Observability\Metric\Meter;
 use Monadial\Nexus\Observability\NoopObservability;
 use Monadial\Nexus\Observability\Observability;
-use Monadial\Nexus\Observability\Trace\NoopSpan;
-use Monadial\Nexus\Observability\Trace\Span;
-use Monadial\Nexus\Observability\Trace\SpanKind;
 use Monadial\Nexus\Observability\Trace\Tracer;
+use Monadial\Nexus\Runtime\Mailbox\EnqueueResult;
 use Monadial\Nexus\Runtime\Runtime\Runtime;
 use Monadial\Nexus\Runtime\Swoole\SwooleRuntime;
 use Monadial\Nexus\Serialization\MessageSerializer;
@@ -88,16 +76,11 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Throwable;
 
-use function array_keys;
-use function array_values;
 use function count;
-use function explode;
 use function extension_loaded;
 use function hrtime;
-use function ltrim;
 use function preg_replace;
 use function strlen;
-use function time;
 
 /**
  * @psalm-api
@@ -132,17 +115,6 @@ use function time;
  */
 final class ClusterNode
 {
-    /** SEC-008 controlRejected `check` attribute values — see {@see recordControlRejected()}. */
-    private const string CHECK_LEAVE_UNSIGNED = 'leave_unsigned';
-
-    private const string CHECK_LEAVE_REPLAY = 'leave_replay';
-
-    private const string CHECK_REIDENTIFY_MISMATCH = 'reidentify_mismatch';
-
-    private const string CHECK_ACK_VIEW_AUTHORITY = 'ack_view_authority';
-
-    private const string CHECK_GOSSIP_ENDPOINT_AUTHORITY = 'gossip_endpoint_authority';
-
     /**
      * Set by {@see shutdown()}. Once this node has broadcast its own Leave it must emit no further
      * frames: with the per-connection handshake preamble, any post-Leave gossip/ack that lazily
@@ -151,19 +123,16 @@ final class ClusterNode
      */
     private bool $stopped = false;
 
-    private ?Counter $handshakeRejected = null;
-
-    private ?Counter $framesDecodeFailed = null;
-
     private ?Counter $controlSendFailed = null;
-
-    private ?Counter $controlRejected = null;
 
     /**
      * The accepted-inbound-link directory, departed-peer tombstones, SEC-008-verified endpoint
      * prefixes, and the (now supervisor-internal) `MutableEndpointRegistry` all moved to {@see
      * ConnectionSupervisor} — this node only ever tells it writes and reads its published {@see
-     * Connection\RoutingSnapshot} via {@see $routingSnapshotHolder}.
+     * Connection\RoutingSnapshot} via {@see $routingSnapshotHolder}. The SEC-008 checks themselves,
+     * the per-link `boundAdvertise`, and the parsing of untrusted wire data all moved to {@see
+     * InboundLinkActor} — this node keeps only the egress side (`sendByPrefix`/`routeSend`/
+     * `dispatchControlSend`) and boot wiring.
      */
     private function __construct(
         private readonly NodeAddress $selfAddress,
@@ -227,8 +196,8 @@ final class ClusterNode
         //    snapshot holder are all owned by ConnectionSupervisor going forward, but constructed
         //    here (rather than inside ClusterNode's own constructor) because the supervisor is
         //    spawned before the node itself and needs the registry + holder directly, while the
-        //    throttle is shared between the node (observeLiveness reads) and the supervisor
-        //    (forget-on-close writes, via an injected closure below).
+        //    throttle is shared between every per-link InboundLinkActor (shouldObserve reads) and
+        //    the supervisor (forget-on-close writes, via an injected closure below).
         $endpointRegistry = new MutableEndpointRegistry();
         $livenessThrottle = new LivenessThrottle();
         $routingSnapshotHolder = new RoutingSnapshotHolder();
@@ -715,194 +684,68 @@ final class ClusterNode
     // Frame pump wiring
     // -------------------------------------------------------------------------
 
-
     /**
-     * Forward a liveness observation for `$peerAddr` to the membership actor, coalesced
-     * to at most one per peer per detector sample interval. Every inbound frame proves
-     * the peer alive, but per-frame observations flood the membership mailbox under
-     * load and carry no extra detection value (the phi detector discards sub-interval
-     * samples) — see {@see LivenessThrottle}.
-     */
-    private function observeLiveness(NodeAddress $peerAddr): void
-    {
-        if ($this->livenessThrottle->shouldObserve($peerAddr->toPathPrefix(), hrtime(true))) {
-            $this->membershipRef->tell(new PeerLivenessObserved($peerAddr, null, $this->system->clock()->now()));
-        }
-    }
-
-    /**
-     * Shared per-link frame state machine, driven by BOTH the accepted-inbound and the dialed-outbound
-     * frame pumps. Handling the Handshake → identification → (ack / gossip / leave / message) sequence
-     * in one place is what keeps the two paths from drifting on which guards they apply (they had
-     * already diverged).
-     *
-     * On a successful handshake, {@see LinkState::$link} distinguishes the two callers: non-null on
-     * the accepted-inbound path (set by {@see InboundLinkAcceptor::accept()} before any frame is
-     * processed), null on the dialed-outbound path (which has no accepted-link bookkeeping to do).
-     * Forwarding it as-is on {@see \Monadial\Nexus\Cluster\Tcp\Connection\Message\RegisterIdentifiedLink}
-     * lets {@see \Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor} apply the C10
-     * accepted-link-slot write only when there is one, with no separate per-path closure needed here.
-     *
-     * SEC-008 check 5 (audited): every branch that can reject a frame — the Handshake branch on
-     * parse/auth failure or {@see isReidentifyMismatch()}, and the Leave branch via
-     * {@see admitSelfAttestingLeave()} — `return`s before any {@see observeLiveness()} call. Only
-     * Gossip and Message branches feed liveness, and only after frame-level processing succeeds;
-     * a per-entry skip inside {@see applyHandshakeAckView()} / {@see registerGossipEndpoint()}
-     * does not withhold liveness for the frame as a whole (the sender's link is still genuinely
-     * live — only that one entry's registration is untrusted).
-     */
-    private function handleLinkFrame(
-        Frame $frame,
-        LinkState $state,
-        InboxRouter $inboxRouter,
-        string $remoteLabel,
-    ): void {
-        if ($frame->type === FrameType::Handshake) {
-            $span = $this->safeStartHandshakeSpan();
-            $parsed = $this->parseHandshakeFrame($frame);
-
-            if ($parsed !== null) {
-                [$peerAddr, $peerEndpoint, $handshake] = $parsed;
-
-                if ($this->isReidentifyMismatch($state, $peerAddr)) {
-                    $this->recordControlRejected(self::CHECK_REIDENTIFY_MISMATCH);
-                    $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
-                    $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.reidentify_rejected', [
-                        'claimed_peer' => $peerAddr->toPathPrefix(),
-                        'existing_peer' => $state->peerAddr?->toPathPrefix(),
-                        'peer_endpoint' => $remoteLabel,
-                    ]));
-                    $this->safeEndSpan($span);
-
-                    return;
-                }
-
-                // Side effects only AFTER the re-identify check: registry write, verified-set mark,
-                // tombstone clear, C10 accepted-link supersede, and the HandshakeReceived tell to
-                // membership all happen inside ConnectionSupervisor's own serialized mailbox, in
-                // that order — the load-bearing ordering invariant (registration precedes membership
-                // processing the handshake it produced) rides the actor hop rather than this
-                // synchronous call stack.
-                $state->peerAddr = $peerAddr;
-                $state->boundAdvertise = $handshake->advertise;
-                $state->ingress = new FrameIngress($inboxRouter, $peerAddr, $this->payloadCodec, meter: $this->meter);
-                // Stamp ingress time here (frame-parse), not at actor-processing time, so the phi
-                // detector is fed the arrival instant regardless of membership-mailbox latency.
-                $observedAt = $this->system->clock()->now();
-                $this->connectionSupervisorRef->tell(new RegisterIdentifiedLink(
-                    $peerAddr,
-                    $peerEndpoint,
-                    $handshake->advertise,
-                    $state->link,
-                    $handshake,
-                    $observedAt,
-                ));
-                $this->safeSpanAttribute($span, 'nexus.cluster.peer', $peerAddr->toPathPrefix());
-                $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'accepted');
-                $this->safeDispatch(new PeerConnected($peerAddr, $peerEndpoint));
-            } else {
-                $this->safeSpanAttribute($span, 'nexus.cluster.handshake.outcome', 'rejected');
-                $this->safeRecordRejection();
-                $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.rejected', [
-                    'peer_endpoint' => $remoteLabel,
-                    'reason' => 'parse_failure',
-                ]));
-            }
-
-            $this->safeEndSpan($span);
-
-            return;
-        }
-
-        $peerAddr = $state->peerAddr;
-
-        if ($peerAddr === null) {
-            return; // Not yet identified; ignore frames until Handshake arrives.
-        }
-
-        // Only process a HandshakeAck AFTER the link has been identified by a verified Handshake.
-        // Processed earlier, an unauthenticated peer could inject an ack whose view map overwrites
-        // endpoint-registry entries (redirecting a victim prefix's gossip and user messages to an
-        // attacker) before any HMAC check runs. The ack always follows the peer's own Handshake on
-        // the same link, so this gate is safe.
-        if ($frame->type === FrameType::HandshakeAck) {
-            $this->applyHandshakeAckView($frame, $state);
-
-            return;
-        }
-
-        if ($frame->type === FrameType::Gossip) {
-            $this->processGossipFrame($frame, $peerAddr, $state);
-            // Gossip is the steady-state heartbeat: receiving it proves the peer is alive, so it MUST
-            // feed the failure detector. Without this the phi detector starves once traffic goes quiet
-            // and falsely suspects an idle-but-alive peer (there is no separate Ping/Pong heartbeat).
-            $this->observeLiveness($peerAddr);
-
-            return;
-        }
-
-        if ($frame->type === FrameType::Leave) {
-            $this->processLeaveFrame($frame, $peerAddr);
-
-            return;
-        }
-
-        if ($frame->type === FrameType::Message && $state->ingress !== null) {
-            $state->ingress->ingest($frame);
-            $this->observeLiveness($peerAddr);
-
-            return;
-        }
-
-        $this->observeLiveness($peerAddr);
-    }
-
-    /**
-     * Build the frame-pump wiring for every accepted inbound PeerLink and hand it to a fresh
-     * {@see InboundLinkAcceptor}, called once at boot. The acceptor owns the per-link concurrency
-     * cap, Slowloris deadline, and frame/close pump; what stays here is the two closures it drives:
-     *
-     *  - `$frameSink` routes each frame through the shared {@see handleLinkFrame()} state machine,
-     *    which now does its own C10 slot-registration bookkeeping via the
-     *    {@see \Monadial\Nexus\Cluster\Tcp\Connection\Message\RegisterIdentifiedLink} tell (using
-     *    `LinkState::$link`, set synchronously by {@see InboundLinkAcceptor::accept()} before this
-     *    link's frame pump is ever wired) — no separate accepted-callback needed here anymore.
-     *  - `$onLinkClosed` tells {@see \Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor}
-     *    the close: the identity-guarded accepted-link removal, tombstone, liveness-throttle forget,
-     *    membership notification, and ask-registry failure all now happen in its own mailbox.
+     * Build the accepted-inbound frame pump: one {@see InboundLinkAcceptor}, constructed once at
+     * boot, spawning a fresh {@see InboundLinkActor} per accepted {@see PeerLink} via the injected
+     * `$spawner` closure. The per-link Unidentified→Identified state machine (parse/admission,
+     * ack/gossip/leave/message handling, SEC-008 checks) lives entirely on the spawned actor now —
+     * see its class docblock. Spawned anonymously (root-level, alongside
+     * `cluster-membership-<nodeSlug>`/`cluster-connections-<nodeSlug>`): a per-link actor has no
+     * reason to be looked up by name, and a stable name would collide across a same-identity
+     * restart-rejoin sharing one `ActorSystem` (a real scenario several integration tests exercise) —
+     * `shutdown()` closes every accepted link, but does not synchronously guarantee its actor has
+     * fully stopped before a caller might reboot, so a predictable name is not safe to reuse.
      */
     private function wireInboundLink(InboxRouter $inboxRouter): InboundLinkAcceptor
     {
-        $frameSink = function (Frame $frame, LinkState $state, string $remoteLabel) use ($inboxRouter): void {
-            $this->handleLinkFrame($frame, $state, $inboxRouter, $remoteLabel);
-        };
+        $spawner = function (PeerLink $link) use ($inboxRouter): ActorRef {
+            $actor = new InboundLinkActor(
+                supervisorRef: $this->connectionSupervisorRef,
+                membershipRef: $this->membershipRef,
+                snapshotHolder: $this->routingSnapshotHolder,
+                authenticator: $this->authenticator,
+                topology: $this->topology,
+                payloadCodec: $this->payloadCodec,
+                controlCodec: $this->controlCodec,
+                inboxRouter: $inboxRouter,
+                livenessThrottle: $this->livenessThrottle,
+                egress: $this->sendByPrefix(...),
+                tracer: $this->tracer,
+                meter: $this->meter,
+                dispatcher: $this->dispatcher,
+                logger: $this->logger,
+                link: $link,
+                remoteLabel: $link->remote() !== null ? (string) $link->remote() : 'unknown',
+                handshakeTimeout: $this->topology->handshakeTimeout,
+            );
 
-        $onLinkClosed = function (LinkState $state, PeerLink $link): void {
-            $peerAddr = $state->peerAddr;
-
-            if ($peerAddr === null) {
-                return;
-            }
-
-            $this->connectionSupervisorRef->tell(new LinkClosed($peerAddr, $link));
+            return $this->system->spawnAnonymous($actor->props());
         };
 
         return new InboundLinkAcceptor(
-            $this->runtime,
             $this->topology->maxInboundLinks,
-            $this->topology->handshakeTimeout,
-            $frameSink,
-            $onLinkClosed,
+            $spawner,
+            $this->system->clock(),
             $this->logger,
         );
     }
 
     /**
      * Dial a seed endpoint: create an outbound PeerConnection (via the shared
-     * {@see PeerConnectionPool}) and wire its frame pump to the shared {@see handleLinkFrame()}
-     * state machine. The self-Handshake is sent by the PeerConnection preamble on the initial
-     * connect and on every reconnect (see {@see handshakePreamble()}), so a dropped seed link
-     * re-identifies us on reconnect instead of the seed silently dropping our post-reconnect frames.
+     * {@see PeerConnectionPool}) and spawn a single {@see InboundLinkActor} for its frame pump — the
+     * SAME state machine the accepted-inbound path uses, spawned `$link: null` (no accepted-link
+     * bookkeeping — there is no accepted PeerLink on this path) and `handshakeTimeout: null` (this
+     * path has never had a Slowloris deadline: it is the seed's own accepted-inbound link, on ITS
+     * node, that enforces one). One actor per seed persists for the process lifetime, exactly
+     * mirroring the previous per-seed `LinkState` — frames from every reconnect generation of the
+     * underlying {@see PeerConnection} land on the SAME actor, since `PeerConnection::onFrame()`'s
+     * handler list survives reconnects. There is no `LinkClosedNotice` wiring here (mirrors this
+     * path's prior behaviour exactly — an outbound reconnect has always been invisible above the
+     * `PeerConnection` layer), and a mailbox-`Dropped` frame is not treated as a flood signal (unlike
+     * the pre-auth accepted-inbound path) — this is a connection to a known, already-dialed seed.
+     * The self-Handshake is sent by the PeerConnection preamble on the initial connect and on every
+     * reconnect (see {@see handshakePreamble()}), so a dropped seed link re-identifies us on
+     * reconnect instead of the seed silently dropping our post-reconnect frames.
      */
     private function dialSeed(NodeEndpoint $seedEndpoint, InboxRouter $inboxRouter): void
     {
@@ -911,454 +754,44 @@ final class ClusterNode
         }
 
         $conn = $this->connectionPool->dial($seedEndpoint);
-
-        $state = new LinkState();
-        $remoteLabel = (string) $seedEndpoint;
-
-        $conn->onFrame(function (Frame $frame) use ($state, $inboxRouter, $remoteLabel): void {
-            // Outbound connection: identity is tracked in $state ($state->link stays null, so
-            // RegisterIdentifiedLink's accepted-link write is skipped for this path — see handleLinkFrame()).
-            $this->handleLinkFrame($frame, $state, $inboxRouter, $remoteLabel);
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    // Frame parsing helpers
-    // -------------------------------------------------------------------------
-
-    /**
-     * SEC-008 check 2 (re-identification pinning): whether a freshly-parsed Handshake identity
-     * conflicts with the identity this link already bound. Applied unconditionally — independent
-     * of whether a cluster secret is configured — because it guards link-slot integrity, not
-     * signature validity: a link already identified as one peer must never be silently rebound to
-     * a different one. A same-prefix re-handshake (the peer re-announcing itself, e.g. on
-     * endpoint failover) is NOT a mismatch and proceeds unchanged (C10 supersede semantics).
-     */
-    private function isReidentifyMismatch(LinkState $state, NodeAddress $parsedPeerAddr): bool
-    {
-        return $state->peerAddr !== null && $state->peerAddr->toPathPrefix() !== $parsedPeerAddr->toPathPrefix();
-    }
-
-    /**
-     * Parse and validate a Handshake frame payload, returning the parsed address, endpoint, and
-     * Handshake as a tuple — or null on any validation failure.
-     *
-     * PURE with respect to routing state: no registry write, no verified-set marking, no
-     * tombstone clear happens here — {@see \Monadial\Nexus\Cluster\Tcp\Connection\ConnectionSupervisor}
-     * applies those via the {@see \Monadial\Nexus\Cluster\Tcp\Connection\Message\RegisterIdentifiedLink}
-     * tell, which {@see handleLinkFrame()} sends only after the re-identification check passes, so a
-     * rejected impersonation attempt cannot poison the claimed identity's routing state
-     * (SEC-008 review fix). The one deliberate exception: a successful HMAC verify() consumes
-     * the frame's nonce in the replay guard, so even a subsequently-rejected frame's signature
-     * cannot be replayed at this node.
-     *
-     * @return array{NodeAddress, NodeEndpoint, Handshake}|null
-     */
-    private function parseHandshakeFrame(Frame $frame): ?array
-    {
-        try {
-            $obj = $this->controlCodec->unpackHandshake($frame->payload);
-        } catch (Throwable) {
-            $this->recordDecodeFailure('handshake');
-
-            return null;
-        }
-
-        // Gate the DATA path here, synchronously, before any ingress is wired: a peer whose
-        // cluster name or protocol version does not match ours must never have its Message
-        // frames routed to local actors. The membership actor performs the same check when it
-        // decides admission, but that runs asynchronously and only governs the membership view —
-        // it does not stop frame ingress. Rejecting at parse time closes that gap.
-        if ($obj->clusterName !== $this->topology->clusterName
-            || $obj->protocolVersion !== MembershipService::PROTOCOL_VERSION) {
-            $this->safely(fn(): mixed => $this->logger->debug('cluster.handshake.mismatch', [
-                'expected_cluster' => $this->topology->clusterName,
-                'peer_cluster' => $obj->clusterName,
-                'peer_protocol' => $obj->protocolVersion,
-            ]));
-
-            return null;
-        }
-
-        // Authenticate BEFORE any ingress is wired: a peer that cannot prove it holds the
-        // shared cluster secret is rejected here, so it never joins the view or delivers a
-        // frame. No-op when the cluster runs without a secret.
-        if ($this->authenticator !== null && !$this->authenticator->verify($obj, time())) {
-            $this->safely(fn(): mixed => $this->logger->warning('cluster.handshake.unauthenticated', [
-                'peer_advertise' => $obj->advertise,
-                'peer_cluster' => $obj->clusterName,
-            ]));
-
-            return null;
-        }
-
-        // Reject a handshake with an incomplete node identity: a peer omitting (or blanking) any of
-        // the four NodeAddress fields must not be admitted under a fabricated `/cluster/unknown/...`
-        // identity. Treat it as a malformed handshake, counted via the decode-failure counter.
-        $cluster = $obj->node['cluster'] ?? '';
-        $datacenter = $obj->node['datacenter'] ?? '';
-        $application = $obj->node['application'] ?? '';
-        $node = $obj->node['node'] ?? '';
-
-        if ($cluster === '' || $datacenter === '' || $application === '' || $node === '') {
-            $this->recordDecodeFailure('handshake');
-
-            return null;
-        }
-
-        try {
-            $peerAddr = new NodeAddress($cluster, $datacenter, $application, $node);
-        } catch (InvalidArgumentException) {
-            // A peer whose identity segments carry non-URL-safe characters is rejected as malformed
-            // rather than admitted — NodeAddress now enforces a collision-free charset at construction.
-            $this->recordDecodeFailure('handshake');
-
-            return null;
-        }
-
-        try {
-            $peerEndpoint = NodeEndpoint::fromString($obj->advertise);
-        } catch (Throwable) {
-            return null;
-        }
-
-        return [$peerAddr, $peerEndpoint, $obj];
-    }
-
-    /**
-     * Apply the view snapshot in a HandshakeAck to register endpoints for members
-     * we haven't seen yet. Fast-paths endpoint discovery without waiting for gossip.
-     *
-     * SEC-008 check 3 (ack-view authority): an entry whose prefix is already tombstoned is
-     * skipped unconditionally — a departed peer must not be resurrected via a stale/forged ack
-     * view, independent of whether a cluster secret is configured. The entry naming the ack
-     * SENDER's own prefix must additionally match the endpoint its Handshake HMAC-bound to this
-     * link ({@see LinkState::$boundAdvertise}); a mismatch is rejected and counted rather than
-     * silently registered, since only that entry is otherwise unauthenticated self-reporting.
-     * Every entry then flows through {@see registerUnauthenticatedEndpoint()}, the SAME write
-     * policy gossip uses (check 4), so a third-party entry cannot overwrite a handshake-verified
-     * endpoint via an ack view either — the two per-entry ingestion paths stay symmetric.
-     */
-    private function applyHandshakeAckView(Frame $frame, LinkState $state): void
-    {
-        try {
-            $obj = $this->controlCodec->unpackHandshakeAck($frame->payload);
-        } catch (Throwable) {
-            return;
-        }
-
-        if (!$obj->accepted) {
-            return;
-        }
-
-        $senderPrefix = $state->peerAddr?->toPathPrefix();
-        $tombstones = $this->routingSnapshotHolder->current()->tombstones;
-
-        foreach ($obj->view as $prefix => $endpointStr) {
-            if (isset($tombstones[$prefix])) {
-                continue;
-            }
-
-            if ($this->authenticator !== null && $prefix === $senderPrefix && $endpointStr !== $state->boundAdvertise) {
-                $this->recordControlRejected(self::CHECK_ACK_VIEW_AUTHORITY);
-
-                continue;
-            }
-
-            $this->registerUnauthenticatedEndpoint($prefix, $endpointStr, self::CHECK_ACK_VIEW_AUTHORITY);
-        }
-    }
-
-    /**
-     * Process an inbound Gossip frame: register member endpoints and tell membership actor.
-     */
-    private function processGossipFrame(Frame $frame, NodeAddress $peerAddr, LinkState $state): void
-    {
-        try {
-            $obj = $this->controlCodec->unpackGossip($frame->payload);
-        } catch (Throwable) {
-            $this->recordDecodeFailure('gossip');
-
-            return;
-        }
-
-        $liveMembers = [];
-        $senderPrefix = $peerAddr->toPathPrefix();
-        $tombstones = $this->routingSnapshotHolder->current()->tombstones;
-
-        foreach ($obj->members as $member) {
-            // Tombstone filter: drop any member we have already processed a graceful Leave for. A peer
-            // that has not yet learned of the departure keeps gossiping the node as Up; without this
-            // filter that lagging gossip re-teaches (resurrects) a node we already removed, and two
-            // peers can bounce it back and forth indefinitely (the classic no-tombstone resurrection).
-            // The tombstone is cleared (on ConnectionSupervisor) when the node re-handshakes on
-            // rejoin, after which its gossip flows again.
-            if (isset($tombstones[$member['address']])) {
-                continue;
-            }
-
-            $this->registerGossipEndpoint($member, $senderPrefix, $state);
-
-            // View merge / forwarding is unaffected by SEC-008 check 4: a member entry this node
-            // declines to REGISTER (endpoint-authority mismatch, or a third-party prefix already
-            // handshake-verified) is still merged into the membership view and re-gossiped —
-            // only the local endpoint-registry write is restricted.
-            $liveMembers[] = $member;
-        }
-
-        $payload = $liveMembers === $obj->members
-            ? $obj
-            : new GossipPayload($liveMembers, $obj->registrations);
-
-        $this->membershipRef->tell(new GossipReceived($peerAddr, $payload));
-    }
-
-    /**
-     * SEC-008 check 4 (gossip endpoint-write policy): register `$member`'s endpoint unless
-     * authority forbids the write. A member entry naming the gossip SENDER's own prefix must
-     * match the endpoint its Handshake HMAC-bound to this link — the sender cannot use gossip to
-     * redirect its own endpoint. Every entry then flows through
-     * {@see registerUnauthenticatedEndpoint()} (shared with the ack-view path, check 3), which
-     * refuses to overwrite an endpoint a verified Handshake already established. Both restrictions
-     * are no-ops without a cluster secret: `$this->authenticator === null` skips the
-     * sender-authority check entirely, and ConnectionSupervisor's verified-prefix set stays
-     * permanently empty, so registration is unconditional — current, pre-SEC-008 behaviour.
-     *
-     * @param array{address: string, endpoint: string, incarnation: int, status: int} $member
-     */
-    private function registerGossipEndpoint(array $member, string $senderPrefix, LinkState $state): void
-    {
-        $isSendersOwnEntry = $member['address'] === $senderPrefix;
-
-        if ($this->authenticator !== null && $isSendersOwnEntry && $member['endpoint'] !== $state->boundAdvertise) {
-            $this->recordControlRejected(self::CHECK_GOSSIP_ENDPOINT_AUTHORITY);
-
-            return;
-        }
-
-        $this->registerUnauthenticatedEndpoint(
-            $member['address'],
-            $member['endpoint'],
-            self::CHECK_GOSSIP_ENDPOINT_AUTHORITY,
+        $actor = new InboundLinkActor(
+            supervisorRef: $this->connectionSupervisorRef,
+            membershipRef: $this->membershipRef,
+            snapshotHolder: $this->routingSnapshotHolder,
+            authenticator: $this->authenticator,
+            topology: $this->topology,
+            payloadCodec: $this->payloadCodec,
+            controlCodec: $this->controlCodec,
+            inboxRouter: $inboxRouter,
+            livenessThrottle: $this->livenessThrottle,
+            egress: $this->sendByPrefix(...),
+            tracer: $this->tracer,
+            meter: $this->meter,
+            dispatcher: $this->dispatcher,
+            logger: $this->logger,
+            link: null,
+            remoteLabel: (string) $seedEndpoint,
+            handshakeTimeout: null,
         );
-    }
+        $ref = $this->system->spawnAnonymous($actor->props());
+        $clock = $this->system->clock();
 
-    /**
-     * Register an endpoint learned from an UNAUTHENTICATED per-entry claim — a HandshakeAck view
-     * entry or a gossip member entry — the single shared write policy behind SEC-008 checks 3–4.
-     * Parses `$endpointStr` here (malformed entries are skipped; a later frame may carry them
-     * well-formed) and delegates the actual write policy — refusing a CONFLICTING claim against a
-     * handshake-verified prefix, counted under `$rejectCheck` — to {@see ConnectionSupervisor} via
-     * a {@see RegisterUnauthenticatedEndpoint} tell, since the verified-prefix set and the registry
-     * are both supervisor-internal now.
-     */
-    private function registerUnauthenticatedEndpoint(string $prefix, string $endpointStr, string $rejectCheck): void
-    {
-        try {
-            $endpoint = NodeEndpoint::fromString($endpointStr);
-        } catch (Throwable) {
-            return;
-        }
+        $conn->onFrame(function (Frame $frame) use ($ref, $clock, $seedEndpoint): void {
+            $message = new LinkFrame($frame, $clock->now(), hrtime(true));
 
-        $this->connectionSupervisorRef->tell(new RegisterUnauthenticatedEndpoint($prefix, $endpoint, $rejectCheck));
-    }
+            if (!$ref instanceof BackpressureCapable) {
+                $ref->tell($message);
 
-    /**
-     * Parse a Leave frame payload to identify the actual leaving node, then notify
-     * the membership actor and forward the frame to all other accepted peers.
-     *
-     * Forwarding covers star topologies where the leaving node has no direct TCP
-     * connection to every peer: the intermediate node (e.g. A in a B→A←C star)
-     * relays the Leave so B and C both learn about each other's departures.
-     *
-     * sendByPrefix is used for forwarding so frames arrive at the recipient's
-     * wireInboundLink handler (which has proper ingress) rather than an outbound
-     * PeerConnection handler that may have $ingress = null.
-     */
-
-    /**
-     * SEC-008 check 1: whether `$payload` is a validly self-attested Leave, recording the specific
-     * rejection reason when it is not. Split into two counted outcomes: `leave_unsigned` (no
-     * signature fields at all — e.g. a peer on an older protocol, or a bare forgery attempt) vs.
-     * `leave_replay` (signature fields present but {@see PeerAuthenticator::verifyLeave()} rejected
-     * them — bad mac, stale timestamp, or an exact replay).
-     */
-    private function admitSelfAttestingLeave(PeerAuthenticator $authenticator, LeavePayload $payload): bool
-    {
-        if ($payload->nonce === null || $payload->issuedAt === null || $payload->mac === null) {
-            $this->recordControlRejected(self::CHECK_LEAVE_UNSIGNED);
-
-            return false;
-        }
-
-        if (!$authenticator->verifyLeave($payload, time())) {
-            $this->recordControlRejected(self::CHECK_LEAVE_REPLAY);
-
-            return false;
-        }
-
-        return true;
-    }
-
-    private function processLeaveFrame(Frame $frame, ?NodeAddress $senderAddr): void
-    {
-        try {
-            $payload = $this->controlCodec->unpackLeave($frame->payload);
-        } catch (Throwable) {
-            $this->recordDecodeFailure('leave');
-
-            return;
-        }
-
-        // SEC-008 check 1 (self-attesting Leave): with a cluster secret configured, a Leave must
-        // carry the leaving node's own signature — otherwise any admitted member could forge a
-        // Leave for an arbitrary victim (mesh-wide partition via the star-relay). The mac is
-        // leaver-bound and link-independent, so a Leave relayed verbatim through an intermediate
-        // node still verifies. Unsigned Leaves are accepted only when no secret is configured
-        // (current behaviour unchanged).
-        if ($this->authenticator !== null && !$this->admitSelfAttestingLeave($this->authenticator, $payload)) {
-            return;
-        }
-
-        $leavingAddr = self::parseNodeAddress($payload->node);
-
-        if ($leavingAddr === null || $leavingAddr->toPathPrefix() === $this->selfAddress->toPathPrefix()) {
-            return;
-        }
-
-        // Dedup: if we have already processed a Leave for this node, skip re-delivery and relay.
-        // Reads the snapshot rather than ConnectionSupervisor's own state, so this check can lag a
-        // moment behind a RecordTombstone told concurrently; the supervisor's own idempotent guard
-        // (see RecordTombstone's handler) is what actually prevents a double-tombstone in that race.
-        $leavingPrefix = $leavingAddr->toPathPrefix();
-        $snapshot = $this->routingSnapshotHolder->current();
-
-        if (isset($snapshot->tombstones[$leavingPrefix])) {
-            return;
-        }
-
-        $this->connectionSupervisorRef->tell(new RecordTombstone($leavingPrefix));
-
-        $this->membershipRef->tell(new LeaveReceived($leavingAddr));
-
-        // A graceful Leave means the peer is definitively gone: evict and close our outbound
-        // connection to it so its reconnect loop stops. We deliberately do NOT evict on a
-        // phi/timeout NodeDown, which may be a false positive that must be allowed to heal.
-        $this->connectionSupervisorRef->tell(new EvictPeer($leavingAddr));
-
-        // Forward to all accepted peers except the leaving node and the frame sender.
-        $senderPrefix = $senderAddr?->toPathPrefix();
-
-        foreach (array_keys($snapshot->acceptedLinks) as $prefix) {
-            if ($prefix !== $leavingPrefix && $prefix !== $senderPrefix) {
-                $this->sendByPrefix($prefix, $frame);
+                return;
             }
-        }
-    }
 
-    // -------------------------------------------------------------------------
-    // Span helpers (swallow-safe — a broken tracer must never disrupt cluster ops)
-    // -------------------------------------------------------------------------
-
-    private function safeStartHandshakeSpan(): Span
-    {
-        try {
-            return $this->tracer->startSpan('cluster.handshake', SpanKind::Internal);
-        } catch (Throwable) {
-            return new NoopSpan();
-        }
-    }
-
-    private function safeSpanAttribute(Span $span, string $key, string $value): void
-    {
-        try {
-            $span->setAttribute($key, $value);
-        } catch (Throwable) {
-        }
-    }
-
-    private function safeEndSpan(Span $span): void
-    {
-        try {
-            $span->end();
-        } catch (Throwable) {
-        }
-    }
-
-    private function safeRecordRejection(): void
-    {
-        try {
-            $this->handshakeRejected ??= $this->meter->counter(
-                'nexus.cluster.handshake.rejected',
-                '{handshake}',
-                'Cluster handshakes rejected due to parse failure',
-            );
-            $this->handshakeRejected->add(1);
-        } catch (Throwable) {
-            // Telemetry must never break cluster operations.
-        }
-    }
-
-    /**
-     * Make an otherwise-silent structural decode failure observable: a corrupt or version-skewed
-     * peer whose handshake/gossip/leave frame fails to deserialize is dropped, and without this an
-     * operator sees zero signal while the cluster quietly fails to converge.
-     */
-    private function recordDecodeFailure(string $frameType): void
-    {
-        try {
-            $this->framesDecodeFailed ??= $this->meter->counter(
-                'nexus.cluster.frames.decode_failed',
-                '{frame}',
-                'Inbound frames dropped because they could not be decoded',
-            );
-            $this->framesDecodeFailed->add(1, ['frame.type' => $frameType]);
-            $this->logger->debug('cluster.frame.decode_failed', ['frame.type' => $frameType]);
-        } catch (Throwable) {
-            // Telemetry must never break cluster operations.
-        }
-    }
-
-    /**
-     * Make a SEC-008 control-frame authorization rejection observable, labeled by which of the
-     * five checks fired: {@see admitSelfAttestingLeave()}, {@see isReidentifyMismatch()},
-     * {@see applyHandshakeAckView()}, {@see registerGossipEndpoint()} (spec §4.2). Mirrors
-     * {@see recordDecodeFailure()}'s silent-drop-must-be-observable discipline.
-     */
-    private function recordControlRejected(string $check): void
-    {
-        try {
-            $this->controlRejected ??= $this->meter->counter(
-                'nexus.cluster.control.rejected',
-                '{frame}',
-                'Control frames rejected by SEC-008 authorization checks',
-            );
-            $this->controlRejected->add(1, ['check' => $check]);
-            $this->logger->debug('cluster.control.rejected', ['check' => $check]);
-        } catch (Throwable) {
-            // Telemetry must never break cluster operations.
-        }
-    }
-
-    private function safeDispatch(object $event): void
-    {
-        try {
-            $this->dispatcher->dispatch($event);
-        } catch (Throwable) {
-            // Event dispatch must never break cluster operations.
-        }
-    }
-
-    /**
-     * @param callable(): mixed $fn
-     */
-    private function safely(callable $fn): void
-    {
-        try {
-            $fn();
-        } catch (Throwable) {
-            // Telemetry must never break cluster operations.
-        }
+            // Unlike the pre-auth accepted-inbound path, a Dropped enqueue here does not close the
+            // link — this is a connection to a known, already-dialed seed, not an unauthenticated
+            // flood risk. Still observable rather than silently discarded.
+            if ($ref->offer($message) === EnqueueResult::Dropped) {
+                $this->logger->debug('cluster.seed_link.frame_dropped', ['peer_endpoint' => (string) $seedEndpoint]);
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
@@ -1571,24 +1004,5 @@ final class ClusterNode
                 );
             }
         };
-    }
-
-    /**
-     * Parse a NodeAddress from a path-prefix string: `/cluster/{cluster}/{dc}/{app}/{node}`.
-     * Returns null on malformed input.
-     */
-    private static function parseNodeAddress(string $pathPrefix): ?NodeAddress
-    {
-        $parts = array_values(array_filter(explode('/', ltrim($pathPrefix, '/'))));
-
-        if (count($parts) !== 5 || $parts[0] !== 'cluster') {
-            return null;
-        }
-
-        try {
-            return new NodeAddress($parts[1], $parts[2], $parts[3], $parts[4]);
-        } catch (InvalidArgumentException) {
-            return null;
-        }
     }
 }

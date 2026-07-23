@@ -373,7 +373,6 @@ final class ConnectionSupervisorTest extends TestCase
         return new RegisterIdentifiedLink(
             peer: $this->peer,
             endpoint: $this->peerEndpoint,
-            boundAdvertise: (string) $this->peerEndpoint,
             link: $link,
             handshake: new Handshake(
                 'production',
